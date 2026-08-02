@@ -71,7 +71,7 @@ dailogues/
 - 后端 LLM：**DeepSeek**（OpenAI 兼容，`deepseek-chat` 默认，配置化可切换）
 - 润色：LLM SSE 流式；**打磨前质量审核前置**（低质量/信息量小/违规内容拒绝并返回原因）；语言跟随对话内容（与界面语言无关）；单期目标 5–10 分钟
 - 计费：Stripe Checkout/Portal/Webhook；免费 1 期，Pro 订阅无限
-- 导入：**仅 URL 分享链接 + 验证码验证**（先发码 → 再分享 → 抓取校验）；平台按抓取矩阵实测交付（DeepSeek ✅ 已实测；Claude ✗ Cloudflare 质询不支持）；无文本粘贴/导出通道
+- 导入：**仅 URL 分享链接 + 验证码验证**（先发码 → 再分享 → 抓取校验）；**双路径抓取**（API 快路径 + 无头浏览器慢路径过 CF）；首发平台 ChatGPT/Claude/豆包/DeepSeek；无文本粘贴/导出通道
 - 邀请码：管理员 CLI + 用户奖励（>3 期后每发布一期 +1）
 - 成本策略：除 LLM/TTS/Stripe 外全免费（配额内）
 
@@ -80,7 +80,7 @@ dailogues/
 - [ ] M0：文档定稿（PRD/ARC/MRD 审阅通过）
 - [ ] M1：Fish Audio spike（多说话人格式、克隆音质）—— 首个实现任务
 - [ ] M2：统一后端骨架（Hono + Drizzle + 迁移 + CI/CD 部署 Fly）
-- [ ] M3：抓取矩阵 spike 定稿平台清单 + 导入解析器（DeepSeek 首发）
+- [ ] M3：双路径抓取逐平台交付（api-fetcher 快路径 + browser-fetcher 无头浏览器；首发 ChatGPT/Claude/豆包/DeepSeek）
 - [ ] M4：质量审核 + 润色（LLM 流式）+ 生成管线（TTS → ffmpeg → R2）
 - [ ] M5：工作台 SPA（录音引导 → 向导 → 发布）
 - [ ] M6：内容站 SSR + RSS + 首页/搜索
