@@ -77,6 +77,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
               title: episodeRow.title,
               status: episodeRow.status,
               language: episodeRow.language,
+              importId: imp[0].id,
             }).returning({ id: schema.episodes.id });
             return { importId: imp[0].id, episodeId: ep[0].id };
           });
@@ -133,6 +134,19 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .limit(1);
         const row = rows[0];
         return row ? { version: row.version, segments: row.segments as ScriptSegment[] } : null;
+      },
+
+      async getImportedDialogue(episodeId, userId) {
+        const rows = await db
+          .select({ parsedDialogue: schema.imports.parsedDialogue })
+          .from(schema.episodes)
+          .innerJoin(schema.imports, eq(schema.episodes.importId, schema.imports.id))
+          .where(and(eq(schema.episodes.id, episodeId), eq(schema.episodes.userId, userId)))
+          .limit(1);
+        const row = rows[0];
+        if (!row?.parsedDialogue) return null;
+        const dialogue = row.parsedDialogue as { messages?: { role: string; content: string }[] };
+        return dialogue.messages ?? null;
       },
 
       async setPublished(id) {

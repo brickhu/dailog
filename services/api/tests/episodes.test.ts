@@ -17,6 +17,7 @@ function fakeRepo(): EpisodesRepo {
       return { episodeId, version, segments };
     },
     getLatestScript: async (episodeId) => scripts.filter((s) => s.episodeId === episodeId).at(-1) ?? null,
+    getImportedDialogue: async () => null,
     setPublished: async (id) => { episodes.get(id)!.status = "published"; },
   };
 }

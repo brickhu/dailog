@@ -53,6 +53,8 @@ export const imports = pgTable(
 export const episodes = pgTable("episodes", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  /** 来源导入（imports.parsed_dialogue 是润色/质量门的对话来源） */
+  importId: uuid("import_id").references(() => imports.id),
   slug: text("slug").notNull().unique(),
   title: text("title"),
   description: text("description"),

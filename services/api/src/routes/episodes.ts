@@ -8,6 +8,8 @@ export interface EpisodesRepo {
   getEpisode(id: string, userId?: string): Promise<{ id: string; userId: string; title: string | null; status: string } | null>;
   saveScript(episodeId: string, version: number, segments: ScriptSegment[]): Promise<{ episodeId: string; version: number; segments: ScriptSegment[] }>;
   getLatestScript(episodeId: string): Promise<{ version: number; segments: ScriptSegment[] } | null>;
+  /** 通过 episodes.import_id 读取来源导入的 parsed_dialogue 消息；userId 强制归属过滤（防 IDOR） */
+  getImportedDialogue(episodeId: string, userId: string): Promise<{ role: string; content: string }[] | null>;
   setPublished(id: string): Promise<void>;
 }
 

@@ -15,8 +15,18 @@ function fakeRepo(): AppDeps["repo"] {
       getEpisode: async () => null,
       saveScript: async (episodeId, version, segments) => ({ episodeId, version, segments }),
       getLatestScript: async () => null,
+      getImportedDialogue: async () => null,
       setPublished: async () => {},
     },
+  };
+}
+
+function fakePolish(): AppDeps["polish"] {
+  return {
+    getDialogueMessages: async () => [],
+    qualityCheck: async () => ({ pass: true, language: "zh" }),
+    savePolished: async (_episodeId, _language, segments) => ({ version: 1, segments }),
+    llm: { complete: async () => "", stream: async () => "" },
   };
 }
 
@@ -39,6 +49,7 @@ function makeApp() {
       return { sub: "user-1" };
     },
     repo: fakeRepo(),
+    polish: fakePolish(),
   });
 }
 

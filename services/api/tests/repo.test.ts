@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { createApp } from "../src/app";
+import { createApp, type AppDeps } from "../src/app";
 import { createDb } from "../src/db/client";
 import { createRepo } from "../src/repo";
 import type { Env } from "../src/config/env";
@@ -133,6 +133,18 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       expect(await repo.episodes.getLatestScript(episodeId)).toBeNull();
     });
 
+    it("getImportedDialogue returns messages via episodes.import_id link", async () => {
+      const episodeId = await makeEpisode("对话来源");
+      const messages = await repo.episodes.getImportedDialogue(episodeId, REPO_USER);
+      expect(messages).toEqual([{ role: "user", content: "你好" }]);
+    });
+
+    it("getImportedDialogue returns null for other user's episode (IDOR 过滤)", async () => {
+      const episodeId = await makeEpisode("他人对话");
+      expect(await repo.episodes.getImportedDialogue(episodeId, API_USER)).toBeNull();
+      expect(await repo.episodes.getImportedDialogue("00000000-0000-4000-8000-000000000000", REPO_USER)).toBeNull();
+    });
+
     it("setPublished updates status and publishedAt", async () => {
       const episodeId = await makeEpisode("发布测试");
       await repo.episodes.setPublished(episodeId);
@@ -144,6 +156,22 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
   });
 
   describe("api via real repo", () => {
+    const polish: AppDeps["polish"] = {
+      getDialogueMessages: (episodeId, userId) => repo.episodes.getImportedDialogue(episodeId, userId),
+      qualityCheck: async () => ({ pass: true, language: "zh" }),
+      savePolished: async (episodeId, _language, segments) => {
+        const latest = await repo.episodes.getLatestScript(episodeId);
+        return repo.episodes.saveScript(episodeId, (latest?.version ?? 0) + 1, segments);
+      },
+      llm: {
+        complete: async () => "",
+        stream: async (_msgs, onDelta) => {
+          const json = '[{"speaker":"host","text":"你好"},{"speaker":"guest","text":"你好！"}]';
+          onDelta(json);
+          return json;
+        },
+      },
+    };
     const app = createApp({
       env: makeEnv(),
       verifyToken: async (token: string) => {
@@ -151,6 +179,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
         return { sub: API_USER };
       },
       repo,
+      polish,
     });
 
     it("POST /api/imports 201 then 409; episodes list/script/publish flow", async () => {
@@ -188,6 +217,30 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       const detail = await app.request(`/api/episodes/${episodeId}`, { headers: { Authorization: "Bearer valid-token" } });
       expect(detail.status).toBe(200);
       expect((await detail.json()) as { status: string }).toMatchObject({ status: "published" });
+    });
+
+    it("POST /api/episodes/:id/polish streams SSE and saves polished script", async () => {
+      const conv = `conv-polish-${Date.now()}`;
+      const body = {
+        platform: "claude", conversationId: conv, title: "润色集成", url: `https://claude.ai/chat/${conv}`,
+        messages: [{ role: "user", content: "你好" }, { role: "assistant", content: "你好！" }],
+      };
+      const headers = { "Content-Type": "application/json", Authorization: "Bearer valid-token" };
+      const res = await app.request("/api/imports", { method: "POST", headers, body: JSON.stringify(body) });
+      expect(res.status).toBe(201);
+      const { episodeId } = (await res.json()) as { importId: string; episodeId: string };
+
+      const polishRes = await app.request(`/api/episodes/${episodeId}/polish`, { method: "POST", headers: { Authorization: "Bearer valid-token" } });
+      expect(polishRes.status).toBe(200);
+      const text = await polishRes.text();
+      expect(text).toContain("event: segment");
+      expect(text).toContain("event: done");
+      const latest = await repo.episodes.getLatestScript(episodeId);
+      expect(latest?.version).toBe(1);
+      expect(latest?.segments).toEqual([
+        { speaker: "host", text: "你好" },
+        { speaker: "guest", text: "你好！" },
+      ]);
     });
   });
 });
