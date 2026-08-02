@@ -9,6 +9,12 @@ function makeApp() {
       SUPABASE_URL: "https://example.supabase.co",
       SUPABASE_JWKS_URL: "https://example.supabase.co/auth/v1/jwks",
       PORT: 8787,
+      DEEPSEEK_API_KEY: "",
+      DEEPSEEK_BASE_URL: "https://api.deepseek.com/v1",
+      DEEPSEEK_MODEL: "deepseek-chat",
+      FISH_API_KEY: "",
+      STORAGE_DRIVER: "fs",
+      STORAGE_DIR: "./data",
     } satisfies Env,
     verifyToken: async (token: string) => {
       if (token !== "valid-token") throw new Error("invalid token");
