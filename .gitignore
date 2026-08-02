@@ -3,6 +3,6 @@ dist/
 .env
 .env.*
 !.env.example
-drizzle/meta/
+**/drizzle/meta/
 scripts/spikes/out-limits/
 sample-voice.*
