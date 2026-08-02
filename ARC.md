@@ -13,7 +13,7 @@
 | 数据库 | Supabase Postgres | Supabase 免费额度（500MB） |
 | 认证 | Supabase Auth（邮箱 + 密码，邀请码门禁） | Supabase 免费额度（5 万 MAU） |
 | 对象存储 | Cloudflare R2（音频/封面/录音样本） | R2 免费 10GB + 流量永久免费 |
-| LLM（脚本润色） | OpenAI 兼容 API（供应商可配置，如 DeepSeek/GLM/OpenAI） | 外部按量 |
+| LLM（质量审核 + 润色 + 语言检测） | **DeepSeek**（OpenAI 兼容接口，配置化可切换） | 外部按量（成本低） |
 | 语音合成 | Fish Audio TTS（多说话人 + 声音克隆） | 外部按量 |
 | 支付 | Stripe Checkout / Portal / Webhook | 外部，费率 2.9% + $0.30/笔 |
 
@@ -55,7 +55,7 @@ app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 - Node.js + TypeScript + **Hono**（轻量路由，SSE/流式友好）
 - **Drizzle ORM** + Supabase Postgres（迁移 + 类型安全）
 - **fluent-ffmpeg**（片头/主对话/片尾拼接；镜像内置 ffmpeg）
-- LLM：OpenAI 兼容 SDK，供应商配置化（`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`）
+- LLM：**DeepSeek**（OpenAI 兼容 SDK），默认 `deepseek-chat`（质量审核 + 润色 + 语言检测；`deepseek-reasoner` 作为备选可切换），供应商配置化（`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`）
 - 认证：校验 Supabase JWT（JWKS 拉取公钥），RBAC 仅区分 `authenticated`
 - 任务队列：**进程内队列 + `generation_jobs` 表**（MVP 不引 Redis；进程重启时从 DB 恢复 `queued` 任务，单实例串行消费）
 
