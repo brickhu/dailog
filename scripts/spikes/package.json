@@ -1,0 +1,10 @@
+{
+  "name": "@dailogues/spikes",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fish": "node fish-audio.mjs",
+    "headless": "node headless-cf.mjs"
+  },
+  "dependencies": {}
+}
