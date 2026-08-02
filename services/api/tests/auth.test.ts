@@ -38,3 +38,13 @@ describe("auth middleware", () => {
     expect(await res.json()).toEqual({ userId: "user-1" });
   });
 });
+
+describe("auth middleware scheme", () => {
+  it("accepts lowercase bearer scheme (RFC 6750)", async () => {
+    const res = await makeApp().request("/api/me", {
+      headers: { Authorization: "bearer valid-token" },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ userId: "user-1" });
+  });
+});
