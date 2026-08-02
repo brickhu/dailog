@@ -76,6 +76,7 @@ function makeApp() {
       FISH_API_KEY: "",
       STORAGE_DRIVER: "fs",
       STORAGE_DIR: "./data",
+      ASSETS_DIR: "assets/audio",
     } satisfies Env,
     verifyToken: async (token: string) => {
       if (token !== "valid-token") throw new Error("invalid token");

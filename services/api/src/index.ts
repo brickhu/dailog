@@ -8,6 +8,8 @@ import { createLlmClient } from "./llm/client";
 import { qualityCheckPrompt, safetyCheckPrompt, parseJsonLoose, type QualityResult } from "./llm/prompts";
 import { createJobQueue } from "./pipeline/queue";
 import { createPipelineRunner } from "./pipeline/runner";
+import { createLocalAssetStore } from "./pipeline/assets";
+import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import { createTtsClient } from "./tts/client";
 import { createStorage } from "./storage";
 import { recoverQueuedJobs } from "./pipeline/bootstrap";
@@ -43,6 +45,9 @@ const queue = createJobQueue(createPipelineRunner({
   },
   tts: createTtsClient({ apiKey: env.FISH_API_KEY }),
   storage: createStorage({ driver: env.STORAGE_DRIVER, dir: env.STORAGE_DIR }),
+  // merge 阶段：intro/outro 资产（缺失 → 降级）+ 真实 ffmpeg 二进制
+  assets: createLocalAssetStore(env.ASSETS_DIR),
+  ffmpegPath: ffmpegInstaller.path,
 }), { concurrency: 1, maxAttempts: 2, backoffMs: 1000 });
 
 // 启动恢复：把上次未完成（queued/tts/merge/upload）的 job 重新入队（不阻塞 serve）

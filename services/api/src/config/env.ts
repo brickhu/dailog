@@ -14,6 +14,8 @@ const schema = z.object({
   FISH_PROXY_URL: z.string().optional(),
   STORAGE_DRIVER: z.enum(["fs", "r2"]).default("fs"),
   STORAGE_DIR: z.string().default("./data"),
+  // 片头/片尾音频资产目录（Task 11 生成；缺失时 merge 降级为只拼主对话）
+  ASSETS_DIR: z.string().default("assets/audio"),
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY: z.string().optional(),
   R2_SECRET_KEY: z.string().optional(),
