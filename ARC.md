@@ -95,6 +95,7 @@ queued → tts → merge → upload → done（failed 可重试）
 ### 3.5 采集与导入（浏览器扩展统一通道）
 
 - **统一采集器（浏览器扩展）**：用户在 AI 平台**登录态**下打开自己的对话页 → 扩展自动滚动加载完整对话（虚拟列表）→ 按平台 DOM 解析为结构化对话 → POST `api.dailogues.com/imports`
+- **元数据随采集回传**：`{ platform, conversation_id, title, url, messages[] }`——标题预填节目名；`(user_id, platform, conversation_id)` 唯一约束防重复导入；播放页展示来源信息
 - **真实性 = 登录态**：扩展运行于用户本人账号会话，读取即本人的对话 → **验证码机制取消**，无需分享链接（架构性消解，见 `docs/spikes/headless-cf.md` 的对照结论）
 - **扩展定位 = 采集器（thin client）**：只做「采集 + 回传」，不做编辑/生成/发布——创作发布全部在 SPA 工作台完成（移动端可用、密钥与服务端管线不暴露、商店审核面最小）
 - 形态：Manifest V3；content script 按平台 URL 匹配（`chatgpt.com/c/*`、`claude.ai/chat/*`、`chat.deepseek.com/chat/*` 等）；鉴权：登录态 token 由 app 站点页注入 `chrome.storage`；扩展不本地存储对话
@@ -108,7 +109,7 @@ queued → tts → merge → upload → done（failed 可重试）
 | `profiles` | `id`(=auth.users), `username`(唯一), `display_name`, `bio`, `plan`(free/pro), `credit_balance`(int, 按期付费余额), `created_at` |
 | `voice_samples` | `user_id`, `audio_url`(R2), `duration`, `status`, `created_at`（可重录覆盖） |
 | `invite_codes` | `code`(唯一), `created_by`, `used_by`, `used_at`, `expires_at`, `source`(admin/reward), `issued_for_episode_id` |
-| `imports` | `user_id`, `platform`(chatgpt/claude/kimi/doubao/tongyi/gemini/deepseek/plain), `raw_content`, `parsed_dialogue`(JSONB), `status`, `created_at` |
+| `imports` | `user_id`, `platform`(chatgpt/claude/kimi/doubao/tongyi/gemini/deepseek/plain), `source_title`, `source_conversation_id`, `source_url`, `raw_content`, `parsed_dialogue`(JSONB), `status`, `created_at`；唯一约束 `(user_id, platform, source_conversation_id)` 防重复导入 |
 | `episodes` | `id`, `user_id`, `slug`, `title`, `description`, `cover_url`, `audio_url`, `duration_seconds`, `status`(draft/generating/published/failed), `quality_status`(pending/passed/rejected), `quality_reason`, `language`, `is_public`, `created_at`, `published_at` |
 | `scripts` | `episode_id`, `version`, `segments`(JSONB: `[{speaker: host\|guest, text}]`), `created_at` |
 | `generation_jobs` | `episode_id`, `status`(queued/tts/merge/upload/done/failed), `progress`, `error`, `attempts`, `timestamps` |

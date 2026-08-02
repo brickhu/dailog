@@ -485,7 +485,7 @@ git commit -m "feat(api): supabase jwt verification and auth middleware"
 
 ```ts
 import {
-  boolean, integer, jsonb, pgTable, text, timestamp, uuid,
+  boolean, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
 } from "drizzle-orm/pg-core";
 
 export const profiles = pgTable("profiles", {
@@ -519,15 +519,22 @@ export const inviteCodes = pgTable("invite_codes", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const imports = pgTable("imports", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
-  platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek", "plain"] }).notNull(),
-  rawContent: text("raw_content"),
-  parsedDialogue: jsonb("parsed_dialogue"),
-  status: text("status", { enum: ["parsed", "failed"] }).notNull().default("parsed"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const imports = pgTable(
+  "imports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+    platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek", "plain"] }).notNull(),
+    sourceTitle: text("source_title"),
+    sourceConversationId: text("source_conversation_id").notNull(),
+    sourceUrl: text("source_url").notNull(),
+    rawContent: text("raw_content"),
+    parsedDialogue: jsonb("parsed_dialogue"),
+    status: text("status", { enum: ["parsed", "failed"] }).notNull().default("parsed"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("imports_user_platform_conv").on(t.userId, t.platform, t.sourceConversationId)],
+);
 
 export const episodes = pgTable("episodes", {
   id: uuid("id").defaultRandom().primaryKey(),

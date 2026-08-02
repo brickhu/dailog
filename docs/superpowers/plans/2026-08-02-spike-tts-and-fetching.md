@@ -175,6 +175,7 @@ git commit -m "spike: fish audio multi-speaker findings"
 3. 滚动加载机制（虚拟列表？向上滚动加载历史？需采集的滚动策略）
 4. 消息内容形态（纯文本 / markdown / 附件链接；代码块、思考过程是否在 DOM 中）
 5. 截断风险（长对话是否按需加载、懒加载占位）
+6. **元数据位置**：对话标题（DOM 何处）、对话 ID（URL 还是 DOM）——扩展采集协议 `{ platform, conversation_id, title, url, messages[] }` 需要
 
 - [ ] **Step 3: 可行性结论**
 
@@ -207,7 +208,7 @@ git commit -m "spike: chat page DOM survey for extension collection"
 - [ ] **Step 3: 设计扩展技术要点（写入 `docs/spikes/headless-cf.md`）**
 
 - Manifest V3；content script 按平台对话页 URL 匹配（`claude.ai/chat/*`、`chatgpt.com/c/*`、`chat.deepseek.com/chat/*` 等）
-- 滚动加载策略（虚拟列表逐段加载）→ DOM 解析 → 结构化对话（`[{role, content}]`）
+- 滚动加载策略（虚拟列表逐段加载）→ DOM 解析 → 结构化对话（`[{role, content}]`）+ **元数据**（标题/对话ID/原始URL，协议 `{ platform, conversation_id, title, url, messages[] }`）
 - POST 回 `api.dailogues.com`；会话鉴权：登录态 token 由 app 站点页注入 `chrome.storage`
 - 扩展定位 = 采集器（thin client）：仅采集 + 回传，编辑/生成/发布留在 SPA
 

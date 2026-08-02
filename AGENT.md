@@ -71,7 +71,7 @@ dailogues/
 - 后端 LLM：**DeepSeek**（OpenAI 兼容，`deepseek-chat` 默认，配置化可切换）
 - 润色：LLM SSE 流式；**打磨前质量审核前置**（低质量/信息量小/违规内容拒绝并返回原因）；语言跟随对话内容（与界面语言无关）；单期目标 5–10 分钟
 - 计费：Stripe Checkout/Portal/Webhook；免费 1 期，Pro 订阅无限
-- 导入：**浏览器扩展统一采集**（登录态下读取本人对话，无验证码、无分享链接）；首发平台 ChatGPT/Claude/豆包/DeepSeek；**扩展定位=采集器（thin）**，创作发布仍在 SPA
+- 导入：**浏览器扩展统一采集**（登录态下读取本人对话，含元数据：标题/对话ID/平台/原始链接，无验证码、无分享链接）；首发平台 ChatGPT/Claude/豆包/DeepSeek；**扩展定位=采集器（thin）**，创作发布仍在 SPA
 - 邀请码：管理员 CLI + 用户奖励（>3 期后每发布一期 +1）
 - 成本策略：除 LLM/TTS/Stripe 外全免费（配额内）
 
