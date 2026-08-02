@@ -63,7 +63,7 @@ app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 
 | 方法/路径 | 认证 | 作用 |
 |---|---|---|
-| `POST /api/imports` | ✓ | 提交链接/文件/文本 → 解析器 → `parsed_dialogue` 落库，返回结构化对话 |
+| `POST /api/imports` | ✓ | 提交分享链接 → 抓取器（按平台 API 模式）→ 验证码校验 → 解析器 → `parsed_dialogue` 落库，返回结构化对话 |
 | `POST /api/episodes/:id/polish` | ✓ | SSE 流式润色：先质量审核（轻量 LLM 预检，不达标返回 422 + 原因）→ 语言检测 → 流式返回脚本段落 |
 | `POST /api/episodes/:id/generate` | ✓ | 配额校验 → 建 job → 后台执行 |
 | `GET /api/episodes/:id/job` | ✓ | 轮询生成进度（阶段 + 百分比） |
@@ -92,6 +92,12 @@ queued → tts → merge → upload → done（failed 可重试）
 - 配额判定在 `generate` 入口（服务端）：免费用户累计生成 ≥1 期 → 403；按期付费用户按 `credit_balance` 扣减；订阅用户无限。额度不足 → 403 + 购买/订阅引导
 - 发布时发放邀请码：已发布期数 > 3 起，每发布一期 +1 码（`source=reward`，**前 3 期不补发**），见 PRD §4.1
 
+### 3.5 抓取与验证（URL-only 导入）
+
+- **抓取器**：按平台内置 API 模式——从分享 URL 提取 share_id → 调已知 API（浏览器头模板：UA/Referer/sec-ch-ua）→ 结构化对话。DeepSeek 已验证（`GET /api/v0/share/content?share_id=`，无需登录）；**Claude 明确不支持**（API 层 Cloudflare JS 质询，MVP 不上无头浏览器）
+- **验证码机制**：`POST /api/imports` 前先请求验证码（一次性，哈希存 `imports.verification_code_hash`）→ 用户"先发码、再分享"→ 抓取内容中匹配验证码 → `verified_at` 落库；不匹配返回 422 + 引导重试
+- **反爬运维**：headers 模板配置化（sec-ch-ua 版本会过时）；单次抓取 + 缓存 + 限速；平台级故障返回明确错误并监控告警
+
 ## 4. 数据模型（Supabase Postgres）
 
 | 表 | 关键字段 |
@@ -99,7 +105,7 @@ queued → tts → merge → upload → done（failed 可重试）
 | `profiles` | `id`(=auth.users), `username`(唯一), `display_name`, `bio`, `plan`(free/pro), `credit_balance`(int, 按期付费余额), `created_at` |
 | `voice_samples` | `user_id`, `audio_url`(R2), `duration`, `status`, `created_at`（可重录覆盖） |
 | `invite_codes` | `code`(唯一), `created_by`, `used_by`, `used_at`, `expires_at`, `source`(admin/reward), `issued_for_episode_id` |
-| `imports` | `user_id`, `source_type`(link/file/text), `platform`(chatgpt/claude/kimi/doubao/tongyi/gemini/plain), `raw_content`, `parsed_dialogue`(JSONB), `status`, `created_at` |
+| `imports` | `user_id`, `source_type`(仅 link), `platform`(chatgpt/claude/kimi/doubao/tongyi/gemini/deepseek/plain), `verification_code_hash`, `verified_at`, `raw_content`, `parsed_dialogue`(JSONB), `status`, `created_at` |
 | `episodes` | `id`, `user_id`, `slug`, `title`, `description`, `cover_url`, `audio_url`, `duration_seconds`, `status`(draft/generating/published/failed), `quality_status`(pending/passed/rejected), `quality_reason`, `language`, `is_public`, `created_at`, `published_at` |
 | `scripts` | `episode_id`, `version`, `segments`(JSONB: `[{speaker: host\|guest, text}]`), `created_at` |
 | `generation_jobs` | `episode_id`, `status`(queued/tts/merge/upload/done/failed), `progress`, `error`, `attempts`, `timestamps` |
