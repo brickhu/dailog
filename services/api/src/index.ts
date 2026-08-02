@@ -49,7 +49,7 @@ const queue = createJobQueue(createPipelineRunner({
     getHostModelId: repo.episodes.getHostModelId,
     getVoiceSampleKey: repo.episodes.getVoiceSampleKey,
     // 嘉宾固定音色 id 尚未提供（Task 10 音色体系），暂为 null → 走零样本 fallback
-    getGuestModelId: async () => null,
+    getGuestModelId: async () => env.FISH_GUEST_REFERENCE_ID ?? null,
     markJobProgress: repo.jobs.markJobProgress,
     markJobDone: repo.jobs.markJobDone,
     updateEpisodeAudio: repo.jobs.updateEpisodeAudio,

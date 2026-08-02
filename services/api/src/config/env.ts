@@ -12,6 +12,7 @@ const schema = z.object({
   DEEPSEEK_MODEL: z.string().default("deepseek-chat"),
   FISH_API_KEY: z.string().default(""),
   FISH_PROXY_URL: z.string().optional(),
+  FISH_GUEST_REFERENCE_ID: z.string().optional(),
   STORAGE_DRIVER: z.enum(["fs", "r2"]).default("fs"),
   STORAGE_DIR: z.string().default("./data"),
   // 片头/片尾音频资产目录（Task 11 生成；缺失时 merge 降级为只拼主对话）
