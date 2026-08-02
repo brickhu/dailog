@@ -10,8 +10,10 @@
 
 | 命令 | 脚本 | 说明 |
 |---|---|---|
-| `npm run fish` | `fish-audio.mjs` | Fish Audio TTS 集成验证（克隆音质、多说话人结构、计费实测） |
-| `npm run headless` | `headless-cf.mjs` | 无头浏览器抓取 Claude 分享页的历史记录脚本，**不再使用**（无头方案被 CF Turnstile 拦截，见 `docs/spikes/headless-cf.md`） |
+| `npm run fish` | `fish-audio.mjs` | Fish Audio TTS 集成验证（多说话人结构、零样本克隆、计费实测），详见 `docs/spikes/fish-audio.md` |
+| `npm run fish:limits` | `fish-audio.mjs --boundary` | 单请求字符上限测试（3000/6000/12000 字符），产物在 `out-limits/` |
+
+> 无头浏览器抓取方案（`headless-cf.mjs`）已废弃：被 CF Turnstile 拦截，见 `docs/spikes/headless-cf.md`，对应 npm script 已移除。
 
 在 `scripts/spikes/` 目录下运行：
 
@@ -32,5 +34,5 @@ npm run fish
 ## 注意
 
 - **`.env` 存放真实密钥，已被 `.gitignore` 忽略，切勿提交**；密钥只应通过 `.env.example` 模板传递
-- 本环境**无任何依赖**（Node 22 原生 `fetch`），不要运行 `npm install` / `pnpm install`
+- 本环境**无任何依赖**（Node >= 20.6：`node --env-file` 自 20.6 起可用，网络仅用内置 `net`/`tls`/`https` 模块），不要运行 `npm install` / `pnpm install`
 - 访问被墙平台（如 Claude 分享页）时使用本地 SOCKS 代理 `127.0.0.1:1081`

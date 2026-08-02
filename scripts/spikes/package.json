@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "fish": "node fish-audio.mjs",
-    "headless": "node headless-cf.mjs"
+    "fish": "node --env-file=.env fish-audio.mjs",
+    "fish:limits": "node --env-file=.env fish-audio.mjs --boundary"
   },
   "dependencies": {}
 }
