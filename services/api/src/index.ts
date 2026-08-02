@@ -17,6 +17,7 @@ import { recoverQueuedJobs } from "./pipeline/bootstrap";
 import type { PolishDeps } from "./routes/polish";
 import type { GenerateDeps } from "./routes/generate";
 import type { JobDeps } from "./routes/job";
+import type { VoiceDeps } from "./routes/voice";
 
 const env = loadEnv();
 
@@ -30,12 +31,14 @@ const llm = createLlmClient({
   model: env.DEEPSEEK_MODEL,
 });
 
-// TTS：Fish Audio 直连；配置 FISH_PROXY_URL（本地 socks5 代理）时经代理出网
-if (!env.FISH_API_KEY) console.warn("[tts] FISH_API_KEY 未配置：generate 管线 tts 阶段将失败，E2E 前请配置");
-const tts = createTtsClient({
-  apiKey: env.FISH_API_KEY,
-  fetchImpl: createProxyFetch(env.FISH_PROXY_URL),
-});
+// TTS：Fish Audio 直连；配置 FISH_PROXY_URL（本地 socks5 代理）时经代理出网。
+// 无 key 时 voice 路由 503（deps.voice.tts = null）；生成管线保持原行为（空 key client 调用时失败）
+if (!env.FISH_API_KEY) console.warn("[tts] FISH_API_KEY 未配置：generate 管线 tts 阶段将失败，voice-sample 路由返回 503，E2E 前请配置");
+const tts = env.FISH_API_KEY
+  ? createTtsClient({ apiKey: env.FISH_API_KEY, fetchImpl: createProxyFetch(env.FISH_PROXY_URL) })
+  : null;
+
+const storage = createStorage({ driver: env.STORAGE_DRIVER, dir: env.STORAGE_DIR });
 
 // 进程内串行生成队列（MVP 单实例，ARC §3.1）：重试 + 指数退避
 const queue = createJobQueue(createPipelineRunner({
@@ -51,8 +54,8 @@ const queue = createJobQueue(createPipelineRunner({
     markJobDone: repo.jobs.markJobDone,
     updateEpisodeAudio: repo.jobs.updateEpisodeAudio,
   },
-  tts,
-  storage: createStorage({ driver: env.STORAGE_DRIVER, dir: env.STORAGE_DIR }),
+  tts: tts ?? createTtsClient({ apiKey: "", fetchImpl: createProxyFetch(env.FISH_PROXY_URL) }),
+  storage,
   // merge 阶段：intro/outro 资产（缺失 → 降级）+ 真实 ffmpeg 二进制
   assets: createLocalAssetStore(env.ASSETS_DIR),
   ffmpegPath: ffmpegInstaller.path,
@@ -94,6 +97,12 @@ const job: JobDeps = {
   getLatestJob: (episodeId) => repo.jobs.getLatestJob(episodeId),
 };
 
+const voice: VoiceDeps = {
+  saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row),
+  tts, // FISH_API_KEY 未配置时为 null → 路由返回 503
+  storage,
+};
+
 const app = createApp({
   env,
   verifyToken: createTokenVerifier(env.SUPABASE_JWKS_URL, `${env.SUPABASE_URL}/auth/v1`),
@@ -101,6 +110,7 @@ const app = createApp({
   polish,
   generate,
   job,
+  voice,
 });
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => {

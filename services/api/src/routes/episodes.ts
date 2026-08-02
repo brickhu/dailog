@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { VoiceSampleRow } from "./voice";
 
 export interface ScriptSegment { speaker: "host" | "guest"; text: string; }
 
@@ -19,6 +20,8 @@ export interface EpisodesRepo {
   getHostModelId(userId: string): Promise<string | null>;
   /** 生成管线：用户最新 ready 录音样本的 storage key（voice_samples.audio_url，storage.get 读字节） */
   getVoiceSampleKey(userId: string): Promise<string | null>;
+  /** 录音样本 upsert（同 user 覆盖旧行：先删后插，保证 getHostModelId/getVoiceSampleKey 取到最新） */
+  saveVoiceSample(row: VoiceSampleRow): Promise<void>;
 }
 
 export function episodesRoutes(repo: EpisodesRepo, getUserId: (c: unknown) => string) {

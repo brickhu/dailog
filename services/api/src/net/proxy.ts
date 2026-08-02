@@ -37,11 +37,11 @@ export function createProxyFetch(proxyUrl?: string): typeof fetch {
           .then((socket) => callback(null, socket), (err) => callback(err, null));
       },
     });
-    return ((input, init) =>
+    return ((input: RequestInfo | URL, init?: RequestInit) =>
       // undici 的 RequestInfo/Response/RequestInit 类型与全局版不同（textStream/duplex/window 等），统一断言
-      undiciFetch(input as never, { ...init, dispatcher: agent } as never)) as typeof fetch;
+      undiciFetch(input as never, { ...init, dispatcher: agent } as never)) as unknown as typeof fetch;
   }
   const agent = new ProxyAgent(proxyUrl);
-  return ((input, init) =>
-    undiciFetch(input as never, { ...init, dispatcher: agent } as never)) as typeof fetch;
+  return ((input: RequestInfo | URL, init?: RequestInit) =>
+    undiciFetch(input as never, { ...init, dispatcher: agent } as never)) as unknown as typeof fetch;
 }

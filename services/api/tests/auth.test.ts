@@ -21,6 +21,7 @@ function fakeRepo(): AppDeps["repo"] {
       getEpisodeLanguage: async () => null,
       getHostModelId: async () => null,
       getVoiceSampleKey: async () => null,
+      saveVoiceSample: async () => {},
     },
     jobs: {
       getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
@@ -63,6 +64,14 @@ function fakeJob(): AppDeps["job"] {
   };
 }
 
+function fakeVoice(): AppDeps["voice"] {
+  return {
+    saveVoiceSample: async () => {},
+    tts: null, // 测试环境无 FISH_API_KEY → voice 路由 503
+    storage: { put: async () => {}, get: async () => new Uint8Array() },
+  };
+}
+
 function makeApp() {
   return createApp({
     env: {
@@ -86,6 +95,7 @@ function makeApp() {
     polish: fakePolish(),
     generate: fakeGenerate(),
     job: fakeJob(),
+    voice: fakeVoice(),
   });
 }
 

@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import * as schema from "../db/schema";
 import type { EpisodesRepo, ScriptSegment } from "../routes/episodes";
 import type { EpisodeRow, ImportRow, ImportsRepo } from "../routes/imports";
+import type { VoiceSampleRow } from "../routes/voice";
 
 function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "23505";
@@ -214,6 +215,20 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .orderBy(desc(schema.voiceSamples.createdAt))
           .limit(1);
         return rows[0]?.audioUrl ?? null;
+      },
+
+      async saveVoiceSample(row: VoiceSampleRow) {
+        // upsert：voice_samples 无 user_id 唯一约束，先删该用户旧行再插，实现「同 user 覆盖」
+        await db.transaction(async (tx) => {
+          await tx.delete(schema.voiceSamples).where(eq(schema.voiceSamples.userId, row.userId));
+          await tx.insert(schema.voiceSamples).values({
+            userId: row.userId,
+            audioUrl: row.audioUrl,
+            referenceId: row.referenceId,
+            duration: row.duration,
+            status: row.status,
+          });
+        });
       },
     },
 

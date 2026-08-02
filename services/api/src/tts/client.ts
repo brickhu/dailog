@@ -14,7 +14,7 @@ export interface TtsClient {
     referenceAudio?: Uint8Array; // msgpack references 内联
     referenceId?: string;
   }): Promise<Uint8Array>;
-  /** 创建/训练音色模型（fast 5-8s，免费） */
+  /** 创建/训练音色模型（POST /model fast 训练 5-8s，免费，0 额度也可用）→ { id }（响应 _id） */
   createVoiceModel(args: { audio: Uint8Array; name: string }): Promise<{ id: string }>;
 }
 
@@ -73,17 +73,24 @@ export function createTtsClient(opts: TtsOptions): TtsClient {
   }
 
   async function createVoiceModel(args: { audio: Uint8Array; name: string }): Promise<{ id: string }> {
+    // 校准自 scripts/spikes/fish-audio.mjs createHostModel / docs/spikes/fish-audio.md §3-b：
+    // 表单字段 type=tts、train_mode=fast、title、visibility=private、tags=zh、
+    // voices=@file（文件字段名是 voices 不是 file）；成功 201 → { _id, state }，id 取 _id
     const form = new FormData();
-    form.append("name", args.name);
-    form.append("file", new Blob([args.audio as Uint8Array<ArrayBuffer>]), "voice.wav");
+    form.append("type", "tts");
+    form.append("train_mode", "fast");
+    form.append("title", args.name);
+    form.append("visibility", "private");
+    form.append("tags", "zh");
+    form.append("voices", new Blob([args.audio as Uint8Array<ArrayBuffer>]), "voice.wav");
     const res = await f(`${base}/model`, {
       method: "POST",
       headers: { Authorization: `Bearer ${opts.apiKey}` },
       body: form,
     });
     if (!res.ok) throw new Error(`voice model http_${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const data = (await res.json()) as { id: string };
-    return { id: data.id };
+    const data = (await res.json()) as { _id: string };
+    return { id: data._id };
   }
 
   return { synthesizeMultiSpeaker, synthesizeSingle, createVoiceModel };

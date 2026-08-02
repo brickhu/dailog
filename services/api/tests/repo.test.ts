@@ -308,6 +308,35 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       expect(await repo.episodes.getHostModelId(API_USER)).toBeNull();
       expect(await repo.episodes.getVoiceSampleKey(API_USER)).toBeNull();
     });
+
+    it("saveVoiceSample upserts: 同 user 覆盖旧行，仅留最新一条", async () => {
+      // 幂等：清掉可能残留的样本行
+      await db.delete(voiceSamples).where(eq(voiceSamples.userId, REPO_USER));
+      await repo.episodes.saveVoiceSample({
+        userId: REPO_USER, audioUrl: "voice/one.wav", referenceId: "m-one", duration: 3, status: "ready",
+      });
+      await repo.episodes.saveVoiceSample({
+        userId: REPO_USER, audioUrl: "voice/two.wav", referenceId: "m-two", duration: 4, status: "ready",
+      });
+      const rows = await db.select().from(voiceSamples).where(eq(voiceSamples.userId, REPO_USER));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        audioUrl: "voice/two.wav", referenceId: "m-two", duration: 4, status: "ready",
+      });
+      // failed 覆盖也生效（status 可写失败态）
+      await repo.episodes.saveVoiceSample({
+        userId: REPO_USER, audioUrl: "voice/broken.wav", referenceId: null, duration: 0, status: "failed",
+      });
+      const failed = await db.select().from(voiceSamples).where(eq(voiceSamples.userId, REPO_USER));
+      expect(failed).toHaveLength(1);
+      expect(failed[0]).toMatchObject({ audioUrl: "voice/broken.wav", referenceId: null, status: "failed" });
+      // 其他用户不受影响
+      await repo.episodes.saveVoiceSample({
+        userId: API_USER, audioUrl: "voice/other.wav", referenceId: "m-other", duration: 1, status: "ready",
+      });
+      expect(await db.select().from(voiceSamples).where(eq(voiceSamples.userId, API_USER))).toHaveLength(1);
+      expect(await db.select().from(voiceSamples).where(eq(voiceSamples.userId, REPO_USER))).toHaveLength(1);
+    });
   });
 
   describe("api via real repo", () => {
@@ -339,6 +368,11 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
     const job: AppDeps["job"] = {
       getLatestJob: (episodeId) => repo.jobs.getLatestJob(episodeId),
     };
+    const voice: AppDeps["voice"] = {
+      saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row),
+      tts: null,
+      storage: { put: async () => {}, get: async () => new Uint8Array() },
+    };
     const app = createApp({
       env: makeEnv(),
       verifyToken: async (token: string) => {
@@ -349,6 +383,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       polish,
       generate,
       job,
+      voice,
     });
 
     it("POST /api/imports 201 then 409; episodes list/script/publish flow", async () => {

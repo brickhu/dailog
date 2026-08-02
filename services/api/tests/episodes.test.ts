@@ -23,6 +23,7 @@ function fakeRepo(): EpisodesRepo {
     getEpisodeLanguage: async () => null,
     getHostModelId: async () => null,
     getVoiceSampleKey: async () => null,
+    saveVoiceSample: async () => {},
   };
 }
 
