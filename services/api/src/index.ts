@@ -87,9 +87,10 @@ const generate: GenerateDeps = {
   createJob: (episodeId) => repo.jobs.createJob(episodeId),
   // 进程内队列：异步消费（runner 全链：tts → merge → upload）
   enqueueJob: async (job) => {
-    await queue.enqueue({ id: job.id, episodeId: job.episodeId }, (p) => {
+    // fire-and-forget：202 立即返回，状态由 GET /job 轮询（队列 promise 在任务完成时才 resolve）
+    void queue.enqueue({ id: job.id, episodeId: job.episodeId }, (p) => {
       console.log(`[queue] job ${job.id} progress ${p}%`);
-    });
+    }).catch((e) => console.error(`[queue] job ${job.id} failed`, e));
   },
 };
 
