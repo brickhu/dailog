@@ -23,6 +23,7 @@ function fakeRepo(): AppDeps["repo"] {
       consumeQuota: async () => {},
       createJob: async (episodeId) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
       getLatestJob: async () => null,
+      getOwnedEpisode: async () => ({ id: "ep-1" }),
     },
   };
 }
@@ -38,6 +39,7 @@ function fakePolish(): AppDeps["polish"] {
 
 function fakeGenerate(): AppDeps["generate"] {
   return {
+    getOwnedEpisode: async () => ({ id: "ep-1" }),
     getLatestScript: async () => null,
     safetyCheck: async () => ({ pass: true }),
     getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),

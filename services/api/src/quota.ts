@@ -11,6 +11,10 @@ export interface QuotaInfo {
  */
 export function canGenerate(q: QuotaInfo): { ok: true; consumeCredit: number } | { ok: false; reason: string } {
   if (q.plan === "pro") return { ok: true, consumeCredit: 0 };
-  if (q.generatedCount >= 1 && q.creditBalance <= 0) return { ok: false, reason: "quota_free_used" };
-  return { ok: true, consumeCredit: 1 };
+  // 免费额度：首期不扣 credit；之后每期扣 1 credit（PRD §4.7）
+  if (q.generatedCount >= 1) {
+    if (q.creditBalance <= 0) return { ok: false, reason: "quota_free_used" };
+    return { ok: true, consumeCredit: 1 };
+  }
+  return { ok: true, consumeCredit: 0 };
 }

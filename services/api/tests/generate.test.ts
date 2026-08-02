@@ -3,6 +3,7 @@ import { generateRoutes, type GenerateDeps } from "../src/routes/generate";
 
 function makeGenerate(deps: Partial<GenerateDeps> = {}) {
   return generateRoutes({
+    getOwnedEpisode: async () => ({ id: "ep-1" }),
     getLatestScript: async () => ({ version: 2, segments: [{ speaker: "host", text: "你好" }] }),
     safetyCheck: async () => ({ pass: true }),
     getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
@@ -49,6 +50,14 @@ describe("POST /api/episodes/:id/generate", () => {
   it("returns 404 when no script", async () => {
     const app = makeGenerate({ getLatestScript: async () => null });
     const res = await app.request("/api/episodes/ep-1/generate", { method: "POST" });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("ownership", () => {
+  it("returns 404 for another user's episode", async () => {
+    const app = makeGenerate({ getOwnedEpisode: async () => null });
+    const res = await app.request("/api/episodes/ep-other/generate", { method: "POST" });
     expect(res.status).toBe(404);
   });
 });

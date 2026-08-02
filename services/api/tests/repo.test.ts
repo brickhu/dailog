@@ -238,6 +238,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       },
     };
     const generate: AppDeps["generate"] = {
+      getOwnedEpisode: (episodeId, userId) => repo.episodes.getEpisode(episodeId, userId),
       getLatestScript: (episodeId) => repo.episodes.getLatestScript(episodeId),
       safetyCheck: async () => ({ pass: true }),
       getQuota: (userId) => repo.jobs.getQuotaInfo(userId),
@@ -352,10 +353,10 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       expect(jobRes.status).toBe(200);
       expect(await jobRes.json()).toMatchObject({ id: genJson.jobId, status: "queued", progress: 0, error: null });
 
-      // 配额视角：job 尚未 done，generatedCount 仍为 0；free 首集消耗 1 积分
+      // 配额视角：job 尚未 done，generatedCount 仍为 0；free 首集为免费额度，不扣 credit
       const quota = await repo.jobs.getQuotaInfo(API_USER);
       expect(quota.generatedCount).toBe(0);
-      expect(quota.creditBalance).toBe(balanceBefore - 1);
+      expect(quota.creditBalance).toBe(balanceBefore);
     });
 
     it("GET /api/episodes/:id/job returns 404 when no job", async () => {

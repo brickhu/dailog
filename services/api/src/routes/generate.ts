@@ -3,6 +3,8 @@ import type { ScriptSegment } from "./episodes";
 import { canGenerate } from "../quota";
 
 export interface GenerateDeps {
+  /** 归属校验（防 IDOR）：返回 null 视为不存在或不属于当前用户 */
+  getOwnedEpisode(episodeId: string, userId: string): Promise<{ id: string } | null>;
   getLatestScript(episodeId: string): Promise<{ version: number; segments: ScriptSegment[] } | null>;
   safetyCheck(segments: ScriptSegment[]): Promise<{ pass: boolean; reason?: string }>;
   getQuota(userId: string): Promise<{ plan: "free" | "pro"; generatedCount: number; creditBalance: number }>;
@@ -18,6 +20,8 @@ export function generateRoutes(deps: GenerateDeps) {
   app.post("/api/episodes/:id/generate", async (c) => {
     const episodeId = c.req.param("id");
     const userId = c.get("userId") as string;
+    const owned = await deps.getOwnedEpisode(episodeId, userId);
+    if (!owned) return c.json({ error: "not_found" }, 404);
     const script = await deps.getLatestScript(episodeId);
     if (!script) return c.json({ error: "no_script" }, 404);
     // 生成前内容安全审核（编辑后脚本）：拒绝不建 job 不扣配额（PRD §4.4）

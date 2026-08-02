@@ -22,6 +22,8 @@ export interface JobsRepo {
   createJob(episodeId: string): Promise<{ id: string; episodeId: string; status: string; progress: number }>;
   /** 最新 job（created_at desc） */
   getLatestJob(episodeId: string): Promise<{ id: string; status: string; progress: number; error: string | null } | null>;
+  /** 归属校验（防 IDOR）：返回 null 视为不存在或不属于该用户 */
+  getOwnedEpisode(episodeId: string, userId: string): Promise<{ id: string } | null>;
 }
 
 export type Repos = { imports: ImportsRepo; episodes: EpisodesRepo; jobs: JobsRepo };
@@ -207,6 +209,15 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           progress: schema.generationJobs.progress,
         });
         return rows[0];
+      },
+
+      async getOwnedEpisode(episodeId, userId) {
+        const rows = await db
+          .select({ id: schema.episodes.id })
+          .from(schema.episodes)
+          .where(and(eq(schema.episodes.id, episodeId), eq(schema.episodes.userId, userId)))
+          .limit(1);
+        return rows[0] ?? null;
       },
 
       async getLatestJob(episodeId) {
