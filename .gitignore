@@ -7,3 +7,4 @@ dist/
 scripts/spikes/out-limits/
 sample-voice.*
 apps/extension/dist/
+data-test/
