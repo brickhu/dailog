@@ -63,7 +63,7 @@ app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 
 | 方法/路径 | 认证 | 作用 |
 |---|---|---|
-| `POST /api/imports` | ✓ | 提交分享链接 → 抓取器（按平台 API 模式）→ 验证码校验 → 解析器 → `parsed_dialogue` 落库，返回结构化对话 |
+| `POST /api/imports` | ✓ | 接收扩展回传的结构化对话（platform + 幂等票据）→ 落库，返回结构化对话 |
 | `POST /api/episodes/:id/polish` | ✓ | SSE 流式润色：先质量审核（轻量 LLM 预检，不达标返回 422 + 原因）→ 语言检测 → 流式返回脚本段落 |
 | `POST /api/episodes/:id/generate` | ✓ | 配额校验 → 建 job → 后台执行 |
 | `GET /api/episodes/:id/job` | ✓ | 轮询生成进度（阶段 + 百分比） |
@@ -92,13 +92,14 @@ queued → tts → merge → upload → done（failed 可重试）
 - 配额判定在 `generate` 入口（服务端）：免费用户累计生成 ≥1 期 → 403；按期付费用户按 `credit_balance` 扣减；订阅用户无限。额度不足 → 403 + 购买/订阅引导
 - 发布时发放邀请码：已发布期数 > 3 起，每发布一期 +1 码（`source=reward`，**前 3 期不补发**），见 PRD §4.1
 
-### 3.5 抓取与验证（URL-only 导入，双路径）
+### 3.5 采集与导入（浏览器扩展统一通道）
 
-- **快路径 `api-fetcher`**：按平台内置 API 模式——从分享 URL 提取 share_id → 调已知 API（浏览器头模板：UA/Referer/sec-ch-ua）→ 结构化对话。DeepSeek 已验证（`GET /api/v0/share/content?share_id=`，无需登录）；豆包/Kimi/通义大概率可行，ChatGPT 待 spike 实测
-- **慢路径 = 浏览器扩展（用户侧采集，spike 实测定稿）**：用于 Cloudflare/Turnstile 质询平台（**Claude 必须**，ChatGPT 视实测）。用户打开分享页 → 扩展 content script 按平台解析 DOM → 回传平台校验。依据（实测 `docs/spikes/headless-cf.md`）：无头浏览器被 Turnstile 交互式质询拦截（70s 未通过、数据接口 403），云端无头方案不可行；扩展运行在用户真实浏览器（住宅 IP + 真实指纹），成功率接近 100%
-- 扩展形态：Manifest V3（Chrome/Edge 商店上架），content script 按平台匹配（`claude.ai/share/*` 等），DOM 解析为结构化对话（含验证码匹配）→ POST 回 `api.dailogues.com`；会话鉴权用平台登录态（token 由 app 站点页注入 `chrome.storage`）；扩展只做「采集 + 回传」，不存储对话；商店审核周期纳入排期
-- **验证码机制**：`POST /api/imports` 前先请求验证码（一次性，哈希存 `imports.verification_code_hash`）→ 用户"先发码、再分享"→ 抓取内容中匹配验证码 → `verified_at` 落库；不匹配返回 422 + 引导重试
-- **反爬运维**：headers 模板配置化（sec-ch-ua 版本会过时）；单次抓取 + 缓存 + 限速；平台级故障返回明确错误并监控告警
+- **统一采集器（浏览器扩展）**：用户在 AI 平台**登录态**下打开自己的对话页 → 扩展自动滚动加载完整对话（虚拟列表）→ 按平台 DOM 解析为结构化对话 → POST `api.dailogues.com/imports`
+- **真实性 = 登录态**：扩展运行于用户本人账号会话，读取即本人的对话 → **验证码机制取消**，无需分享链接（架构性消解，见 `docs/spikes/headless-cf.md` 的对照结论）
+- **扩展定位 = 采集器（thin client）**：只做「采集 + 回传」，不做编辑/生成/发布——创作发布全部在 SPA 工作台完成（移动端可用、密钥与服务端管线不暴露、商店审核面最小）
+- 形态：Manifest V3；content script 按平台 URL 匹配（`chatgpt.com/c/*`、`claude.ai/chat/*`、`chat.deepseek.com/chat/*` 等）；鉴权：登录态 token 由 app 站点页注入 `chrome.storage`；扩展不本地存储对话
+- 适配成本：每平台一个 DOM 解析适配器（滚动机制 + 消息块结构），平台页面改版需定点维护
+- 商店上架（Chrome/Edge）审核周期入排期；移动端暂不支持（Safari 扩展另行评估）
 
 ## 4. 数据模型（Supabase Postgres）
 
@@ -107,7 +108,7 @@ queued → tts → merge → upload → done（failed 可重试）
 | `profiles` | `id`(=auth.users), `username`(唯一), `display_name`, `bio`, `plan`(free/pro), `credit_balance`(int, 按期付费余额), `created_at` |
 | `voice_samples` | `user_id`, `audio_url`(R2), `duration`, `status`, `created_at`（可重录覆盖） |
 | `invite_codes` | `code`(唯一), `created_by`, `used_by`, `used_at`, `expires_at`, `source`(admin/reward), `issued_for_episode_id` |
-| `imports` | `user_id`, `source_type`(仅 link), `platform`(chatgpt/claude/kimi/doubao/tongyi/gemini/deepseek/plain), `verification_code_hash`, `verified_at`, `raw_content`, `parsed_dialogue`(JSONB), `status`, `created_at` |
+| `imports` | `user_id`, `platform`(chatgpt/claude/kimi/doubao/tongyi/gemini/deepseek/plain), `raw_content`, `parsed_dialogue`(JSONB), `status`, `created_at` |
 | `episodes` | `id`, `user_id`, `slug`, `title`, `description`, `cover_url`, `audio_url`, `duration_seconds`, `status`(draft/generating/published/failed), `quality_status`(pending/passed/rejected), `quality_reason`, `language`, `is_public`, `created_at`, `published_at` |
 | `scripts` | `episode_id`, `version`, `segments`(JSONB: `[{speaker: host\|guest, text}]`), `created_at` |
 | `generation_jobs` | `episode_id`, `status`(queued/tts/merge/upload/done/failed), `progress`, `error`, `attempts`, `timestamps` |
@@ -173,7 +174,9 @@ assets/intro.zh.mp3 / intro.en.mp3 / outro.zh.mp3 / outro.en.mp3   ← 固定片
 | 风险 | 缓解 |
 |---|---|
 | Fish Audio 多说话人请求格式/单请求限额不确定 | **首个实现任务：spike**——验证 chunks 格式、返回形态、批上限、克隆+固定音色混排音质 |
-| Cloudflare/Turnstile 风控（Claude 等慢路径平台） | 已实测（`docs/spikes/headless-cf.md`）：无头浏览器被 Turnstile 拦截 → 慢路径定为**浏览器扩展**（用户侧真实浏览器）；扩展商店上架审核周期提前规划 |
+| Cloudflare/Turnstile 风控 | 已实测（`docs/spikes/headless-cf.md`）：无头浏览器被 Turnstile 拦截；导入统一走**浏览器扩展**（用户侧真实浏览器），天然绕开风控 |
+| 平台聊天页改版 | 扩展 DOM 解析适配器需随平台页面改版维护；适配器每平台一文件，改版时定点修复 |
+| 扩展商店审核 | Chrome/Edge 上架审核周期（数天~数周）入排期；先开发者模式/本地灰度 |
 | 克隆音色质量受录音环境影响 | 录音引导页质量校验（时长/响度/语音检测），可重录 |
 | ffmpeg 在 256MB 机器上拼接大音频 | 单期时长限定 5–10 分钟，音频体量小，256MB 无压力 |
 | LLM 供应商切换 | OpenAI 兼容接口 + 配置化，锁定成本 |

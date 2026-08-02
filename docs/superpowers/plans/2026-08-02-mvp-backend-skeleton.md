@@ -522,10 +522,7 @@ export const inviteCodes = pgTable("invite_codes", {
 export const imports = pgTable("imports", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
-  sourceType: text("source_type", { enum: ["link", "file", "text"] }).notNull(),
   platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek", "plain"] }).notNull(),
-  verificationCodeHash: text("verification_code_hash"),
-  verifiedAt: timestamp("verified_at", { withTimezone: true }),
   rawContent: text("raw_content"),
   parsedDialogue: jsonb("parsed_dialogue"),
   status: text("status", { enum: ["parsed", "failed"] }).notNull().default("parsed"),

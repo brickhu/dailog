@@ -1,18 +1,19 @@
-# 计划 2：三合一技术验证 spike（Fish Audio / 抓取矩阵 / 无头浏览器过 CF）Implementation Plan
+# 计划 2：技术验证 spike（Fish Audio / 聊天页 DOM 勘察 / 采集方案定稿）Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 用真实 API/页面验证三个关键不确定点，产出可执行的决策记录：① Fish Audio 多说话人 TTS 的请求格式、限额与音质；② 各 AI 平台分享链接的抓取可行性矩阵；③ 无头浏览器能否稳定通过 Claude 的 Cloudflare 质询。
+**Goal:** 用真实 API/页面验证关键不确定点，产出可执行的决策记录：① Fish Audio 多说话人 TTS 的请求格式、限额与音质；② 各 AI 平台聊天页（登录态）的 DOM 结构与采集可行性勘察；③ 浏览器扩展采集方案的技术要点定稿。
 
-**Architecture:** 全部为**探索性脚本**（`scripts/spikes/` 下的独立 Node 脚本），不进入产品代码。每个 spike 产出「发现文档」（`docs/spikes/*.md`），最后汇总为决策记录并回写 PRD/ARC/AGENT。无头浏览器用 Playwright + stealth 插件，本地验证（依赖用户机器上的 SOCKS 代理 127.0.0.1:1081 访问被墙平台）。
+**Architecture:** 全部为**探索性脚本**（`scripts/spikes/` 下的独立 Node 脚本），不进入产品代码。每个 spike 产出「发现文档」（`docs/spikes/*.md`），最后汇总为决策记录并回写 PRD/ARC/AGENT。DOM 勘察在真实浏览器（IAB，用户登录态）中进行。
 
-**Tech Stack:** Node 22 / 原生 fetch / Playwright / puppeteer-extra-plugin-stealth / 本地 SOCKS 代理
+**Tech Stack:** Node 22 / 原生 fetch / Playwright（已实测：无头被 CF Turnstile 拦截，仅用于记录结论）/ 浏览器扩展（Manifest V3）设计
 
 **前置条件（手动，由用户提供）：**
 - `FISH_API_KEY`（Fish Audio API Key，用户提供）
-- 各平台真实分享链接样本：DeepSeek ✅（已有 `https://chat.deepseek.com/share/643cljtxqilx2oir6x`）；**Doubao / Kimi / 通义 / Gemini / ChatGPT 各 1–2 条（用户提供）**
+- 各平台**登录态对话页**访问能力（用户账号登录，用于 DOM 勘察：DeepSeek/Claude 优先，ChatGPT/豆包/Kimi/通义/Gemini 按可用性）
 - 本地代理 `127.0.0.1:1081`（SOCKS5，已验证可用）
-- 若 npm 安装被墙：`export HTTPS_PROXY=socks5://127.0.0.1:1081`（Playwright 浏览器下载同样生效）
+
+> 历史：本计划原包含「分享页抓取矩阵」与「无头浏览器过 CF」验证。实测结论（`docs/spikes/headless-cf.md`）：无头浏览器被 Cloudflare Turnstile 拦截；**导入统一改为浏览器扩展采集（登录态）**——分享页抓取与验证码机制随之取消。
 
 ---
 
@@ -155,91 +156,40 @@ git commit -m "spike: fish audio multi-speaker findings"
 
 ---
 
-### Task 3: 快路径抓取矩阵（api-fetcher 可行性）
+### Task 3: 各平台聊天页 DOM 勘察（登录态，扩展采集可行性）
 
 **Files:**
-- Create: `scripts/spikes/fetch-matrix.mjs`
-- Create: `docs/spikes/fetch-matrix.md`（发现文档，矩阵表）
+- Create: `docs/spikes/chat-dom.md`（发现文档，逐平台记录）
 
-- [ ] **Step 1: 写矩阵脚本（含已验证的 DeepSeek 参考实现）**
+- [ ] **Step 1: 用真实浏览器打开平台对话页（登录态）**
 
-```js
-// scripts/spikes/fetch-matrix.mjs
-// 用法: FISH_API_KEY 无关；读取 SAMPLES 数组，逐个尝试抓取并记录结果
-const SAMPLES = [
-  { platform: "deepseek", url: process.env.DEEPSEEK_SAMPLE_URL },
-  // 用户提供样本后填入：
-  // { platform: "chatgpt", url: "https://chatgpt.com/share/<uuid>" },
-  // { platform: "doubao", url: "https://www.doubao.com/share/..." },
-  // { platform: "kimi", url: "https://kimi.moonshot.cn/share/..." },
-  // { platform: "tongyi", url: "..." },
-  // { platform: "gemini", url: "https://gemini.google.com/share/..." },
-];
+在 IAB（或用户浏览器）登录各平台账号，打开一条真实对话：
+- Claude: `claude.ai/chat/*`、DeepSeek: `chat.deepseek.com/chat/*`（优先，用户已有账号）
+- ChatGPT / 豆包 / Kimi / 通义 / Gemini：按用户账号可用性补充
 
-const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+- [ ] **Step 2: 逐平台记录 DOM 结构（`docs/spikes/chat-dom.md`）**
 
-function extractShareId(platform, url) {
-  // 各平台 share_id 提取规则，按平台填写（DeepSeek 示例：/share/<id>）
-  const m = url.match(/\/share\/([^/?#]+)/);
-  return m ? m[1] : null;
-}
+用 `domSnapshot` 观察并记录每平台：
+1. 对话页 URL 模式（content script 匹配用）
+2. 消息块容器结构（用户/助手消息的稳定选择器特征，如 `data-testid`、class 层级）
+3. 滚动加载机制（虚拟列表？向上滚动加载历史？需采集的滚动策略）
+4. 消息内容形态（纯文本 / markdown / 附件链接；代码块、思考过程是否在 DOM 中）
+5. 截断风险（长对话是否按需加载、懒加载占位）
 
-async function fetchDeepSeek(shareId) {
-  // 已验证：GET /api/v0/share/content?share_id=，需浏览器头
-  const res = await fetch(`https://chat.deepseek.com/api/v0/share/content?share_id=${shareId}`, {
-    headers: {
-      "User-Agent": UA,
-      "Referer": `https://chat.deepseek.com/share/${shareId}`,
-      "Accept": "application/json",
-      "sec-ch-ua": '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
-    },
-  });
-  const text = await res.text();
-  return { status: res.status, body: text.slice(0, 200), contentType: res.headers.get("content-type") };
-}
+- [ ] **Step 3: 可行性结论**
 
-// 其余平台实现按同一模式添加：fetchHtml / 找 API / 记录 WAF 特征
-const FETCHERS = { deepseek: fetchDeepSeek };
-
-for (const sample of SAMPLES.filter((s) => s.url)) {
-  const id = extractShareId(sample.platform, sample.url);
-  console.log(`\n=== ${sample.platform} (id: ${id}) ===`);
-  try {
-    const r = await FETCHERS[sample.platform](id);
-    console.log("status:", r.status, "| content-type:", r.contentType);
-    console.log("body 前200字:", r.body.replace(/\n/g, " "));
-  } catch (e) {
-    console.log("ERROR:", e.message);
-  }
-}
-```
-
-- [ ] **Step 2: 运行（DeepSeek 参考用例）**
-
-```bash
-cd scripts/spikes && DEEPSEEK_SAMPLE_URL=https://chat.deepseek.com/share/643cljtxqilx2oir6x pnpm matrix
-```
-Expected: deepseek 行输出 `status: 200` 与对话 JSON 前 200 字。
-
-- [ ] **Step 3: 加入用户提供的样本链接，逐个平台实测**
-
-将用户提供的各平台链接填入 `SAMPLES`，对每个平台：
-1. 先 curl 分享页 HTML（记录：SSR 含内容 / SPA 外壳 / WAF 特征页）
-2. 若 SPA 外壳：下载主 JS bundle，grep `api/` + `share` 找数据接口，按 DeepSeek 模式直调
-3. 记录结果到 `docs/spikes/fetch-matrix.md` 矩阵表：
-
-| 平台 | 页面类型 | 数据接口 | curl 可行 | 说明 |
+记录每平台「扩展采集可行性」（高/中/低）与适配要点；识别首个可交付平台（预计 Claude/DeepSeek 先行）。
 
 - [ ] **Step 4: 提交**
 
 ```bash
-git add scripts/spikes docs/spikes
-git commit -m "spike: fetch matrix findings"
+git add docs/spikes
+git commit -m "spike: chat page DOM survey for extension collection"
 ```
 
 ---
 
-### Task 4: 慢路径方案定稿（无头浏览器实测 → 浏览器扩展）
+### Task 4: 采集方案定稿（无头浏览器实测 → 浏览器扩展统一通道）
 
 > **⚠️ 本任务已于 2026-08-02 提前执行完毕**，结论见 `docs/spikes/headless-cf.md`。以下为记录与后续动作。
 
@@ -248,18 +198,18 @@ git commit -m "spike: fetch matrix findings"
 实测要点（本机住宅 IP + 系统 Chrome headless + 请求拦截）：
 - 页面卡在 Cloudflare **Turnstile 交互式质询** 70s 未通过；数据接口 `claude.ai/edge-api/bootstrap` → 403
 - 无头 Chrome 指纹（`navigator.webdriver` 等）被 CF 识别，stealth 插件不足以对抗
-- **结论：云端无头浏览器方案不可行** → 慢路径改为**浏览器扩展**（用户侧真实浏览器，成功率接近 100%）
+- **结论：云端无头浏览器方案不可行；导入统一改为浏览器扩展采集（登录态）**——真实性=登录态，验证码机制取消
 
-- [ ] **Step 2: 确认扩展可解析的分享页 DOM 结构**
+- [ ] **Step 2: 确认可解析的聊天页 DOM 结构（已在 Task 3 输出）**
 
-在真实浏览器（住宅 IP）打开 `CLAUDE_SAMPLE_URL`，用 `domSnapshot` 观察消息块结构（用户消息/助手消息的容器层级），确认可程序化提取；记录到 `docs/spikes/headless-cf.md` 的「扩展 DOM 提取要点」小节。
+在真实浏览器（登录态）打开各平台对话页，确认消息块容器可程序化提取；记录到 `docs/spikes/chat-dom.md`（与 Task 3 共用）。
 
 - [ ] **Step 3: 设计扩展技术要点（写入 `docs/spikes/headless-cf.md`）**
 
-- Manifest V3；content script 匹配 `claude.ai/share/*` 等分享页路径
-- DOM 解析 → 结构化对话（`[{role, content}]`），含验证码字符串匹配
+- Manifest V3；content script 按平台对话页 URL 匹配（`claude.ai/chat/*`、`chatgpt.com/c/*`、`chat.deepseek.com/chat/*` 等）
+- 滚动加载策略（虚拟列表逐段加载）→ DOM 解析 → 结构化对话（`[{role, content}]`）
 - POST 回 `api.dailogues.com`；会话鉴权：登录态 token 由 app 站点页注入 `chrome.storage`
-- 扩展仅采集 + 回传，不本地存储对话；商店上架（Chrome/Edge）审核周期入排期
+- 扩展定位 = 采集器（thin client）：仅采集 + 回传，编辑/生成/发布留在 SPA
 
 - [ ] **Step 4: 提交**
 
@@ -280,9 +230,9 @@ git commit -m "spike: headless vs cloudflare conclusion - extension as slow path
 
 覆盖以下决策点，每条给出结论与依据：
 1. **Fish Audio 集成形态**：多说话人一次调用是否成立？参考音频传法（base64/reference_id）？单请求字符上限 → 决定管线是「一次调用」还是「分批 + ffmpeg 拼接」；主持人克隆音色的 reference_id 是否需要在用户录音后「注册音色」再使用
-2. **MVP 平台清单**：快路径平台（API 直取，验证码方案）、慢路径平台（无头浏览器，Claude）、暂缓平台——更新 PRD §4.3 与 AGENT 速查
-3. **慢路径定稿**：浏览器扩展（实测：无头被 Turnstile 拦截）——扩展技术要点（Manifest V3 / content script 平台匹配 / DOM 解析 / 鉴权注入 / 商店上架排期）已记录于 `docs/spikes/headless-cf.md`
-4. **验证码机制**：确认在快/慢路径下均可实施（抓取内容统一为结构化对话后做字符串匹配）
+2. **MVP 平台清单**：聊天页 DOM 勘察结果 → 扩展采集器首批适配平台（预计 Claude/DeepSeek 先行）与 URL 匹配模式——更新 PRD §4.3 与 AGENT 速查
+3. **扩展采集方案定稿**：Manifest V3 技术要点（content script 平台匹配 / 滚动策略 / DOM 解析 / 鉴权注入 / thin client 定位）已记录于 `docs/spikes/headless-cf.md` 与 `docs/spikes/chat-dom.md`
+4. **验证码机制**：已随「扩展登录态采集」取消（真实性=登录态），无需验证
 
 - [ ] **Step 2: 回写 PRD/ARC/AGENT**
 
@@ -302,7 +252,7 @@ git commit -m "docs: spike 结论回写（平台清单/抓取架构/Fish Audio �
 
 ## 自检记录（计划作者）
 
-- **Spec 覆盖**：PRD §4.3（平台/双路径）、ARC §3.5（双路径抓取 + 验证码）与 §9 风险表（CF 风控）的验证任务全部覆盖；AGENT M1/M3 spike 前置要求满足。
+- **Spec 覆盖**：PRD §4.3（扩展统一采集）、ARC §3.5（采集与导入）与 §9 风险表（页面改版/商店审核）的验证任务全部覆盖；AGENT M1/M3 spike 前置要求满足。
 - **一致性**：spike 脚本与产品侧类型无关（独立脚本目录）；Task 5 回写路径明确。
-- **诚实性**：Fish Audio 请求体为骨架 + 文档查证步骤（spike 的本质就是发现 API 契约，无法预写确定格式）；各平台抓取实现逐一实测，不预设结论。
-- **已知依赖**：Fish API Key、各平台样本链接、本地代理——均为用户提供的前置条件，已在头部列出。
+- **诚实性**：Fish Audio 请求体为骨架 + 文档查证步骤（spike 的本质就是发现 API 契约，无法预写确定格式）；DOM 勘察逐平台实测，不预设结论。
+- **已知依赖**：Fish API Key、各平台登录态账号（DOM 勘察）、本地代理——均为用户提供的前置条件，已在头部列出。
