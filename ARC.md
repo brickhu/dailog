@@ -79,11 +79,13 @@ app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 queued → tts → merge → upload → done（failed 可重试）
 ```
 
-1. **TTS**：主对话一次 **Fish Audio 多说话人调用**（chunks 数组，每段指定说话人）——
-   - 主持人段：`reference_audio` = 用户录音样本（实时克隆）
+1. **TTS（供应商由对比 spike 定稿，核心刚需 = 即时克隆）**：按角色分批调用（每批一个音色，多说话人一次调用为可选优化）——
+   - 主持人段：**即时克隆**（优先零样本按需模式——每次请求带参考音频，重录即时生效；备选预注册复刻模式）
    - 嘉宾段：平台固定音色 `reference_id`
-   - 超长保护：润色以**单期 5–10 分钟**（约 1200–3000 字）为目标压缩；脚本上限 80 段；若超 Fish Audio 单请求字符限额则按批调用（批间靠 ffmpeg 拼接兜底）
-   - 失败：整次重试 2 次（指数退避）
+   - 评估维度（`docs/spikes/tts-comparison.md`）：克隆质量（相似度+自然度）> 即时克隆模式（A 零样本按需 / B 预注册）> 价格 > 多说话人支持
+   - 候选：Fish Audio / MiniMax / CosyVoice 百炼 API / 硅基流动（自部署 CosyVoice2 为规模后迁移路径，Apache-2.0 可商用）
+   - 超长保护：润色以**单期 5–10 分钟**（约 1200–3000 字）为目标压缩；脚本上限 80 段；超单请求字符限额则按批调用（批间靠 ffmpeg 拼接兜底）
+   - 失败：每批重试 2 次（指数退避）
 2. **合并**：ffmpeg 拼接 `intro.{lang}.mp3 + 主对话 + outro.{lang}.mp3`（中/英两套固定片头片尾，按对话语言选择），段间 300ms 自然间隔
 3. **上传**：后端持 CF 凭证直传 R2 → 更新 `episodes.audio_url` / `duration_seconds` → job `done`
 
@@ -174,7 +176,7 @@ assets/intro.zh.mp3 / intro.en.mp3 / outro.zh.mp3 / outro.en.mp3   ← 固定片
 
 | 风险 | 缓解 |
 |---|---|
-| Fish Audio 多说话人请求格式/单请求限额不确定 | **首个实现任务：spike**——验证 chunks 格式、返回形态、批上限、克隆+固定音色混排音质 |
+| TTS 供应商未定（核心刚需 = 即时克隆质量） | **首个实现任务：TTS 对比 spike**——同一参考音频 + 同一文本跑 Fish/MiniMax/CosyVoice百炼/硅基流动，对比克隆质量（相似度+自然度）、即时克隆模式（零样本按需 vs 预注册）、单价、审核门槛；自部署 CosyVoice2（Apache-2.0）为规模后迁移路径 |
 | Cloudflare/Turnstile 风控 | 已实测（`docs/spikes/headless-cf.md`）：无头浏览器被 Turnstile 拦截；导入统一走**浏览器扩展**（用户侧真实浏览器），天然绕开风控 |
 | 平台聊天页改版 | 扩展 DOM 解析适配器需随平台页面改版维护；适配器每平台一文件，改版时定点修复 |
 | 扩展商店审核 | Chrome/Edge 上架审核周期（数天~数周）入排期；先开发者模式/本地灰度 |

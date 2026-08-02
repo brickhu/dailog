@@ -67,7 +67,7 @@ dailogues/
 - 前端：SolidJS + Solid Router + StyleX（两站共用设计 token）
 - 后端：Node + TypeScript + Hono + Drizzle + fluent-ffmpeg
 - 认证：Supabase Auth（JWT，后端 JWKS 校验）；注册需邀请码
-- 生成管线：Fish Audio 多说话人一次调用（主持=克隆，嘉宾=固定）→ ffmpeg 拼接固定片头片尾 → R2
+- 生成管线：TTS 按角色分批（主持=**即时克隆**音色，嘉宾=固定音色）→ ffmpeg 拼接固定片头片尾 → R2；**供应商由对比 spike 定稿（核心刚需=即时克隆质量）**
 - 后端 LLM：**DeepSeek**（OpenAI 兼容，`deepseek-chat` 默认，配置化可切换）
 - 润色：LLM SSE 流式；**打磨前质量审核前置**（低质量/信息量小/违规内容拒绝并返回原因）；语言跟随对话内容（与界面语言无关）；单期目标 5–10 分钟
 - 计费：Stripe Checkout/Portal/Webhook；免费 1 期，Pro 订阅无限
@@ -78,7 +78,7 @@ dailogues/
 ## 里程碑
 
 - [ ] M0：文档定稿（PRD/ARC/MRD 审阅通过）
-- [ ] M1：Fish Audio spike（多说话人格式、克隆音质）—— 首个实现任务
+- [ ] M1：TTS 供应商对比 spike（Fish/MiniMax/CosyVoice百炼/硅基流动，**核心=即时克隆质量**）—— 首个实现任务
 - [ ] M2：统一后端骨架（Hono + Drizzle + 迁移 + CI/CD 部署 Fly）
 - [ ] M3：浏览器扩展采集器（Manifest V3 + 按平台 content script，首发 Claude/DeepSeek）→ 商店上架
 - [ ] M4：质量审核 + 润色（LLM 流式）+ 生成管线（TTS → ffmpeg → R2）
