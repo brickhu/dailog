@@ -79,11 +79,14 @@ app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 queued → tts → merge → upload → done（failed 可重试）
 ```
 
-1. **TTS = Fish Audio（决策定稿，`docs/spikes/tts-comparison.md`）**：核心刚需 = 即时克隆（零样本按需——每次请求带参考音频，用户重录即时生效，无预注册/训练环节）——
-   - 主持人段：`reference_audio` = 用户录音样本（零样本即时克隆）
-   - 嘉宾段：平台固定音色 `reference_id`
-   - 优先多说话人一次调用（Fish 原生支持混排），超单请求字符限额则按角色/段分批调用（批间靠 ffmpeg 拼接兜底）
-   - 单价 ~$15/百万 UTF-8 字节（中文 1 字 3 字节，10 分钟 ≈ ¥0.97）；免费额度与真实账单以 spike 实测为准
+1. **TTS = Fish Audio（决策定稿，`docs/spikes/tts-comparison.md`；集成形态已实测，`docs/spikes/fish-audio.md`）**：核心刚需 = 即时克隆（零样本按需——参考音频随请求携带，无预注册/训练环节，重录即时生效，**实测通过**）——
+   - **多说话人一次调用（实测可用）**：`text` 内嵌 `<|speaker:0|>` / `<|speaker:1|>` 标签 + `reference_id` 数组（下标对应 speaker 序号）——**不是 text/chunks 数组**（旧计划假设有误）；仅 S2-Pro 系模型支持（`s2-pro` / `s2.1-pro*`，`s1` 不行）；单次调用返回一条 mp3（实测 6 段对话 = 27.6s 单文件）
+   - 主持人零样本克隆：**必须 msgpack**（`application/msgpack` + `references: [{audio: 原始音频字节, text: 转录}]`）——JSON 无 base64 字段、无法携带原始音频；重录即时生效
+   - 嘉宾固定音色：音色库 `GET /model?language=zh`（或控制台 Voice Library）取模型 `_id` 存为 `reference_id`
+   - **混合模式限制（实测）**：一次多说话人调用不能混用「主持人内联 references + 嘉宾固定 `reference_id`」（只支持全模型 id 或全内联两种纯模式）→ 一期若主持人零样本克隆 + 嘉宾固定音色，走**两条调用**：主持人零样本整段 + 嘉宾固定音色整段，ffmpeg 拼接（管线本就有）；需单次混排可先建主持人音色模型（`POST /model`，fast 训练 5–8s，免费）走全 `reference_id` 数组
+   - 单请求字符上限：实测 12000 中文（36000 UTF-8 字节）未命中上限，未再上探；语速 ≈7.2 字/秒
+   - 一致性：默认 `temperature=0.7` 且 schema 无 `seed`，同文本两次合成时长波动 ~12%（实测区间 ~12–46%）——可接受但需注意；长节目需稳定节奏可调低 temperature（0.3 量级）或按段重试
+   - 计费：**$15/百万 UTF-8 字节**（按输入文本字节计费，中文 1 字 3 字节，10 分钟 ≈ ¥0.97）；免费模型 `s2.1-pro-free`（$0）实测全功能可用——测试/onboarding 用
    - 超长保护：润色以**单期 5–10 分钟**（约 1200–3000 字）为目标压缩；脚本上限 80 段
    - 失败：每批重试 2 次（指数退避）
    - **备选切换预案**（触发条件：成本超标/音质/合规）：讯飞一句话复刻（¥2.3 训练 + ¥1.15/万字符）、火山声音复刻（5 秒级）、MiniMax、自部署 CosyVoice2（Apache-2.0，规模后迁移路径）——TTS 层保持供应商抽象
@@ -98,10 +101,23 @@ queued → tts → merge → upload → done（failed 可重试）
 ### 3.5 采集与导入（浏览器扩展统一通道）
 
 - **统一采集器（浏览器扩展）**：用户在 AI 平台**登录态**下打开自己的对话页 → 扩展自动滚动加载完整对话（虚拟列表）→ 按平台 DOM 解析为结构化对话 → POST `api.dailogues.com/imports`
-- **元数据随采集回传**：`{ platform, conversation_id, title, url, messages[] }`——标题预填节目名；`(user_id, platform, conversation_id)` 唯一约束防重复导入；播放页展示来源信息
+- **元数据随采集回传**：`{ platform, conversation_id, title, url, messages[] }`——对话 ID 取自 URL 路径、标题取 `document.title`，预填节目名；`(user_id, platform, conversation_id)` 唯一约束防重复导入；播放页展示来源信息
+- **平台可行性分级（DOM 勘察结论，`docs/spikes/chat-dom.md`；选择器基于公开逆向资料，各平台开发时逐一实测修正）**：
+
+| 平台 | 可行性 | 关键适配 |
+|---|---|---|
+| Claude | **高（首批）** | `[data-testid="user-message"]` + `[data-is-streaming]` 判角色；无虚拟化公开证据；**页面 CSP 阻止 content script 外发 fetch → 回传必须走 background service worker** |
+| DeepSeek | **高（首批）** | `.ds-markdown` 产品前缀稳定；**虚拟列表必做滚动采集**（>50 轮直接复制可见区丢 ~30% 历史的坑） |
+| ChatGPT | 中~高 | `data-message-author-role` 多年稳定；原生虚拟化：边滚边采 + 记录 offsetTop 排序 + `data-message-id` 去重 + 空块内容校验 |
+| Gemini | 中 | 自定义元素 `user-query`/`model-response` 较稳；Angular class 混淆频繁，禁用 class 依赖 |
+| Kimi | 中~低 | 类名/哈希约 24h 轮换；首选内部 API（`/api/user/v6/chat/message/{chat_id}`）或通用 DOM 引擎 |
+| 豆包 | 中~低 | 虚拟列表强截断；首选 hook `POST /im/chain/single` API（登录态 XHR 注入） |
+| 通义 | 低 | 无公开稳定选择器、会话路由格式未知；备选官方数据导出（24h 邮箱 ZIP） |
+
+- **虚拟列表通用采集循环**（ChatGPT/DeepSeek/Gemini/豆包 均为虚拟化列表）：定位滚动容器 → 滚动到顶/底 → 等待 mutation（MutationObserver）→ 收集存活节点（记 offsetTop + 消息 id）→ 去重 → 循环至无新增 → 按 offsetTop 排序
 - **真实性 = 登录态**：扩展运行于用户本人账号会话，读取即本人的对话 → **验证码机制取消**，无需分享链接（架构性消解，见 `docs/spikes/headless-cf.md` 的对照结论）
 - **扩展定位 = 采集器（thin client）**：只做「采集 + 回传」，不做编辑/生成/发布——创作发布全部在 SPA 工作台完成（移动端可用、密钥与服务端管线不暴露、商店审核面最小）
-- 形态：Manifest V3；content script 按平台 URL 匹配（`chatgpt.com/c/*`、`claude.ai/chat/*`、`chat.deepseek.com/chat/*` 等）；鉴权：登录态 token 由 app 站点页注入 `chrome.storage`；扩展不本地存储对话
+- 形态：Manifest V3；content script 按平台 URL 匹配（`claude.ai/chat/*`、`chat.deepseek.com/chat/*`、`chatgpt.com/c/*`、`gemini.google.com/app/*`、`kimi.moonshot.cn/chat/*`、`www.doubao.com/chat/*`、`www.tongyi.com/*`）；**回传统一走 background service worker**（claude.ai CSP 拦截 content script 直连外域，`chrome.runtime.sendMessage`）；鉴权：登录态 token 由 app 站点页注入 `chrome.storage`；扩展不本地存储对话
 - 适配成本：每平台一个 DOM 解析适配器（滚动机制 + 消息块结构），平台页面改版需定点维护
 - 商店上架（Chrome/Edge）审核周期入排期；移动端暂不支持（Safari 扩展另行评估）
 
@@ -177,7 +193,9 @@ assets/intro.zh.mp3 / intro.en.mp3 / outro.zh.mp3 / outro.en.mp3   ← 固定片
 
 | 风险 | 缓解 |
 |---|---|
-| Fish Audio 集成细节（多说话人请求格式/单请求字符上限/克隆音质） | **首个实现任务：Fish Audio spike**（计划 2 Task 2）——验证多说话人结构、参考音频传法、单请求上限、克隆音质与真实计费口径；备选切换预案见 §3.3 |
+| 多说话人混合模式受限（实测：一次调用不能混用「主持人内联零样本 + 嘉宾固定 `reference_id`」） | 设计定型：主持人零样本整段 + 嘉宾固定音色整段两条调用，ffmpeg 拼接（管线本就有）；需单次混排时先建主持人音色模型（`POST /model`，fast 5–8s，免费）走全 `reference_id` 数组 |
+| Fish 免费/付费模型差异（spike 全程在 `s2.1-pro-free` 完成，0 额度账号无法直接观察扣费） | 计费口径 $15/百万 UTF-8 字节已由官方定价页确认；上线前用付费账号以 `GET /wallet/self/api-credit` 差值核对账单；克隆一致性默认波动 ~12%，长节目可调低 temperature |
+| 平台 DOM 选择器基于公开逆向资料（`docs/spikes/chat-dom.md`，未登录态实测） | 各平台 content script 开发时逐一实测修正（每平台适配器交付即验证）；虚拟列表平台（ChatGPT/DeepSeek/Gemini/豆包）必须实现滚动采集循环 |
 | Cloudflare/Turnstile 风控 | 已实测（`docs/spikes/headless-cf.md`）：无头浏览器被 Turnstile 拦截；导入统一走**浏览器扩展**（用户侧真实浏览器），天然绕开风控 |
 | 平台聊天页改版 | 扩展 DOM 解析适配器需随平台页面改版维护；适配器每平台一文件，改版时定点修复 |
 | 扩展商店审核 | Chrome/Edge 上架审核周期（数天~数周）入排期；先开发者模式/本地灰度 |
