@@ -1,7 +1,7 @@
 # AGENT — 项目总览
 
 > 本项目所有文档的入口与汇总。任何 Agent / 协作者先读本文件。
-> 最后更新：2026-08-03（MVP 设计阶段，尚未有代码）
+> 最后更新：2026-08-03（M1/M2 已完成：spike 定稿 + 后端骨架代码落地；M3+ 排期中）
 
 ## 项目一句话
 
@@ -40,7 +40,7 @@ dailogues/
 │       │   ├── llm/            #   质量审核 + 润色 + 语言检测（DeepSeek，配置化）
 │       │   ├── billing/        #   Stripe checkout/webhook/配额
 │       │   └── db/             #   Drizzle schema + migrations（Supabase Postgres）
-│       └── Dockerfile          #   含 ffmpeg
+│       └── （Dockerfile 在 infra/railway/，含 ffmpeg）
 ├── packages/
 │   └── shared/                 # 领域类型（含采集协议）+ 设计 token（StyleX）
 ├── infra/

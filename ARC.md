@@ -72,6 +72,8 @@ app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 
 | 方法/路径 | 认证 | 作用 |
 |---|---|---|
+| `GET /health` | — | 健康检查（Railway healthcheckPath） |
+| `GET /api/me` | ✓ | 当前用户（认证中间件验证） |
 | `POST /api/imports` | ✓ | 接收扩展回传的结构化对话（platform + 幂等票据）→ 落库，返回结构化对话 |
 | `POST /api/episodes/:id/polish` | ✓ | SSE 流式润色：先质量审核（轻量 LLM 预检，不达标返回 422 + 原因）→ 语言检测 → 流式返回脚本段落 |
 | `POST /api/episodes/:id/generate` | ✓ | 配额校验 → 建 job → 后台执行 |
