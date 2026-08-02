@@ -10,7 +10,7 @@
 | 工作台 SPA（app.dailogues.com） | SolidJS + Solid Router + StyleX | Cloudflare Pages（静态，免费） |
 | 内容站 SSR（dailogues.com） | SolidStart（SSR）+ StyleX | Cloudflare Pages/Workers（免费） |
 | **采集扩展（浏览器扩展）** | **Manifest V3**：content script 按平台解析 + background service worker 回传 | Chrome/Edge 商店（用户侧安装，登录态采集） |
-| 统一后端（api.dailogues.com） | Node.js + TypeScript + Hono + Drizzle ORM + fluent-ffmpeg | Fly.io 免费配额（Docker，256MB 机器，空闲休眠） |
+| 统一后端（api.dailogues.com） | Node.js + TypeScript + Hono + Drizzle ORM + fluent-ffmpeg | **Railway**（Git 集成自动部署，Docker，按用量约 $5–10/月） |
 | 数据库 | Supabase Postgres | Supabase 免费额度（500MB） |
 | 认证 | Supabase Auth（邮箱 + 密码，邀请码门禁） | Supabase 免费额度（5 万 MAU） |
 | 对象存储 | Cloudflare R2（音频/封面/录音样本） | R2 免费 10GB + 流量永久免费 |
@@ -41,7 +41,7 @@ app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
                                        │         └──────────────┘
                               ┌────────▼─────────┐
                               │ api.dailogues.com │
-                              │  统一后端 (Fly.io 免费配额, Docker) │
+                              │  统一后端 (Railway, Docker)            │
                               │  · imports 接收（扩展回传）         │
                               │  · LLM 润色(SSE 流式)             │
                               │  · 生成管线(TTS→ffmpeg→R2)        │
@@ -183,12 +183,12 @@ assets/intro.zh.mp3 / intro.en.mp3 / outro.zh.mp3 / outro.en.mp3   ← 固定片
 |---|---|
 | Cloudflare Pages/Workers + R2 | 免费（10GB 存储，流量免费） |
 | Supabase（Postgres + Auth） | 免费（500MB / 5 万 MAU） |
-| Fly.io（1 台 256MB 机器） | 免费配额内（3 台/3GB 卷/160GB 流量，空闲休眠） |
+| Railway（统一后端） | 按用量约 $5–10/月（小规格常驻服务；Git 集成自动部署） |
 | LLM 润色 | 按量，每期约几美分 |
 | Fish Audio | 按量（$15/百万 UTF-8 字节，中文 1 字 3 字节；10 分钟期 ≈ ¥0.97，实测见 `docs/spikes/fish-audio.md`） |
 | Stripe | 2.9% + $0.30/笔 |
 
-超出免费额度的触发点：R2 >10GB、Supabase >500MB、Fly 超配额（届时升 paid ~$5/月起）。
+超出免费额度的触发点：R2 >10GB、Supabase >500MB；Railway 随用量线性增长（可设用量上限告警）。
 
 ## 8. 测试策略
 

@@ -2,18 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 搭建 monorepo 与 `api.dailogues.com` 统一后端骨架：TypeScript + Hono + Drizzle 全量数据模型 + Supabase JWT 认证 + Fly.io Docker 部署 + GitHub Actions CI/CD。
+**Goal:** 搭建 monorepo 与 `api.dailogues.com` 统一后端骨架：TypeScript + Hono + Drizzle 全量数据模型 + Supabase JWT 认证 + Railway Docker 部署（Git 集成自动部署）。
 
 **Architecture:** pnpm workspace（`services/api` + `packages/*` 占位）。后端为单一 Hono 应用，通过依赖注入（`createApp({ env, verifyToken })`）保证可测试性：测试注入 fake env 与 fake token verifier，不触达真实环境。数据库为 Supabase Postgres，Drizzle ORM 负责 schema 与迁移。生产运行用 tsx（MVP 简化，不做打包），Docker 镜像内置 ffmpeg（为后续生成管线准备）。
 
-**Tech Stack:** pnpm 9 / Node 22 / TypeScript 5 / Hono 4 / Drizzle ORM + drizzle-kit / postgres.js / jose / zod / Vitest 3 / tsx / Docker / GitHub Actions / Fly.io
+**Tech Stack:** pnpm 9 / Node 22 / TypeScript 5 / Hono 4 / Drizzle ORM + drizzle-kit / postgres.js / jose / zod / Vitest 3 / tsx / Docker / GitHub Actions（CI）/ Railway（部署）
 
-**前置条件（手动一次性，非任务）：**
+**前置条件（手动，一次性，非任务）：**
 - 创建 GitHub 仓库并推送本仓库
 - 创建 Supabase 项目（获取 URL；数据库连接串 `DATABASE_URL`）
-- 安装 flyctl，`fly auth login`，`fly apps create dailogues-api`
-- `fly secrets set DATABASE_URL=... SUPABASE_URL=... SUPABASE_JWKS_URL=...`（JWKS 为 `<SUPABASE_URL>/auth/v1/jwks`）
-- Fly token（`fly tokens create`）加入 GitHub Secrets：`FLY_API_TOKEN`
+- 注册 Railway 账号并绑定 GitHub 仓库（Railway → New Project → Deploy from GitHub repo；部署走 Railway Git 集成，push 即自动部署，无需部署 workflow）
+- Railway 服务 Variables 配置：`DATABASE_URL`、`SUPABASE_URL`、`SUPABASE_JWKS_URL`（敏感值可挂 Railway Reference/Secret）
+- Railway 服务绑定自定义域 `api.dailogues.com`（Settings → Networking → Custom Domain）
 
 ---
 
@@ -743,13 +743,13 @@ git commit -m "feat(api): server entrypoint"
 
 ---
 
-### Task 9: Dockerfile + fly.toml + 本地构建验证
+### Task 9: Dockerfile + Railway 配置 + 本地构建验证
 
 **Files:**
-- Create: `infra/fly/Dockerfile`
-- Create: `fly.toml`
+- Create: `infra/railway/Dockerfile`
+- Create: `infra/railway/railway.json`
 
-- [ ] **Step 1: 创建 `infra/fly/Dockerfile`（构建上下文 = 仓库根目录）**
+- [ ] **Step 1: 创建 `infra/railway/Dockerfile`（构建上下文 = 仓库根目录）**
 
 ```dockerfile
 FROM node:22-slim
@@ -770,32 +770,31 @@ EXPOSE 8787
 CMD ["pnpm", "start"]
 ```
 
-- [ ] **Step 2: 创建 `fly.toml`（仓库根目录）**
+- [ ] **Step 2: 创建 `infra/railway/railway.json`**
 
-```toml
-app = "dailogues-api"
-primary_region = "nrt"
-
-[build]
-  dockerfile = "infra/fly/Dockerfile"
-
-[http_service]
-  internal_port = 8787
-  force_https = true
-  auto_stop_machines = true
-  auto_start_machines = true
-  min_machines_running = 0
-
-[[vm]]
-  size = "shared-cpu-1x"
-  memory = "256mb"
+```json
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "infra/railway/Dockerfile"
+  },
+  "deploy": {
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 120,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 5
+  }
+}
 ```
+
+> Railway 检测到仓库根 `railway.json` 即按此配置构建部署；Dockerfile 路径相对仓库根。
 
 - [ ] **Step 3: 本地构建镜像验证**
 
 Run:
 ```bash
-docker build -f infra/fly/Dockerfile -t dailogues-api .
+docker build -f infra/railway/Dockerfile -t dailogues-api .
 ```
 Expected: 构建成功，镜像含 ffmpeg。验证：
 ```bash
@@ -806,19 +805,18 @@ Expected: `ffmpeg version ...`
 - [ ] **Step 4: 提交**
 
 ```bash
-git add infra/fly/Dockerfile fly.toml
-git commit -m "chore(infra): fly docker image with ffmpeg + fly.toml"
+git add infra/railway/Dockerfile infra/railway/railway.json
+git commit -m "chore(infra): railway docker image with ffmpeg + railway.json"
 ```
 
 ---
 
-### Task 10: GitHub Actions CI/CD
+### Task 10: GitHub Actions CI + Railway 部署验证
 
 **Files:**
 - Create: `infra/github/workflows/ci.yml`
-- Create: `infra/github/workflows/deploy.yml`
 
-> 前置：仓库已推送到 GitHub；`FLY_API_TOKEN` 已加入仓库 Secrets。
+> 前置：仓库已推送到 GitHub；Railway 已绑定仓库（前置条件）——部署由 Railway Git 集成自动完成，**无需部署 workflow**。
 
 - [ ] **Step 1: 创建 `infra/github/workflows/ci.yml`**
 
@@ -843,48 +841,23 @@ jobs:
       - run: pnpm -r test
 ```
 
-- [ ] **Step 2: 创建 `infra/github/workflows/deploy.yml`**
-
-```yaml
-name: Deploy API
-on:
-  push:
-    branches: [main]
-    paths:
-      - "services/api/**"
-      - "infra/fly/**"
-      - "package.json"
-      - "pnpm-workspace.yaml"
-      - "pnpm-lock.yaml"
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --remote-only
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-```
-
-- [ ] **Step 3: 推送并验证 CI 通过、main 分支触发部署**
+- [ ] **Step 2: 推送并验证 CI 通过、Railway 自动部署**
 
 Run:
 ```bash
-git add infra/github/workflows
-git commit -m "ci: add ci and fly deploy workflows"
+git add infra/github/workflows/ci.yml
+git commit -m "ci: add ci workflow"
 git push origin main
 ```
-Expected: GitHub Actions CI 全绿；部署 workflow 在 main 上触发，Fly 控制台可见 `dailogues-api` 应用启动。
+Expected: GitHub Actions CI 全绿；Railway 检测到 push 自动构建部署（Dashboard 可见 `dailogues-api` 服务构建日志）。
 
-- [ ] **Step 4: 线上验证**
+- [ ] **Step 3: 线上验证**
 
 Run:
 ```bash
 curl -s https://api.dailogues.com/health
 ```
-（Fly 应用自定义域 `api.dailogues.com` 需在 Fly 控制台或 `fly certs add api.dailogues.com` 配置）
+（Railway 服务自定义域 `api.dailogues.com` 需在 Railway Settings → Networking 配置）
 Expected: `{"ok":true}`
 
 ---
@@ -898,7 +871,7 @@ Expected: `{"ok":true}`
 
 将 AGENT.md 里程碑中的
 ```markdown
-- [ ] M2：统一后端骨架（Hono + Drizzle + 迁移 + CI/CD 部署 Fly）
+- [ ] M2：统一后端骨架（Hono + Drizzle + 迁移 + Railway 部署）
 ```
 改为
 ```markdown
@@ -916,7 +889,7 @@ git commit -m "docs: mark M2 complete"
 
 ## 自检记录（计划作者）
 
-- **Spec 覆盖**：ARC §3.1（Hono/Drizzle/tsx/进程内队列后续计划）、§3.2（health 与 me 端点、auth 底座）、§4（9 张表全量）、§2（Fly 部署 + R2 后续）、§8（CI 中跑 typecheck+test）；认证 JWT（ARC §3.1/§3.2）已覆盖。生成管线/解析器/计费接口在后续计划实现（本计划仅骨架，不 stub 未实现端点——YAGNI）。
+- **Spec 覆盖**：ARC §3.1（Hono/Drizzle/tsx/进程内队列后续计划）、§3.2（health 与 me 端点、auth 底座）、§4（9 张表全量）、§2（Railway 部署 + R2 后续）、§8（CI 中跑 typecheck+test）；认证 JWT（ARC §3.1/§3.2）已覆盖。生成管线/采集器/计费接口在后续计划实现（本计划仅骨架，不 stub 未实现端点——YAGNI）。
 - **一致性**：`Env`/`VerifyToken`/`createApp`/`AuthEnv` 类型在 Task 3-5、8 之间一致；表字段与 ARC §4 一致（episodes 含 `quality_status`/`quality_reason`）。
 - **占位符**：无 TBD/TODO；版本号均为范围约束，锁文件为准。
 - **已知取舍**：Task 4 单独提交时 import 未完成（Task 5 补齐），已注明预期；db 集成测试在 CI 无 DATABASE_URL 时自动跳过（ARC §8 契约测试仍由 vitest 直测 Hono app 覆盖）。

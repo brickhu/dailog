@@ -44,10 +44,10 @@ dailogues/
 ├── packages/
 │   └── shared/                 # 领域类型（含采集协议）+ 设计 token（StyleX）
 ├── infra/
-│   ├── fly/                    # fly.toml、Dockerfile
-│   ├── cloudflare/             # wrangler.toml、Pages 配置、_routes.json
-│   ├── github/workflows/       # CI/CD（build → deploy：Fly、CF Pages）
-│   └── scripts/                # 管理员 CLI（生成邀请码等）
+│   ├── railway/               # Dockerfile、railway.json、健康检查配置
+│   ├── cloudflare/            # wrangler.toml、Pages 配置、_routes.json
+│   ├── github/workflows/      # CI（typecheck + test；部署走 Railway Git 集成）
+│   └── scripts/               # 管理员 CLI（生成邀请码等）
 ├── assets/
 │   └── audio/                  # 固定片头片尾：intro.zh.mp3 / intro.en.mp3 / outro.zh.mp3 / outro.en.mp3
 ├── fixtures/                   # 采集器测试样本（各平台对话页 DOM 快照）
@@ -60,7 +60,7 @@ dailogues/
 |---|---|---|
 | `app.dailogues.com` | 工作台 SPA | Cloudflare Pages（静态） |
 | `dailogues.com` | 内容站 SSR | Cloudflare Pages/Workers |
-| `api.dailogues.com` | 统一后端 | Fly.io（免费配额，Docker + ffmpeg） |
+| `api.dailogues.com` | 统一后端 | **Railway**（Git 集成自动部署，Docker + ffmpeg，按用量 $5–10/月） |
 | — | 采集扩展 | Chrome/Edge 商店（用户侧安装，登录态采集） |
 | — | Postgres / Auth | Supabase（免费额度） |
 | — | 音频存储 | Cloudflare R2（流量免费） |
@@ -78,13 +78,13 @@ dailogues/
 - 计费：Stripe Checkout/Portal/Webhook；免费 1 期，Pro 订阅无限
 - 导入：**浏览器扩展统一采集**（登录态下读取本人对话，含元数据：标题/对话ID/平台/原始链接，无验证码、无分享链接）；**平台分级（`docs/spikes/chat-dom.md`）**：首发 Claude/DeepSeek（高），次批 ChatGPT（中~高），Gemini（中）/Kimi、豆包（中~低）/通义（低）按需；虚拟列表平台（ChatGPT/DeepSeek/Gemini/豆包）走**滚动采集循环 + 去重**；元数据取 URL + `document.title`；回传统一走 **background service worker**（Claude CSP）；**扩展定位=采集器（thin）**，创作发布仍在 SPA
 - 邀请码：管理员 CLI + 用户奖励（>3 期后每发布一期 +1）
-- 成本策略：除 LLM/TTS/Stripe 外全免费（配额内）
+- 成本策略：除 LLM/TTS/Stripe 外全免费（CF + Supabase）；后端托管 Railway 按用量约 $5–10/月
 
 ## 里程碑
 
 - [ ] M0：文档定稿（PRD/ARC/MRD 审阅通过）
 - [x] M1：Fish Audio 集成 spike（多说话人格式、单请求限额、克隆音质、计费实测）—— 已完成（`docs/spikes/fish-audio.md`；真实扣费金额上线前用付费账号核对）
-- [ ] M2：统一后端骨架（Hono + Drizzle + 迁移 + CI/CD 部署 Fly）
+- [ ] M2：统一后端骨架（Hono + Drizzle + 迁移 + Railway 部署）
 - [ ] M3：浏览器扩展采集器（Manifest V3 + 按平台 content script，首发 Claude/DeepSeek）→ 商店上架（DOM 勘察已完成 `docs/spikes/chat-dom.md`，采集器开发排期中）
 - [ ] M4：质量审核 + 润色（LLM 流式）+ 生成管线（TTS → ffmpeg → R2）
 - [ ] M5：工作台 SPA（录音引导 → 向导 → 发布）
