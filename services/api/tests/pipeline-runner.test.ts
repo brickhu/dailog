@@ -10,6 +10,9 @@ const SEGMENTS: { speaker: "host" | "guest"; text: string }[] = [
   { speaker: "guest", text: "你好！" },
 ];
 
+/** upload 阶段产物键：audio/episodes/{userId}/{episodeId}.mp3 */
+const AUDIO_KEY = "audio/episodes/user-1/ep-1.mp3";
+
 function makeDeps(overrides: Partial<RunnerDeps> = {}): RunnerDeps {
   const repo = {
     getEpisodeUserId: vi.fn(async () => "user-1"),
@@ -18,9 +21,9 @@ function makeDeps(overrides: Partial<RunnerDeps> = {}): RunnerDeps {
     getHostModelId: vi.fn(async () => null),
     getGuestModelId: vi.fn(async () => null),
     getVoiceSampleKey: vi.fn(async () => null),
-    markJobProgress: vi.fn(async () => {}),
-    markJobDone: vi.fn(async () => {}),
-    updateEpisodeAudio: vi.fn(async () => {}),
+    markJobProgress: vi.fn(async (_jobId: string, _status: string, _progress: number) => {}),
+    markJobDone: vi.fn(async (_jobId: string) => {}),
+    updateEpisodeAudio: vi.fn(async (_episodeId: string, _audioKey: string, _durationSeconds: number) => {}),
   };
   return {
     repo,
@@ -31,7 +34,7 @@ function makeDeps(overrides: Partial<RunnerDeps> = {}): RunnerDeps {
       createVoiceModel: vi.fn(),
     } as unknown as RunnerDeps["tts"],
     storage: {
-      put: vi.fn(async () => {}),
+      put: vi.fn(async (_key: string, _data: Uint8Array) => {}),
       get: vi.fn(async () => new Uint8Array([9])),
     },
     assets: {
@@ -42,21 +45,27 @@ function makeDeps(overrides: Partial<RunnerDeps> = {}): RunnerDeps {
   };
 }
 
-describe("createPipelineRunner (tts + merge stages)", () => {
-  it("multi-speaker path: host+guest model ids → single call, merge@70, then upload not implemented", async () => {
+describe("createPipelineRunner (full chain: tts → merge → upload → done)", () => {
+  it("multi-speaker path: storage.put(音频键) + upload@90 + markJobDone + updateEpisodeAudio(duration>0)", async () => {
     const deps = makeDeps();
     vi.mocked(deps.repo.getHostModelId).mockResolvedValue("host-model");
     vi.mocked(deps.repo.getGuestModelId).mockResolvedValue("guest-model");
-    const update = vi.fn(async () => {});
+    const update = vi.fn(async (_p: number) => {});
     const handler = createPipelineRunner(deps);
 
-    await expect(handler(JOB, update)).rejects.toThrow("upload not implemented (Task 9)");
+    const result = await handler(JOB, update);
 
-    // 阶段边界：tts 推进到 40，merge 推进到 70（DB 持久化 + 事件回调）
-    expect(deps.repo.markJobProgress).toHaveBeenNthCalledWith(4, "job-1", "tts", 40);
-    expect(deps.repo.markJobProgress).toHaveBeenNthCalledWith(5, "job-1", "merge", 70);
-    expect(update).toHaveBeenNthCalledWith(4, 40);
-    expect(update).toHaveBeenNthCalledWith(5, 70);
+    expect(result).toEqual({ status: "done" });
+    // 全链进度顺序：queued@10 → tts@20/30/40 → merge@70 → upload@90（DB 持久化 + 事件回调）
+    expect(vi.mocked(deps.repo.markJobProgress).mock.calls).toEqual([
+      ["job-1", "queued", 10],
+      ["job-1", "tts", 20],
+      ["job-1", "tts", 30],
+      ["job-1", "tts", 40],
+      ["job-1", "merge", 70],
+      ["job-1", "upload", 90],
+    ]);
+    expect(update.mock.calls.map(([p]) => p)).toEqual([10, 20, 30, 40, 70, 90]);
     // 主持人模型存在 → 多说话人一次调用，不再逐段合成
     expect(deps.tts.synthesizeMultiSpeaker).toHaveBeenCalledWith({
       segments: [
@@ -66,29 +75,45 @@ describe("createPipelineRunner (tts + merge stages)", () => {
       referenceIds: ["host-model", "guest-model"],
     });
     expect(deps.tts.synthesizeSingle).not.toHaveBeenCalled();
-    // 有录音样本键时 storage 读字节；本路径未用到
-    expect(deps.storage.get).not.toHaveBeenCalled();
     // merge 阶段按语言读取 intro/outro 资产（缺失 → 降级只拼主对话）
     expect(deps.assets.get).toHaveBeenCalledWith("assets/intro.zh.mp3");
     expect(deps.assets.get).toHaveBeenCalledWith("assets/outro.zh.mp3");
+    // upload：merge 产物字节写入 audio/episodes/{userId}/{episodeId}.mp3
+    expect(deps.storage.put).toHaveBeenCalledTimes(1);
+    const [putKey, putAudio] = vi.mocked(deps.storage.put).mock.calls[0];
+    expect(putKey).toBe(AUDIO_KEY);
+    expect(putAudio).toBeInstanceOf(Uint8Array);
+    expect(putAudio.length).toBeGreaterThan(0);
+    // 落库完成：markJobDone(jobId) + updateEpisodeAudio(episodeId, key, duration>0)
+    expect(deps.repo.markJobDone).toHaveBeenCalledWith("job-1");
+    expect(deps.repo.markJobDone).toHaveBeenCalledTimes(1);
+    const [episodeId, audioKey, durationSeconds] = vi.mocked(deps.repo.updateEpisodeAudio).mock.calls[0];
+    expect(episodeId).toBe("ep-1");
+    expect(audioKey).toBe(AUDIO_KEY);
+    expect(durationSeconds).toBeGreaterThan(0);
+    // merge 阶段真实 ffmpeg 产物时长非零（Duration 正则解析）
+    expect(deps.repo.updateEpisodeAudio).toHaveBeenCalledTimes(1);
   });
 
-  it("fallback path: no host model → storage bytes + per-segment synthesize, merge@70", async () => {
+  it("fallback path: storage sample bytes + per-segment synthesize → full chain to done", async () => {
     const deps = makeDeps();
     vi.mocked(deps.repo.getHostModelId).mockResolvedValue(null);
     vi.mocked(deps.repo.getGuestModelId).mockResolvedValue(null);
     vi.mocked(deps.repo.getVoiceSampleKey).mockResolvedValue("voice/user-1.wav");
-    const update = vi.fn(async () => {});
+    const update = vi.fn(async (_p: number) => {});
     const handler = createPipelineRunner(deps);
 
-    await expect(handler(JOB, update)).rejects.toThrow("upload not implemented (Task 9)");
+    const result = await handler(JOB, update);
 
+    expect(result).toEqual({ status: "done" });
     expect(deps.storage.get).toHaveBeenCalledWith("voice/user-1.wav");
     expect(deps.tts.synthesizeMultiSpeaker).not.toHaveBeenCalled();
     expect(deps.tts.synthesizeSingle).toHaveBeenCalledTimes(2);
     expect(deps.tts.synthesizeSingle).toHaveBeenNthCalledWith(1, { text: "你好", referenceAudio: new Uint8Array([9]) });
     expect(deps.tts.synthesizeSingle).toHaveBeenNthCalledWith(2, { text: "你好！", referenceId: undefined });
-    expect(deps.repo.markJobProgress).toHaveBeenLastCalledWith("job-1", "merge", 70);
+    expect(vi.mocked(deps.repo.markJobProgress).mock.calls.at(-1)).toEqual(["job-1", "upload", 90]);
+    expect(vi.mocked(deps.storage.put).mock.calls[0][0]).toBe(AUDIO_KEY);
+    expect(deps.repo.markJobDone).toHaveBeenCalledWith("job-1");
   });
 
   it("fails early with clear errors when episode or script is missing", async () => {

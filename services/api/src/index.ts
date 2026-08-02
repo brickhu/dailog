@@ -12,6 +12,7 @@ import { createLocalAssetStore } from "./pipeline/assets";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import { createTtsClient } from "./tts/client";
 import { createStorage } from "./storage";
+import { createProxyFetch } from "./net/proxy";
 import { recoverQueuedJobs } from "./pipeline/bootstrap";
 import type { PolishDeps } from "./routes/polish";
 import type { GenerateDeps } from "./routes/generate";
@@ -29,6 +30,13 @@ const llm = createLlmClient({
   model: env.DEEPSEEK_MODEL,
 });
 
+// TTS：Fish Audio 直连；配置 FISH_PROXY_URL（本地 socks5 代理）时经代理出网
+if (!env.FISH_API_KEY) console.warn("[tts] FISH_API_KEY 未配置：generate 管线 tts 阶段将失败，E2E 前请配置");
+const tts = createTtsClient({
+  apiKey: env.FISH_API_KEY,
+  fetchImpl: createProxyFetch(env.FISH_PROXY_URL),
+});
+
 // 进程内串行生成队列（MVP 单实例，ARC §3.1）：重试 + 指数退避
 const queue = createJobQueue(createPipelineRunner({
   repo: {
@@ -43,7 +51,7 @@ const queue = createJobQueue(createPipelineRunner({
     markJobDone: repo.jobs.markJobDone,
     updateEpisodeAudio: repo.jobs.updateEpisodeAudio,
   },
-  tts: createTtsClient({ apiKey: env.FISH_API_KEY }),
+  tts,
   storage: createStorage({ driver: env.STORAGE_DRIVER, dir: env.STORAGE_DIR }),
   // merge 阶段：intro/outro 资产（缺失 → 降级）+ 真实 ffmpeg 二进制
   assets: createLocalAssetStore(env.ASSETS_DIR),
@@ -74,7 +82,7 @@ const generate: GenerateDeps = {
   getQuota: (userId) => repo.jobs.getQuotaInfo(userId),
   consumeQuota: (userId, credit) => repo.jobs.consumeQuota(userId, credit),
   createJob: (episodeId) => repo.jobs.createJob(episodeId),
-  // 进程内队列：异步消费（runner 骨架在 Task 7-9 填充分阶段实现）
+  // 进程内队列：异步消费（runner 全链：tts → merge → upload）
   enqueueJob: async (job) => {
     await queue.enqueue({ id: job.id, episodeId: job.episodeId }, (p) => {
       console.log(`[queue] job ${job.id} progress ${p}%`);

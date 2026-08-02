@@ -22,10 +22,9 @@ export interface RunnerDeps {
   ffmpegPath: string;
 }
 
-/** 生成管线执行器：queued → tts → merge → upload → done/failed（upload 在 Task 9 实现） */
+/** 生成管线执行器：queued → tts → merge → upload → done/failed */
 export function createPipelineRunner(deps: RunnerDeps): JobHandler {
   return async (job, update) => {
-    // 阶段 2/3：merge。upload（Task 9）保持 throw，队列重试语义依赖异常
     const progress = async (status: string, p: number) => {
       await deps.repo.markJobProgress(job.id, status, p);
       await update(p);
@@ -54,16 +53,21 @@ export function createPipelineRunner(deps: RunnerDeps): JobHandler {
       deps: { tts: deps.tts, hostModelId, guestModelId, hostReferenceAudio },
     });
 
-    // 4. ffmpeg 拼接：intro + 主对话 + outro（资产缺失自动降级），产物留内存供 upload（Task 9）使用
+    // 4. ffmpeg 拼接 + 时长探测：intro + 主对话 + outro（资产缺失自动降级），产物留内存供 upload
     await progress("tts", 40);
-    const mergedAudio = await mergeEpisodeAudio({
+    const { audio, durationSeconds } = await mergeEpisodeAudio({
       language,
       result: ttsResult,
       deps: { ffmpegPath: deps.ffmpegPath, assets: deps.assets },
     });
-    void mergedAudio;
 
+    // 5. upload：产物写入存储（audio/episodes/{userId}/{episodeId}.mp3）+ 落库完成
     await progress("merge", 70);
-    throw new Error("upload not implemented (Task 9)");
+    const audioKey = `audio/episodes/${userId}/${job.episodeId}.mp3`;
+    await deps.storage.put(audioKey, audio);
+    await progress("upload", 90);
+    await deps.repo.markJobDone(job.id);
+    await deps.repo.updateEpisodeAudio(job.episodeId, audioKey, durationSeconds);
+    return { status: "done" };
   };
 }

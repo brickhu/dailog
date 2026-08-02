@@ -1,8 +1,31 @@
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import ffmpeg from "fluent-ffmpeg";
 import type { SynthesizeResult } from "./tts";
+
+const execFileAsync = promisify(execFile);
+
+/** ffmpeg -i 探测输出里的输入时长（stderr），形如 Duration: 00:00:12.34 */
+const DURATION_RE = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/;
+
+/**
+ * 探测音频时长（秒）。@ffmpeg-installer/ffmpeg 只带 ffmpeg 无 ffprobe，
+ * 故用 `ffmpeg -i <file>`（无输出文件必然 exit 1，但 stderr 会打印输入探测信息）
+ * 解析 Duration 正则。解析失败返回 0（调用方自行兜底）。
+ */
+export async function probeDurationSeconds(ffmpegPath: string, file: string): Promise<number> {
+  try {
+    await execFileAsync(ffmpegPath, ["-i", file], { maxBuffer: 4 * 1024 * 1024 });
+  } catch (err) {
+    const stderr = (err as { stderr?: string })?.stderr ?? "";
+    const m = stderr.match(DURATION_RE);
+    if (m) return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+  }
+  return 0;
+}
 
 export interface MergeDeps {
   ffmpegPath: string;
@@ -27,12 +50,19 @@ function normalizeResult(input: MergeInput): SynthesizeResult {
   throw new Error("merge: no audio input");
 }
 
+export interface MergeOutput {
+  /** 拼接后的完整 mp3 字节（供 upload 阶段写存储） */
+  audio: Uint8Array;
+  /** ffmpeg -i 探测的时长（秒），探测失败为 0 */
+  durationSeconds: number;
+}
+
 /**
  * ffmpeg 拼接 intro + 主对话 + outro；资产缺失时降级为只拼主对话。
  * 用 concat demuxer + 统一重编码 mp3（128k）——输入在单次调用内格式一致
  * （prod 全为 Fish 产出的 mp3，测试全为同参数 wav），demuxer 按内容探测不受扩展名影响。
  */
-export async function mergeEpisodeAudio(args: MergeInput): Promise<Uint8Array> {
+export async function mergeEpisodeAudio(args: MergeInput): Promise<MergeOutput> {
   const { language, deps } = args;
   const result = normalizeResult(args);
   ffmpeg.setFfmpegPath(deps.ffmpegPath);
@@ -78,7 +108,9 @@ export async function mergeEpisodeAudio(args: MergeInput): Promise<Uint8Array> {
         .on("error", (err) => reject(err))
         .run();
     });
-    return new Uint8Array(await readFile(outFile));
+    const audio = new Uint8Array(await readFile(outFile));
+    const durationSeconds = await probeDurationSeconds(deps.ffmpegPath, outFile);
+    return { audio, durationSeconds };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -3,7 +3,7 @@ import { mergeEpisodeAudio, type MergeDeps } from "../src/pipeline/merge";
 import { getFfmpegPath, makeSilenceWav } from "./helpers/silence-wav";
 
 describe("mergeEpisodeAudio", () => {
-  it("concats main with intro/outro when assets exist", async () => {
+  it("concats main with intro/outro when assets exist, returns duration > 0", async () => {
     const deps: MergeDeps = {
       ffmpegPath: getFfmpegPath(),
       assets: {
@@ -16,7 +16,9 @@ describe("mergeEpisodeAudio", () => {
       mainAudio: makeSilenceWav(),
       deps,
     });
-    expect(out.length).toBeGreaterThan(makeSilenceWav().length); // 拼接后更大
+    expect(out.audio.length).toBeGreaterThan(makeSilenceWav().length); // 拼接后更大
+    // 时长来自 ffmpeg -i 探测（Duration 正则）：0.3s 主音频 ×3 段 ≈ 0.9s
+    expect(out.durationSeconds).toBeGreaterThan(0);
   });
 
   it("degrades to main-only when assets missing", async () => {
@@ -25,7 +27,8 @@ describe("mergeEpisodeAudio", () => {
       assets: { get: async () => null },
     };
     const out = await mergeEpisodeAudio({ language: "zh", mainAudio: makeSilenceWav(), deps });
-    expect(out.length).toBeGreaterThan(0);
+    expect(out.audio.length).toBeGreaterThan(0);
+    expect(out.durationSeconds).toBeGreaterThan(0);
   });
 
   it("concats segment audios in order (fallback path)", async () => {
@@ -36,6 +39,7 @@ describe("mergeEpisodeAudio", () => {
     const a = makeSilenceWav();
     const single = await mergeEpisodeAudio({ language: "zh", mainAudio: a, deps });
     const out = await mergeEpisodeAudio({ language: "zh", segmentAudios: [a, a, a], deps });
-    expect(out.length).toBeGreaterThan(single.length); // 3 段拼接时长/体积都大于单段
+    expect(out.audio.length).toBeGreaterThan(single.audio.length); // 3 段拼接时长/体积都大于单段
+    expect(out.durationSeconds).toBeGreaterThan(single.durationSeconds);
   });
 });
