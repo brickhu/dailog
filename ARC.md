@@ -74,7 +74,7 @@ app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 |---|---|---|
 | `GET /health` | — | 健康检查（Railway healthcheckPath） |
 | `GET /api/me` | ✓ | 当前用户（认证中间件验证） |
-| `POST /api/imports` | ✓ | 接收扩展回传的结构化对话（platform + 幂等票据）→ 落库，返回结构化对话 |
+| `POST /api/imports` | ✓ | 接收扩展回传的结构化对话（platform + 幂等票据）→ 落库（imports + draft episode 同事务），返回 `{ importId, episodeId }` |
 | `POST /api/episodes/:id/polish` | ✓ | SSE 流式润色：先质量审核（轻量 LLM 预检，不达标返回 422 + 原因）→ 语言检测 → 流式返回脚本段落 |
 | `POST /api/episodes/:id/generate` | ✓ | **脚本内容安全审核**（DeepSeek，拒绝 422 + 原因且不扣配额）→ 配额校验 → 建 job → 后台执行 |
 | `GET /api/episodes/:id/job` | ✓ | 轮询生成进度（阶段 + 百分比） |
@@ -90,13 +90,13 @@ app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 queued → tts → merge → upload → done（failed 可重试）
 ```
 
-**生成前内容安全审核**：`generate` 入口先对最新脚本版本做 DeepSeek 安全审核（色情/违法/仇恨/诈骗等）——拒绝则返回 422 + 原因、**不创建 job、不扣配额**；审核结果落 `episodes.quality_status/quality_reason`（与打磨前质量门共用字段，语义 = 最近一次审核结果）。
+**生成前内容安全审核**：`generate` 入口先对最新脚本版本做 DeepSeek 安全审核（色情/违法/仇恨/诈骗等）——拒绝则返回 422 + 原因、**不创建 job、不扣配额**。质量门/安全门的审核结果当前仅以 422 + reason 返回、不落库（`episodes.quality_status/quality_reason` 字段已在 schema 预留，语义 = 最近一次审核结果，待前端展示时启用）。
 
-1. **TTS = Fish Audio（决策定稿，`docs/spikes/tts-comparison.md`；集成形态已实测，`docs/spikes/fish-audio.md`）**：核心刚需 = 即时克隆（零样本按需——参考音频随请求携带，无预注册/训练环节，重录即时生效，**实测通过**）——
+1. **TTS = Fish Audio（决策定稿，`docs/spikes/tts-comparison.md`；集成形态已实测，`docs/spikes/fish-audio.md`）**：核心刚需 = 即时克隆（录音样本上传后即时可用：fast 音色模型 5–8s，或零样本按需——参考音频随请求携带；重录即时生效，**实测通过**）——
    - **多说话人一次调用（实测可用）**：`text` 内嵌 `<|speaker:0|>` / `<|speaker:1|>` 标签 + `reference_id` 数组（下标对应 speaker 序号）——**不是 text/chunks 数组**（旧计划假设有误）；仅 S2-Pro 系模型支持（`s2-pro` / `s2.1-pro*`，`s1` 不行）；单次调用返回一条 mp3（实测 6 段对话 = 27.6s 单文件）
-   - 主持人零样本克隆：**必须 msgpack**（`application/msgpack` + `references: [{audio: 原始音频字节, text: 转录}]`）——JSON 无 base64 字段、无法携带原始音频；重录即时生效
+   - 主持人音色：voice-sample 上传后经 `POST /model` 建 fast 音色模型（训练 5–8s，免费，`_id` 存 `voice_samples.reference_id`）；创建失败降级**零样本按需克隆**：参考音频随请求携带（**必须 msgpack**——`application/msgpack` + `references: [{audio: 原始音频字节, text: 转录}]`，JSON 无 base64 字段、无法携带原始音频）；重录即时生效
    - 嘉宾固定音色：音色库 `GET /model?language=zh`（或控制台 Voice Library）取模型 `_id` 存为 `reference_id`
-   - **混合模式限制（实测）**：一次多说话人调用不能混用「主持人内联 references + 嘉宾固定 `reference_id`」（只支持全模型 id 或全内联两种纯模式）→ 一期若主持人零样本克隆 + 嘉宾固定音色，走**两条调用**：主持人零样本整段 + 嘉宾固定音色整段，ffmpeg 拼接（管线本就有）；需单次混排可先建主持人音色模型（`POST /model`，fast 训练 5–8s，免费）走全 `reference_id` 数组
+   - **混合模式限制（实测）**：一次多说话人调用不能混用「主持人内联 references + 嘉宾固定 `reference_id`」（只支持全模型 id 或全内联两种纯模式）→ **实测 fallback = 按段合成**：主持人/嘉宾音色模型任一缺失时，逐段调用 `synthesizeSingle`（host 段 msgpack 内联零样本、guest 段固定 `reference_id`，均缺失时用默认音色），ffmpeg 按段拼接；需单次混排可先建主持人音色模型（`POST /model`，fast 5–8s，免费）走全 `reference_id` 数组
    - 单请求字符上限：实测 12000 中文（36000 UTF-8 字节）未命中上限，未再上探；语速 ≈7.2 字/秒
    - 一致性：默认 `temperature=0.7` 且 schema 无 `seed`，同文本两次合成时长波动 ~12%（实测区间 ~12–46%）——可接受但需注意；长节目需稳定节奏可调低 temperature（0.3 量级）或按段重试
    - 计费：**$15/百万 UTF-8 字节**（按输入文本字节计费，中文 1 字 3 字节，10 分钟 ≈ ¥0.97）；免费模型 `s2.1-pro-free`（$0）实测全功能可用——测试/onboarding 用
@@ -108,7 +108,7 @@ queued → tts → merge → upload → done（failed 可重试）
 
 ### 3.4 配额与邀请码发放
 
-- 配额判定在 `generate` 入口（服务端）：免费用户累计生成 ≥1 期 → 403；按期付费用户按 `credit_balance` 扣减；订阅用户无限。额度不足 → 403 + 购买/订阅引导
+- 配额判定在 `generate` 入口（服务端）：免费用户**首期不扣积分**，已生成 ≥1 期后按 `credit_balance` 每期扣 1 积分（余额不足 → 403 + 购买/订阅引导）；按期付费用户按 `credit_balance` 扣减；订阅用户无限
 - 发布时发放邀请码：已发布期数 > 3 起，每发布一期 +1 码（`source=reward`，**前 3 期不补发**），见 PRD §4.1
 
 ### 3.5 采集与导入（浏览器扩展统一通道）
@@ -139,10 +139,10 @@ queued → tts → merge → upload → done（failed 可重试）
 | 表 | 关键字段 |
 |---|---|
 | `profiles` | `id`(=auth.users), `username`(唯一), `display_name`, `bio`, `plan`(free/pro), `credit_balance`(int, 按期付费余额), `created_at` |
-| `voice_samples` | `user_id`, `audio_url`(R2), `duration`, `status`, `created_at`（可重录覆盖） |
+| `voice_samples` | `user_id`, `audio_url`(R2), `reference_id`（训练音色模型 id，空 = 零样本 fallback，迁移 0002）, `duration`, `status`, `created_at`（可重录覆盖） |
 | `invite_codes` | `code`(唯一), `created_by`, `used_by`, `used_at`, `expires_at`, `source`(admin/reward), `issued_for_episode_id` |
 | `imports` | `user_id`, `platform`(chatgpt/claude/kimi/doubao/tongyi/gemini/deepseek/plain), `source_title`, `source_conversation_id`, `source_url`, `raw_content`, `parsed_dialogue`(JSONB), `status`, `created_at`；唯一约束 `(user_id, platform, source_conversation_id)` 防重复导入 |
-| `episodes` | `id`, `user_id`, `slug`, `title`, `description`, `cover_url`, `audio_url`, `duration_seconds`, `status`(draft/generating/published/failed), `quality_status`(pending/passed/rejected), `quality_reason`, `language`, `is_public`, `created_at`, `published_at` |
+| `episodes` | `id`, `user_id`, `import_id`（来源导入，polish 质量门经它读 `parsed_dialogue`，迁移 0001）, `slug`, `title`, `description`, `cover_url`, `audio_url`, `duration_seconds`, `status`(draft/generating/published/failed), `quality_status`(pending/passed/rejected), `quality_reason`, `language`, `is_public`, `created_at`, `published_at` |
 | `scripts` | `episode_id`, `version`, `segments`(JSONB: `[{speaker: host\|guest, text}]`), `created_at` |
 | `generation_jobs` | `episode_id`, `status`(queued/tts/merge/upload/done/failed), `progress`, `error`, `attempts`, `timestamps` |
 | `payments` | `user_id`, `stripe_session_id`, `amount`, `episodes_granted`, `status`, `created_at`（按期付费购买记录） |
@@ -206,7 +206,7 @@ assets/intro.zh.mp3 / intro.en.mp3 / outro.zh.mp3 / outro.en.mp3   ← 固定片
 
 | 风险 | 缓解 |
 |---|---|
-| 多说话人混合模式受限（实测：一次调用不能混用「主持人内联零样本 + 嘉宾固定 `reference_id`」） | 设计定型：主持人零样本整段 + 嘉宾固定音色整段两条调用，ffmpeg 拼接（管线本就有）；需单次混排时先建主持人音色模型（`POST /model`，fast 5–8s，免费）走全 `reference_id` 数组 |
+| 多说话人混合模式受限（实测：一次调用不能混用「主持人内联零样本 + 嘉宾固定 `reference_id`」） | 设计定型：**按段 fallback**（host 段 msgpack 内联零样本 + guest 段固定音色逐段合成），ffmpeg 拼接（管线本就有）；需单次混排时先建主持人音色模型（`POST /model`，fast 5–8s，免费）走全 `reference_id` 数组 |
 | Fish 免费/付费模型差异（spike 全程在 `s2.1-pro-free` 完成，0 额度账号无法直接观察扣费） | 计费口径 $15/百万 UTF-8 字节已由官方定价页确认；上线前用付费账号以 `GET /wallet/self/api-credit` 差值核对账单；克隆一致性默认波动 ~12%，长节目可调低 temperature |
 | 平台 DOM 选择器基于公开逆向资料（`docs/spikes/chat-dom.md`，未登录态实测） | 各平台 content script 开发时逐一实测修正（每平台适配器交付即验证）；虚拟列表平台（ChatGPT/DeepSeek/Gemini/豆包）必须实现滚动采集循环 |
 | Cloudflare/Turnstile 风控 | 已实测（`docs/spikes/headless-cf.md`）：无头浏览器被 Turnstile 拦截；导入统一走**浏览器扩展**（用户侧真实浏览器），天然绕开风控 |

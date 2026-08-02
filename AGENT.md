@@ -1,7 +1,7 @@
 # AGENT — 项目总览
 
 > 本项目所有文档的入口与汇总。任何 Agent / 协作者先读本文件。
-> 最后更新：2026-08-03（M1-M3 已完成：spike 定稿 + 后端骨架 + 扩展采集器代码落地；商店上架与 M4+ 排期中）
+> 最后更新：2026-08-03（M1-M4 已完成：spike 定稿 + 后端骨架 + 扩展采集器 + 生成管线全链代码；M4 门控 E2E 待 DEEPSEEK_API_KEY 实跑；商店上架与 M5+ 排期中）
 
 ## 项目一句话
 
@@ -72,7 +72,7 @@ dailogues/
 - 前端：SolidJS + Solid Router + StyleX（两站共用设计 token）
 - 后端：Node + TypeScript + Hono + Drizzle + fluent-ffmpeg
 - 认证：Supabase Auth（JWT，后端 JWKS 校验）；注册需邀请码
-- 生成管线：TTS = **Fish Audio**（形态已实测，`docs/spikes/fish-audio.md`）——**多说话人一次调用**：`text` 内嵌 `<|speaker:N|>` 标签 + `reference_id` 数组（**非 text/chunks 数组**）；主持人零样本克隆走 **msgpack `references` 内联音频**（JSON 无 base64 字段、带不了原始音频）；**混合模式受限**（一次调用不能混用内联 + 固定 id）→ 主持人零样本整段 + 嘉宾固定音色整段两条调用 + ffmpeg 拼接；单请求 ≥12000 中文未触上限；免费模型 `s2.1-pro-free`（$0）可用；默认 `temperature=0.7` 一致性波动 ~12%（可接受）→ ffmpeg 拼接固定片头片尾 → R2；备选切换预案见 ARC §3.3 / `docs/spikes/tts-comparison.md`
+- 生成管线：TTS = **Fish Audio**（形态已实测，`docs/spikes/fish-audio.md`）——**多说话人一次调用**：`text` 内嵌 `<|speaker:N|>` 标签 + `reference_id` 数组（**非 text/chunks 数组**）；主持人零样本克隆走 **msgpack `references` 内联音频**（JSON 无 base64 字段、带不了原始音频）；**混合模式受限**（一次调用不能混用内联 + 固定 id）→ 按段 fallback（host 段 msgpack 内联零样本 + guest 段固定音色逐段合成，实测形态）+ ffmpeg 拼接；单请求 ≥12000 中文未触上限；免费模型 `s2.1-pro-free`（$0）可用；默认 `temperature=0.7` 一致性波动 ~12%（可接受）→ ffmpeg 拼接固定片头片尾 → R2；备选切换预案见 ARC §3.3 / `docs/spikes/tts-comparison.md`
 - 后端 LLM：**DeepSeek**（OpenAI 兼容，`deepseek-chat` 默认，配置化可切换）
 - 润色：LLM SSE 流式；**打磨前质量审核前置** + **生成前内容安全审核**（编辑后脚本提交生成时，DeepSeek 安全审核通过才合成，拒绝不扣配额）；语言跟随对话内容（与界面语言无关）；单期目标 5–10 分钟
 - 计费：Stripe Checkout/Portal/Webhook；免费 1 期，Pro 订阅无限
@@ -86,7 +86,7 @@ dailogues/
 - [x] M1：Fish Audio 集成 spike（多说话人格式、单请求限额、克隆音质、计费实测）—— 已完成（`docs/spikes/fish-audio.md`；真实扣费金额上线前用付费账号核对）
 - [x] M2：统一后端骨架（Hono + Drizzle + 9 表迁移 + 本地 Postgres 集成测试 + JWT 认证 + Docker/Railway 配置 + CI）—— 代码完成，**待用户：GitHub 仓库推送 + Supabase 项目 + Railway 绑定部署**
 - [x] M3：浏览器扩展采集器（Manifest V3，首发 Claude/DeepSeek）—— 已完成（fixture 基于公开资料，待真实登录态页面校准，见 `docs/spikes/chat-dom.md` 待实测清单）
-- [ ] M4：质量审核 + 润色（LLM 流式）+ 生成前内容安全审核 + 生成管线（TTS → ffmpeg → R2）
+- [x] M4：质量审核 + 润色（LLM 流式）+ 生成前内容安全审核 + 生成管线（TTS → ffmpeg → R2）—— 已完成（代码全链 + 门控 E2E 待 DEEPSEEK_API_KEY 实跑；真实扣费沿用 M1 核对注记）
 - [ ] M5：工作台 SPA（录音引导 → 向导 → 发布）
 - [ ] M6：内容站 SSR + RSS + 首页/搜索
 - [ ] M7：邀请码 + Stripe 计费（按期付费 + 包月订阅）

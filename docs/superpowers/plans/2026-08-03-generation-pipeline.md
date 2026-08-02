@@ -26,7 +26,7 @@
 - Create: `services/api/src/storage/index.ts`
 - Test: `services/api/tests/clients.test.ts`
 
-- [ ] **Step 1: 写失败测试** `services/api/tests/clients.test.ts`
+- [x] **Step 1: 写失败测试** `services/api/tests/clients.test.ts`
 
 ```ts
 import { describe, expect, it, vi } from "vitest";
@@ -93,9 +93,9 @@ describe("storage", () => {
 });
 ```
 
-- [ ] **Step 2: 运行验证失败**
+- [x] **Step 2: 运行验证失败**
 
-- [ ] **Step 3: env.ts 追加字段**
+- [x] **Step 3: env.ts 追加字段**
 
 ```ts
 const schema = z.object({
@@ -119,7 +119,7 @@ const schema = z.object({
 
 > 默认空串使无 key 本地环境可启动；调用时若 key 为空返回明确错误（`llm/tts 未配置`），测试用 mock 注入。
 
-- [ ] **Step 4: 实现 `services/api/src/llm/client.ts`**
+- [x] **Step 4: 实现 `services/api/src/llm/client.ts`**
 
 ```ts
 export interface LlmMessage { role: "user" | "assistant" | "system"; content: string; }
@@ -190,7 +190,7 @@ export function createLlmClient(opts: LlmOptions): LlmClient {
 }
 ```
 
-- [ ] **Step 5: 实现 `services/api/src/tts/client.ts`**（多说话人 + 零样本按段 + 音色创建）
+- [x] **Step 5: 实现 `services/api/src/tts/client.ts`**（多说话人 + 零样本按段 + 音色创建）
 
 ```ts
 export interface TtsSegment { speaker: number; text: string; }
@@ -288,7 +288,7 @@ function buildMsgpackReferences(audio: Uint8Array, text: string): Uint8Array {
 
 > ⚠️ 诚实约束：msgpack 内联路径的精确字节结构需要从 `docs/spikes/fish-audio.md` 提取（spike 脚本 `fish-audio.mjs` 里有可参考实现）。实现者应阅读该文件与脚本，能确认则实现完整编码；不能确认则**本任务以 referenceId 路径为主**（音色创建 + 多说话人一次调用），msgpack 标记"待校准"，在 Task 7/9 中按需补全。
 
-- [ ] **Step 6: 实现 `services/api/src/storage/index.ts`**
+- [x] **Step 6: 实现 `services/api/src/storage/index.ts`**
 
 ```ts
 export interface AudioStorage {
@@ -354,14 +354,14 @@ function createR2Storage(r2: { accountId: string; accessKey: string; secretKey: 
 }
 ```
 
-- [ ] **Step 7: 安装新依赖**
+- [x] **Step 7: 安装新依赖**
 
 ```bash
 cd /Users/free/Projects/dailogues && npx --yes pnpm@9.15.0 --filter @dailogues/api add @aws-sdk/client-s3 @ffmpeg-installer/ffmpeg fluent-ffmpeg
 npx --yes pnpm@9.15.0 --filter @dailogues/api add -D @types/fluent-ffmpeg socks-proxy-agent undici
 ```
 
-- [ ] **Step 8: 测试通过（红→绿）+ typecheck + 提交**
+- [x] **Step 8: 测试通过（红→绿）+ typecheck + 提交**
 
 ```bash
 npx --yes pnpm@9.15.0 --filter @dailogues/api test && npx --yes pnpm@9.15.0 --filter @dailogues/api typecheck
@@ -378,7 +378,7 @@ git commit -m "feat(api): llm/tts/storage clients + env extension"
 - Modify: `services/api/src/app.ts`（挂载路由）
 - Test: `services/api/tests/imports.test.ts`
 
-- [ ] **Step 1: 写失败测试** `services/api/tests/imports.test.ts`（用临时 SQLite 或注入 fake db——沿用计划 1 的依赖注入模式：`createApp(deps)` 增加 `db`；测试用内存 fake）
+- [x] **Step 1: 写失败测试** `services/api/tests/imports.test.ts`（用临时 SQLite 或注入 fake db——沿用计划 1 的依赖注入模式：`createApp(deps)` 增加 `db`；测试用内存 fake）
 
 设计说明：`createApp` 的 deps 增加 `db: { insertImport, findImportBySource, insertEpisode }` 等仓储函数（实现用 drizzle 查 Supabase/本地 PG）。本任务先定义仓储接口 + fake 实现测试路由逻辑，真实 drizzle 仓储在 Task 3 落地。
 
@@ -445,9 +445,9 @@ describe("POST /api/imports", () => {
 });
 ```
 
-- [ ] **Step 2: 运行验证失败**
+- [x] **Step 2: 运行验证失败**
 
-- [ ] **Step 3: 实现 `services/api/src/routes/imports.ts`**
+- [x] **Step 3: 实现 `services/api/src/routes/imports.ts`**
 
 ```ts
 import { Hono } from "hono";
@@ -456,7 +456,7 @@ import { isCollectedDialogue } from "../../../extension-shared-协议占位"; //
 
 > 采集协议类型在 `apps/extension/src/shared.ts`。跨包共享：将 `apps/extension/src/shared.ts` 的协议类型抽到 `packages/shared/src/dialogue.ts`（monorepo 共享包），扩展与后端都从 `@dailogues/shared` 导入；或后端本地复制最小校验函数（`isCollectedDialogue` 约 30 行，YAGNI 优先本地复制，避免重构扩展包）。**决策：后端本地复制**（`services/api/src/dialogue.ts`），扩展包不动；若未来需要双写一致性再抽共享包。
 
-- [ ] **Step 4: 后端本地协议** `services/api/src/dialogue.ts`（复制扩展版类型与守卫，保持字段一致）
+- [x] **Step 4: 后端本地协议** `services/api/src/dialogue.ts`（复制扩展版类型与守卫，保持字段一致）
 
 ```ts
 export type Platform = "claude" | "deepseek" | "chatgpt" | "gemini" | "kimi" | "doubao" | "tongyi" | "plain";
@@ -465,7 +465,7 @@ export interface CollectedDialogue { platform: Platform; conversationId: string;
 export function isCollectedDialogue(value: unknown): value is CollectedDialogue { /* 同扩展版逻辑 */ }
 ```
 
-- [ ] **Step 5: 实现路由（仓储接口 + 路由）**
+- [x] **Step 5: 实现路由（仓储接口 + 路由）**
 
 ```ts
 // services/api/src/routes/imports.ts
@@ -504,7 +504,7 @@ export function importsRoutes(repo: ImportsRepo) {
 }
 ```
 
-- [ ] **Step 6: app.ts 挂载（deps 增加 repo 参数，auth 中间件已覆盖 /api/*）**
+- [x] **Step 6: app.ts 挂载（deps 增加 repo 参数，auth 中间件已覆盖 /api/*）**
 
 ```ts
 // app.ts 修改要点：
@@ -512,7 +512,7 @@ export function importsRoutes(repo: ImportsRepo) {
 // app.route("/api", importsRoutes(deps.importsRepo));
 ```
 
-- [ ] **Step 7: 测试通过 + typecheck + 提交**
+- [x] **Step 7: 测试通过 + typecheck + 提交**
 
 ```bash
 git add services/api/src services/api/tests
@@ -529,7 +529,7 @@ git commit -m "feat(api): imports route (idempotent collect receive)"
 - Modify: `services/api/src/app.ts`（注入真实仓储）
 - Test: `services/api/tests/repo.test.ts`（本地 PG 门控）+ `services/api/tests/episodes.test.ts`（fake 仓储）
 
-- [ ] **Step 1: 写失败测试** `services/api/tests/episodes.test.ts`（fake 仓储，同 imports 模式：列表/获取/保存脚本版本递增/发布）
+- [x] **Step 1: 写失败测试** `services/api/tests/episodes.test.ts`（fake 仓储，同 imports 模式：列表/获取/保存脚本版本递增/发布）
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -552,11 +552,11 @@ describe("episodes routes", () => {
 });
 ```
 
-- [ ] **Step 2: 运行验证失败**
+- [x] **Step 2: 运行验证失败**
 
-- [ ] **Step 3: 实现 `services/api/src/routes/episodes.ts`**（路由：GET /episodes、GET /episodes/:id、PUT /episodes/:id/script（body: segments[]，version = 最新+1）、POST /episodes/:id/publish（is_public=true + published_at，邀请码发放 plan 7 接入点留注释））
+- [x] **Step 3: 实现 `services/api/src/routes/episodes.ts`**（路由：GET /episodes、GET /episodes/:id、PUT /episodes/:id/script（body: segments[]，version = 最新+1）、POST /episodes/:id/publish（is_public=true + published_at，邀请码发放 plan 7 接入点留注释））
 
-- [ ] **Step 4: 实现 drizzle 仓储 `services/api/src/repo/index.ts`**
+- [x] **Step 4: 实现 drizzle 仓储 `services/api/src/repo/index.ts`**
 
 ```ts
 // 用 drizzle-orm 查询本地 PG/Supabase；表定义来自 src/db/schema.ts
@@ -564,11 +564,11 @@ describe("episodes routes", () => {
 // 唯一约束冲突捕获（imports 幂等：unique (user_id, platform, source_conversation_id)）
 ```
 
-- [ ] **Step 5: app.ts 注入真实仓储**（`createApp(deps)` deps 增加 `repo`；测试仍传 fake）
+- [x] **Step 5: app.ts 注入真实仓储**（`createApp(deps)` deps 增加 `repo`；测试仍传 fake）
 
-- [ ] **Step 6: 本地 PG 集成测试** `services/api/tests/repo.test.ts`（`describe.skipIf(!DATABASE_URL)`：真实插入 imports + episodes + 幂等冲突 409 路径）
+- [x] **Step 6: 本地 PG 集成测试** `services/api/tests/repo.test.ts`（`describe.skipIf(!DATABASE_URL)`：真实插入 imports + episodes + 幂等冲突 409 路径）
 
-- [ ] **Step 7: 全部测试通过 + typecheck + 提交**
+- [x] **Step 7: 全部测试通过 + typecheck + 提交**
 
 ```bash
 git add services/api/src services/api/tests
@@ -585,7 +585,7 @@ git commit -m "feat(api): drizzle repo + episodes/scripts routes"
 - Modify: `services/api/src/app.ts`
 - Test: `services/api/tests/polish.test.ts`（mock LLM）
 
-- [ ] **Step 1: 写失败测试** `services/api/tests/polish.test.ts`
+- [x] **Step 1: 写失败测试** `services/api/tests/polish.test.ts`
 
 ```ts
 import { describe, expect, it, vi } from "vitest";
@@ -634,9 +634,9 @@ describe("POST /api/episodes/:id/polish", () => {
 });
 ```
 
-- [ ] **Step 2: 运行验证失败**
+- [x] **Step 2: 运行验证失败**
 
-- [ ] **Step 3: 实现 `services/api/src/llm/prompts.ts`**
+- [x] **Step 3: 实现 `services/api/src/llm/prompts.ts`**
 
 ```ts
 // qualityCheckPrompt(messages): 输出 JSON { pass: boolean, reason?: string, language: "zh"|"en" }
@@ -648,9 +648,9 @@ describe("POST /api/episodes/:id/polish", () => {
 // parseJsonLoose(text): 从 LLM 输出中容错提取 JSON（去 ```json 围栏、截取首个 [ 或 { 到匹配结束）
 ```
 
-- [ ] **Step 4: 实现 `services/api/src/routes/polish.ts`**（SSE 用 Hono `streamSSE`；流程：取脚本 → 质量门（复用质量审核逻辑，返回 422 + reason，language 一并返回）→ LLM 流式润色（逐 delta 转发 `event: segment`）→ 收齐后解析 JSON 存 scripts 新版本 → `event: done` 带 version）
+- [x] **Step 4: 实现 `services/api/src/routes/polish.ts`**（SSE 用 Hono `streamSSE`；流程：取脚本 → 质量门（复用质量审核逻辑，返回 422 + reason，language 一并返回）→ LLM 流式润色（逐 delta 转发 `event: segment`）→ 收齐后解析 JSON 存 scripts 新版本 → `event: done` 带 version）
 
-- [ ] **Step 5: app.ts 挂载 + 测试通过 + typecheck + 提交**
+- [x] **Step 5: app.ts 挂载 + 测试通过 + typecheck + 提交**
 
 ```bash
 git add services/api/src services/api/tests
@@ -668,7 +668,7 @@ git commit -m "feat(api): polish route (quality gate + lang detect + SSE polish)
 - Modify: `services/api/src/app.ts`
 - Test: `services/api/tests/generate.test.ts` + `services/api/tests/quota.test.ts`
 
-- [ ] **Step 1: 写失败测试** `services/api/tests/quota.test.ts`
+- [x] **Step 1: 写失败测试** `services/api/tests/quota.test.ts`
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -694,7 +694,7 @@ describe("canGenerate", () => {
 });
 ```
 
-- [ ] **Step 2: 实现 `services/api/src/quota.ts`**
+- [x] **Step 2: 实现 `services/api/src/quota.ts`**
 
 ```ts
 export interface QuotaInfo {
@@ -709,13 +709,13 @@ export function canGenerate(q: QuotaInfo): { ok: true; consumeCredit: number } |
 }
 ```
 
-- [ ] **Step 3: 写失败测试** `services/api/tests/generate.test.ts`（mock deps：安全门通过→配额通过→建 job→返回 202 + jobId；安全门拒绝→422 不建 job；配额不足→403）
+- [x] **Step 3: 写失败测试** `services/api/tests/generate.test.ts`（mock deps：安全门通过→配额通过→建 job→返回 202 + jobId；安全门拒绝→422 不建 job；配额不足→403）
 
-- [ ] **Step 4: 实现 `services/api/src/routes/generate.ts`**（流程：取最新脚本 → 安全门（DeepSeek `safetyCheckPrompt`，拒绝 422 + reason，**不建 job 不扣配额**）→ 配额（`canGenerate`，不足 403 + 订阅引导）→ 扣减（credit -1 / 计数）→ `createJob(queued)` → 入队 → 202 + jobId）
+- [x] **Step 4: 实现 `services/api/src/routes/generate.ts`**（流程：取最新脚本 → 安全门（DeepSeek `safetyCheckPrompt`，拒绝 422 + reason，**不建 job 不扣配额**）→ 配额（`canGenerate`，不足 403 + 订阅引导）→ 扣减（credit -1 / 计数）→ `createJob(queued)` → 入队 → 202 + jobId）
 
-- [ ] **Step 5: 实现 `services/api/src/routes/job.ts`**（GET /api/episodes/:id/job → 最新 job { status, progress, error }；404 若无 job）
+- [x] **Step 5: 实现 `services/api/src/routes/job.ts`**（GET /api/episodes/:id/job → 最新 job { status, progress, error }；404 若无 job）
 
-- [ ] **Step 6: 测试通过 + typecheck + 提交**
+- [x] **Step 6: 测试通过 + typecheck + 提交**
 
 ```bash
 git add services/api/src services/api/tests
@@ -731,7 +731,7 @@ git commit -m "feat(api): generate route (safety gate + quota + job) + job route
 - Create: `services/api/src/pipeline/runner.ts`（骨架：消费 job，执行各阶段回调，更新 progress/status，失败重试 2 次指数退避）
 - Test: `services/api/tests/queue.test.ts`
 
-- [ ] **Step 1: 写失败测试** `services/api/tests/queue.test.ts`
+- [x] **Step 1: 写失败测试** `services/api/tests/queue.test.ts`
 
 ```ts
 import { describe, expect, it, vi } from "vitest";
@@ -763,9 +763,9 @@ describe("createJobQueue", () => {
 });
 ```
 
-- [ ] **Step 2: 运行验证失败**
+- [x] **Step 2: 运行验证失败**
 
-- [ ] **Step 3: 实现 `services/api/src/pipeline/queue.ts`**
+- [x] **Step 3: 实现 `services/api/src/pipeline/queue.ts`**
 
 ```ts
 export interface QueueJob { id: string; episodeId: string; }
@@ -810,7 +810,7 @@ export function createJobQueue(handler: JobHandler, opts: QueueOptions) {
 }
 ```
 
-- [ ] **Step 4: 实现 runner 骨架 `services/api/src/pipeline/runner.ts`**
+- [x] **Step 4: 实现 runner 骨架 `services/api/src/pipeline/runner.ts`**
 
 ```ts
 // createPipelineRunner(deps: { repo, tts, storage, ffmpeg, assets }) → JobHandler
@@ -819,9 +819,9 @@ export function createJobQueue(handler: JobHandler, opts: QueueOptions) {
 // 本任务先实现骨架（阶段回调组装），真实 tts/merge/upload 在 Task 7-9
 ```
 
-- [ ] **Step 5: 启动恢复逻辑**（`src/index.ts` 或 `src/pipeline/bootstrap.ts`：启动时查 `generation_jobs where status in (queued, tts, merge, upload)` → 重新入队）
+- [x] **Step 5: 启动恢复逻辑**（`src/index.ts` 或 `src/pipeline/bootstrap.ts`：启动时查 `generation_jobs where status in (queued, tts, merge, upload)` → 重新入队）
 
-- [ ] **Step 6: 测试通过 + typecheck + 提交**
+- [x] **Step 6: 测试通过 + typecheck + 提交**
 
 ```bash
 git add services/api/src services/api/tests
@@ -837,7 +837,7 @@ git commit -m "feat(api): in-process job queue with retry + boot recovery"
 - Modify: `services/api/src/pipeline/runner.ts`
 - Test: `services/api/tests/pipeline-tts.test.ts`（mock TtsClient）
 
-- [ ] **Step 1: 写失败测试** `services/api/tests/pipeline-tts.test.ts`
+- [x] **Step 1: 写失败测试** `services/api/tests/pipeline-tts.test.ts`
 
 ```ts
 import { describe, expect, it, vi } from "vitest";
@@ -883,9 +883,9 @@ describe("synthesizeEpisode", () => {
 });
 ```
 
-- [ ] **Step 2: 运行验证失败**
+- [x] **Step 2: 运行验证失败**
 
-- [ ] **Step 3: 实现 `services/api/src/pipeline/tts.ts`**
+- [x] **Step 3: 实现 `services/api/src/pipeline/tts.ts`**
 
 ```ts
 // synthesizeEpisode({ segments: [{speaker: host|guest, text}], deps: { tts, hostModelId, guestModelId } })
@@ -895,7 +895,7 @@ describe("synthesizeEpisode", () => {
 // 返回 { mainAudio: Uint8Array }（多说话人单文件）或 { segmentAudios: Uint8Array[] }（fallback 拼接用）
 ```
 
-- [ ] **Step 4: runner 接入 + 测试通过 + typecheck + 提交**
+- [x] **Step 4: runner 接入 + 测试通过 + typecheck + 提交**
 
 ```bash
 git add services/api/src services/api/tests
@@ -911,7 +911,7 @@ git commit -m "feat(api): tts pipeline (multi-speaker + per-segment fallback)"
 - Create: `services/api/src/pipeline/assets.ts`（资产查找：intro.{lang}.mp3 / outro.{lang}.mp3，缺失降级）
 - Test: `services/api/tests/pipeline-merge.test.ts`
 
-- [ ] **Step 1: 写失败测试** `services/api/tests/pipeline-merge.test.ts`（生成 0.5s 静音 wav fixture 做输入，断言输出存在、时长 ≈ 输入和；资产缺失时仅主对话）
+- [x] **Step 1: 写失败测试** `services/api/tests/pipeline-merge.test.ts`（生成 0.5s 静音 wav fixture 做输入，断言输出存在、时长 ≈ 输入和；资产缺失时仅主对话）
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -933,7 +933,7 @@ describe("mergeEpisodeAudio", () => {
 });
 ```
 
-- [ ] **Step 2: 实现 `services/api/src/pipeline/merge.ts`**
+- [x] **Step 2: 实现 `services/api/src/pipeline/merge.ts`**
 
 ```ts
 // mergeEpisodeAudio({ language, mainAudio, deps: { ffmpegPath, assets } })
@@ -943,9 +943,9 @@ describe("mergeEpisodeAudio", () => {
 // 简化实现：用 concat demuxer（文件列表）+ 静音填充由资产自带间隔；MVP 不做段间 300ms（fallback 拼接场景在 Task 7 说明）
 ```
 
-- [ ] **Step 3: 实现 `services/api/src/pipeline/assets.ts`**（从本地 `assets/audio/` 目录读取；Task 11 生成真实资产；测试注入 fake）
+- [x] **Step 3: 实现 `services/api/src/pipeline/assets.ts`**（从本地 `assets/audio/` 目录读取；Task 11 生成真实资产；测试注入 fake）
 
-- [ ] **Step 4: runner 接入 + 测试通过 + typecheck + 提交**
+- [x] **Step 4: runner 接入 + 测试通过 + typecheck + 提交**
 
 ```bash
 git add services/api/src services/api/tests
@@ -961,7 +961,7 @@ git commit -m "feat(api): ffmpeg merge with intro/outro assets"
 - Create: `services/api/src/net/proxy.ts`（socks 代理 fetch 包装，本地 Fish 用）
 - Test: `services/api/tests/pipeline-runner.test.ts`（mock 全链：tts/merge/storage/repo）
 
-- [ ] **Step 1: 写失败测试** `services/api/tests/pipeline-runner.test.ts`
+- [x] **Step 1: 写失败测试** `services/api/tests/pipeline-runner.test.ts`
 
 ```ts
 import { describe, expect, it, vi } from "vitest";
@@ -996,9 +996,9 @@ describe("createPipelineRunner", () => {
 });
 ```
 
-- [ ] **Step 2: 运行验证失败**
+- [x] **Step 2: 运行验证失败**
 
-- [ ] **Step 3: 实现 `services/api/src/net/proxy.ts`**
+- [x] **Step 3: 实现 `services/api/src/net/proxy.ts`**
 
 ```ts
 // createProxyFetch(proxyUrl?: string): typeof fetch
@@ -1006,11 +1006,11 @@ describe("createPipelineRunner", () => {
 // 生产（Railway）无代理直连。若 socks-proxy-agent 集成 undici 有坑，用 https-proxy-agent + http 代理替代并记录。
 ```
 
-- [ ] **Step 4: 完整 runner（阶段进度：tts=30, merge=70, upload=90, done=100；失败冒泡给队列重试）**
+- [x] **Step 4: 完整 runner（阶段进度：tts=30, merge=70, upload=90, done=100；失败冒泡给队列重试）**
 
-- [ ] **Step 5: index.ts/bootstrap 组装**（env → clients（llm/tts/storage/repo/assets）→ queue(handler=runner) → app；启动恢复 queued jobs）
+- [x] **Step 5: index.ts/bootstrap 组装**（env → clients（llm/tts/storage/repo/assets）→ queue(handler=runner) → app；启动恢复 queued jobs）
 
-- [ ] **Step 6: 测试通过 + typecheck + 提交**
+- [x] **Step 6: 测试通过 + typecheck + 提交**
 
 ```bash
 git add services/api/src services/api/tests
@@ -1026,7 +1026,7 @@ git commit -m "feat(api): pipeline runner full chain + proxy fetch + boot wiring
 - Modify: `services/api/src/app.ts`
 - Test: `services/api/tests/voice.test.ts`（mock storage + tts.createVoiceModel）
 
-- [ ] **Step 1: 写失败测试** `services/api/tests/voice.test.ts`
+- [x] **Step 1: 写失败测试** `services/api/tests/voice.test.ts`
 
 ```ts
 // POST /api/me/voice-sample (multipart: file) → 存 storage(audio/voices/{userId}.wav)
@@ -1034,11 +1034,11 @@ git commit -m "feat(api): pipeline runner full chain + proxy fetch + boot wiring
 // → 200 { referenceId }；文件缺失/类型错误 → 400；无 FISH_API_KEY → 503 tts_not_configured
 ```
 
-- [ ] **Step 2: 运行验证失败**
+- [x] **Step 2: 运行验证失败**
 
-- [ ] **Step 3: 实现路由 + 仓储（voice_samples upsert）**
+- [x] **Step 3: 实现路由 + 仓储（voice_samples upsert）**
 
-- [ ] **Step 4: 测试通过 + typecheck + 提交**
+- [x] **Step 4: 测试通过 + typecheck + 提交**
 
 ```bash
 git add services/api/src services/api/tests
@@ -1053,16 +1053,16 @@ git commit -m "feat(api): voice-sample route (upload + voice model creation)"
 - Create: `scripts/spikes/gen-assets.mjs`（复用 fish-audio.mjs 的 socks/msgpack 设施或简化：单说话人固定音色合成 4 段）
 - Create: `assets/audio/intro.zh.mp3`、`outro.zh.mp3`、`intro.en.mp3`、`outro.en.mp3`（产物提交）
 
-- [ ] **Step 1: 写生成脚本**（用 Fish `synthesizeSingle`（固定音色 referenceId，无需克隆）；文案：
+- [x] **Step 1: 写生成脚本**（用 Fish `synthesizeSingle`（固定音色 referenceId，无需克隆）；文案：
 
 中文 intro: "欢迎收听 dailogues，在这里，你和 AI 的对话，成为你自己的节目。"
 中文 outro: "感谢收听。下一期，我们继续聊。"
 英文 intro: "Welcome to Dailogues, where your conversations with AI become your own show."
 英文 outro: "Thanks for listening. See you next episode."
 
-- [ ] **Step 2: 运行生成**（`FISH_API_KEY` 从 `scripts/spikes/.env` 读取；走代理）→ 4 个 mp3 落 `assets/audio/`（人工试听确认音色自然）
+- [x] **Step 2: 运行生成**（`FISH_API_KEY` 从 `scripts/spikes/.env` 读取；走代理）→ 4 个 mp3 落 `assets/audio/`（人工试听确认音色自然）
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add scripts/spikes/gen-assets.mjs assets/audio
@@ -1077,11 +1077,11 @@ git commit -m "assets: intro/outro audio (zh/en)"
 - Create: `services/api/tests/e2e-pipeline.test.ts`（`describe.skipIf(!DEEPSEEK_API_KEY || !FISH_API_KEY)`）
 - Modify: `AGENT.md`（M4 状态）、`PRD.md`（如有出入）
 
-- [ ] **Step 1: 门控 E2E**：注入真实 deps（env keys + 本地 PG + fs storage）→ 构造 import → polish（真实 DeepSeek）→ generate → 轮询 job → 断言 audio 文件生成于 `STORAGE_DIR` 且 >1KB；片头片尾拼接后时长合理（ffprobe 可选）
+- [x] **Step 1: 门控 E2E**：注入真实 deps（env keys + 本地 PG + fs storage）→ 构造 import → polish（真实 DeepSeek）→ generate → 轮询 job → 断言 audio 文件生成于 `STORAGE_DIR` 且 >1KB；片头片尾拼接后时长合理（ffprobe 可选）
 
-- [ ] **Step 2: 文档回写**：AGENT M4 `[x]`（含真实扣费核对注记沿用 M1）；管线/路由与实测对齐（如有偏差修正 ARC §3.2/§3.3）
+- [x] **Step 2: 文档回写**：AGENT M4 `[x]`（含真实扣费核对注记沿用 M1）；管线/路由与实测对齐（如有偏差修正 ARC §3.2/§3.3）
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add services/api/tests AGENT.md PRD.md ARC.md
