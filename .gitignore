@@ -6,3 +6,4 @@ dist/
 **/drizzle/meta/
 scripts/spikes/out-limits/
 sample-voice.*
+apps/extension/dist/

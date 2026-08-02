@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "dailogues 采集器",
+  "version": "0.1.0",
+  "description": "把你在 AI 平台的对话一键采集到 dailogues",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://claude.ai/*",
+    "https://chat.deepseek.com/*",
+    "https://chatgpt.com/*",
+    "https://gemini.google.com/*",
+    "https://kimi.moonshot.cn/*",
+    "https://www.doubao.com/*",
+    "https://www.tongyi.com/*",
+    "https://api.dailogues.com/*"
+  ],
+  "externally_connectable": {
+    "matches": ["https://app.dailogues.com/*"]
+  },
+  "background": { "service_worker": "dist/background.js", "type": "module" },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://claude.ai/chat/*",
+        "https://chat.deepseek.com/chat/*",
+        "https://chatgpt.com/c/*",
+        "https://gemini.google.com/app/*",
+        "https://kimi.moonshot.cn/chat/*",
+        "https://www.doubao.com/chat/*",
+        "https://www.tongyi.com/*"
+      ],
+      "js": ["dist/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": { "default_popup": "popup.html" }
+}
