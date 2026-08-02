@@ -20,13 +20,13 @@
 ```
 dailogues/
 ├── apps/
-│   ├── studio/                 # app.daiogues.com — 工作台 SPA
+│   ├── studio/                 # app.dailogues.com — 工作台 SPA
 │   │   ├── src/pages/          #   auth / onboarding-voice / dashboard / episodes-new / settings
 │   │   └── src/components/     #   录音器、对话导入、润色编辑器、生成进度、发布表单
-│   └── site/                   # daiogues.com — 内容分发 SSR（SolidStart + CF adapter）
+│   └── site/                   # dailogues.com — 内容分发 SSR（SolidStart + CF adapter）
 │       └── src/routes/         #   /(首页) /@username /@username/:slug /@username/feed.xml
 ├── services/
-│   └── api/                    # api.daiogues.com — 统一后端（Fly.io，Node + Hono）
+│   └── api/                    # api.dailogues.com — 统一后端（Fly.io，Node + Hono）
 │       ├── src/
 │       │   ├── routes/         #   imports / polish / generate / jobs / voice / billing / stripe-webhook
 │       │   ├── parsers/        #   可插拔对话解析器（chatgpt/claude/kimi/doubao/tongyi/gemini/plain）
@@ -54,13 +54,13 @@ dailogues/
 
 | 域名 | 用途 | 托管 |
 |---|---|---|
-| `app.daiogues.com` | 工作台 SPA | Cloudflare Pages（静态） |
-| `daiogues.com` | 内容站 SSR | Cloudflare Pages/Workers |
-| `api.daiogues.com` | 统一后端 | Fly.io（免费配额，Docker + ffmpeg） |
+| `app.dailogues.com` | 工作台 SPA | Cloudflare Pages（静态） |
+| `dailogues.com` | 内容站 SSR | Cloudflare Pages/Workers |
+| `api.dailogues.com` | 统一后端 | Fly.io（免费配额，Docker + ffmpeg） |
 | — | Postgres / Auth | Supabase（免费额度） |
 | — | 音频存储 | Cloudflare R2（流量免费） |
 
-> ⚠️ **待确认**：域名拼写（`daiogues` / 项目名 `dailogues` / 正确拼写 `dialogues`）与最终注册域名，正式购买前核对。
+> **品牌名**：`dailogues`——由 `dialogues` 交换 `ia→ai` 变形（寓意 AI）。域名统一为 `dailogues.com` 系列。
 
 ## 技术要点速查
 
@@ -82,7 +82,7 @@ dailogues/
 - [ ] M4：润色（LLM 流式）+ 生成管线（TTS → ffmpeg → R2）
 - [ ] M5：工作台 SPA（录音引导 → 向导 → 发布）
 - [ ] M6：内容站 SSR + RSS + 首页/搜索
-- [ ] M7：邀请码 + Stripe 计费
+- [ ] M7：邀请码 + Stripe 计费（按期付费 + 包月订阅）
 - [ ] M8：E2E + 上线（邀请制）
 
 ## 约定

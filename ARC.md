@@ -7,9 +7,9 @@
 
 | 层 | 选型 | 部署位置 |
 |---|---|---|
-| 工作台 SPA（app.daiogues.com） | SolidJS + Solid Router + StyleX | Cloudflare Pages（静态，免费） |
-| 内容站 SSR（daiogues.com） | SolidStart（SSR）+ StyleX | Cloudflare Pages/Workers（免费） |
-| 统一后端（api.daiogues.com） | Node.js + TypeScript + Hono + Drizzle ORM + fluent-ffmpeg | Fly.io 免费配额（Docker，256MB 机器，空闲休眠） |
+| 工作台 SPA（app.dailogues.com） | SolidJS + Solid Router + StyleX | Cloudflare Pages（静态，免费） |
+| 内容站 SSR（dailogues.com） | SolidStart（SSR）+ StyleX | Cloudflare Pages/Workers（免费） |
+| 统一后端（api.dailogues.com） | Node.js + TypeScript + Hono + Drizzle ORM + fluent-ffmpeg | Fly.io 免费配额（Docker，256MB 机器，空闲休眠） |
 | 数据库 | Supabase Postgres | Supabase 免费额度（500MB） |
 | 认证 | Supabase Auth（邮箱 + 密码，邀请码门禁） | Supabase 免费额度（5 万 MAU） |
 | 对象存储 | Cloudflare R2（音频/封面/录音样本） | R2 免费 10GB + 流量永久免费 |
@@ -21,17 +21,17 @@
 
 ```
                         ┌─────────────────────────────────────────┐
-                        │            daiogues.com                 │
+                        │            dailogues.com                 │
                         │   Cloudflare Pages/Workers (SSR, 免费)  │
                         │   首页浏览 / 频道页 / 节目页 / RSS / 搜索  │
                         └──────────────┬──────────────────────────┘
                                        │
-app.daiogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
+app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
   Solid Router, 静态部署在 CF Pages     │         ┌──────────────┐
   导入 → 润色编辑器 → 生成 → 发布        └────────►│  *.mp3 / png │
                                        │         └──────────────┘
                               ┌────────▼─────────┐
-                              │ api.daiogues.com │
+                              │ api.dailogues.com │
                               │  统一后端 (Fly.io 免费配额, Docker) │
                               │  · 导入解析器(可插拔)              │
                               │  · LLM 润色(SSE 流式)             │
@@ -89,20 +89,21 @@ queued → tts → merge → upload → done（failed 可重试）
 
 ### 3.4 配额与邀请码发放
 
-- 配额判定在 `generate` 入口（服务端）：`plan=free` 且已生成 ≥1 期 → 403 + 订阅引导
-- 发布时发放邀请码：已发布期数 > 3 起，每发布一期 +1 码（`source=reward`），见 PRD §4.1
+- 配额判定在 `generate` 入口（服务端）：免费用户累计生成 ≥1 期 → 403；按期付费用户按 `credit_balance` 扣减；订阅用户无限。额度不足 → 403 + 购买/订阅引导
+- 发布时发放邀请码：已发布期数 > 3 起，每发布一期 +1 码（`source=reward`，**前 3 期不补发**），见 PRD §4.1
 
 ## 4. 数据模型（Supabase Postgres）
 
 | 表 | 关键字段 |
 |---|---|
-| `profiles` | `id`(=auth.users), `username`(唯一), `display_name`, `bio`, `plan`(free/pro), `created_at` |
+| `profiles` | `id`(=auth.users), `username`(唯一), `display_name`, `bio`, `plan`(free/pro), `credit_balance`(int, 按期付费余额), `created_at` |
 | `voice_samples` | `user_id`, `audio_url`(R2), `duration`, `status`, `created_at`（可重录覆盖） |
 | `invite_codes` | `code`(唯一), `created_by`, `used_by`, `used_at`, `expires_at`, `source`(admin/reward), `issued_for_episode_id` |
 | `imports` | `user_id`, `source_type`(link/file/text), `platform`(chatgpt/claude/kimi/doubao/tongyi/gemini/plain), `raw_content`, `parsed_dialogue`(JSONB), `status`, `created_at` |
 | `episodes` | `id`, `user_id`, `slug`, `title`, `description`, `cover_url`, `audio_url`, `duration_seconds`, `status`(draft/generating/published/failed), `language`, `is_public`, `created_at`, `published_at` |
 | `scripts` | `episode_id`, `version`, `segments`(JSONB: `[{speaker: host\|guest, text}]`), `created_at` |
 | `generation_jobs` | `episode_id`, `status`(queued/tts/merge/upload/done/failed), `progress`, `error`, `attempts`, `timestamps` |
+| `payments` | `user_id`, `stripe_session_id`, `amount`, `episodes_granted`, `status`, `created_at`（按期付费购买记录） |
 | `subscriptions` | `user_id`, `stripe_customer_id`, `stripe_subscription_id`, `plan`, `status`, `current_period_end` |
 
 **R2 存储路径**：
@@ -134,9 +135,9 @@ assets/intro.zh.mp3 / intro.en.mp3 / outro.zh.mp3 / outro.en.mp3   ← 固定片
 
 ## 6. 计费集成
 
-1. SPA → `POST /api/billing/checkout` → 后端建 Checkout Session（`customer` 按 user 关联，`price_id` 配置化）→ 重定向 Stripe
-2. Webhook（签名校验）处理 `customer.subscription.created/updated/deleted` → 同步 `subscriptions` → 更新 `profiles.plan`
-3. 订阅取消/过期 → 自动降级 `free`；已发布内容保留
+1. **按期付费**：SPA → `POST /api/billing/checkout`（one-time price）→ Stripe Checkout → webhook `checkout.session.completed` → 写 `payments` + `credit_balance` 增加
+2. **包月订阅**：SPA → `POST /api/billing/checkout`（recurring price）→ webhook `customer.subscription.created/updated/deleted` → 同步 `subscriptions` → 更新 `profiles.plan`
+3. 订阅取消/过期 → 自动降级 `free`；已购买额度与已发布内容保留
 
 ## 7. 成本模型（MVP 月度）
 
