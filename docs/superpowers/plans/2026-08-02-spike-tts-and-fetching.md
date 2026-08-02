@@ -239,85 +239,33 @@ git commit -m "spike: fetch matrix findings"
 
 ---
 
-### Task 4: 慢路径无头浏览器过 CF 验证（Claude）
+### Task 4: 慢路径方案定稿（无头浏览器实测 → 浏览器扩展）
 
-**Files:**
-- Create: `scripts/spikes/headless-cf.mjs`
-- Create: `docs/spikes/headless-cf.md`（发现文档）
+> **⚠️ 本任务已于 2026-08-02 提前执行完毕**，结论见 `docs/spikes/headless-cf.md`。以下为记录与后续动作。
 
-- [ ] **Step 1: 安装 Playwright 浏览器（走代理）**
+- [ ] **Step 1: 记录实测结论（已完成，写入 `docs/spikes/headless-cf.md`）**
 
-```bash
-cd scripts/spikes
-export HTTPS_PROXY=socks5://127.0.0.1:1081
-npx playwright install chromium
-```
+实测要点（本机住宅 IP + 系统 Chrome headless + 请求拦截）：
+- 页面卡在 Cloudflare **Turnstile 交互式质询** 70s 未通过；数据接口 `claude.ai/edge-api/bootstrap` → 403
+- 无头 Chrome 指纹（`navigator.webdriver` 等）被 CF 识别，stealth 插件不足以对抗
+- **结论：云端无头浏览器方案不可行** → 慢路径改为**浏览器扩展**（用户侧真实浏览器，成功率接近 100%）
 
-- [ ] **Step 2: 写无头抓取脚本（Playwright + stealth）**
+- [ ] **Step 2: 确认扩展可解析的分享页 DOM 结构**
 
-```js
-// scripts/spikes/headless-cf.mjs
-// 用法: CLAUDE_SAMPLE_URL=... pnpm headless
-import { chromium } from "playwright-extra";
-import stealth from "puppeteer-extra-plugin-stealth";
+在真实浏览器（住宅 IP）打开 `CLAUDE_SAMPLE_URL`，用 `domSnapshot` 观察消息块结构（用户消息/助手消息的容器层级），确认可程序化提取；记录到 `docs/spikes/headless-cf.md` 的「扩展 DOM 提取要点」小节。
 
-chromium.use(stealth());
+- [ ] **Step 3: 设计扩展技术要点（写入 `docs/spikes/headless-cf.md`）**
 
-const URL = process.env.CLAUDE_SAMPLE_URL;
-if (!URL) throw new Error("CLAUDE_SAMPLE_URL 未设置");
-
-const proxy = process.env.PROXY_URL; // socks5://127.0.0.1:1081
-
-const browser = await chromium.launch({
-  headless: true,
-  args: proxy ? [`--proxy-server=${proxy}`] : [],
-});
-const page = await browser.newPage({
-  userAgent:
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-});
-
-const t0 = Date.now();
-try {
-  await page.goto(URL, { waitUntil: "domcontentloaded", timeout: 60000 });
-  // 等待对话渲染：轮询页面文本长度（最多 60s）
-  for (let i = 0; i < 60; i++) {
-    const text = await page.evaluate(() => document.body?.innerText?.length ?? 0);
-    if (text > 500) break;
-    await page.waitForTimeout(1000);
-  }
-  const title = await page.title();
-  const text = (await page.evaluate(() => document.body?.innerText ?? "")).slice(0, 500);
-  console.log("耗时(ms):", Date.now() - t0);
-  console.log("title:", title);
-  console.log("页面文本前500字:", text.replace(/\n/g, " ").slice(0, 500));
-  console.log("含质询页特征:", text.includes("Just a moment") || text.includes("验证"));
-  // 提取对话结构：记录 DOM 中的用户/助手消息块数量（按页面实际结构观察后调整）
-} catch (e) {
-  console.log("ERROR:", e.message);
-} finally {
-  await browser.close();
-}
-```
-
-> 注：`page.evaluate` 在此处为**本地脚本**（非 IAB 约束），可自由执行 DOM 读取。
-
-- [ ] **Step 3: 运行并记录**
-
-```bash
-cd scripts/spikes && CLAUDE_SAMPLE_URL=https://claude.ai/share/6cc0f373-72c5-4afd-a223-98471688e736 pnpm headless
-```
-Expected: 对话渲染成功（标题 + 内容前 500 字）或卡在 CF 质询。记录到 `docs/spikes/headless-cf.md`：
-- 是否通过质询；耗时（秒）
-- 无头模式 vs 有头模式差异（如有必要对比）
-- 页面结构：消息块的可提取性（DOM 结构、是否方便转结构化对话）
-- 连续运行 5 次的稳定性（间隔 30s）
+- Manifest V3；content script 匹配 `claude.ai/share/*` 等分享页路径
+- DOM 解析 → 结构化对话（`[{role, content}]`），含验证码字符串匹配
+- POST 回 `api.dailogues.com`；会话鉴权：登录态 token 由 app 站点页注入 `chrome.storage`
+- 扩展仅采集 + 回传，不本地存储对话；商店上架（Chrome/Edge）审核周期入排期
 
 - [ ] **Step 4: 提交**
 
 ```bash
-git add scripts/spikes docs/spikes
-git commit -m "spike: headless browser vs cloudflare findings"
+git add docs/spikes
+git commit -m "spike: headless vs cloudflare conclusion - extension as slow path"
 ```
 
 ---
@@ -333,7 +281,7 @@ git commit -m "spike: headless browser vs cloudflare findings"
 覆盖以下决策点，每条给出结论与依据：
 1. **Fish Audio 集成形态**：多说话人一次调用是否成立？参考音频传法（base64/reference_id）？单请求字符上限 → 决定管线是「一次调用」还是「分批 + ffmpeg 拼接」；主持人克隆音色的 reference_id 是否需要在用户录音后「注册音色」再使用
 2. **MVP 平台清单**：快路径平台（API 直取，验证码方案）、慢路径平台（无头浏览器，Claude）、暂缓平台——更新 PRD §4.3 与 AGENT 速查
-3. **browser-fetcher 服务规格**：若无头可行——单实例内存需求（实测峰值）、部署形态（Fly ≥1GB 按需唤醒，成本 ~$5–10/月）与 API 契约（`POST /fetch {url} -> {html|dialogue}`）；若不可行——浏览器扩展兜底方案评估
+3. **慢路径定稿**：浏览器扩展（实测：无头被 Turnstile 拦截）——扩展技术要点（Manifest V3 / content script 平台匹配 / DOM 解析 / 鉴权注入 / 商店上架排期）已记录于 `docs/spikes/headless-cf.md`
 4. **验证码机制**：确认在快/慢路径下均可实施（抓取内容统一为结构化对话后做字符串匹配）
 
 - [ ] **Step 2: 回写 PRD/ARC/AGENT**

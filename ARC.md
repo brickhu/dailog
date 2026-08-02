@@ -95,7 +95,8 @@ queued → tts → merge → upload → done（failed 可重试）
 ### 3.5 抓取与验证（URL-only 导入，双路径）
 
 - **快路径 `api-fetcher`**：按平台内置 API 模式——从分享 URL 提取 share_id → 调已知 API（浏览器头模板：UA/Referer/sec-ch-ua）→ 结构化对话。DeepSeek 已验证（`GET /api/v0/share/content?share_id=`，无需登录）；豆包/Kimi/通义大概率可行，ChatGPT 待 spike 实测
-- **慢路径 `browser-fetcher`**：无头浏览器（Playwright + stealth 指纹）渲染分享页提取对话——用于 Cloudflare 质询平台（**Claude 必须**，ChatGPT 视实测）。独立部署（≥1GB 内存，Fly 按需唤醒，超免费配额约 $5–10/月）；过 CF 稳定率以 spike 实测为准，兜底方案为浏览器扩展（用户侧真实浏览器）
+- **慢路径 = 浏览器扩展（用户侧采集，spike 实测定稿）**：用于 Cloudflare/Turnstile 质询平台（**Claude 必须**，ChatGPT 视实测）。用户打开分享页 → 扩展 content script 按平台解析 DOM → 回传平台校验。依据（实测 `docs/spikes/headless-cf.md`）：无头浏览器被 Turnstile 交互式质询拦截（70s 未通过、数据接口 403），云端无头方案不可行；扩展运行在用户真实浏览器（住宅 IP + 真实指纹），成功率接近 100%
+- 扩展形态：Manifest V3（Chrome/Edge 商店上架），content script 按平台匹配（`claude.ai/share/*` 等），DOM 解析为结构化对话（含验证码匹配）→ POST 回 `api.dailogues.com`；会话鉴权用平台登录态（token 由 app 站点页注入 `chrome.storage`）；扩展只做「采集 + 回传」，不存储对话；商店审核周期纳入排期
 - **验证码机制**：`POST /api/imports` 前先请求验证码（一次性，哈希存 `imports.verification_code_hash`）→ 用户"先发码、再分享"→ 抓取内容中匹配验证码 → `verified_at` 落库；不匹配返回 422 + 引导重试
 - **反爬运维**：headers 模板配置化（sec-ch-ua 版本会过时）；单次抓取 + 缓存 + 限速；平台级故障返回明确错误并监控告警
 
@@ -172,7 +173,7 @@ assets/intro.zh.mp3 / intro.en.mp3 / outro.zh.mp3 / outro.en.mp3   ← 固定片
 | 风险 | 缓解 |
 |---|---|
 | Fish Audio 多说话人请求格式/单请求限额不确定 | **首个实现任务：spike**——验证 chunks 格式、返回形态、批上限、克隆+固定音色混排音质 |
-| Cloudflare 对无头浏览器的风控（Claude 慢路径） | 过 CF 稳定率以 spike 实测为准；兜底：浏览器扩展（用户侧真实浏览器）或接受部分平台延迟支持 |
+| Cloudflare/Turnstile 风控（Claude 等慢路径平台） | 已实测（`docs/spikes/headless-cf.md`）：无头浏览器被 Turnstile 拦截 → 慢路径定为**浏览器扩展**（用户侧真实浏览器）；扩展商店上架审核周期提前规划 |
 | 克隆音色质量受录音环境影响 | 录音引导页质量校验（时长/响度/语音检测），可重录 |
 | ffmpeg 在 256MB 机器上拼接大音频 | 单期时长限定 5–10 分钟，音频体量小，256MB 无压力 |
 | LLM 供应商切换 | OpenAI 兼容接口 + 配置化，锁定成本 |
