@@ -24,6 +24,10 @@ function fakeRepo(): AppDeps["repo"] {
       createJob: async (episodeId) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
       getLatestJob: async () => null,
       getOwnedEpisode: async () => ({ id: "ep-1" }),
+      listRecoverableJobs: async () => [],
+      markJobProgress: async () => {},
+      markJobDone: async () => {},
+      updateEpisodeAudio: async () => {},
     },
   };
 }

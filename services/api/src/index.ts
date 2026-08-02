@@ -6,6 +6,9 @@ import { createDb } from "./db/client";
 import { createRepo } from "./repo";
 import { createLlmClient } from "./llm/client";
 import { qualityCheckPrompt, safetyCheckPrompt, parseJsonLoose, type QualityResult } from "./llm/prompts";
+import { createJobQueue } from "./pipeline/queue";
+import { createPipelineRunner } from "./pipeline/runner";
+import { recoverQueuedJobs } from "./pipeline/bootstrap";
 import type { PolishDeps } from "./routes/polish";
 import type { GenerateDeps } from "./routes/generate";
 import type { JobDeps } from "./routes/job";
@@ -20,6 +23,27 @@ const llm = createLlmClient({
   apiKey: env.DEEPSEEK_API_KEY,
   baseUrl: env.DEEPSEEK_BASE_URL,
   model: env.DEEPSEEK_MODEL,
+});
+
+// 进程内串行生成队列（MVP 单实例，ARC §3.1）：重试 + 指数退避
+const queue = createJobQueue(createPipelineRunner({
+  repo: {
+    getOwnedEpisode: repo.jobs.getOwnedEpisode,
+    getLatestScript: repo.episodes.getLatestScript,
+    markJobProgress: repo.jobs.markJobProgress,
+    markJobDone: repo.jobs.markJobDone,
+    updateEpisodeAudio: repo.jobs.updateEpisodeAudio,
+    // Task 7/8 注入：tts 模型/音色等查询由后续任务接到 repo
+    getEpisodeLanguage: async () => null,
+    getHostModelId: async () => null,
+    getGuestModelId: async () => null,
+    getVoiceSampleAudio: async () => null,
+  },
+}), { concurrency: 1, maxAttempts: 2, backoffMs: 1000 });
+
+// 启动恢复：把上次未完成（queued/tts/merge/upload）的 job 重新入队（不阻塞 serve）
+void recoverQueuedJobs(repo.jobs, (job) => queue.enqueue(job, () => {}).then(() => {})).then((n) => {
+  console.log(`[queue] boot recovery: re-enqueued ${n} uncompleted job(s)`);
 });
 
 const polish: PolishDeps = {
@@ -41,9 +65,11 @@ const generate: GenerateDeps = {
   getQuota: (userId) => repo.jobs.getQuotaInfo(userId),
   consumeQuota: (userId, credit) => repo.jobs.consumeQuota(userId, credit),
   createJob: (episodeId) => repo.jobs.createJob(episodeId),
-  // Task 6 接入进程内队列：目前仅记录，不消费 job
-  enqueueJob: async (jobId) => {
-    console.log(`[queue] job ${jobId} enqueued (Task 6 接入进程内队列)`);
+  // 进程内队列：异步消费（runner 骨架在 Task 7-9 填充分阶段实现）
+  enqueueJob: async (job) => {
+    await queue.enqueue({ id: job.id, episodeId: job.episodeId }, (p) => {
+      console.log(`[queue] job ${job.id} progress ${p}%`);
+    });
   },
 };
 

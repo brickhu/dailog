@@ -218,6 +218,51 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       expect(latest?.id).toBe(j2.id);
       expect(latest).toMatchObject({ status: "queued", progress: 0, error: null });
     });
+
+    it("listRecoverableJobs returns only queued/tts/merge/upload jobs", async () => {
+      const episodeId = await makeEpisode("启动恢复");
+      const q = await repo.jobs.createJob(episodeId);
+      await repo.jobs.markJobProgress(q.id, "tts", 10);
+
+      // done / failed 不入恢复集
+      const done = await repo.jobs.createJob(episodeId);
+      await repo.jobs.markJobDone(done.id);
+      const failed = await repo.jobs.createJob(episodeId);
+      await db.update(generationJobs).set({ status: "failed" }).where(eq(generationJobs.id, failed.id));
+
+      const recoverable = await repo.jobs.listRecoverableJobs();
+      const ids = recoverable.map((j) => j.id);
+      expect(ids).toContain(q.id);
+      expect(ids).not.toContain(done.id);
+      expect(ids).not.toContain(failed.id);
+      const qRow = recoverable.find((j) => j.id === q.id);
+      expect(qRow).toEqual({ id: q.id, episodeId });
+    });
+
+    it("markJobProgress updates status and progress", async () => {
+      const episodeId = await makeEpisode("进度推进");
+      const job = await repo.jobs.createJob(episodeId);
+      await repo.jobs.markJobProgress(job.id, "merge", 60);
+      expect(await repo.jobs.getLatestJob(episodeId)).toMatchObject({ status: "merge", progress: 60, error: null });
+    });
+
+    it("markJobDone sets status done and progress 100", async () => {
+      const episodeId = await makeEpisode("完成标记");
+      const job = await repo.jobs.createJob(episodeId);
+      await repo.jobs.markJobProgress(job.id, "upload", 90);
+      await repo.jobs.markJobDone(job.id);
+      expect(await repo.jobs.getLatestJob(episodeId)).toMatchObject({ status: "done", progress: 100, error: null });
+    });
+
+    it("updateEpisodeAudio writes audio_url and duration_seconds", async () => {
+      const episodeId = await makeEpisode("音频落库");
+      await repo.jobs.updateEpisodeAudio(episodeId, "audio/ep-1.mp3", 123);
+      const row = await db
+        .select({ audioUrl: episodes.audioUrl, durationSeconds: episodes.durationSeconds })
+        .from(episodes)
+        .where(eq(episodes.id, episodeId));
+      expect(row[0]).toEqual({ audioUrl: "audio/ep-1.mp3", durationSeconds: 123 });
+    });
   });
 
   describe("api via real repo", () => {

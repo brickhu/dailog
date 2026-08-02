@@ -1,4 +1,4 @@
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { randomBytes } from "node:crypto";
 import * as schema from "../db/schema";
@@ -13,6 +13,8 @@ function randomSlug(): string {
   return randomBytes(8).toString("hex");
 }
 
+export type JobStatus = "queued" | "tts" | "merge" | "upload" | "done" | "failed";
+
 export interface JobsRepo {
   /** 用户配额：plan + credit_balance + 已完成生成（status=done 的 job，经 episodes.user_id 归属）的期数 */
   getQuotaInfo(userId: string): Promise<{ plan: "free" | "pro"; generatedCount: number; creditBalance: number }>;
@@ -24,6 +26,14 @@ export interface JobsRepo {
   getLatestJob(episodeId: string): Promise<{ id: string; status: string; progress: number; error: string | null } | null>;
   /** 归属校验（防 IDOR）：返回 null 视为不存在或不属于该用户 */
   getOwnedEpisode(episodeId: string, userId: string): Promise<{ id: string } | null>;
+  /** 未完成 job（queued/tts/merge/upload）：启动恢复重新入队 */
+  listRecoverableJobs(): Promise<{ id: string; episodeId: string }[]>;
+  /** 推进 job 状态/进度（queued→tts→merge→upload） */
+  markJobProgress(jobId: string, status: JobStatus, progress: number): Promise<void>;
+  /** job 完成：status=done、progress=100 */
+  markJobDone(jobId: string): Promise<void>;
+  /** 生成产物落库：episodes.audio_url + duration_seconds */
+  updateEpisodeAudio(episodeId: string, audioKey: string, durationSeconds: number): Promise<void>;
 }
 
 export type Repos = { imports: ImportsRepo; episodes: EpisodesRepo; jobs: JobsRepo };
@@ -233,6 +243,31 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .orderBy(desc(schema.generationJobs.createdAt))
           .limit(1);
         return rows[0] ?? null;
+      },
+
+      async listRecoverableJobs() {
+        return db
+          .select({ id: schema.generationJobs.id, episodeId: schema.generationJobs.episodeId })
+          .from(schema.generationJobs)
+          .where(inArray(schema.generationJobs.status, ["queued", "tts", "merge", "upload"]));
+      },
+
+      async markJobProgress(jobId, status, progress) {
+        await db.update(schema.generationJobs)
+          .set({ status, progress, updatedAt: new Date() })
+          .where(eq(schema.generationJobs.id, jobId));
+      },
+
+      async markJobDone(jobId) {
+        await db.update(schema.generationJobs)
+          .set({ status: "done", progress: 100, error: null, updatedAt: new Date() })
+          .where(eq(schema.generationJobs.id, jobId));
+      },
+
+      async updateEpisodeAudio(episodeId, audioKey, durationSeconds) {
+        await db.update(schema.episodes)
+          .set({ audioUrl: audioKey, durationSeconds })
+          .where(eq(schema.episodes.id, episodeId));
       },
     },
   };

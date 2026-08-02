@@ -10,7 +10,8 @@ export interface GenerateDeps {
   getQuota(userId: string): Promise<{ plan: "free" | "pro"; generatedCount: number; creditBalance: number }>;
   consumeQuota(userId: string, consumeCredit: number): Promise<void>;
   createJob(episodeId: string): Promise<{ id: string; episodeId: string; status: string; progress: number }>;
-  enqueueJob(jobId: string): Promise<void>;
+  /** 入队（进程内队列需要 id + episodeId 才能驱动生成管线） */
+  enqueueJob(job: { id: string; episodeId: string }): Promise<void>;
 }
 
 export function generateRoutes(deps: GenerateDeps) {
@@ -32,7 +33,7 @@ export function generateRoutes(deps: GenerateDeps) {
     if (!decision.ok) return c.json({ error: "quota_exceeded", reason: decision.reason }, 403);
     await deps.consumeQuota(userId, decision.consumeCredit);
     const job = await deps.createJob(episodeId);
-    await deps.enqueueJob(job.id);
+    await deps.enqueueJob({ id: job.id, episodeId: job.episodeId });
     return c.json({ jobId: job.id, status: job.status }, 202);
   });
   return app;

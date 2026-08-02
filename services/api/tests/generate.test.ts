@@ -22,7 +22,7 @@ describe("POST /api/episodes/:id/generate", () => {
     expect(res.status).toBe(202);
     const json = await res.json();
     expect(json.jobId).toBe("job-1");
-    expect(enqueueJob).toHaveBeenCalledWith("job-1");
+    expect(enqueueJob).toHaveBeenCalledWith({ id: "job-1", episodeId: "ep-1" });
   });
 
   it("returns 422 when safety check rejects (no job, no quota)", async () => {
