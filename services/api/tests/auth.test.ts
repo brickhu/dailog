@@ -64,3 +64,14 @@ describe("auth middleware scheme", () => {
     expect(await res.json()).toEqual({ userId: "user-1" });
   });
 });
+
+describe("auth middleware on imports", () => {
+  it("rejects POST /api/imports without token", async () => {
+    const res = await makeApp().request("/api/imports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ platform: "claude", conversationId: "c", title: "", url: "https://claude.ai/chat/c", messages: [{ role: "user", content: "hi" }] }),
+    });
+    expect(res.status).toBe(401);
+  });
+});
