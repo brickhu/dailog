@@ -167,7 +167,7 @@ assets/intro.zh.mp3 / intro.en.mp3 / outro.zh.mp3 / outro.en.mp3   ← 固定片
 ### 5.2 内容站 SSR（apps/site）
 
 - SolidStart + Cloudflare adapter，SSR 部署于 CF Pages/Workers
-- 路由：`/`（最新/热门/搜索）、`/@username`（频道页）、`/cast/:id`（节目页，id = 节目短 ID）、`/@username/feed.xml`（RSS）
+- 路由：`/`（最新/热门/搜索）、`/@username`（频道页）、`/episode/:id`（单集页，id = 节目短 ID）、`/@username/feed.xml`（RSS）
 - RSS：itunes 元数据 + 封面 + 节目列表；feed 响应加 CF 短 TTL 缓存（防高频拉取）
 - 直连 Supabase 读公开数据（RLS 只读 + 服务端只暴露公开字段）
 

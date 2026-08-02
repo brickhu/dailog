@@ -24,7 +24,7 @@ dailogues/
 │   │   ├── src/pages/          #   auth / onboarding-voice / dashboard / episodes-new / settings
 │   │   └── src/components/     #   录音器、导入结果、润色编辑器、生成进度、发布表单
 │   ├── site/                   # dailogues.com — 内容分发 SSR（SolidStart + CF adapter）
-│   │   └── src/routes/         #   /(首页) /cast/:id(节目页) /@username /@username/feed.xml
+│   │   └── src/routes/         #   /(首页) /episode/:id(单集页) /@username /@username/feed.xml
 │   └── extension/              # 采集扩展（Manifest V3，Chrome/Edge 商店）— 统一导入通道
 │       ├── manifest.json       #   content_scripts 按平台 URL 匹配 + background 权限
 │       ├── src/content/        #   按平台采集器：claude.ts / deepseek.ts / chatgpt.ts / ...
