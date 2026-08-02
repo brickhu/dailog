@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16
+    container_name: dailogues-db
+    environment:
+      POSTGRES_USER: dailogues
+      POSTGRES_PASSWORD: dailogues
+      POSTGRES_DB: dailogues
+    ports:
+      - "5432:5432"
+    volumes:
+      - dailogues-pg:/var/lib/postgresql/data
+volumes:
+  dailogues-pg:
