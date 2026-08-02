@@ -78,7 +78,7 @@ const polish: PolishDeps = {
 };
 
 const generate: GenerateDeps = {
-  getOwnedEpisode: (episodeId, userId) => repo.episodes.getEpisode(episodeId, userId),
+  getOwnedEpisode: (episodeId, userId) => repo.jobs.getOwnedEpisode(episodeId, userId),
   getLatestScript: (episodeId) => repo.episodes.getLatestScript(episodeId),
   // 安全门（PRD §4.4）：编辑后脚本一次非流式补全，输出 JSON { pass, reason? }
   safetyCheck: async (segments) => parseJsonLoose(await llm.complete(safetyCheckPrompt(segments))) as { pass: boolean; reason?: string },
@@ -95,6 +95,7 @@ const generate: GenerateDeps = {
 };
 
 const job: JobDeps = {
+  getOwnedEpisode: (episodeId, userId) => repo.jobs.getOwnedEpisode(episodeId, userId),
   getLatestJob: (episodeId) => repo.jobs.getLatestJob(episodeId),
 };
 

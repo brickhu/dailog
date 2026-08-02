@@ -3,9 +3,10 @@ import { jobRoutes, type JobDeps } from "../src/routes/job";
 
 function makeJob(deps: Partial<JobDeps> = {}) {
   return jobRoutes({
+    getOwnedEpisode: async () => ({ id: "ep-1" }),
     getLatestJob: async () => ({ id: "job-1", status: "queued", progress: 0, error: null }),
     ...deps,
-  });
+  }, () => "user-1");
 }
 
 describe("GET /api/episodes/:id/job", () => {
@@ -30,5 +31,13 @@ describe("GET /api/episodes/:id/job", () => {
     const res = await app.request("/api/episodes/ep-1/job");
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "not_found" });
+  });
+});
+
+describe("ownership", () => {
+  it("returns 404 for another user's episode", async () => {
+    const app = makeJob({ getOwnedEpisode: async () => null });
+    const res = await app.request("/api/episodes/ep-other/job");
+    expect(res.status).toBe(404);
   });
 });

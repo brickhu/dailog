@@ -60,6 +60,7 @@ function fakeGenerate(): AppDeps["generate"] {
 
 function fakeJob(): AppDeps["job"] {
   return {
+    getOwnedEpisode: async () => ({ id: "ep-1" }),
     getLatestJob: async () => null,
   };
 }

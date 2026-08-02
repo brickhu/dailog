@@ -160,6 +160,19 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
     });
   });
 
+    it("getEpisode with mismatched userId returns null (IDOR guard)", async () => {
+      const conv = `conv-ido-${Date.now()}`;
+      const imp = await repo.imports.createImport(
+        { userId: API_USER, platform: "claude", sourceTitle: "t", sourceConversationId: conv, sourceUrl: "https://claude.ai/chat/x", parsedDialogue: { platform: "claude", conversationId: conv, title: "t", url: "u", messages: [{ role: "user", content: "hi" }] } },
+        { userId: API_USER, title: "t", status: "draft", language: null },
+      );
+      if ("duplicate" in imp) throw new Error("unexpected duplicate");
+      const other = await repo.episodes.getEpisode(imp.episodeId, "11111111-1111-1111-1111-111111111111");
+      expect(other).toBeNull();
+      const own = await repo.episodes.getEpisode(imp.episodeId, API_USER);
+      expect(own?.id).toBe(imp.episodeId);
+    });
+
   describe("jobs repo", () => {
     async function makeEpisode(title: string): Promise<string> {
       const conv = `conv-job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -366,6 +379,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       enqueueJob: async () => {},
     };
     const job: AppDeps["job"] = {
+      getOwnedEpisode: (episodeId, userId) => repo.jobs.getOwnedEpisode(episodeId, userId),
       getLatestJob: (episodeId) => repo.jobs.getLatestJob(episodeId),
     };
     const voice: AppDeps["voice"] = {

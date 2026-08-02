@@ -141,7 +141,10 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       },
     };
 
-    const job: JobDeps = { getLatestJob: (id) => repo.jobs.getLatestJob(id) };
+    const job: JobDeps = {
+      getOwnedEpisode: (episodeId, userId) => repo.jobs.getOwnedEpisode(episodeId, userId),
+      getLatestJob: (id) => repo.jobs.getLatestJob(id),
+    };
     const voice: VoiceDeps = { saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row), tts, storage };
 
     app = createApp({

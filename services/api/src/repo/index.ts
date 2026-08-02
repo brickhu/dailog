@@ -127,7 +127,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .orderBy(desc(schema.episodes.createdAt));
       },
 
-      async getEpisode(id) {
+      async getEpisode(id, userId?) {
         const rows = await db
           .select({
             id: schema.episodes.id,
@@ -136,7 +136,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             status: schema.episodes.status,
           })
           .from(schema.episodes)
-          .where(eq(schema.episodes.id, id))
+          .where(userId ? and(eq(schema.episodes.id, id), eq(schema.episodes.userId, userId)) : eq(schema.episodes.id, id))
           .limit(1);
         return rows[0] ?? null;
       },

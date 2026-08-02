@@ -36,7 +36,7 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   // 上面的 /api/* 鉴权中间件依然覆盖
   app.route("/", polishRoutes(deps.polish));
   app.route("/", generateRoutes(deps.generate));
-  app.route("/", jobRoutes(deps.job));
+  app.route("/", jobRoutes(deps.job, (c) => (c as unknown as { get: (k: string) => string }).get("userId")));
   app.route("/", voiceRoutes(deps.voice));
 
   app.notFound((c) => c.json({ error: "not_found" }, 404));
