@@ -95,3 +95,10 @@ describe("auth middleware on imports", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("auth middleware on polish", () => {
+  it("rejects POST polish without token", async () => {
+    const res = await makeApp().request("/api/episodes/ep-1/polish", { method: "POST" });
+    expect(res.status).toBe(401);
+  });
+});
