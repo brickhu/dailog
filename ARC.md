@@ -9,6 +9,7 @@
 |---|---|---|
 | 工作台 SPA（app.dailogues.com） | SolidJS + Solid Router + StyleX | Cloudflare Pages（静态，免费） |
 | 内容站 SSR（dailogues.com） | SolidStart（SSR）+ StyleX | Cloudflare Pages/Workers（免费） |
+| **采集扩展（浏览器扩展）** | **Manifest V3**：content script 按平台解析 + background service worker 回传 | Chrome/Edge 商店（用户侧安装，登录态采集） |
 | 统一后端（api.dailogues.com） | Node.js + TypeScript + Hono + Drizzle ORM + fluent-ffmpeg | Fly.io 免费配额（Docker，256MB 机器，空闲休眠） |
 | 数据库 | Supabase Postgres | Supabase 免费额度（500MB） |
 | 认证 | Supabase Auth（邮箱 + 密码，邀请码门禁） | Supabase 免费额度（5 万 MAU） |
@@ -20,6 +21,14 @@
 ## 2. 部署拓扑
 
 ```
+         ┌────────────────────── 用户浏览器（Chrome/Edge）──────────────────────┐
+         │  采集扩展（Manifest V3）                                             │
+         │  · 用户在 AI 平台打开自己的对话（登录态，如 claude.ai/chat/*）          │
+         │  · content script：虚拟列表滚动加载 → 按平台解析 DOM → 元数据+消息       │
+         │  · background service worker：回传（绕开页面 CSP）                    │
+         └─────────────────────────────┬──────────────────────────────────────┘
+                                       │ POST /api/imports（结构化对话 + 元数据）
+                                       ▼
                         ┌─────────────────────────────────────────┐
                         │            dailogues.com                 │
                         │   Cloudflare Pages/Workers (SSR, 免费)  │
@@ -28,12 +37,12 @@
                                        │
 app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
   Solid Router, 静态部署在 CF Pages     │         ┌──────────────┐
-  导入 → 润色编辑器 → 生成 → 发布        └────────►│  *.mp3 / png │
+  接收采集 → 润色编辑 → 生成 → 发布      └────────►│  *.mp3 / png │
                                        │         └──────────────┘
                               ┌────────▼─────────┐
                               │ api.dailogues.com │
                               │  统一后端 (Fly.io 免费配额, Docker) │
-                              │  · 导入解析器(可插拔)              │
+                              │  · imports 接收（扩展回传）         │
                               │  · LLM 润色(SSE 流式)             │
                               │  · 生成管线(TTS→ffmpeg→R2)        │
                               │  · 配额 / Stripe / 邀请码          │
@@ -46,7 +55,7 @@ app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
                         └─────────────────────────────┘
 ```
 
-**数据流向**：SPA 与 SSR 站读 Supabase（内容站直连读库，不走统一后端）；统一后端是唯一写方；音频资产全部在 R2。
+**数据流向**：扩展在用户登录态下采集对话（真实性=登录态）→ 回传统一后端落库；SPA 与 SSR 站读 Supabase（内容站直连读库，不走统一后端）；统一后端是唯一写方；音频资产全部在 R2。
 
 ## 3. 统一后端（services/api）
 
@@ -176,14 +185,14 @@ assets/intro.zh.mp3 / intro.en.mp3 / outro.zh.mp3 / outro.en.mp3   ← 固定片
 | Supabase（Postgres + Auth） | 免费（500MB / 5 万 MAU） |
 | Fly.io（1 台 256MB 机器） | 免费配额内（3 台/3GB 卷/160GB 流量，空闲休眠） |
 | LLM 润色 | 按量，每期约几美分 |
-| Fish Audio | 按量（按字符） |
+| Fish Audio | 按量（$15/百万 UTF-8 字节，中文 1 字 3 字节；10 分钟期 ≈ ¥0.97，实测见 `docs/spikes/fish-audio.md`） |
 | Stripe | 2.9% + $0.30/笔 |
 
 超出免费额度的触发点：R2 >10GB、Supabase >500MB、Fly 超配额（届时升 paid ~$5/月起）。
 
 ## 8. 测试策略
 
-- **解析器**：每平台 1–2 个真实导出 fixture 快照测试
+- **采集器（扩展 content script）**：每平台 1–2 个对话页 DOM 快照 fixture 测试（`fixtures/`）；滚动采集循环单测（去重/排序/空块校验）
 - **管线**：mock LLM / mock Fish Audio 集成测试；ffmpeg 拼接 golden 文件对比（时长/字节）
 - **规则单测**：配额判定、邀请码发放（>3 期规则）、订阅状态机
 - **API 契约**：Vitest + Hono app 直测

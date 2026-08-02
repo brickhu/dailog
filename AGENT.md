@@ -22,23 +22,27 @@ dailogues/
 ├── apps/
 │   ├── studio/                 # app.dailogues.com — 工作台 SPA
 │   │   ├── src/pages/          #   auth / onboarding-voice / dashboard / episodes-new / settings
-│   │   └── src/components/     #   录音器、对话导入、润色编辑器、生成进度、发布表单
-│   └── site/                   # dailogues.com — 内容分发 SSR（SolidStart + CF adapter）
-│       └── src/routes/         #   /(首页) /@username /@username/:slug /@username/feed.xml
+│   │   └── src/components/     #   录音器、导入结果、润色编辑器、生成进度、发布表单
+│   ├── site/                   # dailogues.com — 内容分发 SSR（SolidStart + CF adapter）
+│   │   └── src/routes/         #   /(首页) /@username /@username/:slug /@username/feed.xml
+│   └── extension/              # 采集扩展（Manifest V3，Chrome/Edge 商店）— 统一导入通道
+│       ├── manifest.json       #   content_scripts 按平台 URL 匹配 + background 权限
+│       ├── src/content/        #   按平台采集器：claude.ts / deepseek.ts / chatgpt.ts / ...
+│       │   └── core.ts         #   虚拟列表滚动循环 + MutationObserver + 去重排序
+│       ├── src/background.ts   #   service worker：接收 content 消息 → POST api.dailogues.com
+│       └── src/shared.ts       #   采集协议类型（platform/conversation_id/title/url/messages[]）
 ├── services/
 │   └── api/                    # api.dailogues.com — 统一后端（Fly.io，Node + Hono）
 │       ├── src/
 │       │   ├── routes/         #   imports / polish / generate / jobs / voice / billing / stripe-webhook
-│       │   ├── parsers/        #   可插拔对话解析器（chatgpt/claude/kimi/doubao/tongyi/gemini/plain）
 │       │   ├── pipeline/       #   生成管线（tts → merge → upload）
-│       │   ├── tts/            #   Fish Audio 适配（多说话人 + 克隆）
-│       │   ├── llm/            #   润色 + 语言检测（OpenAI 兼容，配置化）
+│       │   ├── tts/            #   Fish Audio 适配（多说话人/零样本克隆，见 docs/spikes/fish-audio.md）
+│       │   ├── llm/            #   质量审核 + 润色 + 语言检测（DeepSeek，配置化）
 │       │   ├── billing/        #   Stripe checkout/webhook/配额
 │       │   └── db/             #   Drizzle schema + migrations（Supabase Postgres）
 │       └── Dockerfile          #   含 ffmpeg
 ├── packages/
-│   ├── shared/                 # 领域类型 + 设计 token（StyleX）
-│   └── parsers/                # 解析器库（与 services/api 共用）
+│   └── shared/                 # 领域类型（含采集协议）+ 设计 token（StyleX）
 ├── infra/
 │   ├── fly/                    # fly.toml、Dockerfile
 │   ├── cloudflare/             # wrangler.toml、Pages 配置、_routes.json
@@ -46,7 +50,7 @@ dailogues/
 │   └── scripts/                # 管理员 CLI（生成邀请码等）
 ├── assets/
 │   └── audio/                  # 固定片头片尾：intro.zh.mp3 / intro.en.mp3 / outro.zh.mp3 / outro.en.mp3
-├── fixtures/                   # 解析器测试样本（各平台真实导出）
+├── fixtures/                   # 采集器测试样本（各平台对话页 DOM 快照）
 ├── AGENT.md / PRD.md / ARC.md / MRD.md
 ```
 
@@ -57,6 +61,7 @@ dailogues/
 | `app.dailogues.com` | 工作台 SPA | Cloudflare Pages（静态） |
 | `dailogues.com` | 内容站 SSR | Cloudflare Pages/Workers |
 | `api.dailogues.com` | 统一后端 | Fly.io（免费配额，Docker + ffmpeg） |
+| — | 采集扩展 | Chrome/Edge 商店（用户侧安装，登录态采集） |
 | — | Postgres / Auth | Supabase（免费额度） |
 | — | 音频存储 | Cloudflare R2（流量免费） |
 
