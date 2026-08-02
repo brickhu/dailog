@@ -27,9 +27,7 @@
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/node": "^22.0.0",
     "drizzle-kit": "^0.30.0",
-    "socks-proxy-agent": "^10.1.0",
     "typescript": "^5.7.0",
-    "undici": "^8.9.0",
     "vitest": "^3.0.0"
   }
 }
