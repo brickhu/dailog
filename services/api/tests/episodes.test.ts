@@ -8,7 +8,10 @@ function fakeRepo(): EpisodesRepo {
   const scripts: Array<{ episodeId: string; version: number; segments: ScriptSegment[] }> = [];
   return {
     listEpisodes: async (userId) => [...episodes.values()].filter((e) => e.userId === userId),
-    getEpisode: async (id) => episodes.get(id) ?? null,
+    getEpisode: async (id, userId) => {
+      const ep = episodes.get(id);
+      return ep && (!userId || ep.userId === userId) ? ep : null;
+    },
     saveScript: async (episodeId, version, segments) => {
       scripts.push({ episodeId, version, segments });
       return { episodeId, version, segments };
@@ -58,5 +61,18 @@ describe("episodes routes", () => {
     const app = episodesRoutes(fakeRepo(), () => "user-1");
     const res = await app.request("/episodes/ep-1/publish", { method: "POST" });
     expect(res.status).toBe(200);
+  });
+});
+
+describe("ownership scoping", () => {
+  it("does not expose another user's episode", async () => {
+    const app = episodesRoutes(fakeRepo(), () => "other-user");
+    const res = await app.request("/episodes/ep-1");
+    expect(res.status).toBe(404);
+  });
+  it("does not publish another user's episode", async () => {
+    const app = episodesRoutes(fakeRepo(), () => "other-user");
+    const res = await app.request("/episodes/ep-1/publish", { method: "POST" });
+    expect(res.status).toBe(404);
   });
 });
