@@ -2,8 +2,9 @@ import { Hono } from "hono";
 import type { Env } from "./config/env";
 import type { VerifyToken } from "./auth/verify";
 import { createAuthMiddleware, type AuthEnv } from "./middleware/auth";
+import { importsRoutes, type ImportsRepo } from "./routes/imports";
 
-export type AppDeps = { env: Env; verifyToken: VerifyToken };
+export type AppDeps = { env: Env; verifyToken: VerifyToken; importsRepo: ImportsRepo };
 
 export function createApp(deps: AppDeps): Hono<AuthEnv> {
   const app = new Hono<AuthEnv>();
@@ -13,6 +14,8 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   app.use("/api/*", createAuthMiddleware(deps.verifyToken));
 
   app.get("/api/me", (c) => c.json({ userId: c.get("userId") }));
+
+  app.route("/api", importsRoutes(deps.importsRepo));
 
   app.notFound((c) => c.json({ error: "not_found" }, 404));
   app.onError((err, c) => {

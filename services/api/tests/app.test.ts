@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
 import type { Env } from "../src/config/env";
+import type { ImportsRepo } from "../src/routes/imports";
+
+function fakeImportsRepo(): ImportsRepo {
+  return {
+    findImportBySource: async () => null,
+    insertImport: async () => ({ id: "imp-1" }),
+    insertEpisode: async () => ({ id: "ep-1" }),
+  };
+}
 
 function fakeEnv(): Env {
   return {
@@ -24,6 +33,7 @@ function makeApp() {
       if (token !== "valid-token") throw new Error("invalid token");
       return { sub: "user-1" };
     },
+    importsRepo: fakeImportsRepo(),
   });
 }
 
