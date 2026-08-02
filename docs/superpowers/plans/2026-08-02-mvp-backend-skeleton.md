@@ -875,7 +875,7 @@ Expected: `{"ok":true}`
 ```
 改为
 ```markdown
-- [x] M2：统一后端骨架（Hono + Drizzle + 迁移 + CI/CD 部署 Fly）
+- [x] M2：统一后端骨架（Hono + Drizzle + 迁移 + Railway 部署）
 ```
 
 - [ ] **Step 2: 提交**

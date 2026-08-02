@@ -5,3 +5,4 @@ dist/
 !.env.example
 drizzle/meta/
 scripts/spikes/out-limits/
+sample-voice.*

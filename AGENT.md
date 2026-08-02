@@ -32,7 +32,7 @@ dailogues/
 │       ├── src/background.ts   #   service worker：接收 content 消息 → POST api.dailogues.com
 │       └── src/shared.ts       #   采集协议类型（platform/conversation_id/title/url/messages[]）
 ├── services/
-│   └── api/                    # api.dailogues.com — 统一后端（Fly.io，Node + Hono）
+│   └── api/                    # api.dailogues.com — 统一后端（Railway，Node + Hono）
 │       ├── src/
 │       │   ├── routes/         #   imports / polish / generate / jobs / voice / billing / stripe-webhook
 │       │   ├── pipeline/       #   生成管线（tts → merge → upload）
