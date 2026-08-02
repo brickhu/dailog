@@ -1,0 +1,169 @@
+# ARC — 技术架构
+
+> 状态：MVP 设计稿（2026-08-02）
+> 配套文档：[PRD.md](./PRD.md)（产品与功能）· [MRD.md](./MRD.md)（市场与商业）· [AGENT.md](./AGENT.md)（项目总览）
+
+## 1. 技术栈总览
+
+| 层 | 选型 | 部署位置 |
+|---|---|---|
+| 工作台 SPA（app.daiogues.com） | SolidJS + Solid Router + StyleX | Cloudflare Pages（静态，免费） |
+| 内容站 SSR（daiogues.com） | SolidStart（SSR）+ StyleX | Cloudflare Pages/Workers（免费） |
+| 统一后端（api.daiogues.com） | Node.js + TypeScript + Hono + Drizzle ORM + fluent-ffmpeg | Fly.io 免费配额（Docker，256MB 机器，空闲休眠） |
+| 数据库 | Supabase Postgres | Supabase 免费额度（500MB） |
+| 认证 | Supabase Auth（邮箱 + 密码，邀请码门禁） | Supabase 免费额度（5 万 MAU） |
+| 对象存储 | Cloudflare R2（音频/封面/录音样本） | R2 免费 10GB + 流量永久免费 |
+| LLM（脚本润色） | OpenAI 兼容 API（供应商可配置，如 DeepSeek/GLM/OpenAI） | 外部按量 |
+| 语音合成 | Fish Audio TTS（多说话人 + 声音克隆） | 外部按量 |
+| 支付 | Stripe Checkout / Portal / Webhook | 外部，费率 2.9% + $0.30/笔 |
+
+## 2. 部署拓扑
+
+```
+                        ┌─────────────────────────────────────────┐
+                        │            daiogues.com                 │
+                        │   Cloudflare Pages/Workers (SSR, 免费)  │
+                        │   首页浏览 / 频道页 / 节目页 / RSS / 搜索  │
+                        └──────────────┬──────────────────────────┘
+                                       │
+app.daiogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
+  Solid Router, 静态部署在 CF Pages     │         ┌──────────────┐
+  导入 → 润色编辑器 → 生成 → 发布        └────────►│  *.mp3 / png │
+                                       │         └──────────────┘
+                              ┌────────▼─────────┐
+                              │ api.daiogues.com │
+                              │  统一后端 (Fly.io 免费配额, Docker) │
+                              │  · 导入解析器(可插拔)              │
+                              │  · LLM 润色(SSE 流式)             │
+                              │  · 生成管线(TTS→ffmpeg→R2)        │
+                              │  · 配额 / Stripe / 邀请码          │
+                              └────────┬─────────────────────────┘
+                                       │
+                        ┌──────────────▼──────────────┐
+                        │ Supabase (免费)              │
+                        │  Postgres + Auth             │
+                        │  用户/邀请码/节目/脚本/任务/订阅 │
+                        └─────────────────────────────┘
+```
+
+**数据流向**：SPA 与 SSR 站读 Supabase（内容站直连读库，不走统一后端）；统一后端是唯一写方；音频资产全部在 R2。
+
+## 3. 统一后端（services/api）
+
+### 3.1 技术选型
+
+- Node.js + TypeScript + **Hono**（轻量路由，SSE/流式友好）
+- **Drizzle ORM** + Supabase Postgres（迁移 + 类型安全）
+- **fluent-ffmpeg**（片头/主对话/片尾拼接；镜像内置 ffmpeg）
+- LLM：OpenAI 兼容 SDK，供应商配置化（`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`）
+- 认证：校验 Supabase JWT（JWKS 拉取公钥），RBAC 仅区分 `authenticated`
+- 任务队列：**进程内队列 + `generation_jobs` 表**（MVP 不引 Redis；进程重启时从 DB 恢复 `queued` 任务，单实例串行消费）
+
+### 3.2 API 端点
+
+| 方法/路径 | 认证 | 作用 |
+|---|---|---|
+| `POST /api/imports` | ✓ | 提交链接/文件/文本 → 解析器 → `parsed_dialogue` 落库，返回结构化对话 |
+| `POST /api/episodes/:id/polish` | ✓ | SSE 流式润色：先检测对话语言，再流式返回脚本段落 |
+| `POST /api/episodes/:id/generate` | ✓ | 配额校验 → 建 job → 后台执行 |
+| `GET /api/episodes/:id/job` | ✓ | 轮询生成进度（阶段 + 百分比） |
+| `POST /api/episodes/:id/publish` | ✓ | 发布（`is_public=true`）→ 触发邀请码发放 |
+| `POST /api/me/voice-sample` | ✓ | 上传/重录录音样本（R2 + 基础质量校验） |
+| `POST /api/billing/checkout` | ✓ | 创建 Stripe Checkout 会话 |
+| `POST /api/billing/portal` | ✓ | 创建 Stripe 管理门户会话 |
+| `POST /api/stripe/webhook` | 签名 | 订阅状态同步（`customer.subscription.*`） |
+
+### 3.3 生成管线
+
+```
+queued → tts → merge → upload → done（failed 可重试）
+```
+
+1. **TTS**：主对话一次 **Fish Audio 多说话人调用**（chunks 数组，每段指定说话人）——
+   - 主持人段：`reference_audio` = 用户录音样本（实时克隆）
+   - 嘉宾段：平台固定音色 `reference_id`
+   - 超长保护：脚本上限 80 段；若超单请求字符限额则按批调用（批间靠 ffmpeg 拼接兜底）
+   - 失败：整次重试 2 次（指数退避）
+2. **合并**：ffmpeg 拼接 `intro.{lang}.mp3 + 主对话 + outro.{lang}.mp3`（中/英两套固定片头片尾，按对话语言选择），段间 300ms 自然间隔
+3. **上传**：后端持 CF 凭证直传 R2 → 更新 `episodes.audio_url` / `duration_seconds` → job `done`
+
+### 3.4 配额与邀请码发放
+
+- 配额判定在 `generate` 入口（服务端）：`plan=free` 且已生成 ≥1 期 → 403 + 订阅引导
+- 发布时发放邀请码：已发布期数 > 3 起，每发布一期 +1 码（`source=reward`），见 PRD §4.1
+
+## 4. 数据模型（Supabase Postgres）
+
+| 表 | 关键字段 |
+|---|---|
+| `profiles` | `id`(=auth.users), `username`(唯一), `display_name`, `bio`, `plan`(free/pro), `created_at` |
+| `voice_samples` | `user_id`, `audio_url`(R2), `duration`, `status`, `created_at`（可重录覆盖） |
+| `invite_codes` | `code`(唯一), `created_by`, `used_by`, `used_at`, `expires_at`, `source`(admin/reward), `issued_for_episode_id` |
+| `imports` | `user_id`, `source_type`(link/file/text), `platform`(chatgpt/claude/kimi/doubao/tongyi/gemini/plain), `raw_content`, `parsed_dialogue`(JSONB), `status`, `created_at` |
+| `episodes` | `id`, `user_id`, `slug`, `title`, `description`, `cover_url`, `audio_url`, `duration_seconds`, `status`(draft/generating/published/failed), `language`, `is_public`, `created_at`, `published_at` |
+| `scripts` | `episode_id`, `version`, `segments`(JSONB: `[{speaker: host\|guest, text}]`), `created_at` |
+| `generation_jobs` | `episode_id`, `status`(queued/tts/merge/upload/done/failed), `progress`, `error`, `attempts`, `timestamps` |
+| `subscriptions` | `user_id`, `stripe_customer_id`, `stripe_subscription_id`, `plan`, `status`, `current_period_end` |
+
+**R2 存储路径**：
+```
+audio/episodes/{user_id}/{episode_id}.mp3
+audio/voices/{user_id}.wav
+images/covers/{episode_id}.png
+assets/intro.zh.mp3 / intro.en.mp3 / outro.zh.mp3 / outro.en.mp3   ← 固定片头片尾
+```
+
+## 5. 前端
+
+### 5.1 工作台 SPA（apps/studio）
+
+- Vite + SolidJS + Solid Router + StyleX（Babel/Oxc 插件接入）
+- 页面：auth / onboarding-voice / dashboard / episodes-new（四步向导）/ settings
+- 封面 v1：服务端代码模板生成（标题文字 + 渐变 SVG→PNG，零成本），用户可上传自定义图
+
+### 5.2 内容站 SSR（apps/site）
+
+- SolidStart + Cloudflare adapter，SSR 部署于 CF Pages/Workers
+- 路由：`/`（最新/热门/搜索）、`/@username`（频道页）、`/@username/:slug`（节目页）、`/@username/feed.xml`（RSS）
+- RSS：itunes 元数据 + 封面 + 节目列表；feed 响应加 CF 短 TTL 缓存（防高频拉取）
+- 直连 Supabase 读公开数据（RLS 只读 + 服务端只暴露公开字段）
+
+### 5.3 共享
+
+- `packages/shared`：领域类型 + 设计 token（颜色/间距/字体），StyleX 编译时 CSS 两站共用
+
+## 6. 计费集成
+
+1. SPA → `POST /api/billing/checkout` → 后端建 Checkout Session（`customer` 按 user 关联，`price_id` 配置化）→ 重定向 Stripe
+2. Webhook（签名校验）处理 `customer.subscription.created/updated/deleted` → 同步 `subscriptions` → 更新 `profiles.plan`
+3. 订阅取消/过期 → 自动降级 `free`；已发布内容保留
+
+## 7. 成本模型（MVP 月度）
+
+| 项 | 成本 |
+|---|---|
+| Cloudflare Pages/Workers + R2 | 免费（10GB 存储，流量免费） |
+| Supabase（Postgres + Auth） | 免费（500MB / 5 万 MAU） |
+| Fly.io（1 台 256MB 机器） | 免费配额内（3 台/3GB 卷/160GB 流量，空闲休眠） |
+| LLM 润色 | 按量，每期约几美分 |
+| Fish Audio | 按量（按字符） |
+| Stripe | 2.9% + $0.30/笔 |
+
+超出免费额度的触发点：R2 >10GB、Supabase >500MB、Fly 超配额（届时升 paid ~$5/月起）。
+
+## 8. 测试策略
+
+- **解析器**：每平台 1–2 个真实导出 fixture 快照测试
+- **管线**：mock LLM / mock Fish Audio 集成测试；ffmpeg 拼接 golden 文件对比（时长/字节）
+- **规则单测**：配额判定、邀请码发放（>3 期规则）、订阅状态机
+- **API 契约**：Vitest + Hono app 直测
+- **前端**：Vitest 组件测试（编辑器为重点）+ 1 条 Playwright E2E 主流程（注册→录音→导入→润色→生成→发布→播放）
+
+## 9. 技术风险与前置 Spike
+
+| 风险 | 缓解 |
+|---|---|
+| Fish Audio 多说话人请求格式/单请求限额不确定 | **首个实现任务：spike**——验证 chunks 格式、返回形态、批上限、克隆+固定音色混排音质 |
+| 克隆音色质量受录音环境影响 | 录音引导页质量校验（时长/响度/语音检测），可重录 |
+| ffmpeg 在 256MB 机器上拼接大音频 | 主对话 TTS 直出单文件场景优先；拼接限制节目时长（≤30 分钟） |
+| LLM 供应商切换 | OpenAI 兼容接口 + 配置化，锁定成本 |
