@@ -1,0 +1,28 @@
+{
+  "name": "@dailogues/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "drizzle-orm": "^0.38.0",
+    "hono": "^4.6.0",
+    "jose": "^5.9.0",
+    "postgres": "^3.4.5",
+    "tsx": "^4.19.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "drizzle-kit": "^0.30.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
