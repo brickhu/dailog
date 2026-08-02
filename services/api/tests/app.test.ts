@@ -1,13 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { createApp } from "../src/app";
+import { createApp, type AppDeps } from "../src/app";
 import type { Env } from "../src/config/env";
-import type { ImportsRepo } from "../src/routes/imports";
 
-function fakeImportsRepo(): ImportsRepo {
+function fakeRepo(): AppDeps["repo"] {
   return {
-    findImportBySource: async () => null,
-    insertImport: async () => ({ id: "imp-1" }),
-    insertEpisode: async () => ({ id: "ep-1" }),
+    imports: {
+      findImportBySource: async () => null,
+      insertImport: async () => ({ id: "imp-1" }),
+      insertEpisode: async () => ({ id: "ep-1" }),
+      createImport: async () => ({ importId: "imp-1", episodeId: "ep-1" }),
+    },
+    episodes: {
+      listEpisodes: async () => [],
+      getEpisode: async () => null,
+      saveScript: async (episodeId, version, segments) => ({ episodeId, version, segments }),
+      getLatestScript: async () => null,
+      setPublished: async () => {},
+    },
   };
 }
 
@@ -33,7 +42,7 @@ function makeApp() {
       if (token !== "valid-token") throw new Error("invalid token");
       return { sub: "user-1" };
     },
-    importsRepo: fakeImportsRepo(),
+    repo: fakeRepo(),
   });
 }
 

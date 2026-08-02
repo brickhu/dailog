@@ -8,6 +8,7 @@ function makeApp(overrides: Partial<Record<string, unknown>> = {}) {
     findImportBySource: async () => null,
     insertImport: async (row: unknown) => ({ id: "imp-1", ...(row as object) }),
     insertEpisode: async (row: unknown) => ({ id: "ep-1", ...(row as object) }),
+    createImport: async () => ({ importId: "imp-1", episodeId: "ep-1" }),
     ...overrides,
   }));
   return app;
@@ -39,6 +40,19 @@ describe("POST /api/imports", () => {
   it("returns 409 when already imported", async () => {
     const app = makeApp({
       findImportBySource: async () => ({ id: "imp-0" }),
+    });
+    const res = await app.request("/api/imports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(dialogue),
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it("returns 409 when insert reports duplicate (race)", async () => {
+    // 并发竞态：预检查通过后 insert 撞唯一索引 → repo 返回 duplicate → 路由 409
+    const app = makeApp({
+      createImport: async () => ({ duplicate: true }),
     });
     const res = await app.request("/api/imports", {
       method: "POST",

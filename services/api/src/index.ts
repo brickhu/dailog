@@ -2,21 +2,19 @@ import { serve } from "@hono/node-server";
 import { createApp } from "./app";
 import { loadEnv } from "./config/env";
 import { createTokenVerifier } from "./auth/verify";
-import type { ImportsRepo } from "./routes/imports";
+import { createDb } from "./db/client";
+import { createRepo } from "./repo";
 
 const env = loadEnv();
 
-// 占位 repo：DB 接入为后续任务
-const importsRepo: ImportsRepo = {
-  findImportBySource: async () => null,
-  insertImport: async () => { throw new Error("imports repo not implemented"); },
-  insertEpisode: async () => { throw new Error("imports repo not implemented"); },
-};
+// DB 接入：drizzle repo（imports + episodes）
+const { db } = createDb(env);
+const repo = createRepo(db);
 
 const app = createApp({
   env,
   verifyToken: createTokenVerifier(env.SUPABASE_JWKS_URL, `${env.SUPABASE_URL}/auth/v1`),
-  importsRepo,
+  repo,
 });
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => {
