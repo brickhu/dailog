@@ -84,7 +84,7 @@ dailogues/
 
 - [ ] M0：文档定稿（PRD/ARC/MRD 审阅通过）
 - [x] M1：Fish Audio 集成 spike（多说话人格式、单请求限额、克隆音质、计费实测）—— 已完成（`docs/spikes/fish-audio.md`；真实扣费金额上线前用付费账号核对）
-- [ ] M2：统一后端骨架（Hono + Drizzle + 迁移 + Railway 部署）
+- [x] M2：统一后端骨架（Hono + Drizzle + 9 表迁移 + 本地 Postgres 集成测试 + JWT 认证 + Docker/Railway 配置 + CI）—— 代码完成，**待用户：GitHub 仓库推送 + Supabase 项目 + Railway 绑定部署**
 - [ ] M3：浏览器扩展采集器（Manifest V3 + 按平台 content script，首发 Claude/DeepSeek）→ 商店上架（DOM 勘察已完成 `docs/spikes/chat-dom.md`，采集器开发排期中）
 - [ ] M4：质量审核 + 润色（LLM 流式）+ 生成管线（TTS → ffmpeg → R2）
 - [ ] M5：工作台 SPA（录音引导 → 向导 → 发布）
