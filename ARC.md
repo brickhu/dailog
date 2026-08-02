@@ -76,7 +76,7 @@ app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 | `GET /api/me` | ✓ | 当前用户（认证中间件验证） |
 | `POST /api/imports` | ✓ | 接收扩展回传的结构化对话（platform + 幂等票据）→ 落库，返回结构化对话 |
 | `POST /api/episodes/:id/polish` | ✓ | SSE 流式润色：先质量审核（轻量 LLM 预检，不达标返回 422 + 原因）→ 语言检测 → 流式返回脚本段落 |
-| `POST /api/episodes/:id/generate` | ✓ | 配额校验 → 建 job → 后台执行 |
+| `POST /api/episodes/:id/generate` | ✓ | **脚本内容安全审核**（DeepSeek，拒绝 422 + 原因且不扣配额）→ 配额校验 → 建 job → 后台执行 |
 | `GET /api/episodes/:id/job` | ✓ | 轮询生成进度（阶段 + 百分比） |
 | `POST /api/episodes/:id/publish` | ✓ | 发布（`is_public=true`）→ 触发邀请码发放 |
 | `POST /api/me/voice-sample` | ✓ | 上传/重录录音样本（R2 + 基础质量校验） |
@@ -89,6 +89,8 @@ app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 ```
 queued → tts → merge → upload → done（failed 可重试）
 ```
+
+**生成前内容安全审核**：`generate` 入口先对最新脚本版本做 DeepSeek 安全审核（色情/违法/仇恨/诈骗等）——拒绝则返回 422 + 原因、**不创建 job、不扣配额**；审核结果落 `episodes.quality_status/quality_reason`（与打磨前质量门共用字段，语义 = 最近一次审核结果）。
 
 1. **TTS = Fish Audio（决策定稿，`docs/spikes/tts-comparison.md`；集成形态已实测，`docs/spikes/fish-audio.md`）**：核心刚需 = 即时克隆（零样本按需——参考音频随请求携带，无预注册/训练环节，重录即时生效，**实测通过**）——
    - **多说话人一次调用（实测可用）**：`text` 内嵌 `<|speaker:0|>` / `<|speaker:1|>` 标签 + `reference_id` 数组（下标对应 speaker 序号）——**不是 text/chunks 数组**（旧计划假设有误）；仅 S2-Pro 系模型支持（`s2-pro` / `s2.1-pro*`，`s1` 不行）；单次调用返回一条 mp3（实测 6 段对话 = 27.6s 单文件）

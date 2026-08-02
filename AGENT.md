@@ -74,7 +74,7 @@ dailogues/
 - 认证：Supabase Auth（JWT，后端 JWKS 校验）；注册需邀请码
 - 生成管线：TTS = **Fish Audio**（形态已实测，`docs/spikes/fish-audio.md`）——**多说话人一次调用**：`text` 内嵌 `<|speaker:N|>` 标签 + `reference_id` 数组（**非 text/chunks 数组**）；主持人零样本克隆走 **msgpack `references` 内联音频**（JSON 无 base64 字段、带不了原始音频）；**混合模式受限**（一次调用不能混用内联 + 固定 id）→ 主持人零样本整段 + 嘉宾固定音色整段两条调用 + ffmpeg 拼接；单请求 ≥12000 中文未触上限；免费模型 `s2.1-pro-free`（$0）可用；默认 `temperature=0.7` 一致性波动 ~12%（可接受）→ ffmpeg 拼接固定片头片尾 → R2；备选切换预案见 ARC §3.3 / `docs/spikes/tts-comparison.md`
 - 后端 LLM：**DeepSeek**（OpenAI 兼容，`deepseek-chat` 默认，配置化可切换）
-- 润色：LLM SSE 流式；**打磨前质量审核前置**（低质量/信息量小/违规内容拒绝并返回原因）；语言跟随对话内容（与界面语言无关）；单期目标 5–10 分钟
+- 润色：LLM SSE 流式；**打磨前质量审核前置** + **生成前内容安全审核**（编辑后脚本提交生成时，DeepSeek 安全审核通过才合成，拒绝不扣配额）；语言跟随对话内容（与界面语言无关）；单期目标 5–10 分钟
 - 计费：Stripe Checkout/Portal/Webhook；免费 1 期，Pro 订阅无限
 - 导入：**浏览器扩展统一采集**（登录态下读取本人对话，含元数据：标题/对话ID/平台/原始链接，无验证码、无分享链接）；**平台分级（`docs/spikes/chat-dom.md`）**：首发 Claude/DeepSeek（高），次批 ChatGPT（中~高），Gemini（中）/Kimi、豆包（中~低）/通义（低）按需；虚拟列表平台（ChatGPT/DeepSeek/Gemini/豆包）走**滚动采集循环 + 去重**；元数据取 URL + `document.title`；回传统一走 **background service worker**（Claude CSP）；**扩展定位=采集器（thin）**，创作发布仍在 SPA
 - 邀请码：管理员 CLI + 用户奖励（>3 期后每发布一期 +1）
@@ -86,7 +86,7 @@ dailogues/
 - [x] M1：Fish Audio 集成 spike（多说话人格式、单请求限额、克隆音质、计费实测）—— 已完成（`docs/spikes/fish-audio.md`；真实扣费金额上线前用付费账号核对）
 - [x] M2：统一后端骨架（Hono + Drizzle + 9 表迁移 + 本地 Postgres 集成测试 + JWT 认证 + Docker/Railway 配置 + CI）—— 代码完成，**待用户：GitHub 仓库推送 + Supabase 项目 + Railway 绑定部署**
 - [ ] M3：浏览器扩展采集器（Manifest V3 + 按平台 content script，首发 Claude/DeepSeek）→ 商店上架（DOM 勘察已完成 `docs/spikes/chat-dom.md`，采集器开发排期中）
-- [ ] M4：质量审核 + 润色（LLM 流式）+ 生成管线（TTS → ffmpeg → R2）
+- [ ] M4：质量审核 + 润色（LLM 流式）+ 生成前内容安全审核 + 生成管线（TTS → ffmpeg → R2）
 - [ ] M5：工作台 SPA（录音引导 → 向导 → 发布）
 - [ ] M6：内容站 SSR + RSS + 首页/搜索
 - [ ] M7：邀请码 + Stripe 计费（按期付费 + 包月订阅）
