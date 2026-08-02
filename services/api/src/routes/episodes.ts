@@ -11,6 +11,14 @@ export interface EpisodesRepo {
   /** 通过 episodes.import_id 读取来源导入的 parsed_dialogue 消息；userId 强制归属过滤（防 IDOR） */
   getImportedDialogue(episodeId: string, userId: string): Promise<{ role: string; content: string }[] | null>;
   setPublished(id: string): Promise<void>;
+  /** 生成管线：episode 归属用户（Task 7 tts 阶段） */
+  getEpisodeUserId(episodeId: string): Promise<string | null>;
+  /** 生成管线：episode 语言（Task 7 tts 阶段加载，Task 8 merge 使用） */
+  getEpisodeLanguage(episodeId: string): Promise<string | null>;
+  /** 生成管线：用户最新 ready 录音样本的训练音色模型 id（voice_samples.reference_id，无则零样本 fallback） */
+  getHostModelId(userId: string): Promise<string | null>;
+  /** 生成管线：用户最新 ready 录音样本的 storage key（voice_samples.audio_url，storage.get 读字节） */
+  getVoiceSampleKey(userId: string): Promise<string | null>;
 }
 
 export function episodesRoutes(repo: EpisodesRepo, getUserId: (c: unknown) => string) {

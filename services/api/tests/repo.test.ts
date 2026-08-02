@@ -4,7 +4,7 @@ import { createApp, type AppDeps } from "../src/app";
 import { createDb } from "../src/db/client";
 import { createRepo } from "../src/repo";
 import type { Env } from "../src/config/env";
-import { episodes, generationJobs, imports, profiles } from "../src/db/schema";
+import { episodes, generationJobs, imports, profiles, voiceSamples } from "../src/db/schema";
 import type { EpisodeRow, ImportRow } from "../src/routes/imports";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
@@ -262,6 +262,50 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
         .from(episodes)
         .where(eq(episodes.id, episodeId));
       expect(row[0]).toEqual({ audioUrl: "audio/ep-1.mp3", durationSeconds: 123 });
+    });
+  });
+
+  describe("voice pipeline repo (Task 7)", () => {
+    async function makeEpisode(title: string, language: string | null = "zh"): Promise<string> {
+      const conv = `conv-voice-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const result = await repo.imports.createImport(
+        {
+          userId: REPO_USER, platform: "plain", sourceTitle: title, sourceConversationId: conv,
+          sourceUrl: `https://example.com/${conv}`,
+          parsedDialogue: { platform: "plain", conversationId: conv, title, url: `https://example.com/${conv}`, messages: [{ role: "user", content: "你好" }] },
+        },
+        { userId: REPO_USER, title, status: "draft", language },
+      );
+      if ("duplicate" in result) throw new Error("unexpected duplicate");
+      return result.episodeId;
+    }
+
+    it("getEpisodeUserId / getEpisodeLanguage return episode owner and language", async () => {
+      const episodeId = await makeEpisode("管线归属");
+      expect(await repo.episodes.getEpisodeUserId(episodeId)).toBe(REPO_USER);
+      expect(await repo.episodes.getEpisodeLanguage(episodeId)).toBe("zh");
+      expect(await repo.episodes.getEpisodeUserId("00000000-0000-4000-8000-000000000000")).toBeNull();
+      expect(await repo.episodes.getEpisodeLanguage("00000000-0000-4000-8000-000000000000")).toBeNull();
+    });
+
+    it("getHostModelId / getVoiceSampleKey read latest ready voice sample (reference_id)", async () => {
+      // 幂等：清掉可能残留的样本行再断言空态
+      await db.delete(voiceSamples).where(eq(voiceSamples.userId, REPO_USER));
+      expect(await repo.episodes.getHostModelId(REPO_USER)).toBeNull();
+      expect(await repo.episodes.getVoiceSampleKey(REPO_USER)).toBeNull();
+
+      await db.insert(voiceSamples).values([
+        { userId: REPO_USER, audioUrl: "voice/old.wav", duration: 3, status: "ready", referenceId: "old-model", createdAt: new Date(Date.now() - 60_000) },
+        { userId: REPO_USER, audioUrl: "voice/latest.wav", duration: 4, status: "ready", referenceId: "latest-model", createdAt: new Date() },
+        // failed 样本不参与（最新但状态失败）
+        { userId: REPO_USER, audioUrl: "voice/failed.wav", duration: 2, status: "failed", referenceId: "failed-model", createdAt: new Date(Date.now() + 60_000) },
+      ]);
+
+      expect(await repo.episodes.getHostModelId(REPO_USER)).toBe("latest-model");
+      expect(await repo.episodes.getVoiceSampleKey(REPO_USER)).toBe("voice/latest.wav");
+      // 其他用户无样本
+      expect(await repo.episodes.getHostModelId(API_USER)).toBeNull();
+      expect(await repo.episodes.getVoiceSampleKey(API_USER)).toBeNull();
     });
   });
 

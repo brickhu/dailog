@@ -16,6 +16,8 @@ export const voiceSamples = pgTable("voice_samples", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
   audioUrl: text("audio_url").notNull(),
+  /** 训练好的音色模型 id（fish.audio model id）；为空 = 未训练，走零样本 fallback（Task 7） */
+  referenceId: text("reference_id"),
   duration: integer("duration").notNull(),
   status: text("status", { enum: ["ready", "failed"] }).notNull().default("ready"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

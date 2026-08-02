@@ -177,6 +177,44 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .set({ status: "published", publishedAt: new Date() })
           .where(eq(schema.episodes.id, id));
       },
+
+      async getEpisodeUserId(episodeId) {
+        const rows = await db
+          .select({ userId: schema.episodes.userId })
+          .from(schema.episodes)
+          .where(eq(schema.episodes.id, episodeId))
+          .limit(1);
+        return rows[0]?.userId ?? null;
+      },
+
+      async getEpisodeLanguage(episodeId) {
+        const rows = await db
+          .select({ language: schema.episodes.language })
+          .from(schema.episodes)
+          .where(eq(schema.episodes.id, episodeId))
+          .limit(1);
+        return rows[0]?.language ?? null;
+      },
+
+      async getHostModelId(userId) {
+        const rows = await db
+          .select({ referenceId: schema.voiceSamples.referenceId })
+          .from(schema.voiceSamples)
+          .where(and(eq(schema.voiceSamples.userId, userId), eq(schema.voiceSamples.status, "ready")))
+          .orderBy(desc(schema.voiceSamples.createdAt))
+          .limit(1);
+        return rows[0]?.referenceId ?? null;
+      },
+
+      async getVoiceSampleKey(userId) {
+        const rows = await db
+          .select({ audioUrl: schema.voiceSamples.audioUrl })
+          .from(schema.voiceSamples)
+          .where(and(eq(schema.voiceSamples.userId, userId), eq(schema.voiceSamples.status, "ready")))
+          .orderBy(desc(schema.voiceSamples.createdAt))
+          .limit(1);
+        return rows[0]?.audioUrl ?? null;
+      },
     },
 
     jobs: {

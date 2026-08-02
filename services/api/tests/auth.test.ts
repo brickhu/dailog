@@ -17,6 +17,10 @@ function fakeRepo(): AppDeps["repo"] {
       getLatestScript: async () => null,
       getImportedDialogue: async () => null,
       setPublished: async () => {},
+      getEpisodeUserId: async () => null,
+      getEpisodeLanguage: async () => null,
+      getHostModelId: async () => null,
+      getVoiceSampleKey: async () => null,
     },
     jobs: {
       getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),

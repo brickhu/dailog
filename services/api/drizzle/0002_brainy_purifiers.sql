@@ -1,0 +1,1 @@
+ALTER TABLE "voice_samples" ADD COLUMN "reference_id" text;

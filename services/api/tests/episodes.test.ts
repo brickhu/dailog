@@ -19,6 +19,10 @@ function fakeRepo(): EpisodesRepo {
     getLatestScript: async (episodeId) => scripts.filter((s) => s.episodeId === episodeId).at(-1) ?? null,
     getImportedDialogue: async () => null,
     setPublished: async (id) => { episodes.get(id)!.status = "published"; },
+    getEpisodeUserId: async () => null,
+    getEpisodeLanguage: async () => null,
+    getHostModelId: async () => null,
+    getVoiceSampleKey: async () => null,
   };
 }
 

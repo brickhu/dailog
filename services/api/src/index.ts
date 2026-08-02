@@ -8,6 +8,8 @@ import { createLlmClient } from "./llm/client";
 import { qualityCheckPrompt, safetyCheckPrompt, parseJsonLoose, type QualityResult } from "./llm/prompts";
 import { createJobQueue } from "./pipeline/queue";
 import { createPipelineRunner } from "./pipeline/runner";
+import { createTtsClient } from "./tts/client";
+import { createStorage } from "./storage";
 import { recoverQueuedJobs } from "./pipeline/bootstrap";
 import type { PolishDeps } from "./routes/polish";
 import type { GenerateDeps } from "./routes/generate";
@@ -28,17 +30,19 @@ const llm = createLlmClient({
 // 进程内串行生成队列（MVP 单实例，ARC §3.1）：重试 + 指数退避
 const queue = createJobQueue(createPipelineRunner({
   repo: {
-    getOwnedEpisode: repo.jobs.getOwnedEpisode,
+    getEpisodeUserId: repo.episodes.getEpisodeUserId,
+    getEpisodeLanguage: repo.episodes.getEpisodeLanguage,
     getLatestScript: repo.episodes.getLatestScript,
+    getHostModelId: repo.episodes.getHostModelId,
+    getVoiceSampleKey: repo.episodes.getVoiceSampleKey,
+    // 嘉宾固定音色 id 尚未提供（Task 10 音色体系），暂为 null → 走零样本 fallback
+    getGuestModelId: async () => null,
     markJobProgress: repo.jobs.markJobProgress,
     markJobDone: repo.jobs.markJobDone,
     updateEpisodeAudio: repo.jobs.updateEpisodeAudio,
-    // Task 7/8 注入：tts 模型/音色等查询由后续任务接到 repo
-    getEpisodeLanguage: async () => null,
-    getHostModelId: async () => null,
-    getGuestModelId: async () => null,
-    getVoiceSampleAudio: async () => null,
   },
+  tts: createTtsClient({ apiKey: env.FISH_API_KEY }),
+  storage: createStorage({ driver: env.STORAGE_DRIVER, dir: env.STORAGE_DIR }),
 }), { concurrency: 1, maxAttempts: 2, backoffMs: 1000 });
 
 // 启动恢复：把上次未完成（queued/tts/merge/upload）的 job 重新入队（不阻塞 serve）
