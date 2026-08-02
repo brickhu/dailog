@@ -9,11 +9,14 @@
 **Tech Stack:** pnpm 9 / Node 22 / TypeScript 5 / Hono 4 / Drizzle ORM + drizzle-kit / postgres.js / jose / zod / Vitest 3 / tsx / Docker / GitHub Actions（CI）/ Railway（部署）
 
 **前置条件（手动，一次性，非任务）：**
-- 创建 GitHub 仓库并推送本仓库
-- 创建 Supabase 项目（获取 URL；数据库连接串 `DATABASE_URL`）
+- Docker Desktop / colima（**本地 Postgres** 用，见 Task 7；本地优先原则：部署之前一切先在本地跑通）
+- 创建 GitHub 仓库并推送本仓库（CI 用）
+- 创建 Supabase 项目（获取 URL；数据库连接串 `DATABASE_URL`）——**仅线上部署需要**；本地用 Docker Postgres
 - 注册 Railway 账号并绑定 GitHub 仓库（Railway → New Project → Deploy from GitHub repo；部署走 Railway Git 集成，push 即自动部署，无需部署 workflow）
 - Railway 服务 Variables 配置：`DATABASE_URL`、`SUPABASE_URL`、`SUPABASE_JWKS_URL`（敏感值可挂 Railway Reference/Secret）
 - Railway 服务绑定自定义域 `api.dailogues.com`（Settings → Networking → Custom Domain）
+
+**本地优先原则**：Task 1-8 全部在本地完成并验证（TDD + 本地 Postgres + 本地启动冒烟），Task 9-10（Docker/Railway 部署）在本地全部跑通后才执行。
 
 ---
 
@@ -642,13 +645,17 @@ git commit -m "feat(api): drizzle schema for all tables + migration"
 
 ---
 
-### Task 7: DB 连接层 + 环境门控集成测试
+### Task 7: 本地 Postgres + DB 连接层 + 迁移 + 集成测试
+
+> 本地优先：用 Docker 起本地 Postgres，迁移与集成测试在本地真实跑通（CI 无 DB 时自动跳过）。
 
 **Files:**
+- Create: `infra/local/docker-compose.yml`（本地 Postgres）
+- Create: `services/api/.env.local`（本地环境；`.env.*` 已被 gitignore）
 - Create: `services/api/src/db/client.ts`
 - Test: `services/api/tests/db.test.ts`
 
-- [ ] **Step 1: 写失败测试（无 DATABASE_URL 时自动跳过）**
+- [ ] **Step 1: 写失败测试（本地有 DATABASE_URL 时真实连接，CI 无 DB 自动跳过）**
 
 ```ts
 // services/api/tests/db.test.ts
@@ -670,11 +677,42 @@ describe.skipIf(!hasDb)("database connection", () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试，确认无 DATABASE_URL 时跳过**
+- [ ] **Step 2: 创建 `infra/local/docker-compose.yml`**
 
-Run: `pnpm --filter @dailogues/api test` — Expected: SKIP（环境无 DATABASE_URL）
+```yaml
+services:
+  db:
+    image: postgres:16
+    container_name: dailogues-db
+    environment:
+      POSTGRES_USER: dailogues
+      POSTGRES_PASSWORD: dailogues
+      POSTGRES_DB: dailogues
+    ports:
+      - "5432:5432"
+    volumes:
+      - dailogues-pg:/var/lib/postgresql/data
+volumes:
+  dailogues-pg:
+```
 
-- [ ] **Step 3: 实现 `services/api/src/db/client.ts`**
+- [ ] **Step 3: 启动本地 Postgres 并创建 `.env.local`**
+
+Run:
+```bash
+docker compose -f infra/local/docker-compose.yml up -d
+```
+Expected: 容器 `dailogues-db` 运行中（`docker ps` 可见）。
+
+创建 `services/api/.env.local`：
+```bash
+DATABASE_URL=postgres://dailogues:dailogues@localhost:5432/dailogues
+SUPABASE_URL=https://example.supabase.co
+SUPABASE_JWKS_URL=https://example.supabase.co/auth/v1/jwks
+PORT=8787
+```
+
+- [ ] **Step 4: 实现 `services/api/src/db/client.ts`**
 
 ```ts
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -688,13 +726,35 @@ export function createDb(env: Env) {
 }
 ```
 
-- [ ] **Step 4: 类型检查 + 提交**
+- [ ] **Step 5: 本地跑迁移（真实执行 SQL）**
+
+Run:
+```bash
+cd services/api && DATABASE_URL=postgres://dailogues:dailogues@localhost:5432/dailogues pnpm db:migrate
+```
+Expected: `migrations applied`；本地库里 9 张表已建（`psql` 或 `docker exec dailogues-db psql -U dailogues -c '\dt'` 可见）。
+
+- [ ] **Step 6: 本地跑集成测试（真实连接，非跳过）**
+
+Run:
+```bash
+cd services/api && DATABASE_URL=postgres://dailogues:dailogues@localhost:5432/dailogues pnpm test
+```
+Expected: db.test.ts **PASS**（不再 SKIP）；其余测试照常通过。
+
+- [ ] **Step 7: 确认 CI 环境无 DB 时 SKIP**
+
+Run: `pnpm --filter @dailogues/api test`（不带 DATABASE_URL）— Expected: db.test.ts SKIP，其余 PASS。
+
+- [ ] **Step 8: 类型检查 + 提交**
 
 Run: `pnpm --filter @dailogues/api typecheck` — Expected: 无错误
 ```bash
-git add services/api/src/db/client.ts services/api/tests/db.test.ts
-git commit -m "feat(api): db client factory + gated integration test"
+git add infra/local services/api/src/db/client.ts services/api/tests/db.test.ts services/api/.env.local
+git commit -m "feat(api): local postgres + db client + migration + integration test"
 ```
+
+> 注意：`.env.local` 会被 gitignore（`.env.*` 规则）——Step 8 的 `git add` 实际不会把它加入，属预期（提交记录里只会看到 3 个文件）。
 
 ---
 
@@ -722,12 +782,13 @@ serve({ fetch: app.fetch, port: env.PORT }, (info) => {
 });
 ```
 
-- [ ] **Step 2: 本地启动验证**
+- [ ] **Step 2: 本地启动验证（用 `.env.local`，本地 Postgres）**
 
 Run:
 ```bash
-cd services/api && DATABASE_URL=postgres://localhost:5432/dailogues SUPABASE_URL=https://example.supabase.co SUPABASE_JWKS_URL=https://example.supabase.co/auth/v1/jwks pnpm dev
+cd services/api && node --env-file=.env.local node_modules/tsx/dist/cli.mjs watch src/index.ts
 ```
+（或先在 package.json 增加 `"dev:local": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs watch src/index.ts"`）
 Expected: 输出 `api listening on :8787`。另开终端验证：
 ```bash
 curl -s http://localhost:8787/health
