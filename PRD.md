@@ -101,7 +101,7 @@
 |---|---|
 | `/` | 首页：最新 + 热门 + 搜索 |
 | `/@username` | 频道页 |
-| `/@username/:slug` | 节目页 |
+| `/cast/:id` | 节目页（id = 节目短 ID，URL 短且稳定） |
 | `/@username/feed.xml` | 播客 RSS |
 
 ## 6. 内容与语言规则
