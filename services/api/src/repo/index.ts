@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { randomBytes } from "node:crypto";
 import * as schema from "../db/schema";
@@ -13,7 +13,18 @@ function randomSlug(): string {
   return randomBytes(8).toString("hex");
 }
 
-export type Repos = { imports: ImportsRepo; episodes: EpisodesRepo };
+export interface JobsRepo {
+  /** 用户配额：plan + credit_balance + 已完成生成（status=done 的 job，经 episodes.user_id 归属）的期数 */
+  getQuotaInfo(userId: string): Promise<{ plan: "free" | "pro"; generatedCount: number; creditBalance: number }>;
+  /** 扣积分：仅 free 用户扣 credit_balance；pro 不扣 */
+  consumeQuota(userId: string, credit: number): Promise<void>;
+  /** 建生成 job（queued），返回 job 行 */
+  createJob(episodeId: string): Promise<{ id: string; episodeId: string; status: string; progress: number }>;
+  /** 最新 job（created_at desc） */
+  getLatestJob(episodeId: string): Promise<{ id: string; status: string; progress: number; error: string | null } | null>;
+}
+
+export type Repos = { imports: ImportsRepo; episodes: EpisodesRepo; jobs: JobsRepo };
 
 export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
   return {
@@ -153,6 +164,64 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         await db.update(schema.episodes)
           .set({ status: "published", publishedAt: new Date() })
           .where(eq(schema.episodes.id, id));
+      },
+    },
+
+    jobs: {
+      async getQuotaInfo(userId) {
+        const profileRows = await db
+          .select({ plan: schema.profiles.plan, creditBalance: schema.profiles.creditBalance })
+          .from(schema.profiles)
+          .where(eq(schema.profiles.id, userId))
+          .limit(1);
+        const profile = profileRows[0];
+        if (!profile) return { plan: "free", generatedCount: 0, creditBalance: 0 };
+        const doneRows = await db
+          .select({ count: count() })
+          .from(schema.generationJobs)
+          .innerJoin(schema.episodes, eq(schema.generationJobs.episodeId, schema.episodes.id))
+          .where(and(eq(schema.episodes.userId, userId), eq(schema.generationJobs.status, "done")));
+        return {
+          plan: profile.plan,
+          generatedCount: Number(doneRows[0].count),
+          creditBalance: profile.creditBalance,
+        };
+      },
+
+      async consumeQuota(userId, credit) {
+        if (credit <= 0) return; // pro：不扣积分
+        await db.update(schema.profiles)
+          .set({ creditBalance: sql`${schema.profiles.creditBalance} - ${credit}` })
+          .where(and(eq(schema.profiles.id, userId), eq(schema.profiles.plan, "free")));
+      },
+
+      async createJob(episodeId) {
+        const rows = await db.insert(schema.generationJobs).values({
+          episodeId,
+          status: "queued",
+          progress: 0,
+        }).returning({
+          id: schema.generationJobs.id,
+          episodeId: schema.generationJobs.episodeId,
+          status: schema.generationJobs.status,
+          progress: schema.generationJobs.progress,
+        });
+        return rows[0];
+      },
+
+      async getLatestJob(episodeId) {
+        const rows = await db
+          .select({
+            id: schema.generationJobs.id,
+            status: schema.generationJobs.status,
+            progress: schema.generationJobs.progress,
+            error: schema.generationJobs.error,
+          })
+          .from(schema.generationJobs)
+          .where(eq(schema.generationJobs.episodeId, episodeId))
+          .orderBy(desc(schema.generationJobs.createdAt))
+          .limit(1);
+        return rows[0] ?? null;
       },
     },
   };

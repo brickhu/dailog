@@ -4,7 +4,7 @@ import { createApp, type AppDeps } from "../src/app";
 import { createDb } from "../src/db/client";
 import { createRepo } from "../src/repo";
 import type { Env } from "../src/config/env";
-import { episodes, imports, profiles } from "../src/db/schema";
+import { episodes, generationJobs, imports, profiles } from "../src/db/schema";
 import type { EpisodeRow, ImportRow } from "../src/routes/imports";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
@@ -12,6 +12,7 @@ const hasDb = Boolean(process.env.DATABASE_URL);
 // profiles.id 是 uuid 列，测试用户需用合法 uuid
 const REPO_USER = "11111111-1111-4111-8111-111111111111";
 const API_USER = "22222222-2222-4222-8222-222222222222";
+const QUOTA_USER = "33333333-3333-4333-8333-333333333333";
 
 function makeEnv(): Env {
   return {
@@ -36,13 +37,16 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
     await db.insert(profiles).values([
       { id: REPO_USER, username: "repo-test-user", displayName: "Repo Test" },
       { id: API_USER, username: "api-test-user", displayName: "API Test" },
+      // 配额测试种子：free + 5 积分
+      { id: QUOTA_USER, username: "quota-test-user", displayName: "Quota Test", plan: "free", creditBalance: 5 },
     ]).onConflictDoNothing();
   });
 
   afterAll(async () => {
-    // profile 级联删除 imports/episodes/scripts
+    // profile 级联删除 imports/episodes/scripts/generation_jobs
     await db.delete(profiles).where(eq(profiles.id, REPO_USER));
     await db.delete(profiles).where(eq(profiles.id, API_USER));
+    await db.delete(profiles).where(eq(profiles.id, QUOTA_USER));
     await client.end();
   });
 
@@ -155,6 +159,67 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
     });
   });
 
+  describe("jobs repo", () => {
+    async function makeEpisode(title: string): Promise<string> {
+      const conv = `conv-job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const result = await repo.imports.createImport(
+        {
+          userId: QUOTA_USER, platform: "doubao", sourceTitle: title, sourceConversationId: conv,
+          sourceUrl: `https://doubao.com/chat/${conv}`,
+          parsedDialogue: { platform: "doubao", conversationId: conv, title, url: `https://doubao.com/chat/${conv}`, messages: [{ role: "user", content: "你好" }] },
+        },
+        { userId: QUOTA_USER, title, status: "draft", language: null },
+      );
+      if ("duplicate" in result) throw new Error("unexpected duplicate");
+      return result.episodeId;
+    }
+
+    it("getQuotaInfo returns plan/credit_balance and counts only done jobs", async () => {
+      const episodeId = await makeEpisode("配额统计");
+      const before = await repo.jobs.getQuotaInfo(QUOTA_USER);
+      expect(before).toMatchObject({ plan: "free", generatedCount: 0, creditBalance: 5 });
+
+      const job = await repo.jobs.createJob(episodeId);
+      expect(job).toMatchObject({ episodeId, status: "queued", progress: 0 });
+      // queued 未完成：不计入 generatedCount
+      expect((await repo.jobs.getQuotaInfo(QUOTA_USER)).generatedCount).toBe(0);
+
+      await db.update(generationJobs).set({ status: "done" }).where(eq(generationJobs.id, job.id));
+      expect((await repo.jobs.getQuotaInfo(QUOTA_USER)).generatedCount).toBe(1);
+      // 其他用户 job 不计入（归属过滤）
+      expect((await repo.jobs.getQuotaInfo(REPO_USER)).generatedCount).toBe(0);
+    });
+
+    it("consumeQuota decrements credit_balance for free; pro no-op", async () => {
+      await repo.jobs.consumeQuota(QUOTA_USER, 1);
+      let row = await db.select({ balance: profiles.creditBalance }).from(profiles).where(eq(profiles.id, QUOTA_USER));
+      expect(row[0].balance).toBe(4);
+
+      await db.update(profiles).set({ plan: "pro" }).where(eq(profiles.id, QUOTA_USER));
+      await repo.jobs.consumeQuota(QUOTA_USER, 1);
+      row = await db.select({ balance: profiles.creditBalance }).from(profiles).where(eq(profiles.id, QUOTA_USER));
+      expect(row[0].balance).toBe(4);
+
+      // 恢复 free 供后续用例使用
+      await db.update(profiles).set({ plan: "free" }).where(eq(profiles.id, QUOTA_USER));
+    });
+
+    it("getLatestJob returns newest job by created_at desc, or null", async () => {
+      const episodeId = await makeEpisode("最新 job");
+      expect(await repo.jobs.getLatestJob(episodeId)).toBeNull();
+
+      const j1 = await repo.jobs.createJob(episodeId);
+      await db.update(generationJobs)
+        .set({ createdAt: new Date(Date.now() - 60_000) })
+        .where(eq(generationJobs.id, j1.id));
+      const j2 = await repo.jobs.createJob(episodeId);
+
+      const latest = await repo.jobs.getLatestJob(episodeId);
+      expect(latest?.id).toBe(j2.id);
+      expect(latest).toMatchObject({ status: "queued", progress: 0, error: null });
+    });
+  });
+
   describe("api via real repo", () => {
     const polish: AppDeps["polish"] = {
       getDialogueMessages: (episodeId, userId) => repo.episodes.getImportedDialogue(episodeId, userId),
@@ -172,6 +237,17 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
         },
       },
     };
+    const generate: AppDeps["generate"] = {
+      getLatestScript: (episodeId) => repo.episodes.getLatestScript(episodeId),
+      safetyCheck: async () => ({ pass: true }),
+      getQuota: (userId) => repo.jobs.getQuotaInfo(userId),
+      consumeQuota: (userId, credit) => repo.jobs.consumeQuota(userId, credit),
+      createJob: (episodeId) => repo.jobs.createJob(episodeId),
+      enqueueJob: async () => {},
+    };
+    const job: AppDeps["job"] = {
+      getLatestJob: (episodeId) => repo.jobs.getLatestJob(episodeId),
+    };
     const app = createApp({
       env: makeEnv(),
       verifyToken: async (token: string) => {
@@ -180,6 +256,8 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       },
       repo,
       polish,
+      generate,
+      job,
     });
 
     it("POST /api/imports 201 then 409; episodes list/script/publish flow", async () => {
@@ -241,6 +319,61 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
         { speaker: "host", text: "你好" },
         { speaker: "guest", text: "你好！" },
       ]);
+    });
+
+    it("POST /api/episodes/:id/generate creates job; GET job returns it", async () => {
+      const conv = `conv-gen-${Date.now()}`;
+      const body = {
+        platform: "claude", conversationId: conv, title: "生成集成", url: `https://claude.ai/chat/${conv}`,
+        messages: [{ role: "user", content: "你好" }],
+      };
+      const headers = { "Content-Type": "application/json", Authorization: "Bearer valid-token" };
+      const res = await app.request("/api/imports", { method: "POST", headers, body: JSON.stringify(body) });
+      expect(res.status).toBe(201);
+      const { episodeId } = (await res.json()) as { importId: string; episodeId: string };
+
+      const scriptRes = await app.request(`/api/episodes/${episodeId}/script`, {
+        method: "PUT", headers,
+        body: JSON.stringify({ segments: [{ speaker: "host", text: "生成脚本" }] }),
+      });
+      expect(scriptRes.status).toBe(200);
+
+      const balanceBefore = (await repo.jobs.getQuotaInfo(API_USER)).creditBalance;
+      const gen = await app.request(`/api/episodes/${episodeId}/generate`, {
+        method: "POST", headers: { Authorization: "Bearer valid-token" },
+      });
+      expect(gen.status).toBe(202);
+      const genJson = (await gen.json()) as { jobId: string; status: string };
+      expect(genJson.status).toBe("queued");
+
+      const jobRes = await app.request(`/api/episodes/${episodeId}/job`, {
+        headers: { Authorization: "Bearer valid-token" },
+      });
+      expect(jobRes.status).toBe(200);
+      expect(await jobRes.json()).toMatchObject({ id: genJson.jobId, status: "queued", progress: 0, error: null });
+
+      // 配额视角：job 尚未 done，generatedCount 仍为 0；free 首集消耗 1 积分
+      const quota = await repo.jobs.getQuotaInfo(API_USER);
+      expect(quota.generatedCount).toBe(0);
+      expect(quota.creditBalance).toBe(balanceBefore - 1);
+    });
+
+    it("GET /api/episodes/:id/job returns 404 when no job", async () => {
+      const conv = `conv-nojob-${Date.now()}`;
+      const body = {
+        platform: "claude", conversationId: conv, title: "无 job 集成", url: `https://claude.ai/chat/${conv}`,
+        messages: [{ role: "user", content: "你好" }],
+      };
+      const headers = { "Content-Type": "application/json", Authorization: "Bearer valid-token" };
+      const res = await app.request("/api/imports", { method: "POST", headers, body: JSON.stringify(body) });
+      expect(res.status).toBe(201);
+      const { episodeId } = (await res.json()) as { importId: string; episodeId: string };
+
+      const jobRes = await app.request(`/api/episodes/${episodeId}/job`, {
+        headers: { Authorization: "Bearer valid-token" },
+      });
+      expect(jobRes.status).toBe(404);
+      expect(await jobRes.json()).toEqual({ error: "not_found" });
     });
   });
 });

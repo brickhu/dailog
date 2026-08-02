@@ -18,6 +18,12 @@ function fakeRepo(): AppDeps["repo"] {
       getImportedDialogue: async () => null,
       setPublished: async () => {},
     },
+    jobs: {
+      getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
+      consumeQuota: async () => {},
+      createJob: async (episodeId) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
+      getLatestJob: async () => null,
+    },
   };
 }
 
@@ -27,6 +33,23 @@ function fakePolish(): AppDeps["polish"] {
     qualityCheck: async () => ({ pass: true, language: "zh" }),
     savePolished: async (_episodeId, _language, segments) => ({ version: 1, segments }),
     llm: { complete: async () => "", stream: async () => "" },
+  };
+}
+
+function fakeGenerate(): AppDeps["generate"] {
+  return {
+    getLatestScript: async () => null,
+    safetyCheck: async () => ({ pass: true }),
+    getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
+    consumeQuota: async () => {},
+    createJob: async (episodeId) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
+    enqueueJob: async () => {},
+  };
+}
+
+function fakeJob(): AppDeps["job"] {
+  return {
+    getLatestJob: async () => null,
   };
 }
 
@@ -54,6 +77,8 @@ function makeApp() {
     },
     repo: fakeRepo(),
     polish: fakePolish(),
+    generate: fakeGenerate(),
+    job: fakeJob(),
   });
 }
 

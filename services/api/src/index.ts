@@ -5,8 +5,10 @@ import { createTokenVerifier } from "./auth/verify";
 import { createDb } from "./db/client";
 import { createRepo } from "./repo";
 import { createLlmClient } from "./llm/client";
-import { qualityCheckPrompt, parseJsonLoose, type QualityResult } from "./llm/prompts";
+import { qualityCheckPrompt, safetyCheckPrompt, parseJsonLoose, type QualityResult } from "./llm/prompts";
 import type { PolishDeps } from "./routes/polish";
+import type { GenerateDeps } from "./routes/generate";
+import type { JobDeps } from "./routes/job";
 
 const env = loadEnv();
 
@@ -31,11 +33,30 @@ const polish: PolishDeps = {
   llm,
 };
 
+const generate: GenerateDeps = {
+  getLatestScript: (episodeId) => repo.episodes.getLatestScript(episodeId),
+  // 安全门（PRD §4.4）：编辑后脚本一次非流式补全，输出 JSON { pass, reason? }
+  safetyCheck: async (segments) => parseJsonLoose(await llm.complete(safetyCheckPrompt(segments))) as { pass: boolean; reason?: string },
+  getQuota: (userId) => repo.jobs.getQuotaInfo(userId),
+  consumeQuota: (userId, credit) => repo.jobs.consumeQuota(userId, credit),
+  createJob: (episodeId) => repo.jobs.createJob(episodeId),
+  // Task 6 接入进程内队列：目前仅记录，不消费 job
+  enqueueJob: async (jobId) => {
+    console.log(`[queue] job ${jobId} enqueued (Task 6 接入进程内队列)`);
+  },
+};
+
+const job: JobDeps = {
+  getLatestJob: (episodeId) => repo.jobs.getLatestJob(episodeId),
+};
+
 const app = createApp({
   env,
   verifyToken: createTokenVerifier(env.SUPABASE_JWKS_URL, `${env.SUPABASE_URL}/auth/v1`),
   repo,
   polish,
+  generate,
+  job,
 });
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => {

@@ -36,6 +36,18 @@ export function polishPrompt(messages: { role: string; content: string }[], lang
   }];
 }
 
+/** 安全门 prompt：输出 JSON { pass, reason? }——色情/违法/仇恨/诈骗等违规内容 */
+export function safetyCheckPrompt(segments: { speaker: string; text: string }[]): LlmMessage[] {
+  return [{
+    role: "system",
+    content: `你是 dailogues 播客平台的内容安全审核员。审核一段播客脚本（用户=host，AI=guest）是否包含违规内容：色情、违法、仇恨言论、诈骗、暴力煽动等。
+只输出 JSON：{"pass": true|false, "reason": "违规说明（仅 pass=false 时）"}`,
+  }, {
+    role: "user",
+    content: segments.map((s) => `${s.speaker}: ${s.text}`).join("\n"),
+  }];
+}
+
 /** 容错 JSON 解析：去 ```json 围栏，截取首个 [ 或 { 到匹配的结尾 */
 export function parseJsonLoose(text: string): unknown {
   const cleaned = text.replace(/```json\s*/g, "").replace(/```/g, "").trim();
