@@ -64,7 +64,7 @@ app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 | 方法/路径 | 认证 | 作用 |
 |---|---|---|
 | `POST /api/imports` | ✓ | 提交链接/文件/文本 → 解析器 → `parsed_dialogue` 落库，返回结构化对话 |
-| `POST /api/episodes/:id/polish` | ✓ | SSE 流式润色：先检测对话语言，再流式返回脚本段落 |
+| `POST /api/episodes/:id/polish` | ✓ | SSE 流式润色：先质量审核（轻量 LLM 预检，不达标返回 422 + 原因）→ 语言检测 → 流式返回脚本段落 |
 | `POST /api/episodes/:id/generate` | ✓ | 配额校验 → 建 job → 后台执行 |
 | `GET /api/episodes/:id/job` | ✓ | 轮询生成进度（阶段 + 百分比） |
 | `POST /api/episodes/:id/publish` | ✓ | 发布（`is_public=true`）→ 触发邀请码发放 |
@@ -82,7 +82,7 @@ queued → tts → merge → upload → done（failed 可重试）
 1. **TTS**：主对话一次 **Fish Audio 多说话人调用**（chunks 数组，每段指定说话人）——
    - 主持人段：`reference_audio` = 用户录音样本（实时克隆）
    - 嘉宾段：平台固定音色 `reference_id`
-   - 超长保护：脚本上限 80 段；若超单请求字符限额则按批调用（批间靠 ffmpeg 拼接兜底）
+   - 超长保护：润色以**单期 5–10 分钟**（约 1200–3000 字）为目标压缩；脚本上限 80 段；若超 Fish Audio 单请求字符限额则按批调用（批间靠 ffmpeg 拼接兜底）
    - 失败：整次重试 2 次（指数退避）
 2. **合并**：ffmpeg 拼接 `intro.{lang}.mp3 + 主对话 + outro.{lang}.mp3`（中/英两套固定片头片尾，按对话语言选择），段间 300ms 自然间隔
 3. **上传**：后端持 CF 凭证直传 R2 → 更新 `episodes.audio_url` / `duration_seconds` → job `done`
@@ -100,7 +100,7 @@ queued → tts → merge → upload → done（failed 可重试）
 | `voice_samples` | `user_id`, `audio_url`(R2), `duration`, `status`, `created_at`（可重录覆盖） |
 | `invite_codes` | `code`(唯一), `created_by`, `used_by`, `used_at`, `expires_at`, `source`(admin/reward), `issued_for_episode_id` |
 | `imports` | `user_id`, `source_type`(link/file/text), `platform`(chatgpt/claude/kimi/doubao/tongyi/gemini/plain), `raw_content`, `parsed_dialogue`(JSONB), `status`, `created_at` |
-| `episodes` | `id`, `user_id`, `slug`, `title`, `description`, `cover_url`, `audio_url`, `duration_seconds`, `status`(draft/generating/published/failed), `language`, `is_public`, `created_at`, `published_at` |
+| `episodes` | `id`, `user_id`, `slug`, `title`, `description`, `cover_url`, `audio_url`, `duration_seconds`, `status`(draft/generating/published/failed), `quality_status`(pending/passed/rejected), `quality_reason`, `language`, `is_public`, `created_at`, `published_at` |
 | `scripts` | `episode_id`, `version`, `segments`(JSONB: `[{speaker: host\|guest, text}]`), `created_at` |
 | `generation_jobs` | `episode_id`, `status`(queued/tts/merge/upload/done/failed), `progress`, `error`, `attempts`, `timestamps` |
 | `payments` | `user_id`, `stripe_session_id`, `amount`, `episodes_granted`, `status`, `created_at`（按期付费购买记录） |
@@ -166,5 +166,5 @@ assets/intro.zh.mp3 / intro.en.mp3 / outro.zh.mp3 / outro.en.mp3   ← 固定片
 |---|---|
 | Fish Audio 多说话人请求格式/单请求限额不确定 | **首个实现任务：spike**——验证 chunks 格式、返回形态、批上限、克隆+固定音色混排音质 |
 | 克隆音色质量受录音环境影响 | 录音引导页质量校验（时长/响度/语音检测），可重录 |
-| ffmpeg 在 256MB 机器上拼接大音频 | 主对话 TTS 直出单文件场景优先；拼接限制节目时长（≤30 分钟） |
+| ffmpeg 在 256MB 机器上拼接大音频 | 单期时长限定 5–10 分钟，音频体量小，256MB 无压力 |
 | LLM 供应商切换 | OpenAI 兼容接口 + 配置化，锁定成本 |
