@@ -61,13 +61,14 @@ export function createPipelineRunner(deps: RunnerDeps): JobHandler {
       deps: { ffmpegPath: deps.ffmpegPath, assets: deps.assets },
     });
 
-    // 5. upload：产物写入存储（audio/episodes/{userId}/{episodeId}.mp3）+ 落库完成
+    // 5. upload：产物写入存储（audio/episodes/{userId}/{episodeId}.mp3）+ 落库完成。
+    //    先 updateEpisodeAudio 再 markJobDone：job 标记 done 时音频必已可读（轮询方无竞态窗口）
     await progress("merge", 70);
     const audioKey = `audio/episodes/${userId}/${job.episodeId}.mp3`;
     await deps.storage.put(audioKey, audio);
     await progress("upload", 90);
-    await deps.repo.markJobDone(job.id);
     await deps.repo.updateEpisodeAudio(job.episodeId, audioKey, durationSeconds);
+    await deps.repo.markJobDone(job.id);
     return { status: "done" };
   };
 }
