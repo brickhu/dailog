@@ -10,6 +10,8 @@ export interface CreateAuthOptions {
   secret: string;
   /** 公开基址（回调/重定向用）；本地 dev http://localhost:8787，生产 https://api.* */
   baseURL?: string;
+  /** 跨域白名单（CSRF/URL 校验用，与 CORS APP_ORIGINS 同源）：SPA 经 vite 代理/跨域访问时 Origin 需在此 */
+  trustedOrigins?: string[];
 }
 
 /**
@@ -21,6 +23,7 @@ export interface CreateAuthOptions {
 export function createAuth(opts: CreateAuthOptions) {
   return betterAuth({
     baseURL: opts.baseURL,
+    trustedOrigins: opts.trustedOrigins,
     database: drizzleAdapter(opts.db, {
       provider: "pg",
       // 表导出名（authUsers/authSessions/authAccounts）→ better-auth model 名映射
