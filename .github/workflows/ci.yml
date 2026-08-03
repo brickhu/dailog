@@ -16,10 +16,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r typecheck
       - run: pnpm -r test
-      # 构建校验（M5 迁移后移除 VITE_SUPABASE_* 占位注入）
+      # 构建校验（三站 + 扩展；M5 后 studio 无需 supabase 占位）
       - run: pnpm --filter @dailogues/extension build
       - run: pnpm --filter @dailogues/extension build:dev
       - run: pnpm --filter @dailogues/studio build
-        env:
-          VITE_SUPABASE_URL: https://placeholder.supabase.co
-          VITE_SUPABASE_ANON_KEY: placeholder
+      - run: pnpm --filter @dailogues/site build

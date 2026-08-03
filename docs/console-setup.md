@@ -2,10 +2,10 @@
 
 仓库：`https://github.com/brickhu/dailog`（`dev` = 开发环境，`master` = 生产环境）
 
-| 环境 | 分支 | API | SPA | SSR（预留） | Postgres |
+| 环境 | 分支 | API | Studio (SPA) | 消费站 (SSR) | Postgres |
 |---|---|---|---|---|---|
 | 开发 | `dev` | `api.candelbot.app` | `app.candelbot.app` | `candelbot.app` | Railway Development 环境 |
-| 生产 | `master` | `api.dailogues.com`（待定 dailog.fm） | `app.dailogues.com` | `dailogues.com` | Railway Production 环境 |
+| 生产 | `master` | `api.dailogues.com` | `app.dailogues.com` | `dailogues.com` | Railway Production 环境 |
 
 ## 1. Railway（API + Postgres）
 
@@ -19,12 +19,13 @@
 | 变量 | 开发环境 | 生产环境 |
 |---|---|---|
 | `DATABASE_URL` | 本环境 Postgres | 本环境 Postgres |
-| `APP_ORIGINS` | `https://app.candelbot.app,http://localhost:5173` | `https://app.dailogues.com` |
+| `APP_ORIGINS` | `https://app.candelbot.app,https://candelbot.app,http://localhost:5173,http://localhost:3000` | `https://app.dailogues.com,https://dailogues.com` |
 | `DEEPSEEK_API_KEY` / `BASE_URL` / `MODEL` | ✓ | ✓ |
 | `FISH_API_KEY` / `FISH_PROXY_URL` / `FISH_GUEST_REFERENCE_ID` | ✓ | ✓ |
 | `STORAGE_DRIVER` | `fs`（或 r2） | `r2` + `R2_ACCOUNT_ID/ACCESS_KEY/SECRET_KEY/BUCKET` |
 | `SUPABASE_URL` / `SUPABASE_JWKS_URL` | 共用现有项目（M5 迁移后移除） | 同左 |
-| `BETTER_AUTH_SECRET` | M5 后启用 | M5 后启用 |
+| `BETTER_AUTH_SECRET` | 已启用（各环境独立随机） | 同左 |
+| `BETTER_AUTH_COOKIE_DOMAIN` | 留空（host-only） | `.dailogues.com`（SSO 跨子域 cookie） |
 | `PORT` | 8787 | 8787 |
 
 7. [ ] Development 环境首次部署后跑迁移（Service → Exec 或本地 `railway run`）：
@@ -46,6 +47,21 @@
 
 > `VITE_EXTENSION_ID` 可留空（扩展连接卡隐藏）；M5 后 `VITE_SUPABASE_*` 移除。
 > SSR 站（apps/site 未建）：`candelbot.app` / `dailogues.com` 根域等 plan 6-7 创建后各绑一个 Pages/Workers project。
+
+## 2.5 Cloudflare Pages（消费站 SSR）
+
+| | dev project `dailogues-site-dev` | prod project `dailogues-site` |
+|---|---|---|
+| 连接仓库 | brickhu/dailog | brickhu/dailog |
+| Production branch | `dev` | `master` |
+| 构建命令 | `pnpm --filter @dailogues/site build` | 同左 |
+| 输出目录 | `apps/site/dist` | 同左 |
+| Node 版本 | 22 | 22 |
+| **Node.js compatibility** | **开启（Node 22）**——postgres 直连需要 | 同左 |
+| 自定义域名 | `candelbot.app` | `dailogues.com` |
+
+> 变量（各环境）：`DATABASE_URL`（对应环境 Postgres，只读连接可加 `?sslmode=require`）、`API_BASE_URL`（`https://api.candelbot.app` / `https://api.dailogues.com`）、`SITE_BASE_URL`（站点自身）、`STUDIO_BASE_URL`（`app.*`）、`SITE_COOKIE_DOMAIN`（生产 `.dailogues.com`，dev 留空）。
+> 消费端登录统一走本站 `/login`（server 代理 api 认证端点，SSO cookie 与 studio 共享）。
 
 ## 3. DNS（candelbot.app 托管处）
 
