@@ -1,5 +1,8 @@
 // 最小 chrome.runtime/storage 类型声明（扩展运行时有全局 chrome，tsconfig 仅含 node types）
 declare const chrome: {
+  tabs: {
+    create: (opts: { url: string }) => Promise<unknown>;
+  };
   storage: {
     local: {
       get: (keys: string | string[]) => Promise<Record<string, unknown>>;
@@ -18,7 +21,7 @@ declare const chrome: {
 };
 
 import { MSG_COLLECT, type CollectResult, type CollectedDialogue } from "./shared";
-import { API_BASE_KEY, DEFAULT_API_BASE } from "./env";
+import { API_BASE_KEY, DEFAULT_API_BASE, DEFAULT_LOGIN_BASE } from "./env";
 
 const TOKEN_KEY = "dailoguesToken";
 
@@ -43,8 +46,11 @@ export async function getToken(): Promise<string | null> {
   return typeof token === "string" && token.length > 0 ? token : null;
 }
 
-/** 采集结果回传：带 JWT POST {apiBase}/api/imports */
-export async function handleCollect(dialogue: CollectedDialogue): Promise<CollectResult> {
+/** 采集结果回传：带 session token POST {apiBase}/api/imports */
+export async function handleCollect(
+  dialogue: CollectedDialogue,
+  senderUrl?: string,
+): Promise<CollectResult> {
   const token = await getToken();
   if (!token) return { ok: false, error: "no_token" };
   const apiBase = await getApiBase();
@@ -54,7 +60,16 @@ export async function handleCollect(dialogue: CollectedDialogue): Promise<Collec
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(dialogue),
     });
-    if (!res.ok) return { ok: false, error: `http_${res.status}` };
+    if (!res.ok) {
+      // 401 登录失效：自动打开统一登录页，登录后 redirect 回对话页（token 由登录页自动注入）
+      if (res.status === 401) {
+        const redirect = senderUrl ? encodeURIComponent(senderUrl) : "";
+        void chrome.tabs.create({
+          url: `${DEFAULT_LOGIN_BASE}/login${redirect ? `?redirect=${redirect}` : ""}`,
+        });
+      }
+      return { ok: false, error: `http_${res.status}` };
+    }
     return { ok: true, dialogue };
   } catch (e) {
     return { ok: false, error: String(e instanceof Error ? e.message : e) };
@@ -73,9 +88,9 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onMessageExternal) {
 }
 if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
   // content script 采集结果 → 回传
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg?.type !== MSG_COLLECT) return;
-    void handleCollect(msg.dialogue as CollectedDialogue).then(sendResponse);
+    void handleCollect(msg.dialogue as CollectedDialogue, sender?.tab?.url).then(sendResponse);
     return true;
   });
 }

@@ -1,6 +1,7 @@
 import { createContext, createSignal, onMount, useContext, type JSX } from "solid-js";
 import { authApi, loadToken, clearToken, type AuthUser } from "./auth-api";
 import { env } from "./env";
+import { injectExtensionToken } from "./ext-inject";
 import { setTokenGetter } from "./client";
 
 // 认证上下文（M5：better-auth bearer 模式——token 内存 signal + localStorage 持久化）
@@ -35,6 +36,8 @@ export function AuthProvider(props: { children: JSX.Element }) {
     if (sessionUser.user) {
       setUser(sessionUser.user);
       setLoading(false);
+      // 自动注入扩展 token（页面加载即续上）
+      void injectExtensionToken();
       return;
     }
     // ② 备用：localStorage token 恢复（dev 兜底 / 备用登录页）
@@ -62,6 +65,7 @@ export function AuthProvider(props: { children: JSX.Element }) {
         const { token, user: u } = await authApi.signIn({ email, password });
         setAccessToken(token);
         setUser(u);
+        void injectExtensionToken();
         return { error: null };
       } catch (e) {
         return { error: e instanceof Error ? e.message : "登录失败" };
@@ -72,6 +76,7 @@ export function AuthProvider(props: { children: JSX.Element }) {
         const { token, user: u } = await authApi.signUp({ email, password, name });
         setAccessToken(token);
         setUser(u);
+        void injectExtensionToken();
         return { error: null };
       } catch (e) {
         return { error: e instanceof Error ? e.message : "注册失败" };

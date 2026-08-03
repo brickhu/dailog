@@ -1,5 +1,5 @@
 import { createAsync } from "@solidjs/router";
-import { Show } from "solid-js";
+import { createSignal, Show } from "solid-js";
 import { useParams } from "@solidjs/router";
 import { Title } from "@solidjs/meta";
 import { siteDb } from "../../lib/db";
@@ -51,7 +51,68 @@ const styles = stylex.create({
     textAlign: "center",
     padding: tokens.space7,
   },
+  actions: {
+    display: "flex",
+    gap: tokens.space3,
+    marginBottom: tokens.space5,
+  },
+  actionBtn: {
+    padding: `${tokens.space1} ${tokens.space4}`,
+    borderRadius: tokens.radiusFull,
+    border: `1px solid ${tokens.colorBorder}`,
+    background: tokens.colorSurface,
+    color: tokens.colorTextMuted,
+    cursor: "pointer",
+    fontSize: tokens.fontSizeSm,
+  },
+  actionActive: {
+    borderColor: tokens.colorPrimary,
+    color: tokens.colorPrimary,
+  },
 });
+
+/** 收藏/点赞交互（客户端）：未登录点击 → 跳统一登录页（redirect 回当前单集页） */
+function InteractButtons(props: { episodeId: string }) {
+  const [fav, setFav] = createSignal(false);
+  const [liked, setLiked] = createSignal(false);
+  const [busy, setBusy] = createSignal(false);
+
+  const toggle = async (kind: "favorite" | "like") => {
+    if (busy()) return;
+    const res = await fetch(`/api/episodes/${props.episodeId}/${kind}`, { method: "POST" });
+    if (res.status === 401) {
+      // 未登录：跳统一登录页，登录后回当前页
+      window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+      return;
+    }
+    if (!res.ok) return;
+    setBusy(true);
+    try {
+      const data = (await res.json()) as { favorited?: boolean; liked?: boolean };
+      if (kind === "favorite") setFav(!!data.favorited);
+      else setLiked(!!data.liked);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div {...stylex.props(styles.actions)}>
+      <button
+        {...stylex.props(styles.actionBtn, liked() && styles.actionActive)}
+        onClick={() => toggle("like")}
+      >
+        {liked() ? "♥ 已赞" : "♡ 点赞"}
+      </button>
+      <button
+        {...stylex.props(styles.actionBtn, fav() && styles.actionActive)}
+        onClick={() => toggle("favorite")}
+      >
+        {fav() ? "★ 已收藏" : "☆ 收藏"}
+      </button>
+    </div>
+  );
+}
 
 export default function EpisodePage() {
   const params = useParams<{ id: string }>();
@@ -75,6 +136,7 @@ export default function EpisodePage() {
           <Show when={audioUrl()}>
             <audio controls src={audioUrl()!} {...stylex.props(styles.player)} />
           </Show>
+          <InteractButtons episodeId={ep()!.id} />
           <div {...stylex.props(styles.desc)}>{ep()!.description || "（暂无简介）"}</div>
         </Show>
       </div>
