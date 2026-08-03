@@ -5,15 +5,16 @@
 ## 前置
 
 ```bash
-# 终端 1：api（8787，需 .env.local 含 APP_ORIGINS=http://localhost:5173 + BETTER_AUTH_SECRET）
-cd services/api && set -a && source .env.local && set +a && npx tsx src/index.ts
+# 一键启动（api 8787 + studio 5173 并行，api 自动加载 .env.local）
+pnpm dev
 
-# 生成邀请码（admin user 自动创建）
-pnpm --filter @dailogues/api invites:create my-test-code
-pnpm --filter @dailogues/api invites:create my-expiring-code --expires 30
+# 或分开启动
+pnpm dev:api       # 只起 api（8787）
+pnpm dev:studio    # 只起 studio（5173）
 
-# 终端 2：studio（5173）
-cd apps/studio && pnpm dev
+# 生成授权码（注册后开通频道用；admin user 自动创建）
+pnpm invite my-test-code
+pnpm invite my-expiring-code --expires 30
 ```
 
 `apps/studio/.env.local`：

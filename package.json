@@ -5,6 +5,10 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "dev:api": "pnpm --filter @dailogues/api dev",
+    "dev:studio": "pnpm --filter @dailogues/studio dev",
+    "dev": "pnpm --parallel --stream --filter @dailogues/api --filter @dailogues/studio dev",
+    "invite": "pnpm --filter @dailogues/api invites:create"
   }
 }
