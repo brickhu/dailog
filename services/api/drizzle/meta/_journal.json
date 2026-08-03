@@ -1,0 +1,62 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1785690909558,
+      "tag": "0000_chunky_lady_bullseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785695847369,
+      "tag": "0001_bent_brood",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785696760623,
+      "tag": "0002_brainy_purifiers",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785735779642,
+      "tag": "0003_wakeful_mentallo",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785736169346,
+      "tag": "0004_smart_tenebrous",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785736900196,
+      "tag": "0005_episodes-polish-count",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785740419942,
+      "tag": "0006_flimsy_morg",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785748188415,
+      "tag": "0007_same_iceman",
+      "breakpoints": true
+    }
+  ]
+}
