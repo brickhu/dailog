@@ -4,7 +4,7 @@
 
 | 环境 | 分支 | API | Studio (SPA) | 消费站 (SSR) | Postgres |
 |---|---|---|---|---|---|
-| 开发 | `dev` | `gracious-caring-development.up.railway.app` | `app.candelbot.app` | `candelbot.app` | Railway Development 环境 |
+| 开发 | `dev` | `api.candelbot.app`（同站必须——默认 URL 跨站，凭据请求在浏览器挂起/SSO 失效） | `app.candelbot.app` | `candelbot.app` | Railway Development 环境 |
 | 生产 | `master` | `api.dailogues.com` | `app.dailogues.com` | `dailogues.com` | Railway Production 环境 |
 
 ## 1. Railway（API + Postgres）
@@ -27,7 +27,7 @@
 | `FISH_API_KEY` / `FISH_PROXY_URL` / `FISH_GUEST_REFERENCE_ID` | ✓ | ✓ |
 | `STORAGE_DRIVER` | `fs`（或 r2） | `r2` + `R2_ACCOUNT_ID/ACCESS_KEY/SECRET_KEY/BUCKET` |
 | `BETTER_AUTH_SECRET` | 已启用（各环境独立随机） | 同左 |
-| `BETTER_AUTH_URL` | `https://gracious-caring-development.up.railway.app`（dev） | `https://api.dailogues.com`（生产必改） |
+| `BETTER_AUTH_URL` | `https://api.candelbot.app`（dev） | `https://api.dailogues.com`（生产必改） |
 | `BETTER_AUTH_COOKIE_DOMAIN` | 留空（host-only） | `.dailogues.com`（SSO 跨子域 cookie） |
 | `PORT` | 不配（Railway 默认 8080；内部端口与公网域名无关，healthcheck 自动探测） | 同左 |
 
@@ -46,7 +46,7 @@
 | 构建命令 | `pnpm --filter @dailogues/studio build` | 同左 |
 | 输出目录 | `apps/studio/dist` | 同左 |
 | Node 版本 | 22（Pages 自动识别 pnpm 锁文件） | 22 |
-| `VITE_API_BASE_URL` | `https://gracious-caring-development.up.railway.app` | `https://api.dailogues.com` |
+| `VITE_API_BASE_URL` | `https://api.candelbot.app` | `https://api.dailogues.com` |
 | 自定义域名 | `app.candelbot.app` | `app.dailogues.com`（待定） |
 
 > `VITE_EXTENSION_ID` 可留空（扩展连接卡隐藏）；M5 后 `VITE_SUPABASE_*` 移除。
@@ -64,7 +64,7 @@
 | **Node.js compatibility** | **开启（Node 22）**——postgres 直连需要 | 同左 |
 | 自定义域名 | `candelbot.app` | `dailogues.com` |
 
-> 变量（各环境）：`DATABASE_URL`（对应环境 Postgres，只读连接可加 `?sslmode=require`）、`API_BASE_URL`（`https://gracious-caring-development.up.railway.app` / `https://api.dailogues.com`）、`SITE_BASE_URL`（站点自身，**登录代理以它作为 Origin 转发给 API**）、`STUDIO_BASE_URL`（`app.*`）、`SITE_COOKIE_DOMAIN`（生产 `.dailogues.com`，dev 留空）。
+> 变量（各环境）：`DATABASE_URL`（对应环境 Postgres，只读连接可加 `?sslmode=require`）、`API_BASE_URL`（`https://api.candelbot.app` / `https://api.dailogues.com`）、`SITE_BASE_URL`（站点自身，**登录代理以它作为 Origin 转发给 API**）、`STUDIO_BASE_URL`（`app.*`）、`SITE_COOKIE_DOMAIN`（生产 `.dailogues.com`，dev 留空）。
 > ⚠️ **站点实际域名必须加入 API 的 `APP_ORIGINS`**（auth-proxy 转发时以 `SITE_BASE_URL` 为 Origin，better-auth CSRF 白名单校验）——dev 用 Pages 默认域名时也要加（如 `https://dailogues-site-dev.pages.dev`）。
 > 消费端登录统一走本站 `/login`（server 代理 api 认证端点，SSO cookie 与 studio 共享）。
 
