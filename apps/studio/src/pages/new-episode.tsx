@@ -4,6 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 import { tokens } from "../theme.stylex.ts";
 import { api } from "../lib/client";
 import ScriptEditor from "../components/script-editor";
+import GenerateProgress from "../components/generate-progress";
 import type { Episode } from "./dashboard";
 
 const PLATFORM_LABEL: Record<string, string> = {
@@ -99,6 +100,44 @@ const styles = stylex.create({
     border: `1px dashed ${tokens.colorBorder}`,
     borderRadius: tokens.radiusMd,
   },
+  publishedBox: {
+    padding: tokens.space6,
+    borderRadius: tokens.radiusLg,
+    background: tokens.colorSurface,
+    border: `1px solid ${tokens.colorBorder}`,
+    textAlign: "center",
+  },
+  publishedTitle: {
+    fontSize: tokens.fontSizeXl,
+    fontWeight: tokens.fontWeightBold,
+    color: tokens.colorSuccess,
+    marginBottom: tokens.space3,
+  },
+  publishedDesc: {
+    color: tokens.colorTextMuted,
+    lineHeight: 1.7,
+    marginBottom: tokens.space4,
+  },
+  field: {
+    marginBottom: tokens.space4,
+  },
+  label: {
+    display: "block",
+    color: tokens.colorTextMuted,
+    fontSize: tokens.fontSizeSm,
+    marginBottom: tokens.space1,
+  },
+  input: {
+    width: "100%",
+    boxSizing: "border-box",
+    padding: `${tokens.space2} ${tokens.space3}`,
+    borderRadius: tokens.radiusMd,
+    border: `1px solid ${tokens.colorBorder}`,
+    background: tokens.colorBg,
+    color: tokens.colorText,
+    fontSize: tokens.fontSizeMd,
+    fontFamily: "inherit",
+  },
   actions: {
     display: "flex",
     justifyContent: "flex-end",
@@ -139,11 +178,20 @@ export default function NewEpisode() {
   const [episodes, setEpisodes] = createSignal<Episode[]>([]);
   const [error, setError] = createSignal<string | null>(null);
   const [polishedVersion, setPolishedVersion] = createSignal<number | null>(null);
+  const [generated, setGenerated] = createSignal(false);
+  const [published, setPublished] = createSignal(false);
+  const [title, setTitle] = createSignal("");
+  const [description, setDescription] = createSignal("");
+  const [publishBusy, setPublishBusy] = createSignal(false);
 
   onMount(async () => {
     if (step() !== 1) return;
     try {
-      setEpisodes(await api.get<Episode[]>("/api/episodes"));
+      const list = await api.get<Episode[]>("/api/episodes");
+      setEpisodes(list);
+      // ③④ 需要预填标题：从当前 episode 列表找
+      const cur = list.find((e) => e.id === episodeId());
+      if (cur?.title) setTitle(cur.title);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
     }
@@ -151,7 +199,22 @@ export default function NewEpisode() {
 
   const pick = (id: string) => {
     setEpisodeId(id);
+    const ep = episodes().find((e) => e.id === id);
+    if (ep?.title) setTitle(ep.title);
     setStep(2);
+  };
+
+  const publish = async () => {
+    if (!episodeId()) return;
+    setPublishBusy(true);
+    try {
+      await api.post(`/api/episodes/${episodeId()}/publish`);
+      setPublished(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "发布失败");
+    } finally {
+      setPublishBusy(false);
+    }
   };
 
   return (
@@ -224,8 +287,69 @@ export default function NewEpisode() {
           </div>
         </Show>
 
-        <Show when={step() === 3 || step() === 4}>
-          <div {...stylex.props(styles.empty)}>生成与发布（Task 7 实现中）</div>
+        <Show when={step() === 3 && episodeId()}>
+          <GenerateProgress
+            episodeId={episodeId()!}
+            onDone={() => setGenerated(true)}
+            onFailed={(msg) => setError(`生成失败：${msg}`)}
+            onQuotaDenied={() => setStep(2)}
+          />
+          <div {...stylex.props(styles.actions)}>
+            <button {...stylex.props(styles.buttonGhost)} onClick={() => setStep(2)}>
+              {generated() ? "不满意，回去改" : "上一步"}
+            </button>
+            <Show when={generated()}>
+              <button {...stylex.props(styles.button)} onClick={() => setStep(4)}>
+                下一步：发布
+              </button>
+            </Show>
+          </div>
+        </Show>
+
+        <Show when={step() === 4 && episodeId()}>
+          <Show
+            when={!published()}
+            fallback={
+              <div {...stylex.props(styles.publishedBox)}>
+                <div {...stylex.props(styles.publishedTitle)}>节目已发布 ✓</div>
+                <div {...stylex.props(styles.publishedDesc)}>
+                  播放页即将上线（内容站开发中）。发布满 3 期后，每发布一期可获得一个邀请码，邀请好友加入。
+                </div>
+                <button {...stylex.props(styles.button)} onClick={() => navigate("/dashboard")}>
+                  返回工作台
+                </button>
+              </div>
+            }
+          >
+            <div {...stylex.props(styles.publishedBox)}>
+              <div {...stylex.props(styles.publishedTitle)}>发布你的节目</div>
+              <div {...stylex.props(styles.field)}>
+                <label {...stylex.props(styles.label)}>标题</label>
+                <input
+                  {...stylex.props(styles.input)}
+                  value={title()}
+                  onInput={(e) => setTitle(e.currentTarget.value)}
+                />
+              </div>
+              <div {...stylex.props(styles.field)}>
+                <label {...stylex.props(styles.label)}>描述（可选）</label>
+                <textarea
+                  {...stylex.props(styles.input)}
+                  rows={3}
+                  value={description()}
+                  onInput={(e) => setDescription(e.currentTarget.value)}
+                />
+              </div>
+              <div {...stylex.props(styles.actions)}>
+                <button {...stylex.props(styles.buttonGhost)} onClick={() => setStep(3)}>
+                  上一步
+                </button>
+                <button {...stylex.props(styles.button)} onClick={publish} disabled={publishBusy()}>
+                  {publishBusy() ? "发布中…" : "发布"}
+                </button>
+              </div>
+            </div>
+          </Show>
         </Show>
       </div>
     </div>
