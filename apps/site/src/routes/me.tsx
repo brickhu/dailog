@@ -2,7 +2,7 @@ import { createAsync } from "@solidjs/router";
 import { createEffect, For, Show } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "../theme.stylex";
+import { tokens } from "@dailogues/ui/theme.stylex";
 
 // 消费端个人页：dailogues.com/me（收藏列表；登录态经 cookie 判定，未登录跳统一登录）
 interface FavoriteRow {

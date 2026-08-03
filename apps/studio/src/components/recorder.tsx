@@ -1,6 +1,6 @@
 import { createSignal, onCleanup, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "../theme.stylex.ts";
+import { tokens } from "@dailogues/ui/theme.stylex";
 
 // ---------------------------------------------------------------------------
 // 录音状态机（纯函数，可单测）

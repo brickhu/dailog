@@ -2,7 +2,7 @@ import { createAsync } from "@solidjs/router";
 import { For, Show } from "solid-js";
 import { listLatestEpisodes, type EpisodeSummary } from "../lib/db";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "../theme.stylex";
+import { tokens } from "@dailogues/ui/theme.stylex";
 
 // 首页：最新发布的节目（消费端入口）
 const styles = stylex.create({

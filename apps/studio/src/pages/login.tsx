@@ -1,7 +1,8 @@
 import { createEffect, createSignal, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "../theme.stylex.ts";
+import { Button, Card, TextField } from "@dailogues/ui";
+import { tokens } from "@dailogues/ui/theme.stylex";
 import { useAuth } from "../lib/auth";
 
 const styles = stylex.create({
@@ -12,14 +13,6 @@ const styles = stylex.create({
     justifyContent: "center",
     background: tokens.colorBg,
     padding: tokens.space4,
-  },
-  card: {
-    width: "100%",
-    maxWidth: "400px",
-    padding: tokens.space6,
-    borderRadius: tokens.radiusLg,
-    background: tokens.colorSurface,
-    border: `1px solid ${tokens.colorBorder}`,
   },
   brand: {
     fontSize: "28px",
@@ -51,37 +44,6 @@ const styles = stylex.create({
     background: tokens.colorPrimary,
     borderColor: tokens.colorPrimary,
     color: "#fff",
-  },
-  field: {
-    marginBottom: tokens.space4,
-  },
-  label: {
-    display: "block",
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
-    marginBottom: tokens.space1,
-  },
-  input: {
-    width: "100%",
-    boxSizing: "border-box",
-    padding: `${tokens.space2} ${tokens.space3}`,
-    borderRadius: tokens.radiusMd,
-    border: `1px solid ${tokens.colorBorder}`,
-    background: tokens.colorBg,
-    color: tokens.colorText,
-    fontSize: tokens.fontSizeMd,
-  },
-  submit: {
-    width: "100%",
-    padding: `${tokens.space2} ${tokens.space3}`,
-    borderRadius: tokens.radiusMd,
-    border: "none",
-    background: tokens.colorPrimary,
-    color: "#fff",
-    fontSize: tokens.fontSizeMd,
-    fontWeight: tokens.fontWeightMedium,
-    cursor: "pointer",
-    marginTop: tokens.space2,
   },
   error: {
     color: tokens.colorDanger,
@@ -149,7 +111,7 @@ export default function LoginPage() {
 
   return (
     <div {...stylex.props(styles.page)}>
-      <div {...stylex.props(styles.card)}>
+      <Card>
         <div {...stylex.props(styles.brand)}>dailogues</div>
         <div {...stylex.props(styles.tagline)}>把你的 AI 对话，变成你的播客</div>
         <div {...stylex.props(styles.tabs)}>
@@ -167,33 +129,25 @@ export default function LoginPage() {
           </button>
         </div>
         <form onSubmit={submit}>
-          <div {...stylex.props(styles.field)}>
-            <label {...stylex.props(styles.label)}>邮箱</label>
-            <input
-              {...stylex.props(styles.input)}
-              type="email"
-              required
-              value={email()}
-              onInput={(e) => setEmail(e.currentTarget.value)}
-              placeholder="you@example.com"
-              autocomplete="email"
-            />
-          </div>
-          <div {...stylex.props(styles.field)}>
-            <label {...stylex.props(styles.label)}>密码</label>
-            <input
-              {...stylex.props(styles.input)}
-              type="password"
-              required
-              value={password()}
-              onInput={(e) => setPassword(e.currentTarget.value)}
-              placeholder="至少 8 位"
-              autocomplete={mode() === "signup" ? "new-password" : "current-password"}
-            />
-          </div>
-          <button type="submit" {...stylex.props(styles.submit)} disabled={busy()}>
+          <TextField
+            label="邮箱"
+            type="email"
+            value={email()}
+            onInput={setEmail}
+            placeholder="you@example.com"
+            autocomplete="email"
+          />
+          <TextField
+            label="密码"
+            type="password"
+            value={password()}
+            onInput={setPassword}
+            placeholder="至少 8 位"
+            autocomplete={mode() === "signup" ? "new-password" : "current-password"}
+          />
+          <Button type="submit" block disabled={busy()}>
             {busy() ? "提交中…" : mode() === "signin" ? "登录" : "注册"}
-          </button>
+          </Button>
         </form>
         <Show when={error()}>
           <div {...stylex.props(styles.error)}>{error()}</div>
@@ -202,7 +156,7 @@ export default function LoginPage() {
           <div {...stylex.props(styles.info)}>{info()}</div>
         </Show>
         <div {...stylex.props(styles.hint)}>注册即登录 · 邀请码用于开通频道</div>
-      </div>
+      </Card>
     </div>
   );
 }

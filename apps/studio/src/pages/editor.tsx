@@ -1,7 +1,7 @@
 import { createSignal, For, onMount, Show } from "solid-js";
 import { useNavigate, useSearchParams } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "../theme.stylex.ts";
+import { tokens } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
 import ScriptEditor from "../components/script-editor";
 import GenerateProgress from "../components/generate-progress";

@@ -1,6 +1,6 @@
 import { createSignal, For, onMount, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "../theme.stylex.ts";
+import { tokens } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
 import { ApiError } from "../lib/api";
 import { consumeSse } from "../lib/sse";

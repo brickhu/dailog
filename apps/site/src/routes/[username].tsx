@@ -3,7 +3,7 @@ import { For, Show } from "solid-js";
 import { useParams } from "@solidjs/router";
 import { getChannel, type EpisodeSummary } from "../lib/db";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "../theme.stylex";
+import { tokens } from "@dailogues/ui/theme.stylex";
 
 // 频道页：/@username（简介 + 节目列表 + RSS 订阅入口）
 const styles = stylex.create({

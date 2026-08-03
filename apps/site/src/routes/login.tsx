@@ -1,6 +1,6 @@
 import { createSignal, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "../theme.stylex";
+import { tokens } from "@dailogues/ui/theme.stylex";
 import { env } from "../lib/env";
 
 // 全站统一登录页（dailogues.com/login）：

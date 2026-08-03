@@ -5,7 +5,7 @@ import { Title } from "@solidjs/meta";
 import { getEpisode } from "../../lib/db";
 import { env } from "../../lib/env";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "../../theme.stylex";
+import { tokens } from "@dailogues/ui/theme.stylex";
 
 // 单集页：/episode/:id（播放器 + 元信息；点赞/收藏按钮 Task 4）
 const styles = stylex.create({

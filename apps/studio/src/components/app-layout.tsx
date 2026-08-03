@@ -1,7 +1,7 @@
 import { For } from "solid-js";
 import { useLocation, useNavigate, type RouteSectionProps } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "../theme.stylex.ts";
+import { tokens } from "@dailogues/ui/theme.stylex";
 import { useAuth } from "../lib/auth";
 
 // 两列布局：左导航（节目/设置）+ 右侧内容区（子路由经 props.children 渲染）

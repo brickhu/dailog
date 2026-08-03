@@ -1,6 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
-// 设计 token（StyleX defineVars）：颜色/间距/圆角/字体，全局统一引用
+// 设计 token（StyleX defineVars）唯一源：studio（工作台）与 site（消费端）共享。
+// 注意：defineVars 文件必须保持 .stylex.ts 后缀（StyleX 编译器约定）。
 export const tokens = stylex.defineVars({
   // 品牌
   colorBg: "#0e1116",

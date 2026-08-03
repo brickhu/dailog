@@ -1,7 +1,7 @@
 import { createSignal, For, onMount, Show } from "solid-js";
 import { useNavigate, A } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "../theme.stylex.ts";
+import { tokens } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
 import { useAuth } from "../lib/auth";
 import { env } from "../lib/env";

@@ -1,7 +1,7 @@
 import { createSignal, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "../theme.stylex.ts";
+import { tokens } from "@dailogues/ui/theme.stylex";
 import Recorder from "../components/recorder";
 import { authApi } from "../lib/auth-api";
 import { useAuth } from "../lib/auth";

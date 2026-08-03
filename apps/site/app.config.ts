@@ -16,5 +16,9 @@ export default defineConfig({
         treeshakeCompensation: false,
       }),
     ],
+    ssr: {
+      // 共享设计包是 TS 源码分发（不预编译）：Nitro 必须打包它，不能 externalize
+      noExternal: ["@dailogues/ui"],
+    },
   },
 });
