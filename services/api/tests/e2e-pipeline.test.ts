@@ -138,6 +138,8 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
         await repo.episodes.setEpisodeLanguage(id, language);
         return repo.episodes.saveScript(id, (latest?.version ?? 0) + 1, segments);
       },
+      getPolishCount: (id) => repo.episodes.getPolishCount(id),
+      getPolishLimit: async () => 5,
       llm,
     };
 

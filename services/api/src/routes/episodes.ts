@@ -16,6 +16,10 @@ export interface EpisodesRepo {
   setPublished(id: string): Promise<void>;
   /** 润色完成后持久化对话语言（runner 选片头片尾用） */
   setEpisodeLanguage(id: string, language: string): Promise<void>;
+  /** 对话级润色计数（episodes.polish_count，仅计 LLM 润色保存） */
+  getPolishCount(episodeId: string): Promise<number>;
+  /** LLM 润色保存后 +1（savePolished 内部调用；PUT script 手动保存不计） */
+  incrementPolishCount(episodeId: string): Promise<void>;
   /** 生成管线：episode 归属用户（Task 7 tts 阶段） */
   getEpisodeUserId(episodeId: string): Promise<string | null>;
   /** 生成管线：episode 语言（Task 7 tts 阶段加载，Task 8 merge 使用） */

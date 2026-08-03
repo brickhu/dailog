@@ -190,6 +190,22 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         await db.update(schema.episodes).set({ language }).where(eq(schema.episodes.id, id));
       },
 
+      async getPolishCount(episodeId) {
+        const rows = await db
+          .select({ polishCount: schema.episodes.polishCount })
+          .from(schema.episodes)
+          .where(eq(schema.episodes.id, episodeId))
+          .limit(1);
+        return rows[0]?.polishCount ?? 0;
+      },
+
+      async incrementPolishCount(episodeId) {
+        await db
+          .update(schema.episodes)
+          .set({ polishCount: sql`${schema.episodes.polishCount} + 1` })
+          .where(eq(schema.episodes.id, episodeId));
+      },
+
       async setPublished(id) {
         await db.update(schema.episodes)
           .set({ status: "published", publishedAt: new Date() })

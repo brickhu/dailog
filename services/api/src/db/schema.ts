@@ -113,6 +113,8 @@ export const episodes = pgTable("episodes", {
   status: text("status", { enum: ["draft", "generating", "published", "failed"] }).notNull().default("draft"),
   qualityStatus: text("quality_status", { enum: ["pending", "passed", "rejected"] }).notNull().default("pending"),
   qualityReason: text("quality_reason"),
+  /** 对话级润色上限计数：仅统计 LLM 润色保存（savePolished），手动保存（PUT script）不计 */
+  polishCount: integer("polish_count").notNull().default(0),
   language: text("language"),
   isPublic: boolean("is_public").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

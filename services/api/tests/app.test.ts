@@ -22,6 +22,8 @@ function fakeRepo(): AppDeps["repo"] {
       getEpisodeLanguage: async () => null,
       getHostModelId: async () => null,
       getVoiceSampleKey: async () => null,
+      getPolishCount: async () => 0,
+      incrementPolishCount: async () => {},
       saveVoiceSample: async () => {},
       getVoiceSample: async () => null,
       getEpisodeAudio: async () => null,
@@ -46,6 +48,8 @@ function fakePolish(): AppDeps["polish"] {
     getDialogueMessages: async () => [],
     qualityCheck: async () => ({ pass: true, language: "zh" }),
     savePolished: async (_episodeId, _language, segments) => ({ version: 1, segments }),
+    getPolishCount: async () => 0,
+    getPolishLimit: async () => 5,
     llm: { complete: async () => "", stream: async () => "" },
   };
 }
@@ -90,6 +94,7 @@ function fakeEnv(): Env {
     STORAGE_DIR: "./data",
     ASSETS_DIR: "assets/audio",
     APP_ORIGINS: "",
+    POLISH_MAX_VERSIONS: 5,
   };
 }
 

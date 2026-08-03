@@ -23,6 +23,11 @@ export default function ScriptEditor(props: ScriptEditorProps) {
   const [state, setState] = createSignal<EditorState>({ kind: "loading" });
   const [toast, setToast] = createSignal<string | null>(null);
   const [saving, setSaving] = createSignal(false);
+  // 未保存改动快照（覆盖确认用）：加载/保存成功/润色完成时更新
+  const [savedSegments, setSavedSegments] = createSignal<ScriptSegment[]>([]);
+  // 重新润色方向输入（展开态 + 值）
+  const [directionOpen, setDirectionOpen] = createSignal(false);
+  const [direction, setDirection] = createSignal("");
 
   const update = (op: Parameters<typeof applyScriptOp>[1]) => {
     setState((s) => {
@@ -39,6 +44,7 @@ export default function ScriptEditor(props: ScriptEditorProps) {
       );
       if (existing && Array.isArray(existing.segments)) {
         setState({ kind: "editing", segments: existing.segments, version: existing.version });
+        setSavedSegments(existing.segments);
         return;
       }
       await startPolish();
@@ -47,11 +53,25 @@ export default function ScriptEditor(props: ScriptEditorProps) {
     }
   };
 
-  const startPolish = async () => {
+  /** 重新润色入口：未保存改动先确认（覆盖保护）→ 展开方向输入 */
+  const requestRepolish = () => {
+    const s = state();
+    if (s.kind !== "editing") return;
+    const dirty = JSON.stringify(s.segments) !== JSON.stringify(savedSegments());
+    if (dirty && !window.confirm("重新润色将覆盖当前未保存的改动，继续？")) return;
+    setDirection("");
+    setDirectionOpen(true);
+  };
+
+  const startPolish = async (instruction?: string | null) => {
     setState({ kind: "polishing", segments: [], raw: "" });
+    setDirectionOpen(false);
     let raw = "";
     try {
-      const res = await api.request(`/api/episodes/${props.episodeId}/polish`, { method: "POST" });
+      const res = await api.request(`/api/episodes/${props.episodeId}/polish`, {
+        method: "POST",
+        body: instruction ? JSON.stringify({ instruction }) : undefined,
+      });
       await consumeSse(res, {
         onEvent: (ev) => {
           if (ev.event !== "segment") return;
@@ -68,6 +88,7 @@ export default function ScriptEditor(props: ScriptEditorProps) {
           const { version } = JSON.parse(data) as { version?: number };
           const final = normalize(tryParseSegments(raw) ?? []);
           setState({ kind: "editing", segments: final, version: version ?? null });
+          setSavedSegments(final);
           props.onDone?.(version ?? 0);
         },
         onError: (data) => {
@@ -78,6 +99,8 @@ export default function ScriptEditor(props: ScriptEditorProps) {
     } catch (e) {
       if (e instanceof ApiError && e.status === 422) {
         setState({ kind: "error", message: e.detail ?? "对话质量审核未通过" });
+      } else if (e instanceof ApiError && e.status === 429) {
+        setState({ kind: "error", message: e.detail ?? "该对话的润色次数已达上限" });
       } else if (e instanceof ApiError && e.status === 404) {
         setState({ kind: "error", message: "未找到对话内容" });
       } else {
@@ -95,6 +118,7 @@ export default function ScriptEditor(props: ScriptEditorProps) {
         segments: s.segments,
       });
       setState({ ...s, version: saved.version });
+      setSavedSegments(s.segments);
       setToast("草稿已保存");
       setTimeout(() => setToast(null), 2000);
     } catch (e) {
@@ -156,11 +180,31 @@ export default function ScriptEditor(props: ScriptEditorProps) {
               <button {...stylex.props(styles.button, styles.buttonGhost)} onClick={saveDraft} disabled={saving()}>
                 {saving() ? "保存中…" : "保存草稿"}
               </button>
-              <button {...stylex.props(styles.button, styles.buttonGhost)} onClick={startPolish}>
+              <button {...stylex.props(styles.button, styles.buttonGhost)} onClick={requestRepolish}>
                 重新润色
               </button>
             </div>
           </div>
+          <Show when={directionOpen()}>
+            <div {...stylex.props(styles.directionBox)}>
+              <input
+                {...stylex.props(styles.directionInput)}
+                placeholder="想怎么改？如：更简短、更口语化、换个开场…（可选）"
+                value={direction()}
+                onInput={(e) => setDirection(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") startPolish(direction().trim() || null);
+                  if (e.key === "Escape") setDirectionOpen(false);
+                }}
+              />
+              <button {...stylex.props(styles.button)} onClick={() => startPolish(direction().trim() || null)}>
+                开始润色
+              </button>
+              <button {...stylex.props(styles.button, styles.buttonGhost)} onClick={() => setDirectionOpen(false)}>
+                取消
+              </button>
+            </div>
+          </Show>
           <For each={editing()!.segments}>
             {(seg, i) => (
               <SegmentRow
@@ -304,6 +348,25 @@ const styles = stylex.create({
     background: tokens.colorSurface,
     border: `1px solid ${tokens.colorBorder}`,
     color: tokens.colorText,
+  },
+  directionBox: {
+    display: "flex",
+    gap: tokens.space2,
+    alignItems: "center",
+    marginBottom: tokens.space3,
+    padding: tokens.space2,
+    borderRadius: tokens.radiusMd,
+    background: tokens.colorBg,
+    border: `1px solid ${tokens.colorBorder}`,
+  },
+  directionInput: {
+    flex: 1,
+    padding: `${tokens.space1} ${tokens.space3}`,
+    borderRadius: tokens.radiusSm,
+    border: `1px solid ${tokens.colorBorder}`,
+    background: tokens.colorSurface,
+    color: tokens.colorText,
+    fontSize: tokens.fontSizeSm,
   },
   addButton: {
     marginTop: tokens.space3,

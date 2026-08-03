@@ -1,0 +1,1 @@
+ALTER TABLE "episodes" ADD COLUMN "polish_count" integer DEFAULT 0 NOT NULL;

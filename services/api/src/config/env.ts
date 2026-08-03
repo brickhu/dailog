@@ -17,6 +17,8 @@ const schema = z.object({
   STORAGE_DIR: z.string().default("./data"),
   // 工作台 SPA 跨域白名单（逗号分隔的完整 Origin）；空 = 不放开任何浏览器 Origin
   APP_ORIGINS: z.string().default(""),
+  // 对话级润色上限（PRD §4.7）：每个对话最多 N 个脚本版本（=N 次润色调用）；pro 用户不限
+  POLISH_MAX_VERSIONS: z.coerce.number().default(5),
   // 片头/片尾音频资产目录（Task 11 生成；缺失时 merge 降级为只拼主对话）
   ASSETS_DIR: z.string().default("assets/audio"),
   R2_ACCOUNT_ID: z.string().optional(),

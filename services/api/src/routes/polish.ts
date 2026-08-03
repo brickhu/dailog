@@ -11,6 +11,10 @@ export interface PolishDeps {
   qualityCheck(messages: { role: string; content: string }[]): Promise<QualityResult>;
   savePolished(episodeId: string, language: string, segments: ScriptSegment[]): Promise<{ version: number; segments: ScriptSegment[] }>;
   llm: LlmClient;
+  /** 对话级润色计数（仅计 LLM 润色保存） */
+  getPolishCount(episodeId: string): Promise<number>;
+  /** 对话级润色上限：null = 不限（pro）；free = 5 版（配置化） */
+  getPolishLimit(userId: string): Promise<number | null>;
 }
 
 export function polishRoutes(deps: PolishDeps) {
@@ -19,7 +23,25 @@ export function polishRoutes(deps: PolishDeps) {
   // 挂载时用 app.route("/", polishRoutes(...))，避免前缀重复
   app.post("/api/episodes/:id/polish", async (c) => {
     const episodeId = c.req.param("id");
-    const messages = await deps.getDialogueMessages(episodeId, c.get("userId")).catch(() => null);
+    const userId = c.get("userId") as string;
+    // 润色方向指示（可选，≤100 字）：重新润色时用户可附一句调整方向，拼入 prompt
+    const body = await c.req.json().catch(() => null);
+    const instruction =
+      typeof body?.instruction === "string" && body.instruction.trim().length > 0
+        ? body.instruction.trim().slice(0, 100)
+        : null;
+    // 对话级润色上限（防滥用，在质量门/LLM 调用前拦截，省成本）
+    const limit = await deps.getPolishLimit(userId);
+    if (limit !== null) {
+      const count = await deps.getPolishCount(episodeId);
+      if (count >= limit) {
+        return c.json(
+          { error: "polish_limit_reached", detail: `每个对话最多生成 ${limit} 个脚本版本` },
+          429,
+        );
+      }
+    }
+    const messages = await deps.getDialogueMessages(episodeId, userId).catch(() => null);
     if (!messages || messages.length === 0) return c.json({ error: "no_dialogue" }, 404);
     const quality = await deps.qualityCheck(messages);
     if (!quality.pass) return c.json({ error: "quality_rejected", reason: quality.reason }, 422);
@@ -27,7 +49,7 @@ export function polishRoutes(deps: PolishDeps) {
     return streamSSE(c, async (stream) => {
       let full = "";
       try {
-        const result = await deps.llm.stream(polishPrompt(messages, language), (delta) => {
+        const result = await deps.llm.stream(polishPrompt(messages, language, instruction), (delta) => {
           full += delta;
           void stream.writeSSE({ event: "segment", data: delta });
         });

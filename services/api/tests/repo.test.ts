@@ -27,6 +27,7 @@ function makeEnv(): Env {
     STORAGE_DIR: "./data",
     ASSETS_DIR: "assets/audio",
     APP_ORIGINS: "",
+    POLISH_MAX_VERSIONS: 5,
   };
 }
 
@@ -370,6 +371,8 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
         const latest = await repo.episodes.getLatestScript(episodeId);
         return repo.episodes.saveScript(episodeId, (latest?.version ?? 0) + 1, segments);
       },
+      getPolishCount: (id) => repo.episodes.getPolishCount(id),
+      getPolishLimit: async () => 5,
       llm: {
         complete: async () => "",
         stream: async (_msgs, onDelta) => {

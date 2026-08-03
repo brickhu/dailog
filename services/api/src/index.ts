@@ -73,7 +73,15 @@ const polish: PolishDeps = {
   savePolished: async (episodeId, language, segments) => {
     const latest = await repo.episodes.getLatestScript(episodeId);
     await repo.episodes.setEpisodeLanguage(episodeId, language);
+    // 对话级润色计数（仅计 LLM 润色保存；PUT script 手动保存不走此路径）
+    await repo.episodes.incrementPolishCount(episodeId);
     return repo.episodes.saveScript(episodeId, (latest?.version ?? 0) + 1, segments);
+  },
+  // 对话级润色上限（PRD §4.7）：free = POLISH_MAX_VERSIONS（默认 5 版），pro 不限
+  getPolishCount: (episodeId) => repo.episodes.getPolishCount(episodeId),
+  getPolishLimit: async (userId) => {
+    const quota = await repo.jobs.getQuotaInfo(userId);
+    return quota.plan === "pro" ? null : env.POLISH_MAX_VERSIONS;
   },
   llm,
 };

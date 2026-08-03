@@ -20,8 +20,11 @@ export function qualityCheckPrompt(messages: { role: string; content: string }[]
   }];
 }
 
-/** 润色 prompt：输出 JSON 数组 [{speaker, text}] */
-export function polishPrompt(messages: { role: string; content: string }[], language: string): LlmMessage[] {
+/** 润色 prompt：输出 JSON 数组 [{speaker, text}]；instruction 为用户方向指示（重新润色时可选） */
+export function polishPrompt(messages: { role: string; content: string }[], language: string, instruction?: string | null): LlmMessage[] {
+  const direction = instruction
+    ? `5. 用户方向指示（优先遵循）：${instruction}\n`
+    : "";
   return [{
     role: "system",
     content: `你是播客制作人。把下面的用户与 AI 对话润色成二人对谈播客脚本（用户=主持人 host，AI=嘉宾 guest）。
@@ -29,7 +32,8 @@ export function polishPrompt(messages: { role: string; content: string }[], lang
 1. 语言与对话保持一致（当前语言：${language}）
 2. 目标时长 5-10 分钟（约 1200-3000 字），压缩长段落、去除冗余
 3. 理顺口语化表达，保留原意与关键信息
-4. 输出 JSON 数组：[{"speaker": "host"|"guest", "text": "..."}]，不要输出其他内容`,
+4. 输出 JSON 数组：[{"speaker": "host"|"guest", "text": "..."}]，不要输出其他内容
+${direction}`,
   }, {
     role: "user",
     content: messages.map((m) => `${m.role}: ${m.content}`).join("\n"),
