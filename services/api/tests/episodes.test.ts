@@ -72,6 +72,23 @@ describe("episodes routes", () => {
     expect(res.status).toBe(200);
   });
 
+  it("GET script returns 404 before first polish, then saved script", async () => {
+    const repo = fakeRepo();
+    const app = episodesRoutes(repo, () => "user-1");
+    const before = await app.request("/episodes/ep-1/script");
+    expect(before.status).toBe(404);
+    // 先存一版，再读取
+    await app.request("/episodes/ep-1/script", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ segments: [{ speaker: "host", text: "你好" }] }),
+    });
+    const after = await app.request("/episodes/ep-1/script");
+    expect(after.status).toBe(200);
+    const json = await after.json();
+    expect(json).toMatchObject({ version: 1, segments: [{ speaker: "host", text: "你好" }] });
+  });
+
   it("streams audio when episode has audio (GET /episodes/:id/audio)", async () => {
     const repo = fakeRepo();
     const storage = {

@@ -1,3 +1,5 @@
+// @vitest-environment happy-dom
+// solid JSX 编译产物模块顶层调用 delegateEvents（事件委托），需 DOM 环境
 import { describe, expect, it } from "vitest";
 import { recorderReducer, type RecorderPhase } from "../recorder";
 

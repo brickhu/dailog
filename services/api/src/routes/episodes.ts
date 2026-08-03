@@ -53,6 +53,14 @@ export function episodesRoutes(repo: EpisodesRepo, getUserId: (c: unknown) => st
     if (!ep) return c.json({ error: "not_found" }, 404);
     return c.json(ep);
   });
+  // 润色编辑器加载：最新脚本；从未生成过返回 404（前端据此触发 polish）
+  app.get("/episodes/:id/script", async (c) => {
+    const ep = await repo.getEpisode(c.req.param("id"), getUserId(c));
+    if (!ep) return c.json({ error: "not_found" }, 404);
+    const script = await repo.getLatestScript(c.req.param("id"));
+    if (!script) return c.json({ error: "not_found" }, 404);
+    return c.json(script);
+  });
   app.put("/episodes/:id/script", async (c) => {
     const ep = await repo.getEpisode(c.req.param("id"), getUserId(c));
     if (!ep) return c.json({ error: "not_found" }, 404);
