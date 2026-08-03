@@ -14,6 +14,8 @@
 | [PRD.md](./PRD.md) | 产品设计与功能：流程、MVP 功能清单、页面、边界 | ✅ 已确认 |
 | [ARC.md](./ARC.md) | 技术架构：栈、拓扑、API、管线、数据模型、成本、测试 | ✅ 已确认 |
 | [MRD.md](./MRD.md) | 产品定位、市场策略、商业模式、竞争优势、风险 | 🟡 初稿待审（市场部分为起草） |
+| [docs/pitch-narrative.md](./docs/pitch-narrative.md) | 融资叙事：一句话定位、五幕讲稿、质疑反击话术、90 天验证计划 | 🟡 初稿（2026-08-03） |
+| [docs/pitch-deck.md](./docs/pitch-deck.md) | Pitch Deck 大纲：10 页结构 + 每页内容/台词/视觉 + Demo 脚本 + Q&A 预判 | 🟡 初稿（2026-08-03） |
 
 ## 工程目录参考（monorepo，待实施）
 
@@ -72,7 +74,7 @@ dailogues/
 
 ## 技术要点速查
 
-- 前端：SolidJS + Solid Router + StyleX（两站共用设计 token）
+- 前端：SolidJS + Solid Router + StyleX（设计 token 与基础组件统一在共享包 `packages/ui`，见下节约束）
 - 后端：Node + TypeScript + Hono + Drizzle + fluent-ffmpeg
 - 认证：**better-auth**（自托管邮箱+密码会话，后端中间件验证）；注册开放，**邀请码用于开通频道**（未开通不能生成/发布）
 - 生成管线：TTS = **Fish Audio**（形态已实测，`docs/spikes/fish-audio.md`）——**多说话人一次调用**：`text` 内嵌 `<|speaker:N|>` 标签 + `reference_id` 数组（**非 text/chunks 数组**）；主持人零样本克隆走 **msgpack `references` 内联音频**（JSON 无 base64 字段、带不了原始音频）；**混合模式受限**（一次调用不能混用内联 + 固定 id）→ 按段 fallback（host 段 msgpack 内联零样本 + guest 段固定音色逐段合成，实测形态）+ ffmpeg 拼接；单请求 ≥12000 中文未触上限；免费模型 `s2.1-pro-free`（$0）可用；默认 `temperature=0.7` 一致性波动 ~12%（可接受）→ ffmpeg 拼接固定片头片尾 → R2；备选切换预案见 ARC §3.3 / `docs/spikes/tts-comparison.md`
@@ -82,6 +84,23 @@ dailogues/
 - 导入：**浏览器扩展统一采集**（登录态下读取本人对话，含元数据：标题/对话ID/平台/原始链接，无验证码、无分享链接）；**平台分级（`docs/spikes/chat-dom.md`）**：首发 Claude/DeepSeek（高），次批 ChatGPT（中~高），Gemini（中）/Kimi、豆包（中~低）/通义（低）按需；虚拟列表平台（ChatGPT/DeepSeek/Gemini/豆包）走**滚动采集循环 + 去重**；元数据取 URL + `document.title`；回传统一走 **background service worker**（Claude CSP）；**扩展定位=采集器（thin）**，创作发布仍在 SPA
 - 邀请码：管理员 CLI + 用户奖励（>3 期后每发布一期 +1）；**注册开放，授权码开通频道**
 - 成本策略：除 LLM/TTS/Stripe 外：CF/R2 免费 + better-auth $0；Railway（API+DB）约 $10–25/月
+
+## 共享设计系统约束（StyleX 硬性规则）
+
+设计 token 与基础组件唯一源在 **`packages/ui`**（`@dailogues/ui`），studio 与 site 两站共享。以下规则违反会导致构建失败或样式漂移，改动必须遵守：
+
+1. **tokens 导入路径必须以 `.stylex.ts` 结尾**：
+   `import { tokens } from "@dailogues/ui/theme.stylex"`
+   - 禁止从 barrel 导入：`import { tokens } from "@dailogues/ui"` ❌（StyleX 编译器要求变量导入静态解析到 `.stylex` 文件，barrel 重导出直接构建报错）
+   - 共享组件内部用相对路径 `../theme.stylex` 导入 tokens
+2. **本地禁止新建/修改 theme.stylex.ts**：token 值只能改 `packages/ui/src/theme.stylex.ts`（两站同步生效，无本地副本）
+3. **新增共享组件**：加入 `packages/ui/src/components/`，从 barrel（`src/index.ts`）导出；
+   - 组件文件内禁用 `window`/`document` 顶层依赖（site 是 SSR，必须服务端渲染安全）
+   - 共享包**源码分发、不预编译**（两站各自的 StyleX 管线处理，勿给 packages/ui 加构建产物）
+4. **应用侧配置（改配置时必须保留）**：
+   - `apps/studio`、`apps/site` 的 package.json 依赖含 `"@dailogues/ui": "workspace:^"`
+   - `apps/site/app.config.ts` 的 vite 含 `ssr.noExternal: ["@dailogues/ui"]`（Nitro 必须打包 TS 源码）
+5. **改共享包后必跑验证**：`apps/studio` 与 `apps/site` 的 `typecheck` + `build` 全绿（site 另跑 workerd 冒烟：`npx wrangler pages dev dist`）
 
 ## 里程碑
 
@@ -100,3 +119,4 @@ dailogues/
 - 文档改动同步更新 AGENT.md 索引与里程碑
 - 实现时所有供应商密钥经环境变量注入，不提交仓库
 - 解析器新增平台：加 fixture 测试 + 更新 PRD §4.3 平台清单
+- 前端样式/组件改动遵循「共享设计系统约束」章节；新增 UI 一律优先复用 `@dailogues/ui`
