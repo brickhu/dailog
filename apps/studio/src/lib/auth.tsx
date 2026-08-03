@@ -22,6 +22,9 @@ export function AuthProvider(props: { children: JSX.Element }) {
   const [accessToken, setAccessToken] = createSignal<string | null>(null);
 
   onMount(async () => {
+    // 无论是否已有 token，先注册 token getter（注册/登录后 accessToken signal 更新即生效；
+    // 若不注册，未登录进入页面的会话在注册后 api client 仍拿不到 token）
+    setTokenGetter(() => accessToken());
     const token = loadToken();
     if (!token) {
       setLoading(false);
@@ -35,7 +38,6 @@ export function AuthProvider(props: { children: JSX.Element }) {
     } else {
       clearToken();
     }
-    setTokenGetter(() => accessToken());
     setLoading(false);
   });
 

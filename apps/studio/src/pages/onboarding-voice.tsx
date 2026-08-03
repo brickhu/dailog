@@ -79,7 +79,9 @@ export default function OnboardingVoice() {
       await uploadVoiceSample(b);
       navigate("/dashboard");
     } catch (e) {
-      if (e instanceof ApiError && e.status === 502) {
+      if (e instanceof ApiError && e.status === 401) {
+        setError("登录状态已失效，请重新登录后再试");
+      } else if (e instanceof ApiError && e.status === 502) {
         setError("音色模型训练失败（可能是 Fish 额度不足）。你仍然可以继续，但声音效果会打折扣。");
       } else {
         setError(e instanceof Error ? e.message : "上传失败，请重试");
