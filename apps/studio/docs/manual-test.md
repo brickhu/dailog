@@ -1,5 +1,7 @@
 # 工作台 SPA 本地手测清单（计划 5 验收）
 
+> **⚠️ 架构变更（2026-08-03 决策）**：认证方案由 Supabase Auth 改为 **better-auth**（自托管，与后端同库 Railway Postgres）。本清单中基于 supabase-js 的登录/注册步骤与 `VITE_SUPABASE_*` 配置将在 **M5 迁移任务**中切换到 better-auth（`/api/auth/*` + email+password + 同库用户表）；届时更新本文件对应条目。
+
 ## 前置
 
 ```bash

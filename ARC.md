@@ -11,8 +11,8 @@
 | 内容站 SSR（dailogues.com） | SolidStart（SSR）+ StyleX | Cloudflare Pages/Workers（免费） |
 | **采集扩展（浏览器扩展）** | **Manifest V3**：content script 按平台解析 + background service worker 回传 | Chrome/Edge 商店（用户侧安装，登录态采集） |
 | 统一后端（api.dailogues.com） | Node.js + TypeScript + Hono + Drizzle ORM + fluent-ffmpeg | **Railway**（Git 集成自动部署，Docker，按用量约 $5–10/月） |
-| 数据库 | Supabase Postgres | Supabase 免费额度（500MB） |
-| 认证 | Supabase Auth（邮箱 + 密码，邀请码门禁） | Supabase 免费额度（5 万 MAU） |
+| 数据库 | Railway Postgres（纯 Postgres 用法：Drizzle + postgres.js 直连） | Railway（与后端同平台，~$5–15/月） |
+| 认证 | **better-auth**（自托管：邮箱 + 密码 + 会话，跑在统一后端内） | $0 无外部依赖（邮件验证可后接 Resend 免费额度） |
 | 对象存储 | Cloudflare R2（音频/封面/录音样本） | R2 免费 10GB + 流量永久免费 |
 | LLM（质量审核 + 润色 + 语言检测） | **DeepSeek**（OpenAI 兼容接口，配置化可切换） | 外部按量（成本低） |
 | 语音合成 | Fish Audio TTS（多说话人 + 声音克隆） | 外部按量 |
@@ -49,23 +49,24 @@ app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
                               └────────┬─────────────────────────┘
                                        │
                         ┌──────────────▼──────────────┐
-                        │ Supabase (免费)              │
-                        │  Postgres + Auth             │
+                        ┌──────────────▼──────────────┐
+                        │ Railway Postgres（~$5–15/月） │
+                        │  Postgres + better-auth 用户   │
                         │  用户/邀请码/节目/脚本/任务/订阅 │
                         └─────────────────────────────┘
 ```
 
-**数据流向**：扩展在用户登录态下采集对话（真实性=登录态）→ 回传统一后端落库；SPA 与 SSR 站读 Supabase（内容站直连读库，不走统一后端）；统一后端是唯一写方；音频资产全部在 R2。
+**数据流向**：扩展在用户登录态下采集对话（真实性=登录态）→ 回传统一后端落库；SPA 与 SSR 站读 Railway Postgres（内容站直连读库，只读查询；无 RLS，靠查询层约束）；统一后端是唯一写方；音频资产全部在 R2。
 
 ## 3. 统一后端（services/api）
 
 ### 3.1 技术选型
 
 - Node.js + TypeScript + **Hono**（轻量路由，SSE/流式友好）
-- **Drizzle ORM** + Supabase Postgres（迁移 + 类型安全）
+- **Drizzle ORM** + Railway Postgres（迁移 + 类型安全）
 - **fluent-ffmpeg**（片头/主对话/片尾拼接；镜像内置 ffmpeg）
 - LLM：**DeepSeek**（OpenAI 兼容 SDK），默认 `deepseek-chat`（质量审核 + 润色 + 语言检测；`deepseek-reasoner` 作为备选可切换），供应商配置化（`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`）
-- 认证：校验 Supabase JWT（JWKS 拉取公钥），RBAC 仅区分 `authenticated`
+- 认证：**better-auth**（自托管，邮箱 + 密码 + 会话；后端中间件验证会话，不再依赖外部 auth 平台）
 - 任务队列：**进程内队列 + `generation_jobs` 表**（MVP 不引 Redis；进程重启时从 DB 恢复 `queued` 任务，单实例串行消费）
 
 ### 3.2 API 端点
@@ -73,6 +74,7 @@ app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 | 方法/路径 | 认证 | 作用 |
 |---|---|---|
 | `GET /health` | — | 健康检查（Railway healthcheckPath） |
+| `POST /api/auth/*` | — | **better-auth 会话路由**（注册/登录/登出/会话；注册含邀请码校验） |
 | `GET /api/me` | ✓ | 当前用户（认证中间件验证） |
 | `POST /api/imports` | ✓ | 接收扩展回传的结构化对话（platform + 幂等票据）→ 落库（imports + draft episode 同事务），返回 `{ importId, episodeId }` |
 | `POST /api/episodes/:id/polish` | ✓ | SSE 流式润色：先质量审核（轻量 LLM 预检，不达标返回 422 + 原因）→ 语言检测 → 流式返回脚本段落 |
@@ -134,7 +136,7 @@ queued → tts → merge → upload → done（failed 可重试）
 - 适配成本：每平台一个 DOM 解析适配器（滚动机制 + 消息块结构），平台页面改版需定点维护
 - 商店上架（Chrome/Edge）审核周期入排期；移动端暂不支持（Safari 扩展另行评估）
 
-## 4. 数据模型（Supabase Postgres）
+## 4. 数据模型（Railway Postgres）
 
 | 表 | 关键字段 |
 |---|---|
@@ -169,7 +171,7 @@ assets/intro.zh.mp3 / intro.en.mp3 / outro.zh.mp3 / outro.en.mp3   ← 固定片
 - SolidStart + Cloudflare adapter，SSR 部署于 CF Pages/Workers
 - 路由：`/`（最新/热门/搜索）、`/@username`（频道页）、`/episode/:id`（单集页，id = 节目短 ID）、`/@username/feed.xml`（RSS）
 - RSS：itunes 元数据 + 封面 + 节目列表；feed 响应加 CF 短 TTL 缓存（防高频拉取）
-- 直连 Supabase 读公开数据（RLS 只读 + 服务端只暴露公开字段）
+- 直连 Railway Postgres 读公开数据（只读查询 + 服务端只暴露公开字段）
 
 ### 5.3 共享
 
@@ -186,13 +188,13 @@ assets/intro.zh.mp3 / intro.en.mp3 / outro.zh.mp3 / outro.en.mp3   ← 固定片
 | 项 | 成本 |
 |---|---|
 | Cloudflare Pages/Workers + R2 | 免费（10GB 存储，流量免费） |
-| Supabase（Postgres + Auth） | 免费（500MB / 5 万 MAU） |
+| Railway Postgres（统一后端 + 数据库 + Auth） | DB ~$5–15/月；Auth（better-auth 自托管）$0 |
 | Railway（统一后端） | 按用量约 $5–10/月（小规格常驻服务；Git 集成自动部署） |
 | LLM 润色 | 按量，每期约几美分 |
 | Fish Audio | 按量（$15/百万 UTF-8 字节，中文 1 字 3 字节；10 分钟期 ≈ ¥0.97，实测见 `docs/spikes/fish-audio.md`） |
 | Stripe | 2.9% + $0.30/笔 |
 
-超出免费额度的触发点：R2 >10GB、Supabase >500MB；Railway 随用量线性增长（可设用量上限告警）。
+超出免费额度的触发点：R2 >10GB；Railway（API+DB）随用量线性增长（可设用量上限告警）。
 
 ## 8. 测试策略
 

@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
+> **⚠️ 架构变更（2026-08-03 决策）**：认证方案由 Supabase Auth 改为 **better-auth**（自托管，与后端同库 Railway Postgres）。Task 1-3 中基于 supabase-js 的认证基建（auth.tsx、登录/注册页）在 **M5 迁移任务**中切换到 better-auth 客户端；后续未执行任务按目标态实现。前置条件中的 `VITE_SUPABASE_ANON_KEY` 不再需要。
+
 **Goal:** 实现用户工作台单页应用（SolidJS + StyleX + Solid Router）：登录/注册 → 录音引导（声音克隆样本）→ 节目列表 → 四步向导（选对话 → 润色编辑 → 生成进度/试听 → 发布）→ 设置。与扩展采集器和统一后端打通，本地可完整跑通。
 
 **Architecture:** `apps/studio/` 独立 Vite 应用（不依赖 SolidStart，纯 SPA 静态部署 CF Pages）。认证用 **supabase-js**（云端 Supabase Auth 签发 JWT，api 用 JWKS 校验同一 token——SPA 登录后直接可用）。API 客户端 fetch wrapper 带 Bearer；润色 SSE 用 **fetch 流式解析**（EventSource 无法带 Authorization 头）。录音用 `getUserMedia + MediaRecorder`（本地/HTTPS 环境可用），上传 `POST /api/me/voice-sample` 触发 Fish fast 音色训练。四步向导中"生成"步骤轮询 `GET /api/episodes/:id/job`（阶段 + 百分比）。扩展 token 注入：`chrome.runtime.sendMessage(EXTENSION_ID, {type:"dailogues:set-token"})`（background.ts 已实现接收端）。
