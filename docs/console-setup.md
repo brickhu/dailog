@@ -22,7 +22,7 @@
 | 变量 | 开发环境 | 生产环境 |
 |---|---|---|
 | `DATABASE_URL` | 本环境 Postgres | 本环境 Postgres |
-| `APP_ORIGINS` | `https://app.candelbot.app,https://candelbot.app,http://localhost:5173,http://localhost:3000` | `https://app.dailogues.com,https://dailogues.com` |
+| `APP_ORIGINS` | `https://app.candelbot.app,https://candelbot.app,https://dailog.pages.dev,http://localhost:5173,http://localhost:3000`（每次新增前端域名都要补） | `https://app.dailogues.com,https://dailogues.com` |
 | `DEEPSEEK_API_KEY` / `BASE_URL` / `MODEL` | ✓ | ✓ |
 | `FISH_API_KEY` / `FISH_PROXY_URL` / `FISH_GUEST_REFERENCE_ID` | ✓ | ✓ |
 | `STORAGE_DRIVER` | `fs`（或 r2） | `r2` + `R2_ACCOUNT_ID/ACCESS_KEY/SECRET_KEY/BUCKET` |
