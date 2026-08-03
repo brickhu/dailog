@@ -29,6 +29,8 @@
 
 7. [ ] Development 环境首次部署后跑迁移（Service → Exec 或本地 `railway run`）：
    `pnpm --filter @dailogues/api db:migrate`
+8. [ ] 生成首批邀请码（注册门禁；admin user 自动创建）：
+   `pnpm --filter @dailogues/api invites:create <code> [--expires <days>]`
 
 ## 2. Cloudflare Pages（SPA）
 
