@@ -82,3 +82,22 @@ VITE_EXTENSION_ID=<dev 扩展 id>   # 留空则隐藏扩展连接卡
 - 录音需要麦克风权限（localhost 可）；若 headless 环境跳过录音，可先用 POST /api/me/voice-sample 直传替代验证
 - Fish 音色训练与生成需要 API 额度；未充值时验证到"训练失败提示"与"生成失败重试"即可
 - 扩展注入的是 better-auth session token（非 JWT）——协议与 M5 前一致（Authorization: Bearer）
+
+---
+
+## 计划 6 补充：消费站 + SSO 验证链（apps/site）
+
+### 前置
+```bash
+pnpm dev                  # api + studio
+cd apps/site && pnpm dev  # 消费站（3000，.env.local 已配 DATABASE_URL）
+```
+
+### 验证链
+- [ ] `localhost:3000` 首页显示 fixture/已发布节目（最新列表）
+- [ ] `localhost:3000/@fixture-channel` 频道页（简介 + 列表 + RSS 链接）
+- [ ] `localhost:3000/episode/:id` 单集页（播放器 + 点赞/收藏按钮）
+- [ ] `localhost:3000/@fixture-channel/feed.xml` RSS（itunes:duration + enclosure）
+- [ ] **SSO**：`localhost:3000/login` 登录 → 跳回 → **`localhost:5173` 刷新即已登录**（无需二次登录，跨端口 cookie）
+- [ ] 单集页收藏 → `localhost:3000/me` 可见；未登录点收藏 → 跳 `/login?redirect=...`
+- [ ] 扩展：studio 登录后自动注入（无需点"连接扩展"）；采集 401 → 自动打开登录页
