@@ -235,6 +235,9 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       if (job.status === "done" || job.status === "failed") break;
       await sleep(1000);
     }
+    if (job?.status !== "done") {
+      console.log("JOB_FAILED_DETAIL:", JSON.stringify(job));
+    }
     expect(job?.status).toBe("done");
 
     // 5. 产物断言：episode.audio_url 已更新 + 存储文件存在且 > 1KB（真实 TTS + ffmpeg 拼接产物）
