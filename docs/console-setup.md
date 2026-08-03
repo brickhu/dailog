@@ -29,7 +29,7 @@
 | `BETTER_AUTH_SECRET` | 已启用（各环境独立随机） | 同左 |
 | `BETTER_AUTH_URL` | `https://gracious-caring-development.up.railway.app`（dev） | `https://api.dailogues.com`（生产必改） |
 | `BETTER_AUTH_COOKIE_DOMAIN` | 留空（host-only） | `.dailogues.com`（SSO 跨子域 cookie） |
-| `PORT` | 8787 | 8787 |
+| `PORT` | 不配（Railway 默认 8080；内部端口与公网域名无关，healthcheck 自动探测） | 同左 |
 
 7. [x] 迁移**随部署自动执行**（Dockerfile CMD = `pnpm db:migrate && pnpm start`；drizzle 幂等，已应用自动跳过）。手动兜底：
    `pnpm --filter @dailogues/api db:migrate`（Service → Exec 或本地 `railway run`）
