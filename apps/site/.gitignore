@@ -3,3 +3,7 @@ node_modules/
 dist/
 .output/
 .env.local
+
+# wrangler pages dev 本地缓存与变量（含 DATABASE_URL，勿入库）
+.dev.vars
+.wrangler/
