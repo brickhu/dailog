@@ -4,6 +4,7 @@ declare const chrome: {
     onMessage: {
       addListener: (listener: (message: any, sender: any, sendResponse: (response: unknown) => void) => boolean | void) => void;
     };
+    sendMessage: (message: unknown) => Promise<unknown>;
   };
 };
 
@@ -11,6 +12,8 @@ import { MSG_COLLECT, type CollectResult } from "./shared";
 import { collectFromDocument } from "./content/collector";
 import { parseDeepSeekPage } from "./content/deepseek";
 import { waitForMutation } from "./content/mutation";
+import { createFab } from "./content/ui";
+import { runCollectFlow } from "./content/collect-flow";
 
 function deepSeekScroll() {
   const container = document.querySelector(".ds-scroll-area");
@@ -22,6 +25,19 @@ function deepSeekScroll() {
   };
 }
 
+// 浮动采集按钮（支持平台对话页注入，manifest matches 已限定）
+const fab = createFab({
+  onClick: () => {
+    fab.setBusy(true);
+    void runCollectFlow({
+      collect: () => collectFromDocument({ root: document, url: location.href, scroll: deepSeekScroll() }),
+      send: async (msg) => (await chrome.runtime.sendMessage(msg)) as CollectResult | undefined,
+      onResult: (text, kind) => fab.showToast(text, kind),
+    }).finally(() => fab.setBusy(false));
+  },
+});
+
+// 保留消息监听（供未来 popup/扩展页触发采集）
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type !== MSG_COLLECT) return;
   collectFromDocument({ root: document, url: location.href, scroll: deepSeekScroll() })
