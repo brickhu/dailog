@@ -1,7 +1,7 @@
 import { createAsync } from "@solidjs/router";
 import { For, Show } from "solid-js";
 import { useParams } from "@solidjs/router";
-import { siteDb, type EpisodeSummary } from "../lib/db";
+import { getChannel, type EpisodeSummary } from "../lib/db";
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "../theme.stylex";
 
@@ -83,7 +83,7 @@ export default function ChannelPage() {
   const params = useParams<{ username: string }>();
   // URL /@username → 路由参数含 @ 前缀，查询前归一化
   const username = () => params.username.replace(/^@/, "");
-  const data = createAsync(() => siteDb.getChannel(username()));
+  const data = createAsync(() => getChannel(username()));
 
   return (
     <div {...stylex.props(styles.page)}>

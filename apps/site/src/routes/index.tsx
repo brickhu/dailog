@@ -1,6 +1,6 @@
 import { createAsync } from "@solidjs/router";
 import { For, Show } from "solid-js";
-import { siteDb, type EpisodeSummary } from "../lib/db";
+import { listLatestEpisodes, type EpisodeSummary } from "../lib/db";
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "../theme.stylex";
 
@@ -77,7 +77,7 @@ function fmtDuration(sec: number | null): string {
 }
 
 export default function Home() {
-  const episodes = createAsync<EpisodeSummary[]>(() => siteDb.listLatestEpisodes());
+  const episodes = createAsync<EpisodeSummary[]>(() => listLatestEpisodes());
 
   return (
     <div {...stylex.props(styles.page)}>

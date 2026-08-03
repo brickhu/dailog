@@ -4,15 +4,6 @@
 "use server";
 import postgres from "postgres";
 
-// dev 时 vinxi SSR 运行时不注入 .env.local 到 process.env：Node 22 原生加载（生产平台注入则跳过）
-if (!process.env.DATABASE_URL) {
-  try {
-    process.loadEnvFile(".env.local");
-  } catch {
-    /* 生产环境无此文件，变量由部署平台注入 */
-  }
-}
-
 export interface EpisodeSummary {
   id: string;
   slug: string;
@@ -40,6 +31,15 @@ let sql: postgres.Sql | null = null;
 /** 惰性单例连接（SSR 请求间复用；只读：默认 sslmode=require + 只执行 SELECT） */
 function db(): postgres.Sql {
   if (!sql) {
+    // dev 时 vinxi SSR 运行时不注入 .env.local：Node 22 原生加载（生产平台注入则跳过）。
+    // 放在函数内而非模块顶层——server function 转换会复制顶层语句进 client 桩。
+    if (!process.env.DATABASE_URL) {
+      try {
+        process.loadEnvFile(".env.local");
+      } catch {
+        /* 生产环境无此文件，变量由部署平台注入 */
+      }
+    }
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error("DATABASE_URL 未配置（apps/site/.env.local）");
     sql = postgres(url, { max: 5 });
@@ -47,9 +47,8 @@ function db(): postgres.Sql {
   return sql;
 }
 
-export const siteDb = {
-  /** 最新已发布节目（首页） */
-  async listLatestEpisodes(limit = 20): Promise<EpisodeSummary[]> {
+/** 最新已发布节目（首页） */
+export async function listLatestEpisodes(limit = 20): Promise<EpisodeSummary[]> {
     return db()`
       SELECT e.id, e.slug, e.title, e.description,
              e.duration_seconds AS "durationSeconds",
@@ -62,10 +61,10 @@ export const siteDb = {
       ORDER BY e.published_at DESC
       LIMIT ${limit}
     ` as unknown as Promise<EpisodeSummary[]>;
-  },
+}
 
-  /** 单集详情（仅 published 公开） */
-  async getEpisode(id: string): Promise<EpisodeSummary | null> {
+/** 单集详情（仅 published 公开） */
+export async function getEpisode(id: string): Promise<EpisodeSummary | null> {
     const rows = await db()`
       SELECT e.id, e.slug, e.title, e.description,
              e.duration_seconds AS "durationSeconds",
@@ -78,10 +77,10 @@ export const siteDb = {
       LIMIT 1
     `;
     return (rows[0] as unknown as EpisodeSummary | undefined) ?? null;
-  },
+}
 
-  /** 频道页：简介 + 节目列表 */
-  async getChannel(username: string): Promise<{ channel: ChannelSummary | null; episodes: EpisodeSummary[] }> {
+/** 频道页：简介 + 节目列表 */
+export async function getChannel(username: string): Promise<{ channel: ChannelSummary | null; episodes: EpisodeSummary[] }> {
     const rows = await db()`
       SELECT p.username, p.display_name AS "displayName", p.bio,
              COUNT(e.id)::int AS "episodeCount"
@@ -111,7 +110,4 @@ export const siteDb = {
       ORDER BY e.published_at DESC
     `;
     return { channel, episodes: episodes as unknown as EpisodeSummary[] };
-  },
-};
-
-export type SiteDb = typeof siteDb;
+}

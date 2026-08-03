@@ -2,7 +2,7 @@ import { createAsync } from "@solidjs/router";
 import { createSignal, Show } from "solid-js";
 import { useParams } from "@solidjs/router";
 import { Title } from "@solidjs/meta";
-import { siteDb } from "../../lib/db";
+import { getEpisode } from "../../lib/db";
 import { env } from "../../lib/env";
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "../../theme.stylex";
@@ -116,7 +116,7 @@ function InteractButtons(props: { episodeId: string }) {
 
 export default function EpisodePage() {
   const params = useParams<{ id: string }>();
-  const ep = createAsync(() => siteDb.getEpisode(params.id));
+  const ep = createAsync(() => getEpisode(params.id));
   const audioUrl = () =>
     ep()?.audioUrl ? `${env.apiBaseUrl}/${ep()!.audioUrl}` : null;
 

@@ -1,4 +1,4 @@
-import { siteDb } from "../../lib/db";
+import { getChannel } from "../../lib/db";
 import { env } from "../../lib/env";
 
 // RSS 2.0：/@username/feed.xml（播客订阅；enclosure = 音频 URL）
@@ -13,7 +13,7 @@ function xmlEscape(s: string): string {
 }
 
 export async function GET(event: { params: { username: string } }) {
-  const { channel, episodes } = await siteDb.getChannel(event.params.username.replace(/^@/, ""));
+  const { channel, episodes } = await getChannel(event.params.username.replace(/^@/, ""));
   if (!channel) {
     return new Response("channel not found", { status: 404 });
   }

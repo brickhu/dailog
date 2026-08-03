@@ -31,12 +31,12 @@
 - Modify: `services/api/src/app.ts` / `index.ts`（挂载 + deps）
 - Test: `services/api/tests/favorites.test.ts` + CORS 用例更新
 
-- [ ] **Step 1: 写失败测试**——favorites.test.ts：收藏 toggle（POST 收藏 → GET /api/me/favorites 含该集 → DELETE 取消）；点赞 toggle（同用户重复点赞幂等）；未登录 401；他人 episode 收藏 404（归属校验）。CORS：credentials 请求带 Allow-Credentials 头。
-- [ ] **Step 2: schema + 迁移**——`favorites(id, userId fk→user, episodeId fk→episodes, createdAt, unique(userId, episodeId))`、`likes` 同构。
-- [ ] **Step 3: 端点**——`POST/DELETE /api/episodes/:id/favorite`（episode 存在校验 → upsert/delete → `{ favorited: bool }`）；like 同款；`GET /api/me/favorites`（join episodes：id/title/status/audioUrl/durationSeconds/publishedAt）。
-- [ ] **Step 4: GET /api/auth/token**——cookie 会话（`auth.api.getSession`）→ `{ token }`；无会话 401。SPA 扩展注入用。
-- [ ] **Step 5: CORS credentials**——`Access-Control-Allow-Credentials: true`（仅白名单 Origin 时附带）。
-- [ ] **Step 6: 测试通过 + 全量回归**。
+- [x] **Step 1: 写失败测试**——favorites.test.ts：收藏 toggle（POST 收藏 → GET /api/me/favorites 含该集 → DELETE 取消）；点赞 toggle（同用户重复点赞幂等）；未登录 401；他人 episode 收藏 404（归属校验）。CORS：credentials 请求带 Allow-Credentials 头。
+- [x] **Step 2: schema + 迁移**——`favorites(id, userId fk→user, episodeId fk→episodes, createdAt, unique(userId, episodeId))`、`likes` 同构。
+- [x] **Step 3: 端点**——`POST/DELETE /api/episodes/:id/favorite`（episode 存在校验 → upsert/delete → `{ favorited: bool }`）；like 同款；`GET /api/me/favorites`（join episodes：id/title/status/audioUrl/durationSeconds/publishedAt）。
+- [x] **Step 4: GET /api/auth/token**——cookie 会话（`auth.api.getSession`）→ `{ token }`；无会话 401。SPA 扩展注入用。
+- [x] **Step 5: CORS credentials**——`Access-Control-Allow-Credentials: true`（仅白名单 Origin 时附带）。
+- [x] **Step 6: 测试通过 + 全量回归**。
 
 ### Task 2: SSR 站骨架（apps/site）
 
@@ -46,11 +46,11 @@
 - Create: `apps/site/src/lib/db.ts`（server-only 只读连接 + 查询层）
 - Create: `apps/site/src/theme.stylex.ts`（消费端 token，与 studio 同体系）
 
-- [ ] **Step 1: 脚手架 spike**——SolidStart + CF Pages adapter + StyleX（unplugin）最小 SSR 渲染验证（本地 `pnpm dev` + `pnpm build` 通过）。
-- [ ] **Step 2: server-only 读库**——`src/lib/db.ts`：postgres.js 只读连接（`?sslmode=require` 生产）暴露查询：getPublishedEpisodes（最新/热门排序）、getEpisodeById（published 过滤）、getChannelByUsername（profile + episodes）、getChannelFeed（RSS 数据）。
-- [ ] **Step 3: 路由页**——`/`（最新 + 热门列表，纯展示）；`/@username`（频道页：简介 + 节目列表）；`/episode/:id`（单集页：标题/描述/时长/audio 播放器 + 点赞/收藏按钮（登录态感知）+ "查看原文"入口）；`/@username/feed.xml`（RSS 2.0：title/link/description/pubDate/enclosure mp3——id = episode 短 id）。
-- [ ] **Step 4: 消费端样式**——首页/频道页/单集页 StyleX（token 复用 + 消费端排版）。
-- [ ] **Step 5: 本地验证**——fixture 数据（DB 造 published episode）→ 三页渲染 + RSS XML 校验。
+- [x] **Step 1: 脚手架 spike**——SolidStart + CF Pages adapter + StyleX（unplugin）最小 SSR 渲染验证（本地 `pnpm dev` + `pnpm build` 通过）。
+- [x] **Step 2: server-only 读库**——`src/lib/db.ts`：postgres.js 只读连接（`?sslmode=require` 生产）暴露查询：getPublishedEpisodes（最新/热门排序）、getEpisodeById（published 过滤）、getChannelByUsername（profile + episodes）、getChannelFeed（RSS 数据）。
+- [x] **Step 3: 路由页**——`/`（最新 + 热门列表，纯展示）；`/@username`（频道页：简介 + 节目列表）；`/episode/:id`（单集页：标题/描述/时长/audio 播放器 + 点赞/收藏按钮（登录态感知）+ "查看原文"入口）；`/@username/feed.xml`（RSS 2.0：title/link/description/pubDate/enclosure mp3——id = episode 短 id）。
+- [x] **Step 4: 消费端样式**——首页/频道页/单集页 StyleX（token 复用 + 消费端排版）。
+- [x] **Step 5: 本地验证**——fixture 数据（DB 造 published episode）→ 三页渲染 + RSS XML 校验。
 
 ### Task 3: 统一登录（SSO）+ SPA 会话切换
 
@@ -61,11 +61,11 @@
 - Modify: `apps/studio/src/lib/auth.tsx`（cookie 优先，localStorage 兜底）
 - Modify: `apps/studio/src/lib/guards.tsx`（未登录跳 `dailogues.com/login?redirect=`，dev 保持 /login）
 
-- [ ] **Step 1: server 代理**——`apps/site/src/server/auth-proxy.ts`：`POST /api/auth/sign-in/email`、`sign-up/email`、`sign-out`、`GET /api/auth/get-session` 转发 api.dailogues.com（env `API_BASE_URL`）；登录成功响应透传 token → server 侧 `set-cookie: dailogues_session=token; Domain=.dailogues.com; Path=/; HttpOnly; SameSite=Lax`（本地 dev Domain 省略/用 localhost 验证）。
-- [ ] **Step 2: /login 页**——登录/注册切换表单（样式同 studio 风格）；成功 → 302 回 `redirect`（白名单：仅允许 dailogues.com/app.dailogues.com 域）；本地 dev 回跳 localhost 端口。
-- [ ] **Step 3: 会话中间件**——SSR 页读取 cookie → 转发 `get-session` 验证（server 端，带 User-Agent）→ 注入页面上下文（header 显示登录邮箱/登出按钮）。
-- [ ] **Step 4: SPA 会话切换**——api client `credentials: "include"`（cookie 自动带）；`auth.tsx`：启动先 `GET /api/auth/get-session`（cookie）→ 成功即登录态（localStorage token 仅作 dev 兜底）；`GET /api/auth/token` 拿 token 供扩展注入；guards 未登录 → `dailogues.com/login?redirect=当前页`（dev 环境跳本地 /login）；**app/login 永久保留为备用登录页**（两站登录都写同一 .dailogues.com cookie）。
-- [ ] **Step 5: 本地 SSO 验证**——SSR(3000) 登录 → cookie 落 localhost → SPA(5173) fetch api(8787) credentials 带 cookie → 已登录（跨端口同站验证）；生产跨子域同理。
+- [x] **Step 1: server 代理**——`apps/site/src/server/auth-proxy.ts`：`POST /api/auth/sign-in/email`、`sign-up/email`、`sign-out`、`GET /api/auth/get-session` 转发 api.dailogues.com（env `API_BASE_URL`）；登录成功响应透传 token → server 侧 `set-cookie: dailogues_session=token; Domain=.dailogues.com; Path=/; HttpOnly; SameSite=Lax`（本地 dev Domain 省略/用 localhost 验证）。
+- [x] **Step 2: /login 页**——登录/注册切换表单（样式同 studio 风格）；成功 → 302 回 `redirect`（白名单：仅允许 dailogues.com/app.dailogues.com 域）；本地 dev 回跳 localhost 端口。
+- [x] **Step 3: 会话中间件**——SSR 页读取 cookie → 转发 `get-session` 验证（server 端，带 User-Agent）→ 注入页面上下文（header 显示登录邮箱/登出按钮）。
+- [x] **Step 4: SPA 会话切换**——api client `credentials: "include"`（cookie 自动带）；`auth.tsx`：启动先 `GET /api/auth/get-session`（cookie）→ 成功即登录态（localStorage token 仅作 dev 兜底）；`GET /api/auth/token` 拿 token 供扩展注入；guards 未登录 → `dailogues.com/login?redirect=当前页`（dev 环境跳本地 /login）；**app/login 永久保留为备用登录页**（两站登录都写同一 .dailogues.com cookie）。
+- [x] **Step 5: 本地 SSO 验证**——SSR(3000) 登录 → cookie 落 localhost → SPA(5173) fetch api(8787) credentials 带 cookie → 已登录（跨端口同站验证）；生产跨子域同理。
 
 ### Task 4: 收藏/点赞 UI + 扩展自动注入
 
@@ -75,10 +75,10 @@
 - Modify: `apps/extension/src/background.ts`（401 → 跳登录）
 - Modify: `apps/studio/src/lib/client.ts` / 扩展注入点（自动注入）
 
-- [ ] **Step 1: 单集页交互**——点赞/收藏按钮：登录态（session 中间件注入）→ 直接调（SSR server 转发 api）；未登录 → 跳 `/login?redirect=/episode/:id`；成功后按钮态切换。
-- [ ] **Step 2: /me 页**——收藏列表（episode 卡片 + 播放入口 + 取消收藏）。
-- [ ] **Step 3: 扩展自动注入**——studio 页面加载/登录成功 → `GET /api/auth/token` → sendMessage 注入；扩展采集 401 → `chrome.tabs.create({ url: dailogues.com/login?redirect=<对话页> })`（env 注入登录页地址）。
-- [ ] **Step 4: studio dashboard 引导卡文案更新**（连接扩展 → 自动注入说明）。
+- [x] **Step 1: 单集页交互**——点赞/收藏按钮：登录态（session 中间件注入）→ 直接调（SSR server 转发 api）；未登录 → 跳 `/login?redirect=/episode/:id`；成功后按钮态切换。
+- [x] **Step 2: /me 页**——收藏列表（episode 卡片 + 播放入口 + 取消收藏）。
+- [x] **Step 3: 扩展自动注入**——studio 页面加载/登录成功 → `GET /api/auth/token` → sendMessage 注入；扩展采集 401 → `chrome.tabs.create({ url: dailogues.com/login?redirect=<对话页> })`（env 注入登录页地址）。
+- [x] **Step 4: studio dashboard 引导卡文案更新**（连接扩展 → 自动注入说明）。
 
 ### Task 5: 部署形态 + 收尾
 
@@ -87,10 +87,10 @@
 - Modify: `.github/workflows/ci.yml`（构建 studio + site 两项目）
 - Modify: `apps/studio/docs/manual-test.md`（SSR + SSO 验证链）
 
-- [ ] **Step 1: 部署配置**——console-setup：dailogues-site（SSR, production branch master/dev）+ dailogues-studio（静态）双项目；DNS 三域名；api APP_ORIGINS 生产矩阵。
-- [ ] **Step 2: CI**——两项目构建产物校验。
-- [ ] **Step 3: 本地端到端验证链**——SSR 登录 → SSO 进 SPA → 收藏 → /me 可见 → RSS 可订阅 → 扩展自动注入采集成功。
-- [ ] **Step 4: 全量回归**（api + studio + site 三包 tests/typecheck/build）+ 文档更新。
+- [x] **Step 1: 部署配置**——console-setup：dailogues-site（SSR, production branch master/dev）+ dailogues-studio（静态）双项目；DNS 三域名；api APP_ORIGINS 生产矩阵。
+- [x] **Step 2: CI**——两项目构建产物校验。
+- [x] **Step 3: 本地端到端验证链**——SSR 登录 → SSO 进 SPA → 收藏 → /me 可见 → RSS 可订阅 → 扩展自动注入采集成功。
+- [x] **Step 4: 全量回归**（api + studio + site 三包 tests/typecheck/build）+ 文档更新。
 
 ---
 
