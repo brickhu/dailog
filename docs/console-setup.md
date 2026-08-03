@@ -63,7 +63,8 @@
 | **Node.js compatibility** | **开启（Node 22）**——postgres 直连需要 | 同左 |
 | 自定义域名 | `candelbot.app` | `dailogues.com` |
 
-> 变量（各环境）：`DATABASE_URL`（对应环境 Postgres，只读连接可加 `?sslmode=require`）、`API_BASE_URL`（`https://gracious-caring-development.up.railway.app` / `https://api.dailogues.com`）、`SITE_BASE_URL`（站点自身）、`STUDIO_BASE_URL`（`app.*`）、`SITE_COOKIE_DOMAIN`（生产 `.dailogues.com`，dev 留空）。
+> 变量（各环境）：`DATABASE_URL`（对应环境 Postgres，只读连接可加 `?sslmode=require`）、`API_BASE_URL`（`https://gracious-caring-development.up.railway.app` / `https://api.dailogues.com`）、`SITE_BASE_URL`（站点自身，**登录代理以它作为 Origin 转发给 API**）、`STUDIO_BASE_URL`（`app.*`）、`SITE_COOKIE_DOMAIN`（生产 `.dailogues.com`，dev 留空）。
+> ⚠️ **站点实际域名必须加入 API 的 `APP_ORIGINS`**（auth-proxy 转发时以 `SITE_BASE_URL` 为 Origin，better-auth CSRF 白名单校验）——dev 用 Pages 默认域名时也要加（如 `https://dailogues-site-dev.pages.dev`）。
 > 消费端登录统一走本站 `/login`（server 代理 api 认证端点，SSO cookie 与 studio 共享）。
 
 ## 3. DNS（candelbot.app 托管处）
