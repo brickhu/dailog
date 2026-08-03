@@ -4,7 +4,7 @@ import type { VoiceSampleRow } from "./voice";
 export interface ScriptSegment { speaker: "host" | "guest"; text: string; }
 
 export interface EpisodesRepo {
-  listEpisodes(userId: string): Promise<Array<{ id: string; title: string | null; status: string; createdAt: Date }>>;
+  listEpisodes(userId: string): Promise<Array<{ id: string; title: string | null; status: string; platform: string | null; createdAt: Date }>>;
   /** userId 传入时强制归属过滤（防 IDOR） */
   getEpisode(id: string, userId?: string): Promise<{ id: string; userId: string; title: string | null; status: string } | null>;
   /** 工作台试听：返回 episode 音频 storage key（归属过滤，无音频返回 null） */

@@ -122,9 +122,11 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             id: schema.episodes.id,
             title: schema.episodes.title,
             status: schema.episodes.status,
+            platform: schema.imports.platform,
             createdAt: schema.episodes.createdAt,
           })
           .from(schema.episodes)
+          .leftJoin(schema.imports, eq(schema.episodes.importId, schema.imports.id))
           .where(eq(schema.episodes.userId, userId))
           .orderBy(desc(schema.episodes.createdAt));
       },

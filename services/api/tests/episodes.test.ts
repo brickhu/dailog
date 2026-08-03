@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { episodesRoutes, type EpisodesRepo, type ScriptSegment } from "../src/routes/episodes";
 
 function fakeRepo(): EpisodesRepo {
-  const episodes = new Map<string, { id: string; userId: string; title: string | null; status: string; createdAt: Date }>([
-    ["ep-1", { id: "ep-1", userId: "user-1", title: "测试对话", status: "draft", createdAt: new Date("2026-01-01T00:00:00Z") }],
+  const episodes = new Map<string, { id: string; userId: string; title: string | null; status: string; platform: string | null; createdAt: Date }>([
+    ["ep-1", { id: "ep-1", userId: "user-1", title: "测试对话", status: "draft", platform: "deepseek", createdAt: new Date("2026-01-01T00:00:00Z") }],
   ]);
   const scripts: Array<{ episodeId: string; version: number; segments: ScriptSegment[] }> = [];
   return {
