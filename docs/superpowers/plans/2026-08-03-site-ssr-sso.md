@@ -7,7 +7,7 @@
 **Architecture:**
 - **站点形态**（最终定稿，无兼容跳转）：`dailogues.com` = 消费端（SSR）、`app.dailogues.com` = studio（SPA，无前缀路由）、`api.dailogues.com` = 统一后端（Railway）。**不存在 dailogues.com/app 路径**。
 - **统一登录（SSO）**：SSR 站 `/login` 表单 → **SSR server 端代理** better-auth API（`/api/auth/*` 站内路由转发 api.dailogues.com，同源无 CORS）→ 登录成功拿 session token → **set-cookie：`Domain=.dailogues.com; SameSite=Lax; HttpOnly`**。app/api/dailogues 都是 .dailogues.com 子域（同站）→ 浏览器对 app.dailogues.com 访问 api.dailogues.com 自动带 cookie（跨子域同站，SameSite=Lax 合法，无第三方 cookie 风险）→ **两站共享会话**。
-- **SPA 侧改造**：api client fetch 改 `credentials: "include"`（cookie 认证优先），localStorage token 机制降级为兜底；新增 `GET /api/auth/token`（cookie 会话 → 返回 token）供**扩展自动注入**（页面加载/登录后 sendMessage）；未登录守卫跳 `dailogues.com/login?redirect=<原URL>`（本地 dev 保留 /login 兜底）。
+- **SPA 侧改造**：api client fetch 改 `credentials: "include"`（cookie 认证优先），localStorage token 机制降级为兜底；新增 `GET /api/auth/token`（cookie 会话 → 返回 token）供**扩展自动注入**（页面加载/登录后 sendMessage）。**登录页冗余（修正）**：`dailogues.com/login` 为主入口，`app.dailogues.com/login` 永久保留为备用登录页——两站都只依赖 api（无 SPA→SSR 耦合）；守卫默认跳主站 `/login?redirect=<原URL>`，主站不可达时备用页可用。
 - **收藏/点赞**：新表 `favorites`/`likes`（user_id+episode_id 唯一约束）+ 端点 `POST/DELETE /api/episodes/:id/favorite|like`（toggle）+ `GET /api/me/favorites`（join episode 摘要）。SSR 站收藏请求：浏览器带 cookie → SSR server 读 token → 转发 api（Bearer）。SPA 无收藏页（消费端收藏在 dailogues.com/me）。
 - **内容读取**：SSR 站 **server-only 直连读库**（postgres.js 只读连接 + 查询层，ARC 定稿：内容站直连读库不走统一后端）。
 - **部署**：**双 Pages 项目**（`dailogues-studio` 静态 SPA + `dailogues-site` SSR）+ Railway API；CI 构建两项目；DNS：`dailogues.com`/`app.dailogues.com` CNAME 各自 Pages 项目、`api.dailogues.com` CNAME Railway。
@@ -64,7 +64,7 @@
 - [ ] **Step 1: server 代理**——`apps/site/src/server/auth-proxy.ts`：`POST /api/auth/sign-in/email`、`sign-up/email`、`sign-out`、`GET /api/auth/get-session` 转发 api.dailogues.com（env `API_BASE_URL`）；登录成功响应透传 token → server 侧 `set-cookie: dailogues_session=token; Domain=.dailogues.com; Path=/; HttpOnly; SameSite=Lax`（本地 dev Domain 省略/用 localhost 验证）。
 - [ ] **Step 2: /login 页**——登录/注册切换表单（样式同 studio 风格）；成功 → 302 回 `redirect`（白名单：仅允许 dailogues.com/app.dailogues.com 域）；本地 dev 回跳 localhost 端口。
 - [ ] **Step 3: 会话中间件**——SSR 页读取 cookie → 转发 `get-session` 验证（server 端，带 User-Agent）→ 注入页面上下文（header 显示登录邮箱/登出按钮）。
-- [ ] **Step 4: SPA 会话切换**——api client `credentials: "include"`（cookie 自动带）；`auth.tsx`：启动先 `GET /api/auth/get-session`（cookie）→ 成功即登录态（localStorage token 仅作 dev 兜底）；`GET /api/auth/token` 拿 token 供扩展注入；guards 未登录 → `dailogues.com/login?redirect=当前页`（dev 环境仍跳本地 /login）。
+- [ ] **Step 4: SPA 会话切换**——api client `credentials: "include"`（cookie 自动带）；`auth.tsx`：启动先 `GET /api/auth/get-session`（cookie）→ 成功即登录态（localStorage token 仅作 dev 兜底）；`GET /api/auth/token` 拿 token 供扩展注入；guards 未登录 → `dailogues.com/login?redirect=当前页`（dev 环境跳本地 /login）；**app/login 永久保留为备用登录页**（两站登录都写同一 .dailogues.com cookie）。
 - [ ] **Step 5: 本地 SSO 验证**——SSR(3000) 登录 → cookie 落 localhost → SPA(5173) fetch api(8787) credentials 带 cookie → 已登录（跨端口同站验证）；生产跨子域同理。
 
 ### Task 4: 收藏/点赞 UI + 扩展自动注入
