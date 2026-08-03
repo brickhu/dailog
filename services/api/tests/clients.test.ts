@@ -86,6 +86,57 @@ describe("tts client", () => {
     const body = JSON.parse(String((init as RequestInit).body));
     expect(body.text).toContain("<|speaker:0|>");
     expect(body.reference_id).toEqual(["host-model", "guest-model"]);
+    expect(body.model).toBe("s2.1-pro-free"); // 默认免费模型，防止误用付费
+  });
+
+  it("sends model field with default free model", async () => {
+    const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
+      new Response(new Uint8Array([1, 2, 3]), { status: 200 }),
+    );
+    const tts: TtsClient = createTtsClient({
+      apiKey: "fish-key",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+    await tts.synthesizeSingle({ text: "你好", referenceId: "guest-model" });
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(String((init as RequestInit).body));
+    expect(body.model).toBe("s2.1-pro-free");
+  });
+
+  it("falls back to paid model on 402 insufficient credit (multi-speaker)", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () =>
+        new Response(JSON.stringify({ message: "Insufficient API credit" }), { status: 402 }),
+      )
+      .mockImplementationOnce(async () => new Response(new Uint8Array([9, 9]), { status: 200 }));
+    const tts: TtsClient = createTtsClient({
+      apiKey: "fish-key",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+    const buf = await tts.synthesizeMultiSpeaker({
+      segments: [{ speaker: 0, text: "你好" }],
+      referenceIds: ["host-model"],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(buf.length).toBe(2);
+    const [, init] = fetchMock.mock.calls[1];
+    const body = JSON.parse(String((init as RequestInit).body));
+    expect(body.model).toBe("s2.1-pro"); // 降级付费模型重试
+  });
+
+  it("does not fall back when 402 persists (error surfaces)", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ message: "Insufficient API credit" }), { status: 402 }),
+    );
+    const tts: TtsClient = createTtsClient({
+      apiKey: "fish-key",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+    await expect(
+      tts.synthesizeSingle({ text: "你好", referenceId: "guest-model" }),
+    ).rejects.toThrow(/http_402/);
+    expect(fetchMock).toHaveBeenCalledTimes(2); // 也尝试过降级
   });
 
   it("msgpack references encode to spike-verified golden bytes", () => {

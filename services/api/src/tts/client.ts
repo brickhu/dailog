@@ -22,12 +22,43 @@ export interface TtsOptions {
   apiKey: string;
   proxyUrl?: string; // socks5://host:port，本地代理
   fetchImpl?: typeof fetch;
+  /** 默认免费模型；Fish 免费模型 s2.1-pro-free $0/M（spike 校准，见 docs/spikes/fish-audio.md） */
+  model?: string;
+  /** 免费模型余额不足（402）时自动切换的付费模型 */
+  fallbackModel?: string;
 }
 
 export function createTtsClient(opts: TtsOptions): TtsClient {
   const f = opts.fetchImpl ?? fetch;
   const base = "https://api.fish.audio";
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${opts.apiKey}` };
+  const model = opts.model ?? "s2.1-pro-free";
+  const fallbackModel = opts.fallbackModel ?? "s2.1-pro";
+
+  // 402 余额不足 → 自动降级付费模型重试（免费额度用完后不中断用户生成）
+  async function requestWithFallback(url: string, init: RequestInit): Promise<Response> {
+    const res = await f(url, init);
+    if (res.status !== 402) return res;
+    const body = await res.text().catch(() => "");
+    const retry = await f(url, {
+      ...init,
+      body: replaceModelField(init.body, fallbackModel),
+    });
+    if (!retry.ok) throw new Error(`tts http_${retry.status}: ${body.slice(0, 200)}`);
+    return retry;
+  }
+
+  /** JSON body 内替换 model 字段（msgpack 无 model 字段，仅 JSON 场景降级） */
+  function replaceModelField(body: BodyInit | null | undefined, newModel: string): BodyInit | null | undefined {
+    if (typeof body !== "string") return body;
+    try {
+      const parsed = JSON.parse(body) as Record<string, unknown>;
+      if (typeof parsed.model !== "string") return body;
+      return JSON.stringify({ ...parsed, model: newModel });
+    } catch {
+      return body;
+    }
+  }
 
   // NOTE: 代理场景（本地 socks5）由调用方注入已包装的 fetchImpl；
   //       服务端生产环境直连无需代理。见 Task 9 的 fetchWithProxy 说明。
@@ -39,10 +70,10 @@ export function createTtsClient(opts: TtsOptions): TtsClient {
     const text = args.segments
       .map((s) => `<|speaker:${s.speaker}|>${s.text}`)
       .join("");
-    const res = await f(`${base}/v1/tts`, {
+    const res = await requestWithFallback(`${base}/v1/tts`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ text, reference_id: args.referenceIds, format: "mp3" }),
+      body: JSON.stringify({ model, text, reference_id: args.referenceIds, format: "mp3" }),
     });
     if (!res.ok) throw new Error(`tts http_${res.status}: ${(await res.text()).slice(0, 200)}`);
     return new Uint8Array(await res.arrayBuffer());
@@ -60,8 +91,8 @@ export function createTtsClient(opts: TtsOptions): TtsClient {
     const body = args.referenceAudio
       ? // 零样本内联：msgpack references（JSON 无 base64 字段，实测见 fish-audio.md）
         buildMsgpackReferences(args.referenceAudio, args.text)
-      : JSON.stringify({ text: args.text, reference_id: args.referenceId, format: "mp3" });
-    const res = await f(`${base}/v1/tts`, {
+      : JSON.stringify({ model, text: args.text, reference_id: args.referenceId, format: "mp3" });
+    const res = await requestWithFallback(`${base}/v1/tts`, {
       method: "POST",
       headers: args.referenceAudio
         ? { Authorization: `Bearer ${opts.apiKey}`, "Content-Type": "application/msgpack" }
