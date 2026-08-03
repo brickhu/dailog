@@ -4,6 +4,8 @@ const schema = z.object({
   DATABASE_URL: z.string().min(1),
   /** better-auth 会话签名密钥（M5；本地 dev 任意 32+ 字符，生产 Railway 各环境独立设置） */
   BETTER_AUTH_SECRET: z.string().default("dev-secret-change-me-0123456789abcdef"),
+  /** better-auth 公开基址（回调/重定向用；本地 dev 默认，生产按环境设置 https://api.*） */
+  BETTER_AUTH_URL: z.string().default("http://localhost:8787"),
   PORT: z.coerce.number().default(8787),
   // 注意：default("") 会被 zod 内层校验再次校验，故不能用 .min(1)（空串会抛错），
   // 与计划「默认空串使无 key 本地环境可启动、key 为空在调用时再报错」的意图一致

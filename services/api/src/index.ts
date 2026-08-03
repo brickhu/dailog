@@ -125,7 +125,7 @@ const voice: VoiceDeps = {
 
 const app = createApp({
   env,
-  auth: createAuth({ db, secret: env.BETTER_AUTH_SECRET }),
+  auth: createAuth({ db, secret: env.BETTER_AUTH_SECRET, baseURL: env.BETTER_AUTH_URL }),
   repo,
   polish,
   generate,

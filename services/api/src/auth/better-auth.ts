@@ -8,6 +8,8 @@ import { randomBytes } from "node:crypto";
 export interface CreateAuthOptions {
   db: PostgresJsDatabase<typeof schema>;
   secret: string;
+  /** 公开基址（回调/重定向用）；本地 dev http://localhost:8787，生产 https://api.* */
+  baseURL?: string;
 }
 
 /**
@@ -18,6 +20,7 @@ export interface CreateAuthOptions {
  */
 export function createAuth(opts: CreateAuthOptions) {
   return betterAuth({
+    baseURL: opts.baseURL,
     database: drizzleAdapter(opts.db, {
       provider: "pg",
       // 表导出名（authUsers/authSessions/authAccounts）→ better-auth model 名映射
