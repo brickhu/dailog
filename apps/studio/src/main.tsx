@@ -6,9 +6,9 @@ import AuthPage from "./pages/auth";
 import Dashboard from "./pages/dashboard";
 import OnboardingVoice from "./pages/onboarding-voice";
 import NewEpisode from "./pages/new-episode";
+import Settings from "./pages/settings";
+import NotFound from "./pages/not-found";
 
-// 路由结构：/auth 公开；其余在 RequireAuth 布局守卫下
-// （Task 8 加 /settings）
 render(
   () => (
     <AuthProvider>
@@ -19,6 +19,8 @@ render(
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/onboarding/voice" component={OnboardingVoice} />
           <Route path="/episodes/new" component={NewEpisode} />
+          <Route path="/settings" component={Settings} />
+          <Route path="*" component={NotFound} />
         </Route>
       </Router>
     </AuthProvider>

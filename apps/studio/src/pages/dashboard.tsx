@@ -5,6 +5,7 @@ import { tokens } from "../theme.stylex.ts";
 import { api } from "../lib/client";
 import { useAuth } from "../lib/auth";
 import { env } from "../lib/env";
+import Navbar from "../components/navbar";
 
 // chrome.runtime（扩展注入 token 用；无扩展环境则跳过）
 declare const chrome: { runtime?: { sendMessage?: (id: string, msg: unknown) => Promise<unknown> } };
@@ -40,34 +41,6 @@ const styles = stylex.create({
     minHeight: "100vh",
     background: tokens.colorBg,
     color: tokens.colorText,
-  },
-  header: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: `${tokens.space4} ${tokens.space6}`,
-    borderBottom: `1px solid ${tokens.colorBorder}`,
-  },
-  brand: {
-    fontSize: tokens.fontSizeLg,
-    fontWeight: tokens.fontWeightBold,
-    color: tokens.colorPrimary,
-  },
-  headerRight: {
-    display: "flex",
-    alignItems: "center",
-    gap: tokens.space4,
-  },
-  userEmail: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
-  },
-  linkButton: {
-    background: "transparent",
-    border: "none",
-    color: tokens.colorTextMuted,
-    cursor: "pointer",
-    fontSize: tokens.fontSizeSm,
   },
   content: {
     maxWidth: "720px",
@@ -215,15 +188,7 @@ export default function Dashboard() {
 
   return (
     <div {...stylex.props(styles.page)}>
-      <header {...stylex.props(styles.header)}>
-        <div {...stylex.props(styles.brand)}>dailogues</div>
-        <div {...stylex.props(styles.headerRight)}>
-          <span {...stylex.props(styles.userEmail)}>{auth.user?.email}</span>
-          <button {...stylex.props(styles.linkButton)} onClick={() => auth.signOut()}>
-            退出
-          </button>
-        </div>
-      </header>
+      <Navbar />
 
       <div {...stylex.props(styles.content)}>
         <div {...stylex.props(styles.hero)}>

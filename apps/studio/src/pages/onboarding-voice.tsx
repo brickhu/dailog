@@ -3,8 +3,8 @@ import { useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "../theme.stylex.ts";
 import Recorder from "../components/recorder";
-import { api } from "../lib/client";
 import { ApiError } from "../lib/api";
+import { uploadVoiceSample } from "../lib/voice";
 
 const styles = stylex.create({
   page: {
@@ -76,7 +76,7 @@ export default function OnboardingVoice() {
     setError(null);
     try {
       // multipart 上传：api 侧创建 Fish fast 音色模型（5-8s 训练），失败 502 降级提示
-      await api.post<{ referenceId: string }>("/api/me/voice-sample", b);
+      await uploadVoiceSample(b);
       navigate("/dashboard");
     } catch (e) {
       if (e instanceof ApiError && e.status === 502) {
