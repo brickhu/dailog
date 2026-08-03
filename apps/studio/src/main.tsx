@@ -1,51 +1,23 @@
+import { Router, Route } from "@solidjs/router";
 import { render } from "solid-js/web";
-import * as stylex from "@stylexjs/stylex";
-import { tokens } from "./theme.stylex.ts";
+import { AuthProvider } from "./lib/auth";
+import { RequireAuth } from "./lib/guards";
+import AuthPage from "./pages/auth";
+import Dashboard from "./pages/dashboard";
 
-const styles = stylex.create({
-  root: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: tokens.colorBg,
-    color: tokens.colorText,
-    fontFamily: "system-ui, -apple-system, sans-serif",
-  },
-  card: {
-    padding: tokens.space6,
-    borderRadius: tokens.radiusLg,
-    background: tokens.colorSurface,
-    border: `1px solid ${tokens.colorBorder}`,
-    textAlign: "center",
-  },
-  title: {
-    fontSize: tokens.fontSizeXl,
-    fontWeight: tokens.fontWeightBold,
-    color: tokens.colorPrimary,
-    marginBottom: tokens.space2,
-  },
-  tag: {
-    display: "inline-block",
-    marginTop: tokens.space3,
-    padding: `${tokens.space1} ${tokens.space3}`,
-    borderRadius: tokens.radiusFull,
-    background: tokens.colorPrimary,
-    color: "#fff",
-    fontSize: tokens.fontSizeSm,
-  },
-});
-
-function App() {
-  return (
-    <div {...stylex.props(styles.root)}>
-      <div {...stylex.props(styles.card)}>
-        <div {...stylex.props(styles.title)}>dailogues 工作台</div>
-        <div>StyleX + SolidJS 脚手架验证</div>
-        <div {...stylex.props(styles.tag)}>token 生效 ✓</div>
-      </div>
-    </div>
-  );
-}
-
-render(() => <App />, document.getElementById("root")!);
+// 路由结构：/auth 公开；其余在 RequireAuth 布局守卫下
+// （Task 4 起加 /onboarding/voice；Task 6-7 加 /episodes/new；Task 8 加 /settings）
+render(
+  () => (
+    <AuthProvider>
+      <Router>
+        <Route path="/auth" component={AuthPage} />
+        <Route path="/" component={RequireAuth}>
+          <Route path="/" component={Dashboard} />
+          <Route path="/dashboard" component={Dashboard} />
+        </Route>
+      </Router>
+    </AuthProvider>
+  ),
+  document.getElementById("root")!,
+);
