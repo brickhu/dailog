@@ -12,6 +12,8 @@ export interface CreateAuthOptions {
   baseURL?: string;
   /** 跨域白名单（CSRF/URL 校验用，与 CORS APP_ORIGINS 同源）：SPA 经 vite 代理/跨域访问时 Origin 需在此 */
   trustedOrigins?: string[];
+  /** SSO 跨子域 cookie 域（生产 .dailogues.com；未配置 = host-only cookie） */
+  cookieDomain?: string;
 }
 
 /**
@@ -36,6 +38,9 @@ export function createAuth(opts: CreateAuthOptions) {
     secret: opts.secret,
     emailAndPassword: { enabled: true, minPasswordLength: 8 },
     plugins: [bearer()],
+    advanced: opts.cookieDomain
+      ? { crossSubDomainCookies: { enabled: true, domain: opts.cookieDomain } }
+      : {},
     databaseHooks: {
       user: {
         create: {

@@ -1,5 +1,6 @@
 import { createContext, createSignal, onMount, useContext, type JSX } from "solid-js";
 import { authApi, loadToken, clearToken, type AuthUser } from "./auth-api";
+import { env } from "./env";
 import { setTokenGetter } from "./client";
 
 // 认证上下文（M5：better-auth bearer 模式——token 内存 signal + localStorage 持久化）
@@ -25,15 +26,26 @@ export function AuthProvider(props: { children: JSX.Element }) {
     // 无论是否已有 token，先注册 token getter（注册/登录后 accessToken signal 更新即生效；
     // 若不注册，未登录进入页面的会话在注册后 api client 仍拿不到 token）
     setTokenGetter(() => accessToken());
+    // ① SSO cookie 会话优先：跨子域 cookie（.dailogues.com）已登录则免登录
+    const sessionUser = await fetch(`${env.apiBaseUrl}/api/auth/get-session`, {
+      credentials: "include",
+    })
+      .then((r) => (r.ok ? (r.json() as Promise<{ user: AuthUser | null }>) : Promise.resolve({ user: null })))
+      .catch(() => ({ user: null }));
+    if (sessionUser.user) {
+      setUser(sessionUser.user);
+      setLoading(false);
+      return;
+    }
+    // ② 备用：localStorage token 恢复（dev 兜底 / 备用登录页）
     const token = loadToken();
     if (!token) {
       setLoading(false);
       return;
     }
-    // 恢复会话：localStorage token → getSession 验证（失效则清除）
-    const sessionUser = await authApi.getSession(token).catch(() => null);
-    if (sessionUser) {
-      setUser(sessionUser);
+    const sessionUser2 = await authApi.getSession(token).catch(() => null);
+    if (sessionUser2) {
+      setUser(sessionUser2);
       setAccessToken(token);
     } else {
       clearToken();

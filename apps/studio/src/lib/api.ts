@@ -34,7 +34,8 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
     if (init.body !== undefined && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
-    const res = await fetch(`${opts.baseUrl}${path}`, { ...init, headers });
+    // credentials: "include"——SSO cookie 会话（跨子域同站 cookie 自动携带；本地跨端口 localhost 同理）
+    const res = await fetch(`${opts.baseUrl}${path}`, { ...init, headers, credentials: "include" });
     if (res.status === 401 && res.headers.get("content-type")?.includes("json")) {
       // 后端 401（token 过期/无效）：透传 code，前端据此登出
       const body = (await res.json().catch(() => null)) as { error?: string } | null;
