@@ -56,16 +56,19 @@ dailogues/
 
 ## 域名与部署速查
 
-| 域名 | 用途 | 托管 |
-|---|---|---|
-| `app.dailogues.com` | 工作台 SPA | Cloudflare Pages（静态） |
-| `dailogues.com` | 内容站 SSR | Cloudflare Pages/Workers |
-| `api.dailogues.com` | 统一后端 | **Railway**（Git 集成自动部署，Docker + ffmpeg，按用量 $5–10/月） |
-| — | 采集扩展 | Chrome/Edge 商店（用户侧安装，登录态采集） |
-| — | Postgres + Auth | Railway Postgres + better-auth（自托管） |
-| — | 音频存储 | Cloudflare R2（流量免费） |
+**Git 工作流**：`dev` = 集成分支（推送即集成部署到开发环境）；`master` = 生产分支（推送即部署到生产环境）。功能开发合入 dev → dev 验证 → 合入 master 发生产。
 
-> **品牌名**：`dailogues`——由 `dialogues` 交换 `ia→ai` 变形（寓意 AI）。域名统一为 `dailogues.com` 系列。
+**环境矩阵**（`git branch → 环境 → 域名 → 托管`）：
+
+| | 开发环境（dev 分支） | 生产环境（master 分支） |
+|---|---|---|
+| 后端 API | `api.candelbot.app`（Railway Development 环境） | `api.dailogues.com`（Railway Production 环境）⚠️ 生产域名待定：`dailog.fm` 或保留 `dailogues.com` |
+| 工作台 SPA | `app.candelbot.app`（CF Pages project `dailogues-studio-dev`，production branch = dev） | `app.dailogues.com`（CF Pages project `dailogues-studio`，production branch = master） |
+| 内容站 SSR | `candelbot.app`（Pages project 预留，等 apps/site 创建） | `dailogues.com`（Pages/Workers） |
+| Postgres | Railway Development 环境内独立实例 | Railway Production 环境内实例 |
+| 采集扩展 | `pnpm build:dev`（API 指向 api.candelbot.app；popup 可覆盖） | `pnpm build`（API 指向 api.dailogues.com） |
+
+> **品牌名**：`dailogues`——由 `dialogues` 交换 `ia→ai` 变形（寓意 AI）。开发域名 `candelbot.app`（已确认），生产域名待定（`dailog.fm` / `dailogues.com`），定稿后统一替换文档与扩展 manifest 中的占位。
 
 ## 技术要点速查
 

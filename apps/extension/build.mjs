@@ -1,8 +1,24 @@
 import { build } from "esbuild";
 
-const common = { bundle: true, outdir: "dist", sourcemap: true, target: "es2022" };
+// 环境注入：DAILOGUES_ENV=dev|prod（默认 prod），define 替换 src/env.ts 的默认值
+const env = process.env.DAILOGUES_ENV === "dev" ? "dev" : "prod";
+const hosts = {
+  dev: { api: "https://api.candelbot.app", app: "https://app.candelbot.app" },
+  prod: { api: "https://api.dailogues.com", app: "https://app.dailogues.com" },
+}[env];
+
+const common = {
+  bundle: true,
+  outdir: "dist",
+  sourcemap: true,
+  target: "es2022",
+  define: {
+    "process.env.DAILOGUES_API_BASE": JSON.stringify(hosts.api),
+    "process.env.DAILOGUES_APP_BASE": JSON.stringify(hosts.app),
+  },
+};
 
 await build({ ...common, entryPoints: ["src/content.ts"], format: "iife" });
 await build({ ...common, entryPoints: ["src/background.ts"], format: "esm" });
 await build({ ...common, entryPoints: ["src/popup.ts"], format: "iife" });
-console.log("extension built → dist/");
+console.log(`extension built → dist/ (env=${env}, api=${hosts.api})`);

@@ -4,11 +4,24 @@
     <meta charset="utf-8" />
     <title>dailogues</title>
     <style>
-      body { width: 240px; font-family: system-ui, sans-serif; padding: 12px; }
+      body { width: 260px; font-family: system-ui, sans-serif; padding: 12px; }
+      label { display: block; margin-top: 10px; font-size: 12px; color: #555; }
+      input { width: 100%; box-sizing: border-box; margin-top: 4px; padding: 4px 6px; }
+      .row { display: flex; gap: 8px; margin-top: 8px; }
+      button { flex: 1; padding: 4px 0; }
+      #hint { margin-top: 8px; font-size: 11px; color: #888; }
     </style>
   </head>
   <body>
     <div id="status">加载中…</div>
+    <label>API 地址（断点配置，留空 = 构建默认）
+      <input id="api-base" type="text" placeholder="https://api.dailogues.com" />
+    </label>
+    <div class="row">
+      <button id="save">保存</button>
+      <button id="reset">恢复默认</button>
+    </div>
+    <div id="hint"></div>
     <script src="dist/popup.js"></script>
   </body>
 </html>

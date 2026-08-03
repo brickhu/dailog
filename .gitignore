@@ -8,3 +8,6 @@ scripts/spikes/out-limits/
 sample-voice.*
 apps/extension/dist/
 data-test/
+
+# zcode 会话内部文件
+.zcode/

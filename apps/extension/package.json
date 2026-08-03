@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
+    "build:dev": "DAILOGUES_ENV=dev node build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
