@@ -7,6 +7,8 @@ export interface EpisodesRepo {
   listEpisodes(userId: string): Promise<Array<{ id: string; title: string | null; status: string; createdAt: Date }>>;
   /** userId 传入时强制归属过滤（防 IDOR） */
   getEpisode(id: string, userId?: string): Promise<{ id: string; userId: string; title: string | null; status: string } | null>;
+  /** 工作台试听：返回 episode 音频 storage key（归属过滤，无音频返回 null） */
+  getEpisodeAudio(id: string, userId: string): Promise<string | null>;
   saveScript(episodeId: string, version: number, segments: ScriptSegment[]): Promise<{ episodeId: string; version: number; segments: ScriptSegment[] }>;
   getLatestScript(episodeId: string): Promise<{ version: number; segments: ScriptSegment[] } | null>;
   /** 通过 episodes.import_id 读取来源导入的 parsed_dialogue 消息；userId 强制归属过滤（防 IDOR） */
@@ -24,13 +26,27 @@ export interface EpisodesRepo {
   getVoiceSampleKey(userId: string): Promise<string | null>;
   /** 录音样本 upsert（同 user 覆盖旧行：先删后插，保证 getHostModelId/getVoiceSampleKey 取到最新） */
   saveVoiceSample(row: VoiceSampleRow): Promise<void>;
+  /** 工作台回读最新样本（onboarding 守卫/设置页）；无记录返回 null */
+  getVoiceSample(userId: string): Promise<VoiceSampleRow | null>;
 }
 
-export function episodesRoutes(repo: EpisodesRepo, getUserId: (c: unknown) => string) {
+export function episodesRoutes(repo: EpisodesRepo, getUserId: (c: unknown) => string, storage?: { get(key: string): Promise<Uint8Array> }) {
   const app = new Hono();
   app.get("/episodes", async (c) => {
     const episodes = await repo.listEpisodes(getUserId(c));
     return c.json(episodes);
+  });
+  // 工作台试听：归属校验后流式返回音频（fs/r2 统一走 storage.get）
+  app.get("/episodes/:id/audio", async (c) => {
+    const userId = getUserId(c);
+    const key = await repo.getEpisodeAudio(c.req.param("id"), userId);
+    if (!key || !storage) return c.json({ error: "not_found" }, 404);
+    try {
+      const data = await storage.get(key);
+      return new Response(new Uint8Array(data), { headers: { "Content-Type": "audio/mpeg" } });
+    } catch {
+      return c.json({ error: "not_found" }, 404);
+    }
   });
   app.get("/episodes/:id", async (c) => {
     const ep = await repo.getEpisode(c.req.param("id"), getUserId(c));

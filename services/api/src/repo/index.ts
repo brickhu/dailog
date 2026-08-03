@@ -143,6 +143,15 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return rows[0] ?? null;
       },
 
+      async getEpisodeAudio(id, userId) {
+        const rows = await db
+          .select({ audioUrl: schema.episodes.audioUrl })
+          .from(schema.episodes)
+          .where(and(eq(schema.episodes.id, id), eq(schema.episodes.userId, userId)))
+          .limit(1);
+        return rows[0]?.audioUrl ?? null;
+      },
+
       async saveScript(episodeId, version, segments) {
         await db.insert(schema.scripts).values({ episodeId, version, segments });
         return { episodeId, version, segments };
@@ -221,6 +230,24 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .orderBy(desc(schema.voiceSamples.createdAt))
           .limit(1);
         return rows[0]?.audioUrl ?? null;
+      },
+
+      /** 工作台回读：用户最新一条样本（不限 status，前端区分 ready/failed） */
+      async getVoiceSample(userId) {
+        const rows = await db
+          .select({
+            userId: schema.voiceSamples.userId,
+            status: schema.voiceSamples.status,
+            referenceId: schema.voiceSamples.referenceId,
+            audioUrl: schema.voiceSamples.audioUrl,
+            duration: schema.voiceSamples.duration,
+            createdAt: schema.voiceSamples.createdAt,
+          })
+          .from(schema.voiceSamples)
+          .where(eq(schema.voiceSamples.userId, userId))
+          .orderBy(desc(schema.voiceSamples.createdAt))
+          .limit(1);
+        return rows[0] ?? null;
       },
 
       async saveVoiceSample(row: VoiceSampleRow) {

@@ -23,6 +23,8 @@ function fakeRepo(): AppDeps["repo"] {
       getHostModelId: async () => null,
       getVoiceSampleKey: async () => null,
       saveVoiceSample: async () => {},
+      getVoiceSample: async () => null,
+      getEpisodeAudio: async () => null,
     },
     jobs: {
       getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
@@ -89,6 +91,7 @@ function makeApp() {
       STORAGE_DRIVER: "fs",
       STORAGE_DIR: "./data",
       ASSETS_DIR: "assets/audio",
+    APP_ORIGINS: "",
     } satisfies Env,
     verifyToken: async (token: string) => {
       if (token !== "valid-token") throw new Error("invalid token");

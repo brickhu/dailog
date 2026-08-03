@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import type { Env } from "./config/env";
 import type { VerifyToken } from "./auth/verify";
 import { createAuthMiddleware, type AuthEnv } from "./middleware/auth";
+import { createCorsMiddleware } from "./middleware/cors";
 import { importsRoutes } from "./routes/imports";
 import { episodesRoutes } from "./routes/episodes";
 import { polishRoutes, type PolishDeps } from "./routes/polish";
@@ -24,6 +25,11 @@ export type AppDeps = {
 export function createApp(deps: AppDeps): Hono<AuthEnv> {
   const app = new Hono<AuthEnv>();
 
+  // 工作台 SPA 跨域（本地 dev + 生产 app.dailogues.com）；OPTIONS 预检在此统一 204。
+  // 必须先于其它路由注册（Hono middleware 顺序敏感），否则先注册的路由不经 CORS
+  const appOrigins = deps.env.APP_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean);
+  app.use("*", createCorsMiddleware(appOrigins));
+
   app.get("/health", (c) => c.json({ ok: true }));
 
   app.use("/api/*", createAuthMiddleware(deps.verifyToken));
@@ -31,7 +37,7 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   app.get("/api/me", (c) => c.json({ userId: c.get("userId") }));
 
   app.route("/api", importsRoutes(deps.repo.imports));
-  app.route("/api", episodesRoutes(deps.repo.episodes, (c) => (c as Context<AuthEnv>).get("userId")));
+  app.route("/api", episodesRoutes(deps.repo.episodes, (c) => (c as Context<AuthEnv>).get("userId"), deps.voice.storage));
   // polish/generate/job/voice 路由自带 /api 前缀（与各自 test.ts 直接对裸 app 请求 /api/... 一致），故挂载在根路径；
   // 上面的 /api/* 鉴权中间件依然覆盖
   app.route("/", polishRoutes(deps.polish));

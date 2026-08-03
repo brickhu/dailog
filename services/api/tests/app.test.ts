@@ -23,6 +23,8 @@ function fakeRepo(): AppDeps["repo"] {
       getHostModelId: async () => null,
       getVoiceSampleKey: async () => null,
       saveVoiceSample: async () => {},
+      getVoiceSample: async () => null,
+      getEpisodeAudio: async () => null,
     },
     jobs: {
       getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
@@ -88,12 +90,13 @@ function fakeEnv(): Env {
     STORAGE_DRIVER: "fs",
     STORAGE_DIR: "./data",
     ASSETS_DIR: "assets/audio",
+    APP_ORIGINS: "",
   };
 }
 
-function makeApp() {
+function makeApp(envOverride: Partial<Env> = {}) {
   return createApp({
-    env: fakeEnv(),
+    env: { ...fakeEnv(), ...envOverride },
     verifyToken: async (token: string) => {
       if (token !== "valid-token") throw new Error("invalid token");
       return { sub: "user-1" };
@@ -105,6 +108,38 @@ function makeApp() {
     voice: fakeVoice(),
   });
 }
+
+describe("CORS", () => {
+  const app = makeApp({ APP_ORIGINS: "http://localhost:5173,https://app.dailogues.com" });
+
+  it("answers OPTIONS preflight with allow headers for whitelisted origin", async () => {
+    const res = await app.request("/api/me", {
+      method: "OPTIONS",
+      headers: { Origin: "http://localhost:5173" },
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:5173");
+    expect(res.headers.get("Access-Control-Allow-Headers")).toContain("Authorization");
+  });
+
+  it("sets allow-origin on actual requests from whitelisted origin", async () => {
+    const res = await app.request("/health", { headers: { Origin: "https://app.dailogues.com" } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://app.dailogues.com");
+  });
+
+  it("does not add CORS headers for unknown origin", async () => {
+    const res = await app.request("/health", { headers: { Origin: "https://evil.example.com" } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBeNull();
+  });
+
+  it("no CORS headers when origins list empty", async () => {
+    const app2 = makeApp({ APP_ORIGINS: "" });
+    const res = await app2.request("/health", { headers: { Origin: "http://localhost:5173" } });
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBeNull();
+  });
+});
 
 describe("health", () => {
   it("returns ok", async () => {

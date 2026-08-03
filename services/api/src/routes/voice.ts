@@ -8,11 +8,12 @@ export interface VoiceSampleRow {
   referenceId: string | null;
   duration: number;
   status: "ready" | "failed";
+  createdAt?: Date;   // 仅 GET 回读填充
 }
 
 export interface VoiceDeps {
   saveVoiceSample(row: VoiceSampleRow): Promise<void>;
-  /** 读取用户最新样本（前端回读预留，Task 12 使用；本路由暂未暴露 GET） */
+  /** 工作台回读最新样本（onboarding 守卫/设置页）；无记录返回 null */
   getVoiceSample?(userId: string): Promise<VoiceSampleRow | null>;
   tts: TtsClient | null; // null = 未配置（FISH_API_KEY 空）
   storage: AudioStorage;
@@ -21,6 +22,19 @@ export interface VoiceDeps {
 // 自带 /api 前缀（与 polish/generate/job 路由一致，见 app.ts 挂载说明）：测试对裸 app 请求 /api/...
 export function voiceRoutes(deps: VoiceDeps) {
   const app = new Hono<{ Variables: { userId: string } }>();
+
+  app.get("/api/me/voice-sample", async (c) => {
+    const userId = c.get("userId") as string;
+    const row = await deps.getVoiceSample?.(userId);
+    if (!row) return c.json({ error: "not_found" }, 404);
+    return c.json({
+      status: row.status,
+      referenceId: row.referenceId,
+      duration: row.duration,
+      createdAt: row.createdAt,
+    });
+  });
+
   app.post("/api/me/voice-sample", async (c) => {
     const userId = c.get("userId") as string;
     const form = await c.req.formData().catch(() => null);

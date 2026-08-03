@@ -27,6 +27,7 @@ function makeEnv(): Env {
     STORAGE_DRIVER: "fs",
     STORAGE_DIR: "./data",
     ASSETS_DIR: "assets/audio",
+    APP_ORIGINS: "",
   };
 }
 

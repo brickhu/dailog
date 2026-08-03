@@ -108,6 +108,7 @@ const job: JobDeps = {
 
 const voice: VoiceDeps = {
   saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row),
+  getVoiceSample: (userId) => repo.episodes.getVoiceSample(userId),
   tts, // FISH_API_KEY 未配置时为 null → 路由返回 503
   storage,
 };

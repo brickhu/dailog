@@ -25,6 +25,8 @@ function fakeRepo(): EpisodesRepo {
     getHostModelId: async () => null,
     getVoiceSampleKey: async () => null,
     saveVoiceSample: async () => {},
+    getVoiceSample: async () => null,
+    getEpisodeAudio: async () => null,
   };
 }
 
@@ -68,6 +70,40 @@ describe("episodes routes", () => {
     const app = episodesRoutes(fakeRepo(), () => "user-1");
     const res = await app.request("/episodes/ep-1/publish", { method: "POST" });
     expect(res.status).toBe(200);
+  });
+
+  it("streams audio when episode has audio (GET /episodes/:id/audio)", async () => {
+    const repo = fakeRepo();
+    const storage = {
+      get: async (key: string) => new Uint8Array([0x49, 0x44, 0x33, 0x01]), // "ID3" 音频头
+    };
+    const app = episodesRoutes(
+      { ...repo, getEpisodeAudio: async () => "audio/episodes/ep-1.mp3" },
+      () => "user-1",
+      storage,
+    );
+    const res = await app.request("/episodes/ep-1/audio");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("audio/mpeg");
+    const body = new Uint8Array(await res.arrayBuffer());
+    expect(Array.from(body)).toEqual([0x49, 0x44, 0x33, 0x01]);
+  });
+
+  it("returns 404 for audio when episode has no audio yet", async () => {
+    const app = episodesRoutes(fakeRepo(), () => "user-1", { get: async () => new Uint8Array() });
+    const res = await app.request("/episodes/ep-1/audio");
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 for audio when storage read fails", async () => {
+    const repo = fakeRepo();
+    const app = episodesRoutes(
+      { ...repo, getEpisodeAudio: async () => "audio/episodes/missing.mp3" },
+      () => "user-1",
+      { get: async () => { throw new Error("ENOENT"); } },
+    );
+    const res = await app.request("/episodes/ep-1/audio");
+    expect(res.status).toBe(404);
   });
 });
 
