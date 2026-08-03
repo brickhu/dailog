@@ -361,7 +361,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
 
       async updateEpisodeAudio(episodeId, audioKey, durationSeconds) {
         await db.update(schema.episodes)
-          .set({ audioUrl: audioKey, durationSeconds })
+          // duration_seconds 是 integer 列：ffmpeg Duration 探测返回浮点秒数，落库前取整
+          .set({ audioUrl: audioKey, durationSeconds: Math.round(durationSeconds) })
           .where(eq(schema.episodes.id, episodeId));
       },
     },
