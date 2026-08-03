@@ -40,6 +40,7 @@
 
 | | dev project `dailogues-studio-dev` | prod project `dailogues-studio` |
 |---|---|---|
+| 入口（2026 统一界面） | Workers & Pages → Create application → **Pages** → Connect to Git（勿走 Workers Import a repository，其产物形态为 Workers Assets，无 output directory） | 同左 |
 | 连接仓库 | brickhu/dailog | brickhu/dailog |
 | Production branch | `dev` | `master` |
 | 构建命令 | `pnpm --filter @dailogues/studio build` | 同左 |
