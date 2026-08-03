@@ -35,6 +35,8 @@ export interface JobsRepo {
   markJobDone(jobId: string): Promise<void>;
   /** 生成产物落库：episodes.audio_url + duration_seconds */
   updateEpisodeAudio(episodeId: string, audioKey: string, durationSeconds: number): Promise<void>;
+  /** 队列重试耗尽后落库失败状态（防重启恢复重跑） */
+  markJobFailed(jobId: string, error: string): Promise<void>;
 }
 
 export type Repos = { imports: ImportsRepo; episodes: EpisodesRepo; jobs: JobsRepo };
@@ -173,6 +175,10 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return dialogue.messages ?? null;
       },
 
+      async setEpisodeLanguage(id, language) {
+        await db.update(schema.episodes).set({ language }).where(eq(schema.episodes.id, id));
+      },
+
       async setPublished(id) {
         await db.update(schema.episodes)
           .set({ status: "published", publishedAt: new Date() })
@@ -272,6 +278,13 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           progress: schema.generationJobs.progress,
         });
         return rows[0];
+      },
+
+      async markJobFailed(jobId, error) {
+        await db
+          .update(schema.generationJobs)
+          .set({ status: "failed", error })
+          .where(eq(schema.generationJobs.id, jobId));
       },
 
       async getOwnedEpisode(episodeId, userId) {

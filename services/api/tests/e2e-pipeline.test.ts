@@ -121,8 +121,9 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       getDialogueMessages: (id, userId) => repo.episodes.getImportedDialogue(id, userId),
       qualityCheck: async (messages) =>
         parseJsonLoose(await llm.complete(qualityCheckPrompt(messages))) as { pass: boolean; reason?: string; language?: "zh" | "en" },
-      savePolished: async (id, _language, segments) => {
+      savePolished: async (id, language, segments) => {
         const latest = await repo.episodes.getLatestScript(id);
+        await repo.episodes.setEpisodeLanguage(id, language);
         return repo.episodes.saveScript(id, (latest?.version ?? 0) + 1, segments);
       },
       llm,
@@ -137,7 +138,11 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       consumeQuota: (userId, credit) => repo.jobs.consumeQuota(userId, credit),
       createJob: (id) => repo.jobs.createJob(id),
       enqueueJob: async (job) => {
-        await queue.enqueue({ id: job.id, episodeId: job.episodeId }, () => {});
+        void queue.enqueue({ id: job.id, episodeId: job.episodeId }, () => {}).then((result) => {
+          if (result.status === "failed") {
+            void repo.jobs.markJobFailed(job.id, result.error ?? "unknown");
+          }
+        });
       },
     };
 
@@ -220,7 +225,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
 
     // 4. 轮询 job 直到 done/failed（上限 120s，间隔 1s）
     let job: { status: string; error: string | null } | null = null;
-    const deadline = Date.now() + 120_000;
+    const deadline = Date.now() + 300_000;
     while (Date.now() < deadline) {
       const jobRes = await app.request(`/api/episodes/${episodeId}/job`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
@@ -241,5 +246,5 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     expect(rows[0]?.durationSeconds ?? 0).toBeGreaterThan(0); // ffmpeg Duration 探测成功
     const audio = await readFile(join(storageDir, rows[0]!.audioUrl!));
     expect(audio.length).toBeGreaterThan(1024);
-  });
+  }, 300_000);
 });

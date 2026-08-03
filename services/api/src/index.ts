@@ -70,8 +70,9 @@ const polish: PolishDeps = {
   // 质量门 + 语言检测：一次非流式补全，输出 JSON { pass, reason?, language }
   getDialogueMessages: (episodeId, userId) => repo.episodes.getImportedDialogue(episodeId, userId),
   qualityCheck: async (messages) => parseJsonLoose(await llm.complete(qualityCheckPrompt(messages))) as QualityResult,
-  savePolished: async (episodeId, _language, segments) => {
+  savePolished: async (episodeId, language, segments) => {
     const latest = await repo.episodes.getLatestScript(episodeId);
+    await repo.episodes.setEpisodeLanguage(episodeId, language);
     return repo.episodes.saveScript(episodeId, (latest?.version ?? 0) + 1, segments);
   },
   llm,
@@ -90,6 +91,12 @@ const generate: GenerateDeps = {
     // fire-and-forget：202 立即返回，状态由 GET /job 轮询（队列 promise 在任务完成时才 resolve）
     void queue.enqueue({ id: job.id, episodeId: job.episodeId }, (p) => {
       console.log(`[queue] job ${job.id} progress ${p}%`);
+    }).then((result) => {
+      if (result.status === "failed") {
+        // 重试耗尽：失败状态落库，防止重启恢复时重跑（此前一直停在 queued）
+        void repo.jobs.markJobFailed(job.id, result.error ?? "unknown").catch((e) =>
+          console.error(`[queue] markJobFailed ${job.id} failed`, e));
+      }
     }).catch((e) => console.error(`[queue] job ${job.id} failed`, e));
   },
 };

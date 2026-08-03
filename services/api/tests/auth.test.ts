@@ -17,6 +17,7 @@ function fakeRepo(): AppDeps["repo"] {
       getLatestScript: async () => null,
       getImportedDialogue: async () => null,
       setPublished: async () => {},
+      setEpisodeLanguage: async () => {},
       getEpisodeUserId: async () => null,
       getEpisodeLanguage: async () => null,
       getHostModelId: async () => null,
@@ -33,6 +34,7 @@ function fakeRepo(): AppDeps["repo"] {
       markJobProgress: async () => {},
       markJobDone: async () => {},
       updateEpisodeAudio: async () => {},
+      markJobFailed: async () => {},
     },
   };
 }
