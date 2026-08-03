@@ -294,6 +294,15 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return rows[0] ?? null;
       },
 
+      async getChannelActivatedAt(userId) {
+        const rows = await db
+          .select({ channelActivatedAt: schema.profiles.channelActivatedAt })
+          .from(schema.profiles)
+          .where(eq(schema.profiles.id, userId))
+          .limit(1);
+        return rows[0]?.channelActivatedAt ?? null;
+      },
+
       async saveVoiceSample(row: VoiceSampleRow) {
         // upsert：voice_samples 无 user_id 唯一约束，先删该用户旧行再插，实现「同 user 覆盖」
         await db.transaction(async (tx) => {

@@ -30,6 +30,7 @@ function fakeRepo(): EpisodesRepo {
     saveVoiceSample: async () => {},
     getVoiceSample: async () => null,
     getEpisodeAudio: async () => null,
+    getChannelActivatedAt: async () => new Date(),
   };
 }
 

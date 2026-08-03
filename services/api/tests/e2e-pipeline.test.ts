@@ -43,6 +43,7 @@ import type { PolishDeps } from "../src/routes/polish";
 import type { GenerateDeps } from "../src/routes/generate";
 import type { JobDeps } from "../src/routes/job";
 import type { VoiceDeps } from "../src/routes/voice";
+import { createActivateChannel, type ChannelDeps } from "../src/routes/channel";
 
 // 门控（skip 条件）：三个必需环境变量任一缺失 → SKIP
 const hasE2eEnv = Boolean(
@@ -148,6 +149,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       getLatestScript: (id) => repo.episodes.getLatestScript(id),
       safetyCheck: async (segments) =>
         parseJsonLoose(await llm.complete(safetyCheckPrompt(segments))) as { pass: boolean; reason?: string },
+      getChannelActive: async (userId) => (await repo.episodes.getChannelActivatedAt(userId)) !== null,
       getQuota: (userId) => repo.jobs.getQuotaInfo(userId),
       consumeQuota: (userId, credit) => repo.jobs.consumeQuota(userId, credit),
       createJob: (id) => repo.jobs.createJob(id),
@@ -165,12 +167,14 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       getLatestJob: (id) => repo.jobs.getLatestJob(id),
     };
     const voice: VoiceDeps = { saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row), tts, storage };
+    const channel: ChannelDeps = { activateChannel: createActivateChannel(dbClient.db) };
 
     // 真实 better-auth：注册测试用户，token 供全流程请求（认证与生产路径一致）
     const auth = createAuth({ db: dbClient.db, secret: env.BETTER_AUTH_SECRET });
     app = createApp({
       env,
       auth,
+      channel,
       repo,
       polish,
       generate,
@@ -191,6 +195,15 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       throw new Error(`e2e sign-up failed: ${signUp.status} ${await signUp.text()}`);
     }
     const { token, user } = (await signUp.json()) as { token: string; user: { id: string } };
+    // 开通频道（授权码）：e2e 生成管线需要频道已开通
+    const activate = await app.request("/api/me/channel/activate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ inviteCode: INVITE_CODE }),
+    });
+    if (activate.status !== 200) {
+      throw new Error(`e2e channel activation failed: ${activate.status} ${await activate.text()}`);
+    }
     AUTH_TOKEN = token;
     USER_ID = user.id;
   });

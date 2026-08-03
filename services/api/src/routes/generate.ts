@@ -7,6 +7,8 @@ export interface GenerateDeps {
   getOwnedEpisode(episodeId: string, userId: string): Promise<{ id: string } | null>;
   getLatestScript(episodeId: string): Promise<{ version: number; segments: ScriptSegment[] } | null>;
   safetyCheck(segments: ScriptSegment[]): Promise<{ pass: boolean; reason?: string }>;
+  /** 频道门禁：授权码开通频道后才可生成 */
+  getChannelActive(userId: string): Promise<boolean>;
   getQuota(userId: string): Promise<{ plan: "free" | "pro"; generatedCount: number; creditBalance: number }>;
   consumeQuota(userId: string, consumeCredit: number): Promise<void>;
   createJob(episodeId: string): Promise<{ id: string; episodeId: string; status: string; progress: number }>;
@@ -25,6 +27,9 @@ export function generateRoutes(deps: GenerateDeps) {
     if (!owned) return c.json({ error: "not_found" }, 404);
     const script = await deps.getLatestScript(episodeId);
     if (!script) return c.json({ error: "no_script" }, 404);
+    // 频道门禁：未开通频道（授权码激活）不能生成
+    const channelActive = await deps.getChannelActive(userId);
+    if (!channelActive) return c.json({ error: "channel_not_active", detail: "请先用授权码开通频道" }, 403);
     // 生成前内容安全审核（编辑后脚本）：拒绝不建 job 不扣配额（PRD §4.4）
     const safety = await deps.safetyCheck(script.segments);
     if (!safety.pass) return c.json({ error: "safety_rejected", reason: safety.reason }, 422);

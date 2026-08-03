@@ -28,6 +28,7 @@ function fakeRepo(): AppDeps["repo"] {
       saveVoiceSample: async () => {},
       getVoiceSample: async () => null,
       getEpisodeAudio: async () => null,
+      getChannelActivatedAt: async () => new Date(),
     },
     jobs: {
       getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
@@ -60,6 +61,7 @@ function fakeGenerate(): AppDeps["generate"] {
     getOwnedEpisode: async () => ({ id: "ep-1" }),
     getLatestScript: async () => null,
     safetyCheck: async () => ({ pass: true }),
+    getChannelActive: async () => true,
     getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
     consumeQuota: async () => {},
     createJob: async (episodeId) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
@@ -115,6 +117,7 @@ function makeApp(envOverride: Partial<Env> = {}) {
     generate: fakeGenerate(),
     job: fakeJob(),
     voice: fakeVoice(),
+    channel: { activateChannel: async () => ({ ok: true }) },
   });
 }
 

@@ -107,7 +107,6 @@ export default function AuthPage() {
   const [mode, setMode] = createSignal<"signin" | "signup">("signin");
   const [email, setEmail] = createSignal("");
   const [password, setPassword] = createSignal("");
-  const [invite, setInvite] = createSignal("");
   const [error, setError] = createSignal<string | null>(null);
   const [info, setInfo] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
@@ -122,10 +121,6 @@ export default function AuthPage() {
     e.preventDefault();
     setError(null);
     setInfo(null);
-    if (mode() === "signup" && invite().trim().length === 0) {
-      setError("请填写邀请码（邀请制注册）");
-      return;
-    }
     if (password().length < 8) {
       setError("密码至少 8 位");
       return;
@@ -138,12 +133,10 @@ export default function AuthPage() {
         navigate("/dashboard");
       } else {
         const name = email().trim().split("@")[0] || "用户";
-        const { error } = await auth.signUp(email().trim(), password(), name, invite().trim());
-        if (error) {
-          return setError(error === "invalid_invite_code" ? "邀请码无效或已被使用" : error);
-        }
-        // 注册成功即登录态：直接进入录音引导
-        navigate("/onboarding/voice");
+        const { error } = await auth.signUp(email().trim(), password(), name);
+        if (error) return setError(error);
+        // 注册成功即登录态：先开通频道（授权码），再录声音
+        navigate("/onboarding/channel");
       }
     } finally {
       setBusy(false);
@@ -170,18 +163,6 @@ export default function AuthPage() {
           </button>
         </div>
         <form onSubmit={submit}>
-          <Show when={mode() === "signup"}>
-            <div {...stylex.props(styles.field)}>
-              <label {...stylex.props(styles.label)}>邀请码</label>
-              <input
-                {...stylex.props(styles.input)}
-                value={invite()}
-                onInput={(e) => setInvite(e.currentTarget.value)}
-                placeholder="注册需邀请码"
-                autocomplete="off"
-              />
-            </div>
-          </Show>
           <div {...stylex.props(styles.field)}>
             <label {...stylex.props(styles.label)}>邮箱</label>
             <input
@@ -216,7 +197,7 @@ export default function AuthPage() {
         <Show when={info()}>
           <div {...stylex.props(styles.info)}>{info()}</div>
         </Show>
-        <div {...stylex.props(styles.hint)}>邀请制内测中 · 每个新用户可邀请好友</div>
+        <div {...stylex.props(styles.hint)}>注册即登录 · 邀请码用于开通频道</div>
       </div>
     </div>
   );

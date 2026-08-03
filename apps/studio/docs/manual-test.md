@@ -27,15 +27,20 @@ VITE_EXTENSION_ID=<dev 扩展 id>   # 留空则隐藏扩展连接卡
 
 ## 验收路径
 
-### 1. /auth（better-auth）
+### 1. /auth（better-auth，注册开放）
 - [ ] 未登录访问 `/dashboard` 自动跳 `/auth`
-- [ ] 注册：邀请码为空被拦截（"请填写邀请码"）；密码 <8 位被拦截
-- [ ] 注册：无效/已用邀请码 → "邀请码无效或已被使用"
-- [ ] 注册成功（有效码）→ 跳 `/onboarding/voice`（注册即登录态）
+- [ ] 注册：密码 <8 位被拦截
+- [ ] 注册成功（无需邀请码）→ 跳 `/onboarding/channel`（注册即登录态）
 - [ ] 刷新页面会话保持（localStorage token + get-session 恢复）
-- [ ] 登录成功后自动跳转（有样本 → dashboard；无样本 → onboarding）
+- [ ] 登录成功后自动跳转（已开通频道 → onboarding/voice 或 dashboard）
 - [ ] 错误密码显示服务端错误文案
 - [ ] 退出登录 → 回 /auth；再访问受保护页被重定向
+
+### 1.5 /onboarding/channel（授权码开通频道）
+- [ ] 错误码 → "授权码无效或已被使用"
+- [ ] 正确码 → "频道已开通 ✓" → 下一步进录音
+- [ ] "稍后开通" → dashboard 显示黄色开通横幅
+- [ ] 未开通时：新节目向导生成步骤被 403 挡住（引导开通）
 
 ### 2. /onboarding/voice
 - [ ] 浏览器弹出麦克风授权；拒绝时显示错误

@@ -39,6 +39,8 @@ export interface EpisodesRepo {
   saveVoiceSample(row: VoiceSampleRow): Promise<void>;
   /** 工作台回读最新样本（onboarding 守卫/设置页）；无记录返回 null */
   getVoiceSample(userId: string): Promise<VoiceSampleRow | null>;
+  /** 频道开通时间（授权码激活）；null = 未开通（生成/发布被挡） */
+  getChannelActivatedAt(userId: string): Promise<Date | null>;
 }
 
 export function episodesRoutes(repo: EpisodesRepo, getUserId: (c: unknown) => string, storage?: { get(key: string): Promise<Uint8Array> }) {
@@ -87,8 +89,12 @@ export function episodesRoutes(repo: EpisodesRepo, getUserId: (c: unknown) => st
     return c.json(saved);
   });
   app.post("/episodes/:id/publish", async (c) => {
-    const ep = await repo.getEpisode(c.req.param("id"), getUserId(c));
+    const userId = getUserId(c);
+    const ep = await repo.getEpisode(c.req.param("id"), userId);
     if (!ep) return c.json({ error: "not_found" }, 404);
+    // 频道门禁：未开通频道（授权码激活）不能发布
+    const activated = await repo.getChannelActivatedAt(userId);
+    if (!activated) return c.json({ error: "channel_not_active", detail: "请先用授权码开通频道" }, 403);
     await repo.setPublished(c.req.param("id"));
     return c.json({ ok: true }); // 邀请码发放接入点：plan 7
   });

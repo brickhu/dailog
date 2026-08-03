@@ -9,6 +9,7 @@ import { polishRoutes, type PolishDeps } from "./routes/polish";
 import { generateRoutes, type GenerateDeps } from "./routes/generate";
 import { jobRoutes, type JobDeps } from "./routes/job";
 import { voiceRoutes, type VoiceDeps } from "./routes/voice";
+import { channelRoutes, type ChannelDeps } from "./routes/channel";
 import type { Repos } from "./repo";
 
 export type { AuthLike };
@@ -20,6 +21,7 @@ export type AppDeps = {
   generate: GenerateDeps;
   job: JobDeps;
   voice: VoiceDeps;
+  channel: ChannelDeps; // 频道开通（授权码激活）
 };
 
 export function createApp(deps: AppDeps): Hono<AuthEnv> {
@@ -37,7 +39,11 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
 
   app.use("/api/*", createAuthMiddleware(deps.auth));
 
-  app.get("/api/me", (c) => c.json({ userId: c.get("userId") }));
+  app.get("/api/me", async (c) => {
+    const userId = c.get("userId");
+    const activated = await deps.repo.episodes.getChannelActivatedAt(userId);
+    return c.json({ userId, channelActive: activated !== null });
+  });
 
   app.route("/api", importsRoutes(deps.repo.imports));
   app.route("/api", episodesRoutes(deps.repo.episodes, (c) => (c as Context<AuthEnv>).get("userId"), deps.voice.storage));
@@ -47,6 +53,7 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   app.route("/", generateRoutes(deps.generate));
   app.route("/", jobRoutes(deps.job, (c) => (c as unknown as { get: (k: string) => string }).get("userId")));
   app.route("/", voiceRoutes(deps.voice));
+  app.route("/", channelRoutes(deps.channel));
 
   app.notFound((c) => c.json({ error: "not_found" }, 404));
   app.onError((err, c) => {

@@ -56,6 +56,8 @@ export const profiles = pgTable("profiles", {
   bio: text("bio"),
   plan: text("plan", { enum: ["free", "pro"] }).notNull().default("free"),
   creditBalance: integer("credit_balance").notNull().default(0),
+  /** 频道开通时间（授权码激活；null = 未开通，不能生成/发布） */
+  channelActivatedAt: timestamp("channel_activated_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -9,7 +9,7 @@ export interface AuthState {
   loading: boolean;
   token: () => string | null;
   signIn(email: string, password: string): Promise<{ error: string | null }>;
-  signUp(email: string, password: string, name: string, inviteCode: string): Promise<{ error: string | null }>;
+  signUp(email: string, password: string, name: string): Promise<{ error: string | null }>;
   signOut(): Promise<void>;
 }
 
@@ -53,9 +53,9 @@ export function AuthProvider(props: { children: JSX.Element }) {
         return { error: e instanceof Error ? e.message : "登录失败" };
       }
     },
-    async signUp(email, password, name, inviteCode) {
+    async signUp(email, password, name) {
       try {
-        const { token, user: u } = await authApi.signUp({ email, password, name, inviteCode });
+        const { token, user: u } = await authApi.signUp({ email, password, name });
         setAccessToken(token);
         setUser(u);
         return { error: null };

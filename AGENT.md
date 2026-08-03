@@ -74,13 +74,13 @@ dailogues/
 
 - 前端：SolidJS + Solid Router + StyleX（两站共用设计 token）
 - 后端：Node + TypeScript + Hono + Drizzle + fluent-ffmpeg
-- 认证：**better-auth**（自托管邮箱+密码会话，后端中间件验证）；注册需邀请码
+- 认证：**better-auth**（自托管邮箱+密码会话，后端中间件验证）；注册开放，**邀请码用于开通频道**（未开通不能生成/发布）
 - 生成管线：TTS = **Fish Audio**（形态已实测，`docs/spikes/fish-audio.md`）——**多说话人一次调用**：`text` 内嵌 `<|speaker:N|>` 标签 + `reference_id` 数组（**非 text/chunks 数组**）；主持人零样本克隆走 **msgpack `references` 内联音频**（JSON 无 base64 字段、带不了原始音频）；**混合模式受限**（一次调用不能混用内联 + 固定 id）→ 按段 fallback（host 段 msgpack 内联零样本 + guest 段固定音色逐段合成，实测形态）+ ffmpeg 拼接；单请求 ≥12000 中文未触上限；免费模型 `s2.1-pro-free`（$0）可用；默认 `temperature=0.7` 一致性波动 ~12%（可接受）→ ffmpeg 拼接固定片头片尾 → R2；备选切换预案见 ARC §3.3 / `docs/spikes/tts-comparison.md`
 - 后端 LLM：**DeepSeek**（OpenAI 兼容，`deepseek-chat` 默认，配置化可切换）
 - 润色：LLM SSE 流式；**打磨前质量审核前置** + **生成前内容安全审核**（编辑后脚本提交生成时，DeepSeek 安全审核通过才合成，拒绝不扣配额）；语言跟随对话内容（与界面语言无关）；单期目标 5–10 分钟
 - 计费：Stripe Checkout/Portal/Webhook；**按脚本字数计费**（LLM/TTS 成本随字数线性，对齐成本结构）；**脚本硬上限 5000 字**；润色免费（获客）+ 对话级润色上限（每对话 ≤5 版，pro 不限）；免费首期 0 扣费；Pro 订阅无限
 - 导入：**浏览器扩展统一采集**（登录态下读取本人对话，含元数据：标题/对话ID/平台/原始链接，无验证码、无分享链接）；**平台分级（`docs/spikes/chat-dom.md`）**：首发 Claude/DeepSeek（高），次批 ChatGPT（中~高），Gemini（中）/Kimi、豆包（中~低）/通义（低）按需；虚拟列表平台（ChatGPT/DeepSeek/Gemini/豆包）走**滚动采集循环 + 去重**；元数据取 URL + `document.title`；回传统一走 **background service worker**（Claude CSP）；**扩展定位=采集器（thin）**，创作发布仍在 SPA
-- 邀请码：管理员 CLI + 用户奖励（>3 期后每发布一期 +1）
+- 邀请码：管理员 CLI + 用户奖励（>3 期后每发布一期 +1）；**注册开放，授权码开通频道**
 - 成本策略：除 LLM/TTS/Stripe 外：CF/R2 免费 + better-auth $0；Railway（API+DB）约 $10–25/月
 
 ## 里程碑

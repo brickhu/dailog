@@ -35,6 +35,7 @@ function fakeRepo(): AppDeps["repo"] {
       saveVoiceSample: async () => {},
       getVoiceSample: async () => null,
       getEpisodeAudio: async () => null,
+      getChannelActivatedAt: async () => null,
     },
     jobs: {
       getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
@@ -67,6 +68,7 @@ function fakeGenerate(): AppDeps["generate"] {
     getOwnedEpisode: async () => ({ id: "ep-1" }),
     getLatestScript: async () => null,
     safetyCheck: async () => ({ pass: true }),
+    getChannelActive: async () => true,
     getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
     consumeQuota: async () => {},
     createJob: async (episodeId) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
@@ -142,6 +144,7 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
       generate: fakeGenerate(),
       job: fakeJob(),
       voice: fakeVoice(),
+    channel: { activateChannel: async () => ({ ok: true }) },
     });
   });
 
@@ -158,43 +161,12 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
     }
   });
 
-  it("rejects sign-up without invite code (400 invalid_invite_code)", async () => {
-    const res = await app.request("/api/auth/sign-up/email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email(), password: "password123", name: "无码用户" }),
-    });
-    expect(res.status).toBe(400);
-    const json = (await res.json()) as { message?: string };
-    expect(JSON.stringify(json)).toContain("invalid_invite_code");
-  });
-
-  it("rejects sign-up with unknown invite code", async () => {
-    const res = await app.request("/api/auth/sign-up/email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email(), password: "password123", name: "错码用户", inviteCode: INVALID_CODE }),
-    });
-    expect(res.status).toBe(400);
-  });
-
-  it("rejects sign-up with expired invite code", async () => {
-    const res = await app.request("/api/auth/sign-up/email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email(), password: "password123", name: "过期码用户", inviteCode: "auth-expired-code" }),
-    });
-    expect(res.status).toBe(400);
-  });
-
-  it("signs up with valid invite code → token, profile row, invite marked used", async () => {
+  it("signs up without invite code → token + profile row（注册开放，码仅用于开通频道）", async () => {
     const mail = email();
-    const code = freshCode();
-    await insertInvite(code);
     const res = await app.request("/api/auth/sign-up/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: mail, password: "password123", name: "新用户", inviteCode: code }),
+      body: JSON.stringify({ email: mail, password: "password123", name: "新用户" }),
     });
     expect(res.status).toBe(200);
     const json = (await res.json()) as { token?: string; user?: { id: string } };
@@ -203,35 +175,29 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
 
     // profile 行已创建（after hook）
     const profiles = await dbClient.db
-      .select({ id: schema.profiles.id })
+      .select({ id: schema.profiles.id, channelActivatedAt: schema.profiles.channelActivatedAt })
       .from(schema.profiles)
       .where(eq(schema.profiles.id, json.user!.id));
     expect(profiles.length).toBe(1);
-
-    // 邀请码已标记使用
-    const codes = await dbClient.db
-      .select({ usedBy: schema.inviteCodes.usedBy, usedAt: schema.inviteCodes.usedAt })
-      .from(schema.inviteCodes)
-      .where(eq(schema.inviteCodes.code, code));
-    expect(codes[0]?.usedBy).toBe(json.user!.id);
-    expect(codes[0]?.usedAt).toBeTruthy();
+    expect(profiles[0]?.channelActivatedAt).toBeNull(); // 频道未开通
 
     // 带 token 访问受保护接口
     const me = await app.request("/api/me", {
       headers: { Authorization: `Bearer ${json.token}` },
     });
     expect(me.status).toBe(200);
-    expect((await me.json()) as { userId: string }).toEqual({ userId: json.user!.id });
+    expect((await me.json()) as { userId: string; channelActive: boolean }).toEqual({
+      userId: json.user!.id,
+      channelActive: false,
+    });
   });
 
   it("signs in and get-session restores via bearer token", async () => {
     const mail = email();
-    const code = freshCode();
-    await insertInvite(code);
     await app.request("/api/auth/sign-up/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: mail, password: "password123", name: "登录用户", inviteCode: code }),
+      body: JSON.stringify({ email: mail, password: "password123", name: "登录用户" }),
     });
     const signIn = await app.request("/api/auth/sign-in/email", {
       method: "POST",

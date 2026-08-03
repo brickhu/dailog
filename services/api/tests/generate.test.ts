@@ -6,6 +6,7 @@ function makeGenerate(deps: Partial<GenerateDeps> = {}) {
     getOwnedEpisode: async () => ({ id: "ep-1" }),
     getLatestScript: async () => ({ version: 2, segments: [{ speaker: "host", text: "你好" }] }),
     safetyCheck: async () => ({ pass: true }),
+    getChannelActive: async () => true,
     getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
     consumeQuota: async () => {},
     createJob: async (episodeId) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),

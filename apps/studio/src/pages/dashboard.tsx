@@ -1,5 +1,5 @@
 import { createSignal, For, onMount, Show } from "solid-js";
-import { useNavigate } from "@solidjs/router";
+import { useNavigate, A } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "../theme.stylex.ts";
 import { api } from "../lib/client";
@@ -155,6 +155,25 @@ const styles = stylex.create({
     color: tokens.colorDanger,
     marginBottom: tokens.space3,
   },
+  channelBanner: {
+    padding: tokens.space3,
+    borderRadius: tokens.radiusMd,
+    background: "rgba(224, 162, 60, 0.12)",
+    border: `1px solid rgba(224, 162, 60, 0.4)`,
+    color: tokens.colorWarning,
+    fontSize: tokens.fontSizeSm,
+    marginBottom: tokens.space4,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: tokens.space3,
+  },
+  channelLink: {
+    color: tokens.colorWarning,
+    fontWeight: tokens.fontWeightMedium,
+    textDecoration: "underline",
+    flexShrink: 0,
+  },
 });
 
 export default function Dashboard() {
@@ -164,9 +183,12 @@ export default function Dashboard() {
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
   const [extConnected, setExtConnected] = createSignal(false);
+  const [channelActive, setChannelActive] = createSignal(true);
 
   onMount(async () => {
     try {
+      const me = await api.get<{ channelActive: boolean }>("/api/me");
+      setChannelActive(me.channelActive);
       setEpisodes(await api.get<Episode[]>("/api/episodes"));
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
@@ -197,6 +219,15 @@ export default function Dashboard() {
             开始新节目
           </button>
         </div>
+
+        <Show when={!channelActive()}>
+          <div {...stylex.props(styles.channelBanner)}>
+            <span>你的频道尚未开通：开通后才能生成和发布节目</span>
+            <A href="/onboarding/channel" {...stylex.props(styles.channelLink)}>
+              输入授权码开通 →
+            </A>
+          </div>
+        </Show>
 
         <Show when={!extConnected() && env.extensionId}>
           <div {...stylex.props(styles.extCard)}>

@@ -44,10 +44,10 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       { id: QUOTA_USER, name: "Quota Test", email: "quota-test@test.local", emailVerified: true, createdAt: now, updatedAt: now },
     ]).onConflictDoNothing();
     await db.insert(profiles).values([
-      { id: REPO_USER, username: "repo-test-user", displayName: "Repo Test" },
-      { id: API_USER, username: "api-test-user", displayName: "API Test" },
-      // 配额测试种子：free + 5 积分
-      { id: QUOTA_USER, username: "quota-test-user", displayName: "Quota Test", plan: "free", creditBalance: 5 },
+      { id: REPO_USER, username: "repo-test-user", displayName: "Repo Test", channelActivatedAt: new Date() },
+      { id: API_USER, username: "api-test-user", displayName: "API Test", channelActivatedAt: new Date() },
+      // 配额测试种子：free + 5 积分（已开通频道）
+      { id: QUOTA_USER, username: "quota-test-user", displayName: "Quota Test", plan: "free", creditBalance: 5, channelActivatedAt: new Date() },
     ]).onConflictDoNothing();
   });
 
@@ -419,6 +419,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       getOwnedEpisode: (episodeId, userId) => repo.episodes.getEpisode(episodeId, userId),
       getLatestScript: (episodeId) => repo.episodes.getLatestScript(episodeId),
       safetyCheck: async () => ({ pass: true }),
+      getChannelActive: async (userId) => (await repo.episodes.getChannelActivatedAt(userId)) !== null,
       getQuota: (userId) => repo.jobs.getQuotaInfo(userId),
       consumeQuota: (userId, credit) => repo.jobs.consumeQuota(userId, credit),
       createJob: (episodeId) => repo.jobs.createJob(episodeId),
@@ -433,12 +434,14 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       tts: null,
       storage: { put: async () => {}, get: async () => new Uint8Array() },
     };
+    const channel: AppDeps["channel"] = { activateChannel: async () => ({ ok: true }) };
     const app = createApp({
       env: makeEnv(),
       auth: {
         handler: async () => new Response("", { status: 404 }),
         api: { getSession: async () => ({ user: { id: API_USER } }) },
       },
+      channel,
       repo,
       polish,
       generate,

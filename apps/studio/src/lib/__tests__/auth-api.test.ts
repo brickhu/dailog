@@ -23,10 +23,10 @@ describe("authApi.signUp", () => {
     mockFetchOnce(async (url, init) => {
       expect(String(url)).toContain("/api/auth/sign-up/email");
       const body = JSON.parse(String(init?.body));
-      expect(body).toMatchObject({ email: "a@b.co", password: "pw123456", inviteCode: "inv-1" });
+      expect(body).toMatchObject({ email: "a@b.co", password: "pw123456", name: "A" });
       return jsonResponse(200, { token: "t1", user: USER });
     });
-    const out = await authApi.signUp({ email: "a@b.co", password: "pw123456", name: "A", inviteCode: "inv-1" });
+    const out = await authApi.signUp({ email: "a@b.co", password: "pw123456", name: "A" });
     expect(out.token).toBe("t1");
     expect(localStorage.getItem(TOKEN_KEY)).toBe("t1");
   });
@@ -68,10 +68,22 @@ describe("authApi.signOut", () => {
   });
 });
 
+describe("authApi.activateChannel", () => {
+  it("posts inviteCode with bearer token", async () => {
+    mockFetchOnce(async (url, init) => {
+      expect(String(url)).toContain("/api/me/channel/activate");
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer t5");
+      expect(JSON.parse(String(init?.body))).toEqual({ inviteCode: "code-1" });
+      return jsonResponse(200, { ok: true });
+    });
+    await authApi.activateChannel("t5", "code-1");
+  });
+});
+
 describe("authApi error mapping", () => {
   it("surfaces better-auth error message (invalid_invite_code)", async () => {
     mockFetchOnce(async () => jsonResponse(400, { message: "invalid_invite_code" }));
-    const err = await authApi.signUp({ email: "x@y.z", password: "pw123456", name: "X", inviteCode: "bad" }).catch((e) => e);
+    const err = await authApi.activateChannel("t", "bad").catch((e) => e);
     expect((err as Error).message).toBe("invalid_invite_code");
   });
 });

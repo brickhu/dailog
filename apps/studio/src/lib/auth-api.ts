@@ -14,7 +14,6 @@ export interface SignUpInput {
   email: string;
   password: string;
   name: string;
-  inviteCode: string;
 }
 
 export interface SignInInput {
@@ -83,6 +82,18 @@ export const authApi = {
     if (!res.ok) return null;
     const data = (await res.json()) as { user: AuthUser };
     return data.user ?? null;
+  },
+
+  /** 授权码开通频道（注册开放；生成/发布前需开通） */
+  async activateChannel(token: string, inviteCode: string): Promise<void> {
+    const res = await expectOk(
+      await request("/api/me/channel/activate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ inviteCode }),
+      }),
+    );
+    await res.json();
   },
 
   async signOut(token: string): Promise<void> {

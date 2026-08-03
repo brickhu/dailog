@@ -5,6 +5,7 @@ import { RequireAuth } from "./lib/guards";
 import AuthPage from "./pages/auth";
 import Dashboard from "./pages/dashboard";
 import OnboardingVoice from "./pages/onboarding-voice";
+import OnboardingChannel from "./pages/onboarding-channel";
 import NewEpisode from "./pages/new-episode";
 import Settings from "./pages/settings";
 import NotFound from "./pages/not-found";
@@ -17,6 +18,7 @@ render(
         <Route path="/" component={RequireAuth}>
           <Route path="/" component={Dashboard} />
           <Route path="/dashboard" component={Dashboard} />
+          <Route path="/onboarding/channel" component={OnboardingChannel} />
           <Route path="/onboarding/voice" component={OnboardingVoice} />
           <Route path="/episodes/new" component={NewEpisode} />
           <Route path="/settings" component={Settings} />

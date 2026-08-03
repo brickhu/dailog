@@ -18,6 +18,7 @@ import type { PolishDeps } from "./routes/polish";
 import type { GenerateDeps } from "./routes/generate";
 import type { JobDeps } from "./routes/job";
 import type { VoiceDeps } from "./routes/voice";
+import { createActivateChannel } from "./routes/channel";
 
 const env = loadEnv();
 
@@ -89,6 +90,7 @@ const polish: PolishDeps = {
 const generate: GenerateDeps = {
   getOwnedEpisode: (episodeId, userId) => repo.jobs.getOwnedEpisode(episodeId, userId),
   getLatestScript: (episodeId) => repo.episodes.getLatestScript(episodeId),
+  getChannelActive: async (userId) => (await repo.episodes.getChannelActivatedAt(userId)) !== null,
   // 安全门（PRD §4.4）：编辑后脚本一次非流式补全，输出 JSON { pass, reason? }
   safetyCheck: async (segments) => parseJsonLoose(await llm.complete(safetyCheckPrompt(segments))) as { pass: boolean; reason?: string },
   getQuota: (userId) => repo.jobs.getQuotaInfo(userId),
@@ -129,6 +131,7 @@ const app = createApp({
   generate,
   job,
   voice,
+  channel: { activateChannel: createActivateChannel(db) },
 });
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => {

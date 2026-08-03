@@ -1,0 +1,1 @@
+ALTER TABLE "profiles" ADD COLUMN "channel_activated_at" timestamp with time zone;
