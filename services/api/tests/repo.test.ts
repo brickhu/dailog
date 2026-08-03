@@ -18,6 +18,7 @@ function makeEnv(): Env {
   return {
     DATABASE_URL: process.env.DATABASE_URL!,
     BETTER_AUTH_SECRET: "test-secret",
+      BETTER_AUTH_URL: "http://localhost:8787",
     PORT: 8787,
     DEEPSEEK_API_KEY: "",
     DEEPSEEK_BASE_URL: "https://api.deepseek.com/v1",
