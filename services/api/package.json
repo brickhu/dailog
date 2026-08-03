@@ -22,7 +22,8 @@
     "jose": "^6.2.7",
     "postgres": "^3.4.5",
     "tsx": "^4.19.0",
-    "zod": "^3.24.0"
+    "zod": "^3.24.0",
+    "undici": "^7.8.0"
   },
   "devDependencies": {
     "@types/fluent-ffmpeg": "^2.1.28",
