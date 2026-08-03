@@ -13,7 +13,7 @@
     "https://www.doubao.com/*",
     "https://www.tongyi.com/*",
     "https://api.dailogues.com/*",
-    "https://gracious-caring-development.up.railway.app/*"
+    "https://api.candelbot.app/*"
   ],
   "externally_connectable": {
     "matches": [

@@ -3,7 +3,7 @@ import { build } from "esbuild";
 // 环境注入：DAILOGUES_ENV=dev|prod（默认 prod），define 替换 src/env.ts 的默认值
 const env = process.env.DAILOGUES_ENV === "dev" ? "dev" : "prod";
 const hosts = {
-  dev: { api: "https://gracious-caring-development.up.railway.app", app: "https://app.candelbot.app" },
+  dev: { api: "https://api.candelbot.app", app: "https://app.candelbot.app" },
   prod: { api: "https://api.dailogues.com", app: "https://app.dailogues.com" },
 }[env];
 
