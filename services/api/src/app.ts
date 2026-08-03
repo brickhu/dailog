@@ -1,8 +1,7 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { Env } from "./config/env";
-import type { VerifyToken } from "./auth/verify";
-import { createAuthMiddleware, type AuthEnv } from "./middleware/auth";
+import { createAuthMiddleware, type AuthEnv, type AuthLike } from "./middleware/auth";
 import { createCorsMiddleware } from "./middleware/cors";
 import { importsRoutes } from "./routes/imports";
 import { episodesRoutes } from "./routes/episodes";
@@ -12,9 +11,10 @@ import { jobRoutes, type JobDeps } from "./routes/job";
 import { voiceRoutes, type VoiceDeps } from "./routes/voice";
 import type { Repos } from "./repo";
 
+export type { AuthLike };
 export type AppDeps = {
   env: Env;
-  verifyToken: VerifyToken;
+  auth: AuthLike; // better-auth 实例（/api/auth/* 处理器 + 认证中间件）
   repo: Repos;
   polish: PolishDeps;
   generate: GenerateDeps;
@@ -32,7 +32,10 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
 
   app.get("/health", (c) => c.json({ ok: true }));
 
-  app.use("/api/*", createAuthMiddleware(deps.verifyToken));
+  // better-auth 会话路由（注册/登录/登出/get-session）：挂在认证中间件之前，免鉴权
+  app.on(["POST", "GET"], "/api/auth/*", (c) => deps.auth.handler(c.req.raw));
+
+  app.use("/api/*", createAuthMiddleware(deps.auth));
 
   app.get("/api/me", (c) => c.json({ userId: c.get("userId") }));
 

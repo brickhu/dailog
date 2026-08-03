@@ -26,6 +26,7 @@ import { fileURLToPath } from "node:url";
 import { eq } from "drizzle-orm";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import { createApp } from "../src/app";
+import { createAuth } from "../src/auth/better-auth";
 import { loadEnv } from "../src/config/env";
 import { createDb } from "../src/db/client";
 import * as schema from "../src/db/schema";
@@ -52,8 +53,11 @@ const hasE2eEnv = Boolean(
 const ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const ASSETS_DIR = join(ROOT, "assets", "audio");
 
-const AUTH_TOKEN = "e2e-token";
-const USER_ID = randomUUID();
+// 真实 better-auth 注册用户（M5）：beforeAll 造邀请码注册，token 供后续请求
+let AUTH_TOKEN = "";
+let USER_ID = "";
+const ADMIN_USER_ID = `e2e-admin-${randomUUID().slice(0, 8)}`;
+const INVITE_CODE = `e2e-code-${randomUUID().slice(0, 8)}`;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -72,9 +76,8 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     storageDir = await mkdtemp(join(tmpdir(), "dailogues-e2e-"));
     const env = loadEnv({
       ...process.env,
-      // 鉴权在测试中用本地假 verifyToken（真实 JWT 走 Supabase JWKS，E2E 不涉及）
-      SUPABASE_URL: "https://example.supabase.co",
-      SUPABASE_JWKS_URL: "https://example.supabase.co/auth/v1/jwks",
+      // 认证：真实 better-auth（本地 PG 注册），BETTER_AUTH_SECRET 用 e2e 专属值
+      BETTER_AUTH_SECRET: "e2e-secret-not-for-prod",
       STORAGE_DRIVER: "fs",
       STORAGE_DIR: storageDir, // 测试专属临时目录，afterAll 清理
       ASSETS_DIR,
@@ -83,11 +86,20 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     dbClient = createDb(env);
     repo = createRepo(dbClient.db);
 
-    // 种子 profile：free 首期不扣 credit（canGenerate），结束后按 profile 级联清理
-    await dbClient.db.insert(schema.profiles).values({
-      id: USER_ID,
-      username: `e2e-${randomUUID().slice(0, 8)}`,
-      displayName: "E2E User",
+    // 造邀请码（admin user + 码），供真实注册
+    await dbClient.db.insert(schema.authUsers).values({
+      id: ADMIN_USER_ID,
+      name: "E2E Admin",
+      email: `e2e-admin-${randomUUID().slice(0, 8)}@test.local`,
+      emailVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await dbClient.db.insert(schema.inviteCodes).values({
+      code: INVITE_CODE,
+      createdBy: ADMIN_USER_ID,
+      source: "admin",
+      expiresAt: null,
     });
 
     const llm = createLlmClient({
@@ -152,24 +164,42 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     };
     const voice: VoiceDeps = { saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row), tts, storage };
 
+    // 真实 better-auth：注册测试用户，token 供全流程请求（认证与生产路径一致）
+    const auth = createAuth({ db: dbClient.db, secret: env.BETTER_AUTH_SECRET });
     app = createApp({
       env,
-      verifyToken: async (token) => {
-        if (token !== AUTH_TOKEN) throw new Error("invalid token");
-        return { sub: USER_ID };
-      },
+      auth,
       repo,
       polish,
       generate,
       job,
       voice,
     });
+    const signUp = await app.request("/api/auth/sign-up/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: `e2e-${randomUUID().slice(0, 8)}@test.local`,
+        password: "password123",
+        name: "E2E User",
+        inviteCode: INVITE_CODE,
+      }),
+    });
+    if (signUp.status !== 200) {
+      throw new Error(`e2e sign-up failed: ${signUp.status} ${await signUp.text()}`);
+    }
+    const { token, user } = (await signUp.json()) as { token: string; user: { id: string } };
+    AUTH_TOKEN = token;
+    USER_ID = user.id;
   });
 
   afterAll(async () => {
     if (dbClient) {
       try {
-        await dbClient.db.delete(schema.profiles).where(eq(schema.profiles.id, USER_ID)); // 级联清理 imports/episodes/scripts/jobs
+        // 级联清理：user 删除 → profiles/sessions/accounts/imports/episodes/scripts/jobs
+        if (USER_ID) await dbClient.db.delete(schema.authUsers).where(eq(schema.authUsers.id, USER_ID));
+        await dbClient.db.delete(schema.inviteCodes).where(eq(schema.inviteCodes.code, INVITE_CODE));
+        await dbClient.db.delete(schema.authUsers).where(eq(schema.authUsers.id, ADMIN_USER_ID));
       } catch { /* 表未就绪等情况忽略 */ }
       await dbClient.client.end().catch(() => {});
     }

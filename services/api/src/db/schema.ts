@@ -2,8 +2,55 @@ import {
   boolean, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
 } from "drizzle-orm/pg-core";
 
+// ---------------------------------------------------------------------------
+// better-auth 核心表（官方字段，profiles.id 关联 user.id；M5 迁移）
+// ---------------------------------------------------------------------------
+
+export const authUsers = pgTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  image: text("image"),
+  createdAt: timestamp("created_at").notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
+  // emailAndPassword additionalFields：注册携带的邀请码
+  inviteCode: text("invite_code"),
+});
+
+export const authSessions = pgTable("session", {
+  id: text("id").primaryKey(),
+  expiresAt: timestamp("expires_at").notNull(),
+  token: text("token").notNull().unique(),
+  createdAt: timestamp("created_at").notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+});
+
+export const authAccounts = pgTable("account", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").notNull(),
+  providerId: text("provider_id").notNull(),
+  userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  idToken: text("id_token"),
+  accessTokenExpiresAt: timestamp("access_token_expires_at"),
+  refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
+  scope: text("scope"),
+  password: text("password"),
+  createdAt: timestamp("created_at").notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
+});
+
+// ---------------------------------------------------------------------------
+// 业务表（user_id 关联 better-auth user.id，text 类型；M5 迁移）
+// ---------------------------------------------------------------------------
+
 export const profiles = pgTable("profiles", {
-  id: uuid("id").primaryKey(),
+  id: text("id").primaryKey().references(() => authUsers.id, { onDelete: "cascade" }),
   username: text("username").notNull().unique(),
   displayName: text("display_name").notNull(),
   bio: text("bio"),
@@ -14,7 +61,7 @@ export const profiles = pgTable("profiles", {
 
 export const voiceSamples = pgTable("voice_samples", {
   id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
   audioUrl: text("audio_url").notNull(),
   /** 训练好的音色模型 id（fish.audio model id）；为空 = 未训练，走零样本 fallback（Task 7） */
   referenceId: text("reference_id"),
@@ -26,8 +73,8 @@ export const voiceSamples = pgTable("voice_samples", {
 export const inviteCodes = pgTable("invite_codes", {
   id: uuid("id").defaultRandom().primaryKey(),
   code: text("code").notNull().unique(),
-  createdBy: uuid("created_by").notNull().references(() => profiles.id),
-  usedBy: uuid("used_by").references(() => profiles.id),
+  createdBy: text("created_by").notNull().references(() => authUsers.id),
+  usedBy: text("used_by").references(() => authUsers.id),
   usedAt: timestamp("used_at", { withTimezone: true }),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   source: text("source", { enum: ["admin", "reward"] }).notNull(),
@@ -39,7 +86,7 @@ export const imports = pgTable(
   "imports",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    userId: uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
     platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek", "plain"] }).notNull(),
     sourceTitle: text("source_title"),
     sourceConversationId: text("source_conversation_id").notNull(),
@@ -54,7 +101,7 @@ export const imports = pgTable(
 
 export const episodes = pgTable("episodes", {
   id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
   /** 来源导入（imports.parsed_dialogue 是润色/质量门的对话来源） */
   importId: uuid("import_id").references(() => imports.id),
   slug: text("slug").notNull().unique(),
@@ -93,7 +140,7 @@ export const generationJobs = pgTable("generation_jobs", {
 
 export const payments = pgTable("payments", {
   id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
   stripeSessionId: text("stripe_session_id").notNull().unique(),
   amount: integer("amount").notNull(),
   episodesGranted: integer("episodes_granted").notNull(),
@@ -103,7 +150,7 @@ export const payments = pgTable("payments", {
 
 export const subscriptions = pgTable("subscriptions", {
   id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
   stripeCustomerId: text("stripe_customer_id").notNull(),
   stripeSubscriptionId: text("stripe_subscription_id").notNull(),
   plan: text("plan", { enum: ["pro"] }).notNull(),

@@ -2,8 +2,8 @@ import { z } from "zod";
 
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
-  SUPABASE_URL: z.string().url(),
-  SUPABASE_JWKS_URL: z.string().url(),
+  /** better-auth 会话签名密钥（M5；本地 dev 任意 32+ 字符，生产 Railway 各环境独立设置） */
+  BETTER_AUTH_SECRET: z.string().default("dev-secret-change-me-0123456789abcdef"),
   PORT: z.coerce.number().default(8787),
   // 注意：default("") 会被 zod 内层校验再次校验，故不能用 .min(1)（空串会抛错），
   // 与计划「默认空串使无 key 本地环境可启动、key 为空在调用时再报错」的意图一致

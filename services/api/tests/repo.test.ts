@@ -4,12 +4,12 @@ import { createApp, type AppDeps } from "../src/app";
 import { createDb } from "../src/db/client";
 import { createRepo } from "../src/repo";
 import type { Env } from "../src/config/env";
-import { episodes, generationJobs, imports, profiles, voiceSamples } from "../src/db/schema";
+import { authUsers, episodes, generationJobs, imports, profiles, voiceSamples } from "../src/db/schema";
 import type { EpisodeRow, ImportRow } from "../src/routes/imports";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
-// profiles.id 是 uuid 列，测试用户需用合法 uuid
+// profiles.id 引用 better-auth user.id（text），测试用户 id 用固定值
 const REPO_USER = "11111111-1111-4111-8111-111111111111";
 const API_USER = "22222222-2222-4222-8222-222222222222";
 const QUOTA_USER = "33333333-3333-4333-8333-333333333333";
@@ -17,8 +17,7 @@ const QUOTA_USER = "33333333-3333-4333-8333-333333333333";
 function makeEnv(): Env {
   return {
     DATABASE_URL: process.env.DATABASE_URL!,
-    SUPABASE_URL: "https://example.supabase.co",
-    SUPABASE_JWKS_URL: "https://example.supabase.co/auth/v1/jwks",
+    BETTER_AUTH_SECRET: "test-secret",
     PORT: 8787,
     DEEPSEEK_API_KEY: "",
     DEEPSEEK_BASE_URL: "https://api.deepseek.com/v1",
@@ -36,6 +35,13 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
   const repo = createRepo(db);
 
   beforeAll(async () => {
+    // M5：profiles.id 引用 better-auth user.id，先建 user 行
+    const now = new Date();
+    await db.insert(authUsers).values([
+      { id: REPO_USER, name: "Repo Test", email: "repo-test@test.local", emailVerified: true, createdAt: now, updatedAt: now },
+      { id: API_USER, name: "API Test", email: "api-test@test.local", emailVerified: true, createdAt: now, updatedAt: now },
+      { id: QUOTA_USER, name: "Quota Test", email: "quota-test@test.local", emailVerified: true, createdAt: now, updatedAt: now },
+    ]).onConflictDoNothing();
     await db.insert(profiles).values([
       { id: REPO_USER, username: "repo-test-user", displayName: "Repo Test" },
       { id: API_USER, username: "api-test-user", displayName: "API Test" },
@@ -45,10 +51,13 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
   });
 
   afterAll(async () => {
-    // profile 级联删除 imports/episodes/scripts/generation_jobs
+    // profile 级联删除 imports/episodes/scripts/generation_jobs；user 级联 profiles
     await db.delete(profiles).where(eq(profiles.id, REPO_USER));
     await db.delete(profiles).where(eq(profiles.id, API_USER));
     await db.delete(profiles).where(eq(profiles.id, QUOTA_USER));
+    await db.delete(authUsers).where(eq(authUsers.id, REPO_USER));
+    await db.delete(authUsers).where(eq(authUsers.id, API_USER));
+    await db.delete(authUsers).where(eq(authUsers.id, QUOTA_USER));
     await client.end();
   });
 
@@ -390,9 +399,9 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
     };
     const app = createApp({
       env: makeEnv(),
-      verifyToken: async (token: string) => {
-        if (token !== "valid-token") throw new Error("invalid token");
-        return { sub: API_USER };
+      auth: {
+        handler: async () => new Response("", { status: 404 }),
+        api: { getSession: async () => ({ user: { id: API_USER } }) },
       },
       repo,
       polish,

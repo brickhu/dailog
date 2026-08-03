@@ -80,8 +80,7 @@ function fakeVoice(): AppDeps["voice"] {
 function fakeEnv(): Env {
   return {
     DATABASE_URL: "postgres://localhost:5432/dailogues",
-    SUPABASE_URL: "https://example.supabase.co",
-    SUPABASE_JWKS_URL: "https://example.supabase.co/auth/v1/jwks",
+    BETTER_AUTH_SECRET: "test-secret",
     PORT: 8787,
     DEEPSEEK_API_KEY: "",
     DEEPSEEK_BASE_URL: "https://api.deepseek.com/v1",
@@ -94,13 +93,17 @@ function fakeEnv(): Env {
   };
 }
 
+function fakeAuth(): AppDeps["auth"] {
+  return {
+    handler: async () => new Response("", { status: 404 }),
+    api: { getSession: async () => ({ user: { id: "user-1" } }) },
+  };
+}
+
 function makeApp(envOverride: Partial<Env> = {}) {
   return createApp({
     env: { ...fakeEnv(), ...envOverride },
-    verifyToken: async (token: string) => {
-      if (token !== "valid-token") throw new Error("invalid token");
-      return { sub: "user-1" };
-    },
+    auth: fakeAuth(),
     repo: fakeRepo(),
     polish: fakePolish(),
     generate: fakeGenerate(),

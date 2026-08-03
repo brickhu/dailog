@@ -1,6 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { createApp, type AppDeps } from "../src/app";
-import type { Env } from "../src/config/env";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { randomUUID } from "node:crypto";
+import { eq, like } from "drizzle-orm";
+import { createApp, type AppDeps, type AuthLike } from "../src/app";
+import { createAuth } from "../src/auth/better-auth";
+import { createDb } from "../src/db/client";
+import * as schema from "../src/db/schema";
+
+// 认证全链路测试：真实 better-auth + 本地 PG（门控；无 DATABASE_URL 时跳过）
+const hasDb = Boolean(process.env.DATABASE_URL);
 
 function fakeRepo(): AppDeps["repo"] {
   return {
@@ -72,85 +79,179 @@ function fakeJob(): AppDeps["job"] {
 function fakeVoice(): AppDeps["voice"] {
   return {
     saveVoiceSample: async () => {},
-    tts: null, // 测试环境无 FISH_API_KEY → voice 路由 503
+    tts: null,
     storage: { put: async () => {}, get: async () => new Uint8Array() },
   };
 }
 
-function makeApp() {
-  return createApp({
-    env: {
-      DATABASE_URL: "postgres://localhost:5432/dailogues",
-      SUPABASE_URL: "https://example.supabase.co",
-      SUPABASE_JWKS_URL: "https://example.supabase.co/auth/v1/jwks",
-      PORT: 8787,
-      DEEPSEEK_API_KEY: "",
-      DEEPSEEK_BASE_URL: "https://api.deepseek.com/v1",
-      DEEPSEEK_MODEL: "deepseek-chat",
-      FISH_API_KEY: "",
-      STORAGE_DRIVER: "fs",
-      STORAGE_DIR: "./data",
-      ASSETS_DIR: "assets/audio",
-    APP_ORIGINS: "",
-    } satisfies Env,
-    verifyToken: async (token: string) => {
-      if (token !== "valid-token") throw new Error("invalid token");
-      return { sub: "user-1" };
-    },
-    repo: fakeRepo(),
-    polish: fakePolish(),
-    generate: fakeGenerate(),
-    job: fakeJob(),
-    voice: fakeVoice(),
-  });
-}
+describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
+  let dbClient: ReturnType<typeof createDb>;
+  let app: ReturnType<typeof createApp>;
+  let adminUserId: string;
 
-describe("auth middleware", () => {
-  it("rejects missing token with 401", async () => {
-    const res = await makeApp().request("/api/me");
-    expect(res.status).toBe(401);
-  });
-
-  it("rejects invalid token with 401", async () => {
-    const res = await makeApp().request("/api/me", {
-      headers: { Authorization: "Bearer bad-token" },
+  const email = () => `auth-${randomUUID().slice(0, 8)}@test.local`;
+  const INVALID_CODE = "no-such-code-xyz";
+  /** 每个用例独立邀请码（避免用例间 used 状态污染） */
+  const freshCode = () => `auth-code-${randomUUID().slice(0, 8)}`;
+  const insertInvite = async (code: string, expiresAt: Date | null = null) => {
+    await dbClient!.db.insert(schema.inviteCodes).values({
+      code, createdBy: adminUserId, source: "admin", expiresAt,
     });
-    expect(res.status).toBe(401);
-  });
+  };
 
-  it("accepts valid token and exposes userId", async () => {
-    const res = await makeApp().request("/api/me", {
-      headers: { Authorization: "Bearer valid-token" },
+  beforeAll(async () => {
+    dbClient = createDb({ DATABASE_URL: process.env.DATABASE_URL! } as never);
+    // admin user（invite_codes.created_by 引用 user.id）
+    const admin = await dbClient.db
+      .insert(schema.authUsers)
+      .values({
+        id: `admin-${randomUUID()}`,
+        name: "Admin",
+        email: `auth-admin-${randomUUID().slice(0, 8)}@test.local`,
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning({ id: schema.authUsers.id });
+    adminUserId = admin[0].id;
+
+    const auth = createAuth({ db: dbClient.db, secret: "test-secret" });
+    app = createApp({
+      env: {
+        DATABASE_URL: process.env.DATABASE_URL!,
+        BETTER_AUTH_SECRET: "test-secret",
+        PORT: 8787,
+        DEEPSEEK_API_KEY: "",
+        DEEPSEEK_BASE_URL: "https://api.deepseek.com/v1",
+        DEEPSEEK_MODEL: "deepseek-chat",
+        FISH_API_KEY: "",
+        STORAGE_DRIVER: "fs",
+        STORAGE_DIR: "./data",
+        ASSETS_DIR: "assets/audio",
+        APP_ORIGINS: "",
+      },
+      auth,
+      repo: fakeRepo(),
+      polish: fakePolish(),
+      generate: fakeGenerate(),
+      job: fakeJob(),
+      voice: fakeVoice(),
     });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ userId: "user-1" });
   });
-});
 
-describe("auth middleware scheme", () => {
-  it("accepts lowercase bearer scheme (RFC 6750)", async () => {
-    const res = await makeApp().request("/api/me", {
-      headers: { Authorization: "bearer valid-token" },
-    });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ userId: "user-1" });
+  afterAll(async () => {
+    if (dbClient) {
+      // 清理顺序：先删邀请码（used_by 引用 user，无 cascade），再删测试用户（级联 profiles/sessions/accounts）
+      await dbClient.db
+        .delete(schema.inviteCodes)
+        .where(like(schema.inviteCodes.code, "auth-%"));
+      await dbClient.db
+        .delete(schema.authUsers)
+        .where(like(schema.authUsers.email, "auth-%@test.local"));
+      await dbClient.client.end().catch(() => {});
+    }
   });
-});
 
-describe("auth middleware on imports", () => {
-  it("rejects POST /api/imports without token", async () => {
-    const res = await makeApp().request("/api/imports", {
+  it("rejects sign-up without invite code (400 invalid_invite_code)", async () => {
+    const res = await app.request("/api/auth/sign-up/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ platform: "claude", conversationId: "c", title: "", url: "https://claude.ai/chat/c", messages: [{ role: "user", content: "hi" }] }),
+      body: JSON.stringify({ email: email(), password: "password123", name: "无码用户" }),
+    });
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { message?: string };
+    expect(JSON.stringify(json)).toContain("invalid_invite_code");
+  });
+
+  it("rejects sign-up with unknown invite code", async () => {
+    const res = await app.request("/api/auth/sign-up/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email(), password: "password123", name: "错码用户", inviteCode: INVALID_CODE }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects sign-up with expired invite code", async () => {
+    const res = await app.request("/api/auth/sign-up/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email(), password: "password123", name: "过期码用户", inviteCode: "auth-expired-code" }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("signs up with valid invite code → token, profile row, invite marked used", async () => {
+    const mail = email();
+    const code = freshCode();
+    await insertInvite(code);
+    const res = await app.request("/api/auth/sign-up/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: mail, password: "password123", name: "新用户", inviteCode: code }),
+    });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { token?: string; user?: { id: string } };
+    expect(typeof json.token).toBe("string");
+    expect(json.user?.id).toBeTruthy();
+
+    // profile 行已创建（after hook）
+    const profiles = await dbClient.db
+      .select({ id: schema.profiles.id })
+      .from(schema.profiles)
+      .where(eq(schema.profiles.id, json.user!.id));
+    expect(profiles.length).toBe(1);
+
+    // 邀请码已标记使用
+    const codes = await dbClient.db
+      .select({ usedBy: schema.inviteCodes.usedBy, usedAt: schema.inviteCodes.usedAt })
+      .from(schema.inviteCodes)
+      .where(eq(schema.inviteCodes.code, code));
+    expect(codes[0]?.usedBy).toBe(json.user!.id);
+    expect(codes[0]?.usedAt).toBeTruthy();
+
+    // 带 token 访问受保护接口
+    const me = await app.request("/api/me", {
+      headers: { Authorization: `Bearer ${json.token}` },
+    });
+    expect(me.status).toBe(200);
+    expect((await me.json()) as { userId: string }).toEqual({ userId: json.user!.id });
+  });
+
+  it("signs in and get-session restores via bearer token", async () => {
+    const mail = email();
+    const code = freshCode();
+    await insertInvite(code);
+    await app.request("/api/auth/sign-up/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: mail, password: "password123", name: "登录用户", inviteCode: code }),
+    });
+    const signIn = await app.request("/api/auth/sign-in/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: mail, password: "password123" }),
+    });
+    expect(signIn.status).toBe(200);
+    const { token, user } = (await signIn.json()) as { token: string; user: { id: string } };
+
+    const session = await app.request("/api/auth/get-session", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(session.status).toBe(200);
+    const body = (await session.json()) as { user?: { id: string } };
+    expect(body.user?.id).toBe(user.id);
+  });
+
+  it("rejects invalid bearer token with 401", async () => {
+    const res = await app.request("/api/me", {
+      headers: { Authorization: "Bearer garbage-token" },
     });
     expect(res.status).toBe(401);
   });
-});
 
-describe("auth middleware on polish", () => {
-  it("rejects POST polish without token", async () => {
-    const res = await makeApp().request("/api/episodes/ep-1/polish", { method: "POST" });
+  it("rejects missing token with 401", async () => {
+    const res = await app.request("/api/me");
     expect(res.status).toBe(401);
   });
 });

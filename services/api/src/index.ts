@@ -1,7 +1,7 @@
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
 import { loadEnv } from "./config/env";
-import { createTokenVerifier } from "./auth/verify";
+import { createAuth } from "./auth/better-auth";
 import { createDb } from "./db/client";
 import { createRepo } from "./repo";
 import { createLlmClient } from "./llm/client";
@@ -115,7 +115,7 @@ const voice: VoiceDeps = {
 
 const app = createApp({
   env,
-  verifyToken: createTokenVerifier(env.SUPABASE_JWKS_URL, `${env.SUPABASE_URL}/auth/v1`),
+  auth: createAuth({ db, secret: env.BETTER_AUTH_SECRET }),
   repo,
   polish,
   generate,

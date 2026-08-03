@@ -1,20 +1,21 @@
 import { createMiddleware } from "hono/factory";
-import type { VerifyToken } from "../auth/verify";
 
 export type AuthEnv = { Variables: { userId: string } };
 
-export function createAuthMiddleware(verify: VerifyToken) {
+/** 认证最小接口（better-auth 实例满足；单测可注入 fake） */
+export interface AuthLike {
+  handler(req: Request): Promise<Response>;
+  api: {
+    getSession(opts: { headers: Headers }): Promise<{ user: { id: string } } | null>;
+  };
+}
+
+/** 认证中间件（M5）：better-auth 会话校验——cookie 与 Authorization: Bearer 双通道 */
+export function createAuthMiddleware(auth: AuthLike) {
   return createMiddleware<AuthEnv>(async (c, next) => {
-    const header = c.req.header("Authorization");
-    const match = header?.match(/^Bearer\s+(.+)$/i); // RFC 6750：scheme 大小写不敏感
-    if (!match) return c.json({ error: "unauthorized" }, 401);
-    let sub: string;
-    try {
-      ({ sub } = await verify(match[1]));
-    } catch {
-      return c.json({ error: "unauthorized" }, 401);
-    }
-    c.set("userId", sub);
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    c.set("userId", session.user.id);
     await next();
   });
 }
