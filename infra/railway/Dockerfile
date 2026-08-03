@@ -13,4 +13,5 @@ COPY services/api ./services/api
 WORKDIR /app/services/api
 
 EXPOSE 8787
-CMD ["pnpm", "start"]
+# 启动前自动跑迁移（drizzle 幂等：已应用的跳过）；失败则不启动，日志可查
+CMD ["sh", "-c", "pnpm db:migrate && pnpm start"]

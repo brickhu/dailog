@@ -31,8 +31,8 @@
 | `BETTER_AUTH_COOKIE_DOMAIN` | 留空（host-only） | `.dailogues.com`（SSO 跨子域 cookie） |
 | `PORT` | 8787 | 8787 |
 
-7. [ ] Development 环境首次部署后跑迁移（Service → Exec 或本地 `railway run`）：
-   `pnpm --filter @dailogues/api db:migrate`
+7. [x] 迁移**随部署自动执行**（Dockerfile CMD = `pnpm db:migrate && pnpm start`；drizzle 幂等，已应用自动跳过）。手动兜底：
+   `pnpm --filter @dailogues/api db:migrate`（Service → Exec 或本地 `railway run`）
 8. [ ] 生成首批邀请码（注册门禁；admin user 自动创建）：
    `pnpm --filter @dailogues/api invites:create <code> [--expires <days>]`
 
