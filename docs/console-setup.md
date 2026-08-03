@@ -10,9 +10,12 @@
 ## 1. Railway（API + Postgres）
 
 1. [ ] 新建项目 → **Connect GitHub repo**：`brickhu/dailog`
-2. [ ] Settings → **Production branch = `master`**；启用 **Development environment**（此后 `dev` 分支 push 自动部署到 Development 环境）
+2. [ ] 分支部署是**按服务**配置的（项目级 "Production Branch" 设置已取消）：
+   - 默认即 `production` 环境：各 service → Settings → **Source → Branch connected to = `master`**
+   - Development 环境：顶部环境下拉 → **+ New Environment**（选 **Duplicate** 可复制生产环境的 services/变量；或 Empty 后手动加）→ 该环境各 service 的 Source branch 选 `dev`
+   - 此后 `master` push 自动部署 Production、`dev` push 自动部署 Development
 3. [ ] Production 环境：`Add Database → PostgreSQL` + 部署 API service（自动识别根 `railway.json`：Docker 镜像含 ffmpeg，healthcheck `/health`）
-4. [ ] Development 环境：同样加 Postgres + API service
+4. [ ] Development 环境（Duplicate 出来的）：确认同样有 Postgres + API service；两个环境的 Postgres 是独立的
 5. [ ] 域名：Production API 服务 → Settings → Domains 绑 `api.dailogues.com`；Development API 服务绑 `api.candelbot.app`（DNS 加 CNAME 到对应 `*.up.railway.app`）
 6. [ ] 各环境 Variable（按环境分别设置）：
 
