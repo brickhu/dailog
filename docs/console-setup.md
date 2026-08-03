@@ -26,8 +26,8 @@
 | `DEEPSEEK_API_KEY` / `BASE_URL` / `MODEL` | ✓ | ✓ |
 | `FISH_API_KEY` / `FISH_PROXY_URL` / `FISH_GUEST_REFERENCE_ID` | ✓ | ✓ |
 | `STORAGE_DRIVER` | `fs`（或 r2） | `r2` + `R2_ACCOUNT_ID/ACCESS_KEY/SECRET_KEY/BUCKET` |
-| `SUPABASE_URL` / `SUPABASE_JWKS_URL` | 共用现有项目（M5 迁移后移除） | 同左 |
 | `BETTER_AUTH_SECRET` | 已启用（各环境独立随机） | 同左 |
+| `BETTER_AUTH_URL` | `http://localhost:8787`（本地） | `https://api.dailogues.com`（生产必改） |
 | `BETTER_AUTH_COOKIE_DOMAIN` | 留空（host-only） | `.dailogues.com`（SSO 跨子域 cookie） |
 | `PORT` | 8787 | 8787 |
 
