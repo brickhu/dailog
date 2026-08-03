@@ -16,6 +16,7 @@ function fakeRepo(): AppDeps["repo"] {
       saveScript: async (episodeId, version, segments) => ({ episodeId, version, segments }),
       getLatestScript: async () => null,
       getImportedDialogue: async () => null,
+      getPublishedDialogue: async () => null,
       setPublished: async () => {},
       setEpisodeLanguage: async () => {},
       getEpisodeUserId: async () => null,

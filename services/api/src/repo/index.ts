@@ -186,6 +186,30 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return dialogue.messages ?? null;
       },
 
+      async getPublishedDialogue(episodeId) {
+        const rows = await db
+          .select({
+            platform: schema.imports.platform,
+            sourceTitle: schema.imports.sourceTitle,
+            sourceUrl: schema.imports.sourceUrl,
+            parsedDialogue: schema.imports.parsedDialogue,
+          })
+          .from(schema.episodes)
+          .innerJoin(schema.imports, eq(schema.episodes.importId, schema.imports.id))
+          // 公开只读语义：仅已发布节目可读，草稿一律不可见
+          .where(and(eq(schema.episodes.id, episodeId), eq(schema.episodes.isPublic, true)))
+          .limit(1);
+        const row = rows[0];
+        if (!row?.parsedDialogue) return null;
+        const dialogue = row.parsedDialogue as { messages?: { role: string; content: string }[] };
+        return {
+          platform: row.platform,
+          sourceTitle: row.sourceTitle ?? null,
+          sourceUrl: row.sourceUrl,
+          messages: dialogue.messages ?? [],
+        };
+      },
+
       async setEpisodeLanguage(id, language) {
         await db.update(schema.episodes).set({ language }).where(eq(schema.episodes.id, id));
       },
@@ -207,8 +231,10 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       },
 
       async setPublished(id) {
+        // 发布即公开（MVP 无私密选项；PRD §4.6 私密为后续扩展），
+        // is_public 是内容站/公开只读接口（getPublishedDialogue）的可见性开关
         await db.update(schema.episodes)
-          .set({ status: "published", publishedAt: new Date() })
+          .set({ status: "published", isPublic: true, publishedAt: new Date() })
           .where(eq(schema.episodes.id, id));
       },
 

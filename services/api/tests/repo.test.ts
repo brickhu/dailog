@@ -80,6 +80,39 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       expect(ep).toMatchObject({ id: result.episodeId, userId: REPO_USER, title: "集成测试", status: "draft" });
     });
 
+    it("getPublishedDialogue: 仅已发布节目返回对话原文（节目页查看原文接口预留）", async () => {
+      const conv = `conv-${Date.now()}-pub`;
+      const result = await repo.imports.createImport(
+        {
+          userId: REPO_USER, platform: "deepseek", sourceTitle: "公开原文", sourceConversationId: conv,
+          sourceUrl: `https://chat.deepseek.com/${conv}`,
+          parsedDialogue: {
+            platform: "deepseek", conversationId: conv, title: "公开原文", url: `https://chat.deepseek.com/${conv}`,
+            messages: [
+              { role: "user", content: "你好" },
+              { role: "assistant", content: "你好！" },
+            ],
+          },
+        },
+        { userId: REPO_USER, title: "公开原文", status: "draft", language: null },
+      );
+      if ("duplicate" in result) throw new Error("unexpected duplicate");
+      // 草稿：公开读不可见
+      expect(await repo.episodes.getPublishedDialogue(result.episodeId)).toBeNull();
+      // 发布后：对话原文 + 来源元数据可见
+      await repo.episodes.setPublished(result.episodeId);
+      const out = await repo.episodes.getPublishedDialogue(result.episodeId);
+      expect(out).toMatchObject({
+        platform: "deepseek",
+        sourceTitle: "公开原文",
+        sourceUrl: `https://chat.deepseek.com/${conv}`,
+        messages: [
+          { role: "user", content: "你好" },
+          { role: "assistant", content: "你好！" },
+        ],
+      });
+    });
+
     it("duplicate source: createImport returns { duplicate: true } and leaves no orphan rows", async () => {
       const conv = `conv-${Date.now()}-2`;
       const row: ImportRow = {

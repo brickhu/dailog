@@ -84,6 +84,7 @@ app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 | `GET /api/episodes/:id/job` | ✓ | 轮询生成进度（阶段 + 百分比） |
 | `POST /api/episodes/:id/publish` | ✓ | 发布（`is_public=true`）→ 触发邀请码发放 |
 | `POST /api/me/voice-sample` | ✓ | 上传/重录录音样本（R2 + 基础质量校验） |
+| ~~`GET /api/public/episodes/:id/dialogue`~~ | 预留 | 节目页"查看原文"（未来）：对话全文 + 来源元数据。内容站 SSR 直连读库（`repo.episodes.getPublishedDialogue`，仅 `is_public=true`、草稿不可见）；如需 HTTP 公开端点再按此形态暴露（无鉴权） |
 | `POST /api/billing/checkout` | ✓ | 创建 Stripe Checkout 会话 |
 | `POST /api/billing/portal` | ✓ | 创建 Stripe 管理门户会话 |
 | `POST /api/stripe/webhook` | 签名 | 订阅状态同步（`customer.subscription.*`） |

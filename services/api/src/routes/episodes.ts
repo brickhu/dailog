@@ -13,6 +13,13 @@ export interface EpisodesRepo {
   getLatestScript(episodeId: string): Promise<{ version: number; segments: ScriptSegment[] } | null>;
   /** 通过 episodes.import_id 读取来源导入的 parsed_dialogue 消息；userId 强制归属过滤（防 IDOR） */
   getImportedDialogue(episodeId: string, userId: string): Promise<{ role: string; content: string }[] | null>;
+  /** 节目页"查看原文"预留：公开只读，仅已发布（is_public=true）节目返回对话 + 来源元数据；未发布/无导入 → null */
+  getPublishedDialogue(episodeId: string): Promise<{
+    platform: string;
+    sourceTitle: string | null;
+    sourceUrl: string;
+    messages: { role: string; content: string }[];
+  } | null>;
   setPublished(id: string): Promise<void>;
   /** 润色完成后持久化对话语言（runner 选片头片尾用） */
   setEpisodeLanguage(id: string, language: string): Promise<void>;
