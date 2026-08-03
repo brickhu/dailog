@@ -50,13 +50,13 @@ describe("handleCollect", () => {
   });
 
   it("posts to popup-configured api base when overridden", async () => {
-    mockChrome({ dailoguesToken: "jwt-token", dailoguesApiBase: "https://api.candelbot.app" });
+    mockChrome({ dailoguesToken: "jwt-token", dailoguesApiBase: "https://gracious-caring-development.up.railway.app" });
     const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
     (globalThis as Record<string, unknown>).fetch = fetchMock;
 
     await handleCollect(collectPayload());
 
-    expect(fetchMock).toHaveBeenCalledWith("https://api.candelbot.app/api/imports", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("https://gracious-caring-development.up.railway.app/api/imports", expect.anything());
   });
 
   it("returns auth error when no token", async () => {
@@ -70,8 +70,8 @@ describe("handleCollect", () => {
 describe("setApiBase", () => {
   it("strips trailing slashes before saving", async () => {
     const storage = mockChrome();
-    await setApiBase("https://api.candelbot.app/");
-    expect(storage.local.set).toHaveBeenCalledWith({ dailoguesApiBase: "https://api.candelbot.app" });
+    await setApiBase("https://gracious-caring-development.up.railway.app/");
+    expect(storage.local.set).toHaveBeenCalledWith({ dailoguesApiBase: "https://gracious-caring-development.up.railway.app" });
   });
 
   it("clears override when empty", async () => {

@@ -20,7 +20,7 @@
 
 ## 2. 部署拓扑
 
-> **双环境**（2026-08-03）：`dev` 分支集成部署到开发环境（Railway Development 环境 + CF Pages project `dailogues-studio-dev`），`master` 部署到生产。开发环境域名：`api.candelbot.app` / `app.candelbot.app` / `candelbot.app`（SSR，预留）；生产域名待定（`dailog.fm` 或 `dailogues.com`）。拓扑图按生产形态绘制，开发环境结构相同、域名与实例不同。
+> **双环境**（2026-08-03）：`dev` 分支集成部署到开发环境（Railway Development 环境 + CF Pages project `dailogues-studio-dev`），`master` 部署到生产。开发环境域名：`gracious-caring-development.up.railway.app`（API，Railway 默认 URL）/ `app.candelbot.app` / `candelbot.app`（SSR，预留）；生产域名待定（`dailog.fm` 或 `dailogues.com`）。拓扑图按生产形态绘制，开发环境结构相同、域名与实例不同。
 
 ```
          ┌────────────────────── 用户浏览器（Chrome/Edge）──────────────────────┐

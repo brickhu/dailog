@@ -62,11 +62,11 @@ dailogues/
 
 | | 开发环境（dev 分支） | 生产环境（master 分支） |
 |---|---|---|
-| 后端 API | `api.candelbot.app`（Railway Development 环境） | `api.dailogues.com`（Railway Production 环境）⚠️ 生产域名待定：`dailog.fm` 或保留 `dailogues.com` |
+| 后端 API | `gracious-caring-development.up.railway.app`（Railway Development 环境默认 URL） | `api.dailogues.com`（Railway Production 环境）⚠️ 生产域名待定：`dailog.fm` 或保留 `dailogues.com` |
 | 工作台 SPA | `app.candelbot.app`（CF Pages project `dailogues-studio-dev`，production branch = dev） | `app.dailogues.com`（CF Pages project `dailogues-studio`，production branch = master） |
 | 内容站 SSR | `candelbot.app`（Pages project 预留，等 apps/site 创建） | `dailogues.com`（Pages/Workers） |
 | Postgres | Railway Development 环境内独立实例 | Railway Production 环境内实例 |
-| 采集扩展 | `pnpm build:dev`（API 指向 api.candelbot.app；popup 可覆盖） | `pnpm build`（API 指向 api.dailogues.com） |
+| 采集扩展 | `pnpm build:dev`（API 指向 gracious-caring-development.up.railway.app；popup 可覆盖） | `pnpm build`（API 指向 api.dailogues.com） |
 
 > **品牌名**：`dailogues`——由 `dialogues` 交换 `ia→ai` 变形（寓意 AI）。开发域名 `candelbot.app`（已确认），生产域名待定（`dailog.fm` / `dailogues.com`），定稿后统一替换文档与扩展 manifest 中的占位。
 

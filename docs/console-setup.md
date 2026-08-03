@@ -4,7 +4,7 @@
 
 | 环境 | 分支 | API | Studio (SPA) | 消费站 (SSR) | Postgres |
 |---|---|---|---|---|---|
-| 开发 | `dev` | `api.candelbot.app` | `app.candelbot.app` | `candelbot.app` | Railway Development 环境 |
+| 开发 | `dev` | `gracious-caring-development.up.railway.app` | `app.candelbot.app` | `candelbot.app` | Railway Development 环境 |
 | 生产 | `master` | `api.dailogues.com` | `app.dailogues.com` | `dailogues.com` | Railway Production 环境 |
 
 ## 1. Railway（API + Postgres）
@@ -16,7 +16,7 @@
    - 此后 `master` push 自动部署 Production、`dev` push 自动部署 Development
 3. [ ] Production 环境：`Add Database → PostgreSQL` + 部署 API service（自动识别根 `railway.json`：Docker 镜像含 ffmpeg，healthcheck `/health`）
 4. [ ] Development 环境（Duplicate 出来的）：确认同样有 Postgres + API service；两个环境的 Postgres 是独立的
-5. [ ] 域名：Production API 服务 → Settings → Domains 绑 `api.dailogues.com`；Development API 服务绑 `api.candelbot.app`（DNS 加 CNAME 到对应 `*.up.railway.app`）
+5. [ ] 域名：Production API 服务 → Settings → Domains 绑 `api.dailogues.com`；Development API **不绑自定义域名**（直接用 Railway 默认 URL）
 6. [ ] 各环境 Variable（按环境分别设置）：
 
 | 变量 | 开发环境 | 生产环境 |
@@ -27,7 +27,7 @@
 | `FISH_API_KEY` / `FISH_PROXY_URL` / `FISH_GUEST_REFERENCE_ID` | ✓ | ✓ |
 | `STORAGE_DRIVER` | `fs`（或 r2） | `r2` + `R2_ACCOUNT_ID/ACCESS_KEY/SECRET_KEY/BUCKET` |
 | `BETTER_AUTH_SECRET` | 已启用（各环境独立随机） | 同左 |
-| `BETTER_AUTH_URL` | `http://localhost:8787`（本地） | `https://api.dailogues.com`（生产必改） |
+| `BETTER_AUTH_URL` | `https://gracious-caring-development.up.railway.app`（dev） | `https://api.dailogues.com`（生产必改） |
 | `BETTER_AUTH_COOKIE_DOMAIN` | 留空（host-only） | `.dailogues.com`（SSO 跨子域 cookie） |
 | `PORT` | 8787 | 8787 |
 
@@ -45,7 +45,7 @@
 | 构建命令 | `pnpm --filter @dailogues/studio build` | 同左 |
 | 输出目录 | `apps/studio/dist` | 同左 |
 | Node 版本 | 22（Pages 自动识别 pnpm 锁文件） | 22 |
-| `VITE_API_BASE_URL` | `https://api.candelbot.app` | `https://api.dailogues.com` |
+| `VITE_API_BASE_URL` | `https://gracious-caring-development.up.railway.app` | `https://api.dailogues.com` |
 | 自定义域名 | `app.candelbot.app` | `app.dailogues.com`（待定） |
 
 > `VITE_EXTENSION_ID` 可留空（扩展连接卡隐藏）；M5 后 `VITE_SUPABASE_*` 移除。
@@ -63,26 +63,25 @@
 | **Node.js compatibility** | **开启（Node 22）**——postgres 直连需要 | 同左 |
 | 自定义域名 | `candelbot.app` | `dailogues.com` |
 
-> 变量（各环境）：`DATABASE_URL`（对应环境 Postgres，只读连接可加 `?sslmode=require`）、`API_BASE_URL`（`https://api.candelbot.app` / `https://api.dailogues.com`）、`SITE_BASE_URL`（站点自身）、`STUDIO_BASE_URL`（`app.*`）、`SITE_COOKIE_DOMAIN`（生产 `.dailogues.com`，dev 留空）。
+> 变量（各环境）：`DATABASE_URL`（对应环境 Postgres，只读连接可加 `?sslmode=require`）、`API_BASE_URL`（`https://gracious-caring-development.up.railway.app` / `https://api.dailogues.com`）、`SITE_BASE_URL`（站点自身）、`STUDIO_BASE_URL`（`app.*`）、`SITE_COOKIE_DOMAIN`（生产 `.dailogues.com`，dev 留空）。
 > 消费端登录统一走本站 `/login`（server 代理 api 认证端点，SSO cookie 与 studio 共享）。
 
 ## 3. DNS（candelbot.app 托管处）
 
 - `app.candelbot.app` → CNAME `dailogues-studio-dev.pages.dev`
-- `api.candelbot.app` → CNAME Railway 提供的 `<project>.up.railway.app`
 - `candelbot.app` → 暂不解析（SSR 预留）
 
 ## 4. 扩展 dev 包
 
 ```bash
-pnpm --filter @dailogues/extension build:dev   # 注入 api.candelbot.app
+pnpm --filter @dailogues/extension build:dev   # 注入 gracious-caring-development.up.railway.app
 ```
 
-chrome://extensions 加载 `apps/extension/`（unpacked），popup 确认 API 地址为 `https://api.candelbot.app`（可手动覆盖、可恢复默认）。
+chrome://extensions 加载 `apps/extension/`（unpacked），popup 确认 API 地址为 `https://gracious-caring-development.up.railway.app`（可手动覆盖、可恢复默认）。
 
 ## 5. dev 跑通验证链
 
-1. `https://api.candelbot.app/health` → 200
+1. `https://gracious-caring-development.up.railway.app/health` → 200
 2. `https://app.candelbot.app` 打开 → 登录 → 连接扩展（externally_connectable 白名单已含 dev 域名）
 3. DeepSeek 对话页点采集 → 导入 dev API → studio 出现草稿 → 向导生成
 4. 全部通过后：`dev → master` 合并触发生产部署
