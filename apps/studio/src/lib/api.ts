@@ -55,9 +55,15 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
   return {
     get: <T>(path: string) => json<T>(path),
     post: <T>(path: string, body?: unknown) =>
-      json<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) }),
+      json<T>(path, { method: "POST", body: body === undefined ? undefined : serializeBody(body) }),
     put: <T>(path: string, body?: unknown) =>
-      json<T>(path, { method: "PUT", body: body === undefined ? undefined : JSON.stringify(body) }),
+      json<T>(path, { method: "PUT", body: body === undefined ? undefined : serializeBody(body) }),
     request,
   };
+}
+
+/** JSON 序列化；FormData 原样透传（multipart 场景） */
+function serializeBody(body: unknown): BodyInit | undefined {
+  if (body instanceof FormData) return body;
+  return JSON.stringify(body);
 }

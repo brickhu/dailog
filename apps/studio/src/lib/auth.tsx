@@ -1,6 +1,7 @@
 import { createContext, createSignal, onMount, useContext, type JSX } from "solid-js";
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { env } from "./env";
+import { setTokenGetter } from "./client";
 
 // 认证上下文：supabase-js 会话管理 + api JWT 供给 + 路由守卫用状态
 export interface AuthState {
@@ -27,6 +28,8 @@ export function AuthProvider(props: { children: JSX.Element }) {
     const { data } = await client.auth.getSession();
     setUser(data.session?.user ?? null);
     setAccessToken(data.session?.access_token ?? null);
+    // 注入全局 api client 的 token 源
+    setTokenGetter(() => accessToken());
     setLoading(false);
     // 登出/过期/刷新时同步
     client.auth.onAuthStateChange((_event, session) => {
