@@ -212,7 +212,7 @@ export default function Dashboard() {
       <div {...stylex.props(styles.content)}>
         <div {...stylex.props(styles.hero)}>
           <div {...stylex.props(styles.title)}>我的节目</div>
-          <button {...stylex.props(styles.newButton)} onClick={() => navigate("/app/episodes/new")}>
+          <button {...stylex.props(styles.newButton)} onClick={() => navigate("/episodes/new")}>
             开始新节目
           </button>
         </div>
@@ -220,7 +220,7 @@ export default function Dashboard() {
         <Show when={!channelActive()}>
           <div {...stylex.props(styles.channelBanner)}>
             <span>你的频道尚未开通：开通后才能生成和发布节目</span>
-            <A href="/app/onboarding" {...stylex.props(styles.channelLink)}>
+            <A href="/onboarding" {...stylex.props(styles.channelLink)}>
               去开通 →
             </A>
           </div>

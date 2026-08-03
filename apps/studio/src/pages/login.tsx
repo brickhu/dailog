@@ -106,7 +106,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   // 已登录访问登录页 → 直接进工作台
   createEffect(() => {
-    if (!auth.loading && auth.user) navigate("/app/episodes", { replace: true });
+    if (!auth.loading && auth.user) navigate("/episodes", { replace: true });
   });
   const [mode, setMode] = createSignal<"signin" | "signup">("signin");
   const [email, setEmail] = createSignal("");
@@ -134,13 +134,13 @@ export default function LoginPage() {
       if (mode() === "signin") {
         const { error } = await auth.signIn(email().trim(), password());
         if (error) return setError(error);
-        navigate("/app/episodes");
+        navigate("/episodes");
       } else {
         const name = email().trim().split("@")[0] || "用户";
         const { error } = await auth.signUp(email().trim(), password(), name);
         if (error) return setError(error);
         // 注册成功即登录态：先开通频道（授权码），再录声音
-        navigate("/app/onboarding");
+        navigate("/onboarding");
       }
     } finally {
       setBusy(false);

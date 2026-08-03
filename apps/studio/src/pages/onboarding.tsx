@@ -143,7 +143,7 @@ export default function Onboarding() {
     setError(null);
     try {
       await uploadVoiceSample(b);
-      navigate("/app/episodes");
+      navigate("/episodes");
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         setError("登录状态已失效，请重新登录后再试");

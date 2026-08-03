@@ -10,22 +10,22 @@ import OnboardingPage from "./pages/onboarding";
 import SettingsPage from "./pages/settings";
 import NotFound from "./pages/not-found";
 
-// SPA 工作台（dailogues.com/app/*）路由：
-// /login 统一登录入口（计划 6 前由 SPA 兜底，之后主站 SSR 接管）
-// /app 两列布局（RequireAuth 守卫 + 左导航）：
-//   /app/episodes          节目管理（默认页）
-//   /app/episodes/new      新增节目（四步向导）
-//   /app/episodes/:id      续编辑草稿
-//   /app/onboarding        频道初始化 + 录音（两步）
-//   /app/settings          设置
+// SPA studio（app.dailogues.com）路由——无前缀，与主站完全区分：
+// /login SPA 本地兜底登录（计划 6 主站统一登录页上线后由守卫改跳 dailogues.com/login）
+// 其余页面在 RequireAuth + AppLayout（两列布局）下：
+//   /episodes          节目管理（默认页）
+//   /episodes/new      新增节目（四步向导）
+//   /episodes/:id      续编辑草稿
+//   /onboarding        频道初始化 + 录音（两步）
+//   /settings          设置
 render(
   () => (
     <AuthProvider>
       <Router>
         <Route path="/login" component={LoginPage} />
-        <Route path="/app" component={RequireAuth}>
-          <Route path="/app" component={AppLayout}>
-            <Route path="/" component={() => <Navigate href="/app/episodes" />} />
+        <Route path="/" component={RequireAuth}>
+          <Route path="/" component={AppLayout}>
+            <Route path="/" component={() => <Navigate href="/episodes" />} />
             <Route path="/episodes" component={EpisodesPage} />
             <Route path="/episodes/new" component={EditorPage} />
             <Route path="/episodes/:id" component={EditorPage} />

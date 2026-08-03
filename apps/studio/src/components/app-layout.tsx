@@ -6,8 +6,8 @@ import { useAuth } from "../lib/auth";
 
 // 两列布局：左导航（节目/设置）+ 右侧内容区（子路由经 props.children 渲染）
 const NAV = [
-  { path: "/app/episodes", label: "节目" },
-  { path: "/app/settings", label: "设置" },
+  { path: "/episodes", label: "节目" },
+  { path: "/settings", label: "设置" },
 ];
 
 const styles = stylex.create({
@@ -95,7 +95,7 @@ export default function AppLayout(props: RouteSectionProps) {
   return (
     <div {...stylex.props(styles.shell)}>
       <aside {...stylex.props(styles.sidebar)}>
-        <div {...stylex.props(styles.brand)} onClick={() => navigate("/app/episodes")}>
+        <div {...stylex.props(styles.brand)} onClick={() => navigate("/episodes")}>
           dailogues
         </div>
         <nav {...stylex.props(styles.nav)}>
