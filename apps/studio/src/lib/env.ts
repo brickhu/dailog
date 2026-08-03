@@ -10,8 +10,6 @@ function required(name: string, fallback?: string): string {
 export const env = {
   /** api 基地址；本地 dev 走 vite 代理时用同源相对路径 */
   apiBaseUrl: required("VITE_API_BASE_URL", ""),
-  supabaseUrl: required("VITE_SUPABASE_URL"),
-  supabaseAnonKey: required("VITE_SUPABASE_ANON_KEY"),
   /** 浏览器扩展 id（chrome://extensions 加载后可见）；留空则隐藏扩展连接卡 */
   extensionId: required("VITE_EXTENSION_ID", ""),
 };

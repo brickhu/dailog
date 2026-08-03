@@ -137,10 +137,12 @@ export default function AuthPage() {
         if (error) return setError(error);
         navigate("/dashboard");
       } else {
-        const { error, needsConfirmation } = await auth.signUp(email().trim(), password());
-        if (error) return setError(error);
-        if (needsConfirmation) return setInfo("注册成功！请查收确认邮件后登录。");
-        // 未开邮箱确认：直接进入录音引导
+        const name = email().trim().split("@")[0] || "用户";
+        const { error } = await auth.signUp(email().trim(), password(), name, invite().trim());
+        if (error) {
+          return setError(error === "invalid_invite_code" ? "邀请码无效或已被使用" : error);
+        }
+        // 注册成功即登录态：直接进入录音引导
         navigate("/onboarding/voice");
       }
     } finally {
