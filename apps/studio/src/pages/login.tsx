@@ -1,4 +1,4 @@
-import { createSignal, Show } from "solid-js";
+import { createEffect, createSignal, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "../theme.stylex.ts";
@@ -101,9 +101,13 @@ const styles = stylex.create({
   },
 });
 
-export default function AuthPage() {
+export default function LoginPage() {
   const auth = useAuth();
   const navigate = useNavigate();
+  // 已登录访问登录页 → 直接进工作台
+  createEffect(() => {
+    if (!auth.loading && auth.user) navigate("/app/episodes", { replace: true });
+  });
   const [mode, setMode] = createSignal<"signin" | "signup">("signin");
   const [email, setEmail] = createSignal("");
   const [password, setPassword] = createSignal("");
@@ -130,13 +134,13 @@ export default function AuthPage() {
       if (mode() === "signin") {
         const { error } = await auth.signIn(email().trim(), password());
         if (error) return setError(error);
-        navigate("/dashboard");
+        navigate("/app/episodes");
       } else {
         const name = email().trim().split("@")[0] || "用户";
         const { error } = await auth.signUp(email().trim(), password(), name);
         if (error) return setError(error);
         // 注册成功即登录态：先开通频道（授权码），再录声音
-        navigate("/onboarding/channel");
+        navigate("/app/onboarding");
       }
     } finally {
       setBusy(false);

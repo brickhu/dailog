@@ -28,22 +28,22 @@ VITE_EXTENSION_ID=<dev 扩展 id>   # 留空则隐藏扩展连接卡
 
 ## 验收路径
 
-### 1. /auth（better-auth，注册开放）
-- [ ] 未登录访问 `/dashboard` 自动跳 `/auth`
+### 1. /login（统一登录入口，注册开放）
+- [ ] 未登录访问 `/app/*` 自动跳 `/login`
 - [ ] 注册：密码 <8 位被拦截
-- [ ] 注册成功（无需邀请码）→ 跳 `/onboarding/channel`（注册即登录态）
+- [ ] 注册成功（无需邀请码）→ 跳 `/app/onboarding`（注册即登录态）
 - [ ] 刷新页面会话保持（localStorage token + get-session 恢复）
 - [ ] 登录成功后自动跳转（已开通频道 → onboarding/voice 或 dashboard）
 - [ ] 错误密码显示服务端错误文案
-- [ ] 退出登录 → 回 /auth；再访问受保护页被重定向
+- [ ] 退出登录 → 回 /login；再访问受保护页被重定向
 
-### 1.5 /onboarding/channel（授权码开通频道）
+### 1.5 /app/onboarding（两步：授权码开通频道 + 录声音）
 - [ ] 错误码 → "授权码无效或已被使用"
 - [ ] 正确码 → "频道已开通 ✓" → 下一步进录音
-- [ ] "稍后开通" → dashboard 显示黄色开通横幅
+- [ ] "稍后开通"（未实现，可暂不开通直接访问 /app/episodes）→ 黄色开通横幅
 - [ ] 未开通时：新节目向导生成步骤被 403 挡住（引导开通）
 
-### 2. /onboarding/voice
+### 1.6 声音录音（onboarding 第二步 / 设置页重录）
 - [ ] 浏览器弹出麦克风授权；拒绝时显示错误
 - [ ] 录音：波形动起来；计时走；30s 自动停止
 - [ ] <8s 录音显示"至少 8 秒"；≥8s 可提交
@@ -51,14 +51,14 @@ VITE_EXTENSION_ID=<dev 扩展 id>   # 留空则隐藏扩展连接卡
 - [ ] 提交后"训练音色中…"；成功 → dashboard
 - [ ] （依赖 Fish 额度）502 时显示降级提示但可继续
 
-### 3. 扩展采集 → dashboard
+### 3. 扩展采集 → /app/episodes
 - [ ] chrome://extensions 加载 apps/extension（dev 模式），记下扩展 id
 - [ ] dashboard 点"连接扩展" → 显示"扩展已连接 ✓"（token 注入 = better-auth session token）
 - [ ] 打开 DeepSeek/Claude 对话页 → 点扩展采集 → 提示成功
 - [ ] 回到 dashboard（刷新）→ 出现新草稿（平台徽标正确）
 - [ ] 空列表时显示引导文案；"开始新节目"进入向导
 
-### 4. /episodes/new 向导
+### 4. /app/episodes/new 向导
 - [ ] ① 列表显示已采集对话（标题/平台/日期）→ 选择进入 ②
 - [ ] ② 无脚本：自动触发润色，SSE 段落逐渐浮现 → 完成
 - [ ] ② 有脚本：直接进入编辑态（版本号正确）
@@ -71,10 +71,10 @@ VITE_EXTENSION_ID=<dev 扩展 id>   # 留空则隐藏扩展连接卡
 - [ ] ④ 标题预填、可改描述 → 发布 → 成功态
 - [ ] 刷新 dashboard → 该节目显示"已发布"
 
-### 5. /settings
+### 5. /app/settings
 - [ ] 当前样本状态展示；重录 → 保存新声音生效
 - [ ] 邀请码/订阅占位文案显示
-- [ ] 退出登录 → 回 /auth
+- [ ] 退出登录 → 回 /login
 - [ ] 404 页：随便输个路径
 
 ## 已知依赖

@@ -5,7 +5,6 @@ import { tokens } from "../theme.stylex.ts";
 import { api } from "../lib/client";
 import { useAuth } from "../lib/auth";
 import { env } from "../lib/env";
-import Navbar from "../components/navbar";
 
 // chrome.runtime（扩展注入 token 用；无扩展环境则跳过）
 declare const chrome: { runtime?: { sendMessage?: (id: string, msg: unknown) => Promise<unknown> } };
@@ -210,12 +209,10 @@ export default function Dashboard() {
 
   return (
     <div {...stylex.props(styles.page)}>
-      <Navbar />
-
       <div {...stylex.props(styles.content)}>
         <div {...stylex.props(styles.hero)}>
           <div {...stylex.props(styles.title)}>我的节目</div>
-          <button {...stylex.props(styles.newButton)} onClick={() => navigate("/episodes/new")}>
+          <button {...stylex.props(styles.newButton)} onClick={() => navigate("/app/episodes/new")}>
             开始新节目
           </button>
         </div>
@@ -223,8 +220,8 @@ export default function Dashboard() {
         <Show when={!channelActive()}>
           <div {...stylex.props(styles.channelBanner)}>
             <span>你的频道尚未开通：开通后才能生成和发布节目</span>
-            <A href="/onboarding/channel" {...stylex.props(styles.channelLink)}>
-              输入授权码开通 →
+            <A href="/app/onboarding" {...stylex.props(styles.channelLink)}>
+              去开通 →
             </A>
           </div>
         </Show>

@@ -1,7 +1,6 @@
 import { createSignal, onMount, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "../theme.stylex.ts";
-import Navbar from "../components/navbar";
 import Recorder from "../components/recorder";
 import { api } from "../lib/client";
 import { ApiError } from "../lib/api";
@@ -108,7 +107,6 @@ export default function Settings() {
 
   return (
     <div {...stylex.props(styles.page)}>
-      <Navbar />
       <div {...stylex.props(styles.content)}>
         <div {...stylex.props(styles.title)}>设置</div>
 

@@ -5,7 +5,7 @@ import { tokens } from "../theme.stylex.ts";
 import { api } from "../lib/client";
 import ScriptEditor from "../components/script-editor";
 import GenerateProgress from "../components/generate-progress";
-import type { Episode } from "./dashboard";
+import type { Episode } from "./episodes";
 
 const PLATFORM_LABEL: Record<string, string> = {
   deepseek: "DeepSeek",
@@ -220,7 +220,7 @@ export default function NewEpisode() {
   return (
     <div {...stylex.props(styles.page)}>
       <header {...stylex.props(styles.header)}>
-        <button {...stylex.props(styles.back)} onClick={() => navigate("/dashboard")}>
+        <button {...stylex.props(styles.back)} onClick={() => navigate("/app/episodes")}>
           ← 返回
         </button>
         <div {...stylex.props(styles.steps)}>
@@ -315,7 +315,7 @@ export default function NewEpisode() {
                 <div {...stylex.props(styles.publishedDesc)}>
                   播放页即将上线（内容站开发中）。发布满 3 期后，每发布一期可获得一个邀请码，邀请好友加入。
                 </div>
-                <button {...stylex.props(styles.button)} onClick={() => navigate("/dashboard")}>
+                <button {...stylex.props(styles.button)} onClick={() => navigate("/app/episodes")}>
                   返回工作台
                 </button>
               </div>

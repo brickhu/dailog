@@ -34,7 +34,7 @@ export default function NotFound() {
     <div {...stylex.props(styles.page)}>
       <div {...stylex.props(styles.code)}>404</div>
       <div>页面不存在</div>
-      <button {...stylex.props(styles.button)} onClick={() => navigate("/dashboard")}>
+      <button {...stylex.props(styles.button)} onClick={() => navigate("/app/episodes")}>
         回工作台
       </button>
     </div>

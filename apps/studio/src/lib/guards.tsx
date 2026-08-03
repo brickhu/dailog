@@ -9,7 +9,7 @@ export function RequireAuth(props: RouteSectionProps) {
   // auth.user/auth.loading 是响应式 getter（内部读取 signal）
   return (
     <Show when={!auth.loading} fallback={<div>加载中…</div>}>
-      <Show when={auth.user} fallback={<Navigate href="/auth" />}>
+      <Show when={auth.user} fallback={<Navigate href="/login" />}>
         {props.children}
       </Show>
     </Show>
