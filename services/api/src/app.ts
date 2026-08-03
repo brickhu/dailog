@@ -10,6 +10,8 @@ import { generateRoutes, type GenerateDeps } from "./routes/generate";
 import { jobRoutes, type JobDeps } from "./routes/job";
 import { voiceRoutes, type VoiceDeps } from "./routes/voice";
 import { channelRoutes, type ChannelDeps } from "./routes/channel";
+import { favoritesRoutes, type FavoritesRepo } from "./routes/favorites";
+import { tokenRoutes } from "./routes/token";
 import type { Repos } from "./repo";
 
 export type { AuthLike };
@@ -22,6 +24,7 @@ export type AppDeps = {
   job: JobDeps;
   voice: VoiceDeps;
   channel: ChannelDeps; // 频道开通（授权码激活）
+  favorites: FavoritesRepo; // 消费端互动（收藏/点赞）
 };
 
 export function createApp(deps: AppDeps): Hono<AuthEnv> {
@@ -54,6 +57,8 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   app.route("/", jobRoutes(deps.job, (c) => (c as unknown as { get: (k: string) => string }).get("userId")));
   app.route("/", voiceRoutes(deps.voice));
   app.route("/", channelRoutes(deps.channel));
+  app.route("/", favoritesRoutes(deps.favorites));
+  app.route("/", tokenRoutes(deps.auth));
 
   app.notFound((c) => c.json({ error: "not_found" }, 404));
   app.onError((err, c) => {

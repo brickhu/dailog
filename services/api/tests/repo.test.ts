@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { createApp, type AppDeps } from "../src/app";
+import { createFavoritesRepo } from "../src/routes/favorites";
 import { createDb } from "../src/db/client";
 import { createRepo } from "../src/repo";
 import type { Env } from "../src/config/env";
@@ -436,6 +437,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       storage: { put: async () => {}, get: async () => new Uint8Array() },
     };
     const channel: AppDeps["channel"] = { activateChannel: async () => ({ ok: true }) };
+    const favorites = createFavoritesRepo(db);
     const app = createApp({
       env: makeEnv(),
       auth: {
@@ -443,6 +445,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
         api: { getSession: async () => ({ user: { id: API_USER } }) },
       },
       channel,
+      favorites,
       repo,
       polish,
       generate,

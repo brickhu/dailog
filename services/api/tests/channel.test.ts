@@ -148,6 +148,12 @@ describe.skipIf(!hasDb)("channel activation (授权码开通频道, real local P
       job: fakeJob(),
       voice: fakeVoice(),
       channel: { activateChannel: createActivateChannel(dbClient.db) },
+      favorites: {
+        getPublishableEpisode: async () => null,
+        toggleFavorite: async () => ({ favorited: true }),
+        toggleLike: async () => ({ liked: true }),
+        listFavorites: async () => [],
+      },
     });
 
     // 注册一个用户（开放注册）

@@ -119,7 +119,12 @@ function makeApp(envOverride: Partial<Env> = {}) {
     job: fakeJob(),
     voice: fakeVoice(),
     channel: { activateChannel: async () => ({ ok: true }) },
-  });
+    favorites: {
+      getPublishableEpisode: async () => null,
+      toggleFavorite: async () => ({ favorited: true }),
+      toggleLike: async () => ({ liked: true }),
+      listFavorites: async () => [],
+    },  });
 }
 
 describe("CORS", () => {
@@ -139,6 +144,11 @@ describe("CORS", () => {
     const res = await app.request("/health", { headers: { Origin: "https://app.dailogues.com" } });
     expect(res.status).toBe(200);
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://app.dailogues.com");
+  });
+
+  it("includes Allow-Credentials for whitelisted origin (SSO cookie)", async () => {
+    const res = await app.request("/health", { headers: { Origin: "https://app.dailogues.com" } });
+    expect(res.headers.get("Access-Control-Allow-Credentials")).toBe("true");
   });
 
   it("does not add CORS headers for unknown origin", async () => {

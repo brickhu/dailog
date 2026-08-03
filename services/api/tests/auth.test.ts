@@ -146,7 +146,12 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
       job: fakeJob(),
       voice: fakeVoice(),
     channel: { activateChannel: async () => ({ ok: true }) },
-    });
+    favorites: {
+      getPublishableEpisode: async () => null,
+      toggleFavorite: async () => ({ favorited: true }),
+      toggleLike: async () => ({ liked: true }),
+      listFavorites: async () => [],
+    },    });
   });
 
   afterAll(async () => {

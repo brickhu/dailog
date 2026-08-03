@@ -123,6 +123,29 @@ export const episodes = pgTable("episodes", {
   publishedAt: timestamp("published_at", { withTimezone: true }),
 });
 
+// 消费端互动（计划 6）：user_id 引用 better-auth user（未登录用户不能收藏/点赞）
+export const favorites = pgTable(
+  "favorites",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+    episodeId: uuid("episode_id").notNull().references(() => episodes.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("favorites_user_episode").on(t.userId, t.episodeId)],
+);
+
+export const likes = pgTable(
+  "likes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+    episodeId: uuid("episode_id").notNull().references(() => episodes.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("likes_user_episode").on(t.userId, t.episodeId)],
+);
+
 export const scripts = pgTable("scripts", {
   id: uuid("id").defaultRandom().primaryKey(),
   episodeId: uuid("episode_id").notNull().references(() => episodes.id, { onDelete: "cascade" }),

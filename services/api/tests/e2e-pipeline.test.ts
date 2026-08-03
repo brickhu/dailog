@@ -44,6 +44,7 @@ import type { GenerateDeps } from "../src/routes/generate";
 import type { JobDeps } from "../src/routes/job";
 import type { VoiceDeps } from "../src/routes/voice";
 import { createActivateChannel, type ChannelDeps } from "../src/routes/channel";
+import { createFavoritesRepo } from "../src/routes/favorites";
 
 // 门控（skip 条件）：三个必需环境变量任一缺失 → SKIP
 const hasE2eEnv = Boolean(
@@ -168,6 +169,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     };
     const voice: VoiceDeps = { saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row), tts, storage };
     const channel: ChannelDeps = { activateChannel: createActivateChannel(dbClient.db) };
+    const favorites = createFavoritesRepo(dbClient.db);
 
     // 真实 better-auth：注册测试用户，token 供全流程请求（认证与生产路径一致）
     const auth = createAuth({ db: dbClient.db, secret: env.BETTER_AUTH_SECRET });
@@ -175,6 +177,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       env,
       auth,
       channel,
+      favorites,
       repo,
       polish,
       generate,
