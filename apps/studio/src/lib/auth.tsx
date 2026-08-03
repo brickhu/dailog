@@ -28,13 +28,17 @@ export function AuthProvider(props: { children: JSX.Element }) {
     // 若不注册，未登录进入页面的会话在注册后 api client 仍拿不到 token）
     setTokenGetter(() => accessToken());
     // ① SSO cookie 会话优先：跨子域 cookie（.dailogues.com）已登录则免登录
-    const sessionUser = await fetch(`${env.apiBaseUrl}/api/auth/get-session`, {
+    // 注意：better-auth 未登录时 get-session 返回 JSON null（而非 {user:null}），
+    // 必须整体走可选链——历史上 sessionUser.user 在 null 上抛 TypeError，
+    // onMount 中断导致 auth.loading 永久 true（守卫卡"加载中"）。
+    const loggedUser = await fetch(`${env.apiBaseUrl}/api/auth/get-session`, {
       credentials: "include",
     })
-      .then((r) => (r.ok ? (r.json() as Promise<{ user: AuthUser | null }>) : Promise.resolve({ user: null })))
-      .catch(() => ({ user: null }));
-    if (sessionUser.user) {
-      setUser(sessionUser.user);
+      .then((r) => (r.ok ? (r.json() as Promise<{ user: AuthUser } | null>) : Promise.resolve(null)))
+      .catch(() => null);
+    const user = loggedUser?.user ?? null;
+    if (user) {
+      setUser(user);
       setLoading(false);
       // 自动注入扩展 token（页面加载即续上）
       void injectExtensionToken();
