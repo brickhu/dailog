@@ -83,8 +83,8 @@ export function AuthProvider(props: { children: JSX.Element }) {
       }
     },
     async signOut() {
-      const token = accessToken();
-      if (token) await authApi.signOut(token);
+      // cookie 会话下 token 为 null 也要调服务端登出（清 better-auth cookie）
+      await authApi.signOut(accessToken());
       setAccessToken(null);
       setUser(null);
     },

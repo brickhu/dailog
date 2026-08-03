@@ -47,12 +47,15 @@ describe("createApiClient", () => {
     expect((err as ApiError).detail).toBe("信息量不足");
   });
 
-  it("throws unauthenticated when no token", async () => {
+  it("sends request without bearer when no token (cookie session path)", async () => {
     const anon = createApiClient({ baseUrl: "http://localhost:8787", getToken: () => null });
-    const err = await anon.get("/api/me").catch((e) => e);
-    expect(err).toBeInstanceOf(ApiError);
-    expect((err as ApiError).status).toBe(401);
-    expect((err as ApiError).code).toBe("unauthenticated");
+    const spy = mockFetchOnce(async (_url, init) => {
+      expect(new Headers(init?.headers).get("Authorization")).toBeNull();
+      return jsonResponse(200, { userId: "u-1" });
+    });
+    const out = await anon.get<{ userId: string }>("/api/me");
+    expect(out.userId).toBe("u-1");
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it("maps 401 response to unauthorized error", async () => {

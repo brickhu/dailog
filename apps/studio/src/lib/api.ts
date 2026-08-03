@@ -13,7 +13,7 @@ export class ApiError extends Error {
 
 export interface ApiClientOptions {
   baseUrl: string;
-  /** 每次请求取当前 JWT；null = 未登录（直接 401 unauthenticated，不发请求） */
+  /** 每次请求取当前 JWT；null = 无 Bearer（SSO cookie 会话仍可认证：请求照发，未认证由服务端 401） */
   getToken: () => string | null;
 }
 
@@ -27,10 +27,11 @@ export interface ApiClient {
 
 export function createApiClient(opts: ApiClientOptions): ApiClient {
   const request = async (path: string, init: RequestInit = {}): Promise<Response> => {
+    // 无 token 不拦截：cookie 会话（credentials: "include"）可独立认证；
+    // 有 token（登录响应/扩展注入）附加 Bearer；真正未认证由服务端 401 统一规范化。
     const token = opts.getToken();
-    if (!token) throw new ApiError(401, "unauthenticated", "请先登录");
     const headers = new Headers(init.headers);
-    headers.set("Authorization", `Bearer ${token}`);
+    if (token) headers.set("Authorization", `Bearer ${token}`);
     if (init.body !== undefined && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }

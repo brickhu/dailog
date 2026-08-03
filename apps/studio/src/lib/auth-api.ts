@@ -22,7 +22,9 @@ export interface SignInInput {
 }
 
 async function request(path: string, init: RequestInit = {}): Promise<Response> {
-  const res = await fetch(`${env.apiBaseUrl}${path}`, init);
+  // credentials: "include"：登录/登出响应 Set-Cookie 需被浏览器接受（SSO cookie 会话），
+  // 否则 cookie 会话永远不会建立，只能靠 localStorage token 兜底
+  const res = await fetch(`${env.apiBaseUrl}${path}`, { ...init, credentials: "include" });
   return res;
 }
 
@@ -96,10 +98,11 @@ export const authApi = {
     await res.json();
   },
 
-  async signOut(token: string): Promise<void> {
+  /** 登出：token 存在时带 Bearer；cookie 会话由 credentials include 携带，服务端清 cookie */
+  async signOut(token: string | null): Promise<void> {
     await request("/api/auth/sign-out", {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     }).catch(() => {});
     clearToken();
   },
