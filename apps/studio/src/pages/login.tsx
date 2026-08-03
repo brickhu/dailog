@@ -14,6 +14,7 @@ const styles = stylex.create({
     justifyContent: "center",
     background: tokens.colorBg,
     padding: tokens.space4,
+    minWidth: "320px",
   },
   brand: {
     fontSize: "28px",
