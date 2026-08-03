@@ -26,30 +26,35 @@ export interface ChannelSummary {
   episodeCount: number;
 }
 
-let sql: postgres.Sql | null = null;
-
-/** 惰性单例连接（SSR 请求间复用；只读：默认 sslmode=require + 只执行 SELECT） */
-function db(): postgres.Sql {
-  if (!sql) {
-    // dev 时 vinxi SSR 运行时不注入 .env.local：Node 22 原生加载（生产平台注入则跳过）。
-    // 放在函数内而非模块顶层——server function 转换会复制顶层语句进 client 桩。
-    if (!process.env.DATABASE_URL) {
-      try {
-        process.loadEnvFile(".env.local");
-      } catch {
-        /* 生产环境无此文件，变量由部署平台注入 */
-      }
+/**
+ * 每请求连接辅助：CF Workers 的 I/O 对象绑定创建它的请求上下文，模块级连接池跨请求
+ * 复用会抛 "Cannot perform I/O on behalf of a different request"（workerd）。
+ * 因此不做单例池：SSR 每请求新建连接、用完即关（查询量小，可接受）；
+ * 流量上来后可换 Cloudflare Hyperdrive 托管连接池。
+ * dev 时 vinxi SSR 不注入 .env.local：Node 22 原生加载（生产平台注入则跳过）。
+ * 放函数内而非模块顶层——server function 转换会复制顶层语句进 client 桩。
+ */
+async function withDb<T>(fn: (sql: postgres.Sql) => Promise<T>): Promise<T> {
+  if (!process.env.DATABASE_URL) {
+    try {
+      process.loadEnvFile(".env.local");
+    } catch {
+      /* 生产环境无此文件，变量由部署平台注入 */
     }
-    const url = process.env.DATABASE_URL;
-    if (!url) throw new Error("DATABASE_URL 未配置（apps/site/.env.local）");
-    sql = postgres(url, { max: 5 });
   }
-  return sql;
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL 未配置（apps/site/.env.local）");
+  const sql = postgres(url, { max: 1 });
+  try {
+    return await fn(sql);
+  } finally {
+    await sql.end();
+  }
 }
 
 /** 最新已发布节目（首页） */
 export async function listLatestEpisodes(limit = 20): Promise<EpisodeSummary[]> {
-    return db()`
+    return withDb((db) => db`
       SELECT e.id, e.slug, e.title, e.description,
              e.duration_seconds AS "durationSeconds",
              e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
@@ -60,12 +65,12 @@ export async function listLatestEpisodes(limit = 20): Promise<EpisodeSummary[]> 
       WHERE e.status = 'published' AND e.is_public = true
       ORDER BY e.published_at DESC
       LIMIT ${limit}
-    ` as unknown as Promise<EpisodeSummary[]>;
+    ` as unknown as Promise<EpisodeSummary[]>);
 }
 
 /** 单集详情（仅 published 公开） */
 export async function getEpisode(id: string): Promise<EpisodeSummary | null> {
-    const rows = await db()`
+    const rows = await withDb((db) => db`
       SELECT e.id, e.slug, e.title, e.description,
              e.duration_seconds AS "durationSeconds",
              e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
@@ -75,13 +80,14 @@ export async function getEpisode(id: string): Promise<EpisodeSummary | null> {
       JOIN profiles p ON p.id = e.user_id
       WHERE e.id = ${id} AND e.status = 'published' AND e.is_public = true
       LIMIT 1
-    `;
+    `);
     return (rows[0] as unknown as EpisodeSummary | undefined) ?? null;
 }
 
 /** 频道页：简介 + 节目列表 */
 export async function getChannel(username: string): Promise<{ channel: ChannelSummary | null; episodes: EpisodeSummary[] }> {
-    const rows = await db()`
+    return withDb(async (db) => {
+    const rows = await db`
       SELECT p.username, p.display_name AS "displayName", p.bio,
              COUNT(e.id)::int AS "episodeCount"
       FROM profiles p
@@ -98,7 +104,7 @@ export async function getChannel(username: string): Promise<{ channel: ChannelSu
       bio: raw.bio == null ? null : String(raw.bio),
       episodeCount: Number(raw.episodeCount),
     };
-    const episodes = await db()`
+    const episodes = await db`
       SELECT e.id, e.slug, e.title, e.description,
              e.duration_seconds AS "durationSeconds",
              e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
@@ -110,4 +116,5 @@ export async function getChannel(username: string): Promise<{ channel: ChannelSu
       ORDER BY e.published_at DESC
     `;
     return { channel, episodes: episodes as unknown as EpisodeSummary[] };
+    });
 }
