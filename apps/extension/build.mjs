@@ -4,7 +4,7 @@ import { build } from "esbuild";
 const env = process.env.DAILOGUES_ENV === "dev" ? "dev" : "prod";
 const hosts = {
   dev: { api: "https://api.candelbot.app", app: "https://app.candelbot.app" },
-  prod: { api: "https://api.dailogues.com", app: "https://app.dailogues.com" },
+  prod: { api: "https://api.dailog.fm", app: "https://app.dailog.fm" },
 }[env];
 
 const common = {
