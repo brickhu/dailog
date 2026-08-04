@@ -18,7 +18,8 @@
     "postgres": "^3.4.5",
     "server-only": "^0.0.1",
     "solid-js": "^1.9.14",
-    "@dailogues/ui": "workspace:^"
+    "@dailogues/ui": "workspace:^",
+    "@dailogues/auth-ui": "workspace:^"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
