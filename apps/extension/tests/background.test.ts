@@ -69,11 +69,11 @@ describe("handleCollect", () => {
     expect(fetchMock).toHaveBeenCalledWith("https://api.candelbot.app/api/imports", expect.anything());
   });
 
-  it("returns auth error when no token", async () => {
+  it("returns auth error with loginUrl when no token", async () => {
     mockChrome();
     const res = await handleCollect(collectPayload());
     // 断言语义与 ok/error 逐条检查一致；expect 链不会收窄判别联合，故用整体 toEqual
-    expect(res).toEqual({ ok: false, error: "no_token" });
+    expect(res).toEqual({ ok: false, error: "no_token", loginUrl: "https://dailog.fm/login" });
   });
 });
 
