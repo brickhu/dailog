@@ -1,5 +1,4 @@
-import { createAsync } from "@solidjs/router";
-import { Show } from "solid-js";
+import { Show, createSignal, onMount } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "@dailogues/ui/theme.stylex";
 
@@ -48,14 +47,15 @@ const styles = stylex.create({
  *  会话经 site 代理（/api/auth/get-session）在 client 判定（cookie 同站自动携带）；
  *  SSR 首帧无 cookie 渲染"登录"，hydration 后更新为邮箱 + 登出。 */
 export function SiteNav() {
-  const session = createAsync(async () => {
-    // SSR 无浏览器 cookie 且相对 fetch 在 workerd 抛 Invalid URL：首帧渲染"登录"，
-    // hydration 后 client 再判定（fetch 相对路径仅 client 可用）
-    if (import.meta.env.SSR) return null;
+  // 会话判定：仅 client 执行（SSR 无浏览器 cookie、相对 fetch 在 workerd 抛 Invalid URL）。
+  // 不用 createAsync——其 SSR 序列化结果（null）会被 hydration 复用，不再重新请求；
+  // onMount 保证挂载后必然重新 fetch，首帧渲染"登录"、挂载后更新为邮箱。
+  const [user, setUser] = createSignal<{ email?: string } | null>(null);
+  onMount(async () => {
     const res = await fetch("/api/auth/get-session");
-    if (!res.ok) return null;
+    if (!res.ok) return;
     const data = (await res.json()) as { user?: { email?: string } | null };
-    return data.user ?? null;
+    setUser(data.user ?? null);
   });
 
   const signOut = async () => {
@@ -68,7 +68,7 @@ export function SiteNav() {
       <a href="/" {...stylex.props(styles.brand)}>
         dailogues
       </a>
-      <Show when={session()} fallback={<a href="/login" {...stylex.props(styles.login)}>登录</a>}>
+      <Show when={user()} fallback={<a href="/login" {...stylex.props(styles.login)}>登录</a>}>
         {(u) => (
           <div {...stylex.props(styles.userBox)}>
             <span {...stylex.props(styles.email)}>{u().email}</span>
