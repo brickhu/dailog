@@ -34,7 +34,12 @@ export async function proxySignOut(request: Request): Promise<Response> {
   const cookie = request.headers.get("cookie");
   const res = await fetch(`${env.apiBaseUrl}/api/auth/sign-out`, {
     method: "POST",
-    headers: { ...(cookie ? { Cookie: cookie } : {}), "Content-Type": "application/json" },
+    headers: {
+      ...(cookie ? { Cookie: cookie } : {}),
+      "Content-Type": "application/json",
+      // 与 proxyAuth 一致：显式声明来源站点（better-auth CSRF：无 Origin 请求被拒）
+      Origin: env.siteBaseUrl,
+    },
     body: "{}",
   });
   const outHeaders: Record<string, string> = { "Content-Type": "application/json" };
