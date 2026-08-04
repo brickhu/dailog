@@ -54,8 +54,9 @@ export function SiteNav() {
   onMount(async () => {
     const res = await fetch("/api/auth/get-session");
     if (!res.ok) return;
-    const data = (await res.json()) as { user?: { email?: string } | null };
-    setUser(data.user ?? null);
+    // better-auth 未登录返回 JSON null（代理透传）——必须整体可选链，否则 onMount 抛错、导航永不更新
+    const data = (await res.json()) as { user?: { email?: string } | null } | null;
+    setUser(data?.user ?? null);
   });
 
   const signOut = async () => {

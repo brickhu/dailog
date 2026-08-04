@@ -64,8 +64,9 @@ export default function MePage() {
   onMount(async () => {
     const res = await fetch("/api/auth/get-session");
     if (res.ok) {
-      const data = (await res.json()) as { user?: { id: string } | null };
-      setSession(data.user ?? null);
+      // better-auth 未登录返回 JSON null（代理透传）——必须整体可选链
+      const data = (await res.json()) as { user?: { id: string } | null } | null;
+      setSession(data?.user ?? null);
     }
     setChecked(true);
   });
