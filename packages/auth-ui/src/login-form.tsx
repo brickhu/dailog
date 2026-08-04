@@ -117,8 +117,9 @@ export type LoginMethod = "email";
 export interface LoginVerificationConfig {
   /** 重发验证邮件端点（POST { email, callbackURL }） */
   resendEndpoint: string;
-  /** 验证链接点击后的跳回地址（callbackURL；"从哪里来就返回哪里去"） */
-  callbackURL: string;
+  /** 验证链接点击后的跳回地址（callbackURL；不传 = 当前站点 origin——"从哪里来就返回哪里去"）。
+   *  注意：勿传服务端 env 直读值——客户端 bundle 无 process.env，会退化到错误回退值。 */
+  callbackURL?: string;
 }
 
 export interface LoginFormConfig {
@@ -182,8 +183,10 @@ export function LoginForm(props: LoginFormProps) {
                 email: email().trim(),
                 password: password(),
                 name: name().trim() || email().trim().split("@")[0],
-                // 验证邮件链接跳回地址（宿主声明）——better-auth signUpEmail 透传
-                ...(props.config.verification ? { callbackURL: props.config.verification.callbackURL } : {}),
+                // 验证邮件链接跳回地址：优先宿主声明，缺省当前站点 origin（提交是客户端事件，window 安全）
+                ...(props.config.verification
+                  ? { callbackURL: props.config.verification.callbackURL ?? window.location.origin }
+                  : {}),
               },
         ),
       });
@@ -225,7 +228,10 @@ export function LoginForm(props: LoginFormProps) {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: target.email, callbackURL: verification.callbackURL }),
+        body: JSON.stringify({
+          email: target.email,
+          callbackURL: verification.callbackURL ?? window.location.origin,
+        }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as { message?: string; code?: string } | null;

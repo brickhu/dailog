@@ -27,8 +27,7 @@ export default function LoginPage() {
         verification: {
           // 重发验证邮件走站内代理（与注册同链路：api 发信 + Set-Cookie 透传）
           resendEndpoint: "/api/auth/send-verification-email",
-          // 验证链接点击后跳回站点首页
-          callbackURL: env.siteBaseUrl,
+          // callbackURL 不传：LoginForm 用当前站点 origin（客户端 env 直读会退化，勿用 env.siteBaseUrl）
         },
       }}
       redirect={{ allowedOrigins: [env.siteBaseUrl, env.studioBaseUrl] }}
