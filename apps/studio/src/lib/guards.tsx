@@ -1,4 +1,4 @@
-import { Show } from "solid-js";
+import { Show, createEffect } from "solid-js";
 import { Navigate, useLocation, type RouteSectionProps } from "@solidjs/router";
 import { useAuth } from "./auth";
 
@@ -12,6 +12,17 @@ function loginHref(): string {
     return `https://dailog.fm/login${redirect ? `?redirect=${redirect}` : ""}`;
   }
   return "/login";
+}
+
+/** 登录跳转：跨站（完整 URL，生产 app.dailog.fm → 主站登录页）必须整页跳转——
+ *  SolidJS Router 的 Navigate 只接受站内路径，传完整 URL 会抛 "not a routable path"；
+ *  站内（/login）走 SPA 导航。 */
+function LoginRedirect() {
+  const href = loginHref();
+  createEffect(() => {
+    if (href.startsWith("http")) window.location.href = href;
+  });
+  return href.startsWith("http") ? <div>跳转到登录页…</div> : <Navigate href={href} />;
 }
 
 /** 布局守卫：未登录 → /auth；session 恢复中先渲染加载态（避免误跳）。
@@ -29,7 +40,7 @@ export function RequireAuth(props: RouteSectionProps) {
     !auth.channelActive() || (auth.channelActive() && !auth.hasVoiceSample());
   return (
     <Show when={!auth.loading} fallback={<div>加载中…</div>}>
-      <Show when={auth.user} fallback={<Navigate href={loginHref()} />}>
+      <Show when={auth.user} fallback={<LoginRedirect />}>
         <Show
           when={auth.channelActive() !== null && auth.hasVoiceSample() !== null}
           fallback={<div>加载中…</div>}
