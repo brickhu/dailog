@@ -37,6 +37,12 @@ export async function runCollectFlow(opts: CollectFlowOptions): Promise<void> {
       opts.onResult(`采集失败：${res?.error ?? "未知错误"}`, "error");
     }
   } catch (e) {
-    opts.onResult(`采集失败：${e instanceof Error ? e.message : String(e)}`, "error");
+    const msg = e instanceof Error ? e.message : String(e);
+    // 扩展重新加载后旧页面 content script 上下文失效——引导刷新页面重新注入
+    if (msg.includes("Extension context invalidated")) {
+      opts.onResult("扩展已更新：请刷新本页面后重试", "error");
+    } else {
+      opts.onResult(`采集失败：${msg}`, "error");
+    }
   }
 }
