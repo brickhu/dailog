@@ -1,6 +1,7 @@
 import { createAsync } from "@solidjs/router";
 import { For, Show } from "solid-js";
 import { listLatestEpisodes, type EpisodeSummary } from "../lib/db";
+import { SiteNav } from "../components/site-nav";
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "@dailogues/ui/theme.stylex";
 
@@ -11,24 +12,6 @@ const styles = stylex.create({
     background: tokens.colorBg,
     color: tokens.colorText,
     fontFamily: "system-ui, -apple-system, sans-serif",
-  },
-  header: {
-    padding: `${tokens.space4} ${tokens.space6}`,
-    borderBottom: `1px solid ${tokens.colorBorder}`,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  brand: {
-    fontSize: tokens.fontSizeLg,
-    fontWeight: tokens.fontWeightBold,
-    color: tokens.colorPrimary,
-    textDecoration: "none",
-  },
-  login: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
-    textDecoration: "none",
   },
   content: {
     maxWidth: "720px",
@@ -81,14 +64,7 @@ export default function Home() {
 
   return (
     <div {...stylex.props(styles.page)}>
-      <header {...stylex.props(styles.header)}>
-        <a href="/" {...stylex.props(styles.brand)}>
-          dailogues
-        </a>
-        <a href="/login" {...stylex.props(styles.login)}>
-          登录
-        </a>
-      </header>
+      <SiteNav />
       <div {...stylex.props(styles.content)}>
         <div {...stylex.props(styles.title)}>最新节目</div>
         <Show

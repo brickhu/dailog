@@ -59,6 +59,7 @@ const styles = stylex.create({
 export default function MePage() {
   // 会话判定（server 端转发）：未登录 → 统一登录页带 redirect
   const session = createAsync(async () => {
+    if (import.meta.env.SSR) return null;
     const res = await fetch("/api/auth/get-session");
     if (!res.ok) return null;
     const data = (await res.json()) as { user?: { id: string } | null };

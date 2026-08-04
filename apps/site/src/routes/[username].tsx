@@ -2,6 +2,7 @@ import { createAsync } from "@solidjs/router";
 import { For, Show } from "solid-js";
 import { useParams } from "@solidjs/router";
 import { getChannel, type EpisodeSummary } from "../lib/db";
+import { SiteNav } from "../components/site-nav";
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "@dailogues/ui/theme.stylex";
 
@@ -87,6 +88,7 @@ export default function ChannelPage() {
 
   return (
     <div {...stylex.props(styles.page)}>
+      <SiteNav />
       <div {...stylex.props(styles.content)}>
         <Show
           when={data()?.channel}
