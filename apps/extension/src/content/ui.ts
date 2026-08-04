@@ -3,9 +3,9 @@
 export interface FabController {
   setBusy(busy: boolean): void;
   showToast(text: string, kind: "success" | "error"): void;
-  /** 未登录时展开登录引导面板（点"去登录"打开统一登录页，登录后回跳当前页） */
-  showLoginPanel(loginUrl: string): void;
-  closeLoginPanel(): void;
+  /** 引导面板：登录（no_token）/ 创建频道（channel_not_activated） */
+  showGuidePanel(kind: "login" | "channel", url: string): void;
+  closeGuidePanel(): void;
   destroy(): void;
 }
 
@@ -111,15 +111,30 @@ export function createFab(opts: { onClick: () => void }): FabController {
         setTimeout(() => { toast.hidden = true; }, 200);
       }, 3000);
     },
-    showLoginPanel(loginUrl) {
-      panel.querySelector(".panel-btn")!.addEventListener("click", () => {
-        // 用户手势内 window.open：允许新标签打开登录页（登录后 redirect 回当前对话页）
-        window.open(loginUrl, "_blank");
+    showGuidePanel(kind, url) {
+      const title = panel.querySelector(".panel-title")!;
+      const desc = panel.querySelector(".panel-desc")!;
+      const btn = panel.querySelector(".panel-btn")!;
+      if (kind === "login") {
+        title.textContent = "需要登录 dailog";
+        desc.textContent = "登录后即可采集当前对话，并自动同步到你的工作台。";
+        btn.textContent = "去登录";
+      } else {
+        title.textContent = "先创建你的频道";
+        desc.textContent = "采集前需要先开通频道（输入邀请码 + 录制声音），完成初始化后即可采集。";
+        btn.textContent = "去创建频道";
+      }
+      // 先移除旧监听（每次展开重新绑定，避免重复触发）
+      const clone = btn.cloneNode(true);
+      btn.replaceWith(clone);
+      clone.addEventListener("click", () => {
+        // 用户手势内 window.open：允许新标签打开目标页
+        window.open(url, "_blank");
         panel.classList.remove("show");
       });
       panel.classList.add("show");
     },
-    closeLoginPanel() {
+    closeGuidePanel() {
       panel.classList.remove("show");
     },
     destroy() {

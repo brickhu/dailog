@@ -61,6 +61,9 @@ export async function handleCollect(
       body: JSON.stringify(dialogue),
     });
     if (!res.ok) {
+      // 错误码透传（body.error 优先）：channel_not_activated（未开通频道）/ 401（登录失效）等
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      const code = body?.error ?? `http_${res.status}`;
       // 401 登录失效：自动打开统一登录页，登录后 redirect 回对话页（token 由登录页自动注入）
       if (res.status === 401) {
         const redirect = senderUrl ? encodeURIComponent(senderUrl) : "";
@@ -68,7 +71,7 @@ export async function handleCollect(
           url: `${DEFAULT_LOGIN_BASE}/login${redirect ? `?redirect=${redirect}` : ""}`,
         });
       }
-      return { ok: false, error: `http_${res.status}` };
+      return { ok: false, error: code };
     }
     return { ok: true, dialogue };
   } catch (e) {

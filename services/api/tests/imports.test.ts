@@ -5,6 +5,7 @@ import { importsRoutes } from "../src/routes/imports";
 function makeApp(overrides: Partial<Record<string, unknown>> = {}) {
   const app = new Hono();
   app.route("/api", importsRoutes({
+    getChannelActivatedAt: async () => new Date(),
     findImportBySource: async () => null,
     insertImport: async (row: unknown) => ({ id: "imp-1", ...(row as object) }),
     insertEpisode: async (row: unknown) => ({ id: "ep-1", ...(row as object) }),
@@ -40,6 +41,18 @@ describe("POST /api/imports", () => {
     expect(res.status).toBe(201);
     const json = await res.json();
     expect(json.episodeId).toBe("ep-1");
+  });
+
+  it("returns 403 channel_not_activated when channel not created", async () => {
+    const app = makeApp({ getChannelActivatedAt: async () => null });
+    const res = await app.request("/api/imports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(dialogue),
+    });
+    expect(res.status).toBe(403);
+    const json = await res.json();
+    expect(json.error).toBe("channel_not_activated");
   });
 
   it("returns 409 when already imported", async () => {

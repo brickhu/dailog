@@ -9,7 +9,7 @@ declare const chrome: {
 };
 
 import { MSG_COLLECT, type CollectResult } from "./shared";
-import { DEFAULT_LOGIN_BASE } from "./env";
+import { DEFAULT_LOGIN_BASE, DEFAULT_APP_BASE } from "./env";
 import { collectFromDocument } from "./content/collector";
 import { parseDeepSeekPage } from "./content/deepseek";
 import { waitForMutation } from "./content/mutation";
@@ -36,7 +36,10 @@ const fab = createFab({
       onResult: (text, kind) => fab.showToast(text, kind),
       // 未登录：展开登录引导（登录后 redirect 回当前对话页）
       loginUrl: `${DEFAULT_LOGIN_BASE}/login?redirect=${encodeURIComponent(location.href)}`,
-      onLoginRequired: (url) => fab.showLoginPanel(url),
+      onLoginRequired: (url) => fab.showGuidePanel("login", url),
+      // 未开通频道：引导去工作台 onboarding 创建频道
+      channelUrl: `${DEFAULT_APP_BASE}/onboarding`,
+      onChannelRequired: (url) => fab.showGuidePanel("channel", url),
     }).finally(() => fab.setBusy(false));
   },
 });

@@ -49,6 +49,16 @@ describe("handleCollect", () => {
     expect(res.ok).toBe(true);
   });
 
+  it("透传 body.error（403 channel_not_activated）", async () => {
+    mockChrome({ dailogToken: "jwt-token" });
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ error: "channel_not_activated" }), { status: 403 }),
+    );
+    (globalThis as Record<string, unknown>).fetch = fetchMock;
+    const res = await handleCollect(collectPayload());
+    expect(res).toEqual({ ok: false, error: "channel_not_activated" });
+  });
+
   it("posts to popup-configured api base when overridden", async () => {
     mockChrome({ dailogToken: "jwt-token", dailogApiBase: "https://api.candelbot.app" });
     const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));

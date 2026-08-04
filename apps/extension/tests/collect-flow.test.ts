@@ -14,7 +14,7 @@ describe("runCollectFlow", () => {
   it("collects, sends MSG_COLLECT with dialogue, shows success", async () => {
     const send = vi.fn(async (): Promise<CollectResult> => ({ ok: true, dialogue }));
     const onResult = vi.fn();
-    await runCollectFlow({ collect: async () => dialogue, send, onResult, loginUrl: "https://dailog.fm/login" });
+    await runCollectFlow({ collect: async () => dialogue, send, onResult, loginUrl: "https://dailog.fm/login", channelUrl: "https://app.dailog.fm/onboarding" });
     expect(send).toHaveBeenCalledWith({ type: "dailog:collect", dialogue });
     expect(onResult).toHaveBeenCalledWith(expect.stringContaining("已采集"), "success");
   });
@@ -22,7 +22,7 @@ describe("runCollectFlow", () => {
   it("shows error when collect returns null", async () => {
     const send = vi.fn(async (): Promise<CollectResult | undefined> => undefined);
     const onResult = vi.fn();
-    await runCollectFlow({ collect: async () => null, send, onResult, loginUrl: "https://dailog.fm/login" });
+    await runCollectFlow({ collect: async () => null, send, onResult, loginUrl: "https://dailog.fm/login", channelUrl: "https://app.dailog.fm/onboarding" });
     expect(send).not.toHaveBeenCalled();
     expect(onResult).toHaveBeenCalledWith(expect.stringContaining("未识别到对话内容"), "error");
   });
@@ -30,14 +30,14 @@ describe("runCollectFlow", () => {
   it("shows backend error message when send fails", async () => {
     const send = vi.fn(async (): Promise<CollectResult> => ({ ok: false, error: "no_token" }));
     const onResult = vi.fn();
-    await runCollectFlow({ collect: async () => dialogue, send, onResult, loginUrl: "https://dailog.fm/login" });
+    await runCollectFlow({ collect: async () => dialogue, send, onResult, loginUrl: "https://dailog.fm/login", channelUrl: "https://app.dailog.fm/onboarding" });
     expect(onResult).toHaveBeenCalledWith(expect.stringContaining("no_token"), "error");
   });
 
   it("surfaces thrown errors", async () => {
     const send = vi.fn(async (): Promise<CollectResult> => { throw new Error("boom"); });
     const onResult = vi.fn();
-    await runCollectFlow({ collect: async () => dialogue, send, onResult, loginUrl: "https://dailog.fm/login" });
+    await runCollectFlow({ collect: async () => dialogue, send, onResult, loginUrl: "https://dailog.fm/login", channelUrl: "https://app.dailog.fm/onboarding" });
     expect(onResult).toHaveBeenCalledWith(expect.stringContaining("boom"), "error");
   });
 });

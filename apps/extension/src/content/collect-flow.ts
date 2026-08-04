@@ -10,6 +10,10 @@ export interface CollectFlowOptions {
   loginUrl: string;
   /** 未登录：展开登录引导面板 */
   onLoginRequired?: (loginUrl: string) => void;
+  /** 工作台 onboarding 地址；未开通频道（channel_not_activated）时触发 */
+  channelUrl: string;
+  /** 未开通频道：展开创建频道引导面板 */
+  onChannelRequired?: (channelUrl: string) => void;
 }
 
 /** FAB 点击流程：采集 → 送 background → 展示结果 */
@@ -26,6 +30,9 @@ export async function runCollectFlow(opts: CollectFlowOptions): Promise<void> {
     } else if (res?.error === "no_token" && opts.onLoginRequired) {
       // 未登录：展开登录引导（不弹错误 toast）
       opts.onLoginRequired(opts.loginUrl);
+    } else if (res?.error === "channel_not_activated" && opts.onChannelRequired) {
+      // 已登录但未创建频道：展开创建频道引导
+      opts.onChannelRequired(opts.channelUrl);
     } else {
       opts.onResult(`采集失败：${res?.error ?? "未知错误"}`, "error");
     }

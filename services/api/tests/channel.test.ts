@@ -15,6 +15,7 @@ const hasDb = Boolean(process.env.DATABASE_URL);
 function fakeRepo(): AppDeps["repo"] {
   return {
     imports: {
+      getChannelActivatedAt: async () => new Date(),
       findImportBySource: async () => null,
       insertImport: async () => ({ id: "imp-1" }),
       insertEpisode: async () => ({ id: "ep-1" }),

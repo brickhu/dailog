@@ -44,6 +44,14 @@ export type Repos = { imports: ImportsRepo; episodes: EpisodesRepo; jobs: JobsRe
 export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
   return {
     imports: {
+      async getChannelActivatedAt(userId) {
+        const rows = await db
+          .select({ channelActivatedAt: schema.profiles.channelActivatedAt })
+          .from(schema.profiles)
+          .where(eq(schema.profiles.id, userId))
+          .limit(1);
+        return rows[0]?.channelActivatedAt ?? null;
+      },
       async findImportBySource(userId, platform, conversationId) {
         const rows = await db
           .select({ id: schema.imports.id })

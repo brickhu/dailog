@@ -22,6 +22,8 @@ export interface EpisodeRow {
 }
 
 export interface ImportsRepo {
+  /** 频道开通校验（未开通 → 采集引导创建频道）：profiles.channel_activated_at */
+  getChannelActivatedAt(userId: string): Promise<Date | null>;
   findImportBySource(userId: string, platform: Platform, conversationId: string): Promise<{ id: string } | null>;
   /** 唯一约束冲突（并发竞态）surface 为 { duplicate: true } */
   insertImport(row: ImportRow): Promise<{ id: string } | { duplicate: true }>;
@@ -36,6 +38,9 @@ export function importsRoutes(repo: ImportsRepo, storage: AudioStorage) {
     const body = await c.req.json().catch(() => null);
     if (!isCollectedDialogue(body)) return c.json({ error: "invalid_dialogue" }, 400);
     const userId = c.get("userId") as string;
+    // 频道开通校验：未开通（未创建频道）→ 403，扩展据此引导先去 onboarding 创建频道
+    const activated = await repo.getChannelActivatedAt(userId);
+    if (!activated) return c.json({ error: "channel_not_activated" }, 403);
     // 快速路径预检查；竞态安全依赖 createImport 内唯一约束信号（23505 → duplicate）
     const existing = await repo.findImportBySource(userId, body.platform, body.conversationId);
     if (existing) return c.json({ error: "already_imported", importId: existing.id }, 409);

@@ -113,7 +113,7 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
       env: testEnv,
       auth,
       repo: {
-        imports: { findImportBySource: async () => null, insertImport: async () => ({ id: "i" }), insertEpisode: async () => ({ id: "e" }), createImport: async () => ({ importId: "i", episodeId: "e" }) },
+        imports: { getChannelActivatedAt: async () => new Date(), findImportBySource: async () => null, insertImport: async () => ({ id: "i" }), insertEpisode: async () => ({ id: "e" }), createImport: async () => ({ importId: "i", episodeId: "e" }) },
         episodes: {
           listEpisodes: async () => [],
           getEpisode: async () => null,
