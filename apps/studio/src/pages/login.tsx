@@ -1,6 +1,6 @@
 import { createEffect } from "solid-js";
 import { useNavigate } from "@solidjs/router";
-import { LoginForm, type LoginSuccess } from "@dailogues/auth-ui";
+import { LoginForm, getLoginRedirect, type LoginSuccess } from "@dailogues/auth-ui";
 import { env } from "../lib/env";
 import { useAuth } from "../lib/auth";
 import { persistToken } from "../lib/auth-api";
@@ -11,9 +11,10 @@ import { injectExtensionToken } from "../lib/ext-inject";
 export default function LoginPage() {
   const auth = useAuth();
   const navigate = useNavigate();
-  // 已登录访问登录页 → 直接进工作台
+  // 已登录访问登录页 → 统一回跳（共享逻辑，与登录成功后一致）：
+  // 来源路径（?redirect= 白名单内）或根路径（"/" 由路由重定向进工作台）
   createEffect(() => {
-    if (!auth.loading && auth.user) navigate("/episodes", { replace: true });
+    if (!auth.loading && auth.user) navigate(getLoginRedirect({ fallback: "/" }));
   });
 
   const onSuccess = (r: LoginSuccess) => {
