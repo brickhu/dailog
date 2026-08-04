@@ -28,7 +28,7 @@
 | `STORAGE_DRIVER` | `fs`（或 r2） | `r2` + `R2_ACCOUNT_ID/ACCESS_KEY/SECRET_KEY/BUCKET` |
 | `BETTER_AUTH_SECRET` | 已启用（各环境独立随机） | 同左 |
 | `BETTER_AUTH_URL` | `https://api.candelbot.app`（dev） | `https://api.dailogues.com`（生产必改） |
-| `BETTER_AUTH_COOKIE_DOMAIN` | 留空（host-only） | `.dailogues.com`（SSO 跨子域 cookie） |
+| `BETTER_AUTH_COOKIE_DOMAIN` | `.candelbot.app`（dev 同站 SSO——真域名环境必须显式设 cookie 域，host-only 只对 api 主机生效） | `.dailogues.com`（SSO 跨子域 cookie） |
 | `PORT` | 不配（Railway 默认 8080；内部端口与公网域名无关，healthcheck 自动探测） | 同左 |
 
 7. [x] 迁移**随部署自动执行**（Dockerfile CMD = `pnpm db:migrate && pnpm start`；drizzle 幂等，已应用自动跳过）。手动兜底：

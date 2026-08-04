@@ -25,6 +25,9 @@ const schema = z.object({
   POLISH_MAX_VERSIONS: z.coerce.number().default(5),
   // 片头/片尾音频资产目录（Task 11 生成；缺失时 merge 降级为只拼主对话）
   ASSETS_DIR: z.string().default("assets/audio"),
+  /** Resend 事务邮件（注册邮箱验证/密码重置）：免费 3000 封/月，超出按量计费 */
+  RESEND_API_KEY: z.string().default(""),
+  EMAIL_FROM: z.string().default("dailogues <no-reply@dailogues.com>"),
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY: z.string().optional(),
   R2_SECRET_KEY: z.string().optional(),

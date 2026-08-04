@@ -1,5 +1,5 @@
 import { createAsync } from "@solidjs/router";
-import { createEffect, For, Show } from "solid-js";
+import { createEffect, createSignal, For, onMount, Show } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "@dailogues/ui/theme.stylex";
@@ -57,12 +57,18 @@ const styles = stylex.create({
 });
 
 export default function MePage() {
-  // 会话判定（server 端转发）：未登录 → 统一登录页带 redirect
-  const session = createAsync(async () => {
+  // 会话判定（server 端转发）：仅 client 执行（SSR 无 cookie；createAsync 序列化结果
+  // 会被 hydration 复用不再重取，用 onMount + signal 保证挂载后必然重新判定）
+  const [session, setSession] = createSignal<{ id: string } | null>(null);
+  const [checked, setChecked] = createSignal(false);
+  onMount(async () => {
     const res = await fetch("/api/auth/get-session");
-    if (!res.ok) return null;
-    const data = (await res.json()) as { user?: { id: string } | null };
-    return data.user ?? null;
+    if (res.ok) {
+      // better-auth 未登录返回 JSON null（代理透传）——必须整体可选链
+      const data = (await res.json()) as { user?: { id: string } | null } | null;
+      setSession(data?.user ?? null);
+    }
+    setChecked(true);
   });
 
   const favorites = createAsync<FavoriteRow[] | null>(async () => {
@@ -73,9 +79,9 @@ export default function MePage() {
     return (await res.json()) as FavoriteRow[];
   });
 
-  // 未登录：客户端跳统一登录页（redirect 回 /me）
+  // 未登录：客户端跳统一登录页（redirect 回 /me）；等会话判定完成后才跳
   createEffect(() => {
-    if (typeof window !== "undefined" && session() === null) {
+    if (checked() && session() === null) {
       window.location.href = `/login?redirect=${encodeURIComponent("/me")}`;
     }
   });

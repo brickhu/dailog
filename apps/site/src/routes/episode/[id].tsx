@@ -3,6 +3,7 @@ import { createSignal, Show } from "solid-js";
 import { useParams } from "@solidjs/router";
 import { Title } from "@solidjs/meta";
 import { getEpisode } from "../../lib/db";
+import { SiteNav } from "../../components/site-nav";
 import { env } from "../../lib/env";
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "@dailogues/ui/theme.stylex";
@@ -122,6 +123,7 @@ export default function EpisodePage() {
 
   return (
     <div {...stylex.props(styles.page)}>
+      <SiteNav />
       <div {...stylex.props(styles.content)}>
         <Show when={ep()} fallback={<div {...stylex.props(styles.notFound)}>节目不存在或未发布</div>}>
           <Title>{ep()!.title || "dailogues"}</Title>

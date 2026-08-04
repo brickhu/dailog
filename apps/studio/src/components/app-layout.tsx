@@ -1,4 +1,4 @@
-import { For } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { useLocation, useNavigate, type RouteSectionProps } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "@dailogues/ui/theme.stylex";
@@ -85,12 +85,50 @@ const styles = stylex.create({
     flex: 1,
     minWidth: 0,
   },
+  verifyBanner: {
+    display: "flex",
+    alignItems: "center",
+    gap: tokens.space3,
+    padding: `${tokens.space2} ${tokens.space4}`,
+    background: "rgba(240, 173, 78, 0.12)",
+    borderBottom: `1px solid rgba(240, 173, 78, 0.35)`,
+    fontSize: tokens.fontSizeSm,
+    color: tokens.colorText,
+  },
+  verifyText: {
+    flex: 1,
+  },
+  resendBtn: {
+    background: "transparent",
+    border: `1px solid ${tokens.colorBorder}`,
+    borderRadius: tokens.radiusMd,
+    padding: `${tokens.space1} ${tokens.space3}`,
+    color: tokens.colorText,
+    cursor: "pointer",
+    fontSize: tokens.fontSizeSm,
+  },
+  resendMsg: {
+    color: tokens.colorDanger,
+  },
+  resendMsgOk: {
+    color: tokens.colorPrimary,
+  },
 });
 
 export default function AppLayout(props: RouteSectionProps) {
   const auth = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [resending, setResending] = createSignal(false);
+  const [resendMsg, setResendMsg] = createSignal<{ ok: boolean; text: string } | null>(null);
+
+  const resendVerification = async () => {
+    setResending(true);
+    setResendMsg(null);
+    const { error } = await auth.resendVerification();
+    setResendMsg(error ? { ok: false, text: error } : { ok: true, text: "已重新发送，请查收邮箱。" });
+    setResending(false);
+  };
 
   return (
     <div {...stylex.props(styles.shell)}>
@@ -117,7 +155,24 @@ export default function AppLayout(props: RouteSectionProps) {
           </button>
         </div>
       </aside>
-      <main {...stylex.props(styles.main)}>{props.children}</main>
+      <main {...stylex.props(styles.main)}>
+        <Show when={auth.user && !auth.user.emailVerified}>
+          <div {...stylex.props(styles.verifyBanner)}>
+            <span {...stylex.props(styles.verifyText)}>
+              邮箱尚未验证，请查收验证邮件；未收到可重新发送。
+            </span>
+            <button {...stylex.props(styles.resendBtn)} disabled={resending()} onClick={resendVerification}>
+              {resending() ? "发送中…" : "重新发送验证邮件"}
+            </button>
+            <Show when={resendMsg()}>
+              <span {...stylex.props(styles.resendMsg, resendMsg()!.ok && styles.resendMsgOk)}>
+                {resendMsg()!.text}
+              </span>
+            </Show>
+          </div>
+        </Show>
+        {props.children}
+      </main>
     </div>
   );
 }

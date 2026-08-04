@@ -28,6 +28,9 @@ importers:
 
   apps/site:
     dependencies:
+      '@dailogues/auth-ui':
+        specifier: workspace:^
+        version: link:../../packages/auth-ui
       '@dailogues/ui':
         specifier: workspace:^
         version: link:../../packages/ui
@@ -68,6 +71,9 @@ importers:
 
   apps/studio:
     dependencies:
+      '@dailogues/auth-ui':
+        specifier: workspace:^
+        version: link:../../packages/auth-ui
       '@dailogues/ui':
         specifier: workspace:^
         version: link:../../packages/ui
@@ -99,6 +105,22 @@ importers:
       vitest:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@22.20.1)(happy-dom@20.11.1)(jiti@2.7.0)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)
+
+  packages/auth-ui:
+    dependencies:
+      '@dailogues/ui':
+        specifier: workspace:^
+        version: link:../ui
+      '@stylexjs/stylex':
+        specifier: ^0.19.0
+        version: 0.19.0
+      solid-js:
+        specifier: ^1.9.14
+        version: 1.9.14
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
 
   packages/ui:
     dependencies:

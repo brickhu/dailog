@@ -30,6 +30,8 @@ function makeEnv(): Env {
     ASSETS_DIR: "assets/audio",
     APP_ORIGINS: "",
     POLISH_MAX_VERSIONS: 5,
+      RESEND_API_KEY: "",
+      EMAIL_FROM: "dailogues <no-reply@dailogues.com>",
   };
 }
 
