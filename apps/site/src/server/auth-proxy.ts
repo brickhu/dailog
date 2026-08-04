@@ -34,7 +34,8 @@ export async function proxySignOut(request: Request): Promise<Response> {
   const cookie = request.headers.get("cookie");
   const res = await fetch(`${env.apiBaseUrl}/api/auth/sign-out`, {
     method: "POST",
-    headers: cookie ? { Cookie: cookie } : {},
+    headers: { ...(cookie ? { Cookie: cookie } : {}), "Content-Type": "application/json" },
+    body: "{}",
   });
   const outHeaders: Record<string, string> = { "Content-Type": "application/json" };
   const setCookie = res.headers.get("set-cookie");
