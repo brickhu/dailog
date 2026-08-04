@@ -10,3 +10,9 @@ data-test/
 
 # zcode 会话内部文件
 .zcode/
+
+# db-ops 操作日志（审计留痕）
+.dbops/logs/
+
+# 运行时数据（用户录音样本/生成音频）——隐私，绝不入库
+services/api/data/
