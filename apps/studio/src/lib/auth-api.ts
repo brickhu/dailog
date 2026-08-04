@@ -8,6 +8,8 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string;
+  /** better-auth 邮箱验证状态（注册后为 false，点击验证邮件后为 true） */
+  emailVerified: boolean;
 }
 
 export interface SignUpInput {
@@ -96,6 +98,17 @@ export const authApi = {
       }),
     );
     await res.json();
+  },
+
+  /** 重发验证邮件（better-auth: POST send-verification-email { email, callbackURL }） */
+  async resendVerification(email: string, callbackURL: string): Promise<void> {
+    await expectOk(
+      await request("/api/auth/send-verification-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, callbackURL }),
+      }),
+    );
   },
 
   /** 登出：token 存在时带 Bearer；cookie 会话由 credentials include 携带，服务端清 cookie */

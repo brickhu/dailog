@@ -26,6 +26,11 @@ export default function LoginPage() {
       config={{
         signInEndpoint: `${env.apiBaseUrl}/api/auth/sign-in/email`,
         signUpEndpoint: `${env.apiBaseUrl}/api/auth/sign-up/email`,
+        verification: {
+          resendEndpoint: `${env.apiBaseUrl}/api/auth/send-verification-email`,
+          // 验证链接点击后跳回当前站点
+          callbackURL: window.location.origin,
+        },
       }}
       onSuccess={onSuccess}
     />

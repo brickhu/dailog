@@ -172,7 +172,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     const favorites = createFavoritesRepo(dbClient.db);
 
     // 真实 better-auth：注册测试用户，token 供全流程请求（认证与生产路径一致）
-    const auth = createAuth({ db: dbClient.db, secret: env.BETTER_AUTH_SECRET });
+    const auth = createAuth({ db: dbClient.db, secret: env.BETTER_AUTH_SECRET, env });
     app = createApp({
       env,
       auth,

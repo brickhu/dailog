@@ -12,6 +12,8 @@ export interface AuthState {
   token: () => string | null;
   signIn(email: string, password: string): Promise<{ error: string | null }>;
   signUp(email: string, password: string, name: string): Promise<{ error: string | null }>;
+  /** 重发验证邮件到当前用户邮箱（验证链接跳回当前站点） */
+  resendVerification(): Promise<{ error: string | null }>;
   signOut(): Promise<void>;
 }
 
@@ -84,6 +86,17 @@ export function AuthProvider(props: { children: JSX.Element }) {
         return { error: null };
       } catch (e) {
         return { error: e instanceof Error ? e.message : "注册失败" };
+      }
+    },
+    async resendVerification() {
+      const u = user();
+      if (!u) return { error: "未登录" };
+      try {
+        // callbackURL = 当前站点：点击验证链接后跳回（从哪里来就返回哪里去）
+        await authApi.resendVerification(u.email, window.location.origin);
+        return { error: null };
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : "发送失败" };
       }
     },
     async signOut() {

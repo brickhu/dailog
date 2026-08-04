@@ -77,12 +77,49 @@ const styles = stylex.create({
     marginTop: tokens.space3,
     textAlign: "center",
   },
+  noticePanel: {
+    textAlign: "center",
+    padding: `${tokens.space4} 0`,
+  },
+  noticeTitle: {
+    fontSize: tokens.fontSizeLg,
+    fontWeight: tokens.fontWeightBold,
+    color: tokens.colorText,
+    marginBottom: tokens.space2,
+  },
+  noticeText: {
+    color: tokens.colorTextMuted,
+    fontSize: tokens.fontSizeSm,
+    lineHeight: "1.6",
+    marginBottom: tokens.space4,
+    wordBreak: "break-all",
+  },
+  noticeButtons: {
+    display: "flex",
+    flexDirection: "column",
+    gap: tokens.space2,
+  },
+  noticeMsg: {
+    fontSize: tokens.fontSizeSm,
+    marginTop: tokens.space2,
+  },
+  noticeMsgOk: {
+    color: tokens.colorPrimary,
+  },
 });
 
 export type LoginMode = "signin" | "signup";
 
 /** 支持的登录方式（业务配置：未来扩展 github/wechat 时在此声明） */
 export type LoginMethod = "email";
+
+/** 邮箱验证配置（业务声明：宿主需要验证时开启；不声明则注册后直接跳转） */
+export interface LoginVerificationConfig {
+  /** 重发验证邮件端点（POST { email, callbackURL }） */
+  resendEndpoint: string;
+  /** 验证链接点击后的跳回地址（callbackURL；"从哪里来就返回哪里去"） */
+  callbackURL: string;
+}
 
 export interface LoginFormConfig {
   /** 登录 POST 端点（业务配置：site 传站内代理路径；studio 传 API 绝对地址） */
@@ -91,11 +128,13 @@ export interface LoginFormConfig {
   signUpEndpoint: string;
   /** 支持的登录方式（默认仅 email） */
   methods?: LoginMethod[];
+  /** 邮箱验证（可选）：注册成功后停留显示验证提示，不自动跳转 */
+  verification?: LoginVerificationConfig;
 }
 
 export interface LoginSuccess {
   mode: LoginMode;
-  user?: { id: string; email: string; name?: string } | null;
+  user?: { id: string; email: string; name?: string; emailVerified?: boolean } | null;
   token?: string | null;
 }
 
@@ -117,6 +156,10 @@ export function LoginForm(props: LoginFormProps) {
   const [name, setName] = createSignal("");
   const [error, setError] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
+  // 注册成功 + 声明了 verification → 停留显示验证提示（不自动跳转）
+  const [notice, setNotice] = createSignal<{ email: string } | null>(null);
+  const [resending, setResending] = createSignal(false);
+  const [noticeMsg, setNoticeMsg] = createSignal<{ ok: boolean; text: string } | null>(null);
 
   const submit = async (e: SubmitEvent) => {
     e.preventDefault();
@@ -135,7 +178,13 @@ export function LoginForm(props: LoginFormProps) {
         body: JSON.stringify(
           isSignin
             ? { email: email().trim(), password: password() }
-            : { email: email().trim(), password: password(), name: name().trim() || email().trim().split("@")[0] },
+            : {
+                email: email().trim(),
+                password: password(),
+                name: name().trim() || email().trim().split("@")[0],
+                // 验证邮件链接跳回地址（宿主声明）——better-auth signUpEmail 透传
+                ...(props.config.verification ? { callbackURL: props.config.verification.callbackURL } : {}),
+              },
         ),
       });
       if (!res.ok) {
@@ -148,6 +197,11 @@ export function LoginForm(props: LoginFormProps) {
         | { user?: LoginSuccess["user"]; token?: string | null }
         | null;
       props.onSuccess?.({ mode: mode(), user: body?.user ?? null, token: body?.token ?? null });
+      // 注册 + 声明了邮箱验证：停留展示"验证邮件已发送"提示（未收到可重发），不自动跳转
+      if (!isSignin && props.config.verification) {
+        setNotice({ email: email().trim() });
+        return;
+      }
       // 共享跳转：从哪里来就返回哪里去
       if (props.redirect?.enabled !== false) {
         window.location.href = getLoginRedirect(props.redirect);
@@ -159,61 +213,126 @@ export function LoginForm(props: LoginFormProps) {
     }
   };
 
+  /** 重发验证邮件（POST { email, callbackURL } → 宿主声明的端点） */
+  const resend = async () => {
+    const verification = props.config.verification;
+    const target = notice();
+    if (!verification || !target) return;
+    setResending(true);
+    setNoticeMsg(null);
+    try {
+      const res = await fetch(verification.resendEndpoint, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: target.email, callbackURL: verification.callbackURL }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { message?: string; code?: string } | null;
+        setNoticeMsg({ ok: false, text: getLoginErrorMessage(data, res.status) });
+      } else {
+        setNoticeMsg({ ok: true, text: "已重新发送，请查收邮箱。" });
+      }
+    } catch {
+      setNoticeMsg({ ok: false, text: "网络错误，请重试" });
+    } finally {
+      setResending(false);
+    }
+  };
+
   return (
     <div {...stylex.props(styles.page)}>
       <Card>
         <div {...stylex.props(styles.brand)}>dailogues</div>
         <div {...stylex.props(styles.tagline)}>把你的 AI 对话，变成你的播客</div>
-        <div {...stylex.props(styles.tabs)}>
-          <button
-            {...stylex.props(styles.tab, mode() === "signin" && styles.tabActive)}
-            onClick={() => setMode("signin")}
-          >
-            登录
-          </button>
-          <button
-            {...stylex.props(styles.tab, mode() === "signup" && styles.tabActive)}
-            onClick={() => setMode("signup")}
-          >
-            注册
-          </button>
-        </div>
-        <form onSubmit={submit}>
-          <Show when={mode() === "signup"}>
-            <div {...stylex.props(styles.nameField)}>
-              <label {...stylex.props(styles.nameLabel)}>昵称（可选）</label>
-              <input
-                {...stylex.props(styles.nameInput)}
-                value={name()}
-                onInput={(e) => setName(e.currentTarget.value)}
-                autocomplete="nickname"
-              />
+        <Show
+          when={notice()}
+          fallback={
+            <>
+              <div {...stylex.props(styles.tabs)}>
+                <button
+                  {...stylex.props(styles.tab, mode() === "signin" && styles.tabActive)}
+                  onClick={() => setMode("signin")}
+                >
+                  登录
+                </button>
+                <button
+                  {...stylex.props(styles.tab, mode() === "signup" && styles.tabActive)}
+                  onClick={() => setMode("signup")}
+                >
+                  注册
+                </button>
+              </div>
+              <form onSubmit={submit}>
+                <Show when={mode() === "signup"}>
+                  <div {...stylex.props(styles.nameField)}>
+                    <label {...stylex.props(styles.nameLabel)}>昵称（可选）</label>
+                    <input
+                      {...stylex.props(styles.nameInput)}
+                      value={name()}
+                      onInput={(e) => setName(e.currentTarget.value)}
+                      autocomplete="nickname"
+                    />
+                  </div>
+                </Show>
+                <TextField
+                  label="邮箱"
+                  type="email"
+                  value={email()}
+                  onInput={setEmail}
+                  placeholder="you@example.com"
+                  autocomplete="email"
+                />
+                <TextField
+                  label="密码"
+                  type="password"
+                  value={password()}
+                  onInput={setPassword}
+                  placeholder="至少 8 位"
+                  autocomplete={mode() === "signup" ? "new-password" : "current-password"}
+                />
+                <Button type="submit" block disabled={busy()}>
+                  {busy() ? "提交中…" : mode() === "signin" ? "登录" : "注册"}
+                </Button>
+                <Show when={error()}>
+                  <div {...stylex.props(styles.error)}>{error()}</div>
+                </Show>
+                <div {...stylex.props(styles.hint)}>注册即登录 · 邀请码用于开通频道</div>
+              </form>
+            </>
+          }
+        >
+          {/* 注册成功 + 声明邮箱验证：验证提示面板（停留，不自动跳转） */}
+          <div {...stylex.props(styles.noticePanel)}>
+            <div {...stylex.props(styles.noticeTitle)}>验证邮件已发送</div>
+            <div {...stylex.props(styles.noticeText)}>
+              我们已向 <b>{notice()!.email}</b> 发送了一封验证邮件。
+              <br />
+              点击邮件中的链接即可完成验证；若未收到，请检查垃圾邮件或重新发送。
             </div>
-          </Show>
-          <TextField
-            label="邮箱"
-            type="email"
-            value={email()}
-            onInput={setEmail}
-            placeholder="you@example.com"
-            autocomplete="email"
-          />
-          <TextField
-            label="密码"
-            type="password"
-            value={password()}
-            onInput={setPassword}
-            placeholder="至少 8 位"
-            autocomplete={mode() === "signup" ? "new-password" : "current-password"}
-          />
-          <Button type="submit" block disabled={busy()}>
-            {busy() ? "提交中…" : mode() === "signin" ? "登录" : "注册"}
-          </Button>
-          <Show when={error()}>
-            <div {...stylex.props(styles.error)}>{error()}</div>
-          </Show>
-          <div {...stylex.props(styles.hint)}>注册即登录 · 邀请码用于开通频道</div>
-        </form>
+            <div {...stylex.props(styles.noticeButtons)}>
+              <Button block disabled={resending()} onClick={resend}>
+                {resending() ? "发送中…" : "重新发送验证邮件"}
+              </Button>
+              <Button
+                block
+                variant="ghost"
+                onClick={() => {
+                  if (props.redirect?.enabled !== false) {
+                    window.location.href = getLoginRedirect(props.redirect);
+                  }
+                }}
+              >
+                先进入应用 →
+              </Button>
+            </div>
+            <Show when={noticeMsg()}>
+              <div {...stylex.props(styles.noticeMsg, noticeMsg()!.ok && styles.noticeMsgOk)}>
+                {noticeMsg()!.text}
+              </div>
+            </Show>
+          </div>
+        </Show>
       </Card>
     </div>
   );
