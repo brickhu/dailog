@@ -1,10 +1,13 @@
 import { createEffect } from "solid-js";
 import { useNavigate } from "@solidjs/router";
-import { LoginForm, type LoginInput } from "@dailogues/auth-ui";
+import { LoginForm, type LoginSuccess } from "@dailogues/auth-ui";
+import { env } from "../lib/env";
 import { useAuth } from "../lib/auth";
+import { persistToken } from "../lib/auth-api";
+import { injectExtensionToken } from "../lib/ext-inject";
 
-// studio 备用登录页（app.dailogues.com/login 兜底）：纯逻辑包装——完整页面由共享
-// LoginForm 渲染，本页只注入提交逻辑（AuthProvider signIn/signUp + 跳转）。
+// studio 备用登录页（app.dailogues.com/login 兜底）：业务配置声明——认证端点（API 直连）+ 成功事件
+// （持久化 token + 扩展注入）。页面与流程由共享 LoginForm 提供。
 export default function LoginPage() {
   const auth = useAuth();
   const navigate = useNavigate();
@@ -13,19 +16,18 @@ export default function LoginPage() {
     if (!auth.loading && auth.user) navigate("/episodes", { replace: true });
   });
 
-  const submit = async ({ mode, email, password, name }: LoginInput): Promise<string | null> => {
-    if (mode === "signin") {
-      const { error } = await auth.signIn(email, password);
-      if (error) return error;
-      navigate("/episodes");
-    } else {
-      const { error } = await auth.signUp(email, password, name || email.split("@")[0] || "用户");
-      if (error) return error;
-      // 注册成功即登录态：先开通频道（授权码），再录声音
-      navigate("/onboarding");
-    }
-    return null;
+  const onSuccess = (r: LoginSuccess) => {
+    if (r.token) persistToken(r.token);
+    void injectExtensionToken();
   };
 
-  return <LoginForm onSubmit={submit} />;
+  return (
+    <LoginForm
+      config={{
+        signInEndpoint: `${env.apiBaseUrl}/api/auth/sign-in/email`,
+        signUpEndpoint: `${env.apiBaseUrl}/api/auth/sign-up/email`,
+      }}
+      onSuccess={onSuccess}
+    />
+  );
 }

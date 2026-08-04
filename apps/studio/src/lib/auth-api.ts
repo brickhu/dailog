@@ -37,7 +37,7 @@ async function expectOk(res: Response): Promise<Response> {
   return res;
 }
 
-function persistToken(token: string): void {
+export function persistToken(token: string): void {
   localStorage.setItem(TOKEN_KEY, token);
 }
 
