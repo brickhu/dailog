@@ -33,14 +33,14 @@ beforeEach(() => { vi.restoreAllMocks(); });
 
 describe("handleCollect", () => {
   it("posts to default prod api with bearer token", async () => {
-    mockChrome({ dailoguesToken: "jwt-token" });
+    mockChrome({ dailogToken: "jwt-token" });
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: "imp-1" }), { status: 200 }));
     (globalThis as Record<string, unknown>).fetch = fetchMock;
 
     const res = await handleCollect(collectPayload());
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.dailogues.com/api/imports",
+      "https://api.dailog.fm/api/imports",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({ Authorization: "Bearer jwt-token" }),
@@ -50,7 +50,7 @@ describe("handleCollect", () => {
   });
 
   it("posts to popup-configured api base when overridden", async () => {
-    mockChrome({ dailoguesToken: "jwt-token", dailoguesApiBase: "https://api.candelbot.app" });
+    mockChrome({ dailogToken: "jwt-token", dailogApiBase: "https://api.candelbot.app" });
     const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
     (globalThis as Record<string, unknown>).fetch = fetchMock;
 
@@ -71,13 +71,13 @@ describe("setApiBase", () => {
   it("strips trailing slashes before saving", async () => {
     const storage = mockChrome();
     await setApiBase("https://api.candelbot.app/");
-    expect(storage.local.set).toHaveBeenCalledWith({ dailoguesApiBase: "https://api.candelbot.app" });
+    expect(storage.local.set).toHaveBeenCalledWith({ dailogApiBase: "https://api.candelbot.app" });
   });
 
   it("clears override when empty", async () => {
     const storage = mockChrome();
     await setApiBase("   ");
-    expect(storage.local.remove).toHaveBeenCalledWith("dailoguesApiBase");
+    expect(storage.local.remove).toHaveBeenCalledWith("dailogApiBase");
     expect(storage.local.set).not.toHaveBeenCalled();
   });
 });

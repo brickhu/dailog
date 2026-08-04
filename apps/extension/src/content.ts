@@ -9,6 +9,7 @@ declare const chrome: {
 };
 
 import { MSG_COLLECT, type CollectResult } from "./shared";
+import { DEFAULT_LOGIN_BASE } from "./env";
 import { collectFromDocument } from "./content/collector";
 import { parseDeepSeekPage } from "./content/deepseek";
 import { waitForMutation } from "./content/mutation";
@@ -33,6 +34,9 @@ const fab = createFab({
       collect: () => collectFromDocument({ root: document, url: location.href, scroll: deepSeekScroll() }),
       send: async (msg) => (await chrome.runtime.sendMessage(msg)) as CollectResult | undefined,
       onResult: (text, kind) => fab.showToast(text, kind),
+      // 未登录：展开登录引导（登录后 redirect 回当前对话页）
+      loginUrl: `${DEFAULT_LOGIN_BASE}/login?redirect=${encodeURIComponent(location.href)}`,
+      onLoginRequired: (url) => fab.showLoginPanel(url),
     }).finally(() => fab.setBusy(false));
   },
 });

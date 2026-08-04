@@ -6,6 +6,10 @@ export interface CollectFlowOptions {
   collect: () => Promise<CollectedDialogue | null>;
   send: (msg: unknown) => Promise<CollectResult | undefined>;
   onResult: (text: string, kind: "success" | "error") => void;
+  /** 统一登录页地址（登录后 redirect 回当前对话页）；未登录（no_token）时触发 */
+  loginUrl: string;
+  /** 未登录：展开登录引导面板 */
+  onLoginRequired?: (loginUrl: string) => void;
 }
 
 /** FAB 点击流程：采集 → 送 background → 展示结果 */
@@ -19,6 +23,9 @@ export async function runCollectFlow(opts: CollectFlowOptions): Promise<void> {
     const res = await opts.send({ type: MSG_COLLECT, dialogue });
     if (res?.ok) {
       opts.onResult("已采集 ✓ 去 app.dailog.fm 继续编辑", "success");
+    } else if (res?.error === "no_token" && opts.onLoginRequired) {
+      // 未登录：展开登录引导（不弹错误 toast）
+      opts.onLoginRequired(opts.loginUrl);
     } else {
       opts.onResult(`采集失败：${res?.error ?? "未知错误"}`, "error");
     }
