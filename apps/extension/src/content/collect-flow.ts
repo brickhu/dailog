@@ -28,8 +28,8 @@ export async function runCollectFlow(opts: CollectFlowOptions): Promise<void> {
     if (res?.ok) {
       opts.onResult("已采集 ✓ 去 app.dailog.fm 继续编辑", "success");
     } else if (res?.error === "no_token" && opts.onLoginRequired) {
-      // 未登录：展开登录引导（不弹错误 toast）
-      opts.onLoginRequired(opts.loginUrl);
+      // 未登录：展开登录引导（loginUrl 由 background 生成，含 redirect 回当前对话页）
+      opts.onLoginRequired(res.loginUrl ?? opts.loginUrl);
     } else if (res?.error === "channel_not_activated" && opts.onChannelRequired) {
       // 已登录但未创建频道：展开创建频道引导
       opts.onChannelRequired(opts.channelUrl);

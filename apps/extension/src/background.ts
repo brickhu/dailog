@@ -21,7 +21,7 @@ declare const chrome: {
 };
 
 import { MSG_COLLECT, type CollectResult, type CollectedDialogue } from "./shared";
-import { API_BASE_KEY, DEFAULT_API_BASE, DEFAULT_LOGIN_BASE } from "./env";
+import { API_BASE_KEY, LOGIN_BASE_KEY, DEFAULT_API_BASE, DEFAULT_LOGIN_BASE } from "./env";
 
 const TOKEN_KEY = "dailogToken";
 
@@ -41,6 +41,21 @@ export async function setApiBase(base: string): Promise<void> {
   await chrome.storage.local.set({ [API_BASE_KEY]: value });
 }
 
+/** 当前登录页基址：popup 覆盖值优先（chrome.storage），否则构建注入的默认值 */
+export async function getLoginBase(): Promise<string> {
+  const { [LOGIN_BASE_KEY]: base } = await chrome.storage.local.get(LOGIN_BASE_KEY);
+  return typeof base === "string" && base.length > 0 ? base : DEFAULT_LOGIN_BASE;
+}
+
+export async function setLoginBase(base: string): Promise<void> {
+  const value = base.trim().replace(/\/+$/, "");
+  if (!value) {
+    await chrome.storage.local.remove(LOGIN_BASE_KEY);
+    return;
+  }
+  await chrome.storage.local.set({ [LOGIN_BASE_KEY]: value });
+}
+
 export async function getToken(): Promise<string | null> {
   const { [TOKEN_KEY]: token } = await chrome.storage.local.get(TOKEN_KEY);
   return typeof token === "string" && token.length > 0 ? token : null;
@@ -52,7 +67,16 @@ export async function handleCollect(
   senderUrl?: string,
 ): Promise<CollectResult> {
   const token = await getToken();
-  if (!token) return { ok: false, error: "no_token" };
+  if (!token) {
+    // 未登录：带登录页地址（含 redirect 回当前对话页），由 content 展开登录引导
+    const loginBase = await getLoginBase();
+    const redirect = senderUrl ? encodeURIComponent(senderUrl) : "";
+    return {
+      ok: false,
+      error: "no_token",
+      loginUrl: `${loginBase}/login${redirect ? `?redirect=${redirect}` : ""}`,
+    };
+  }
   const apiBase = await getApiBase();
   try {
     const res = await fetch(`${apiBase}/api/imports`, {
@@ -66,9 +90,10 @@ export async function handleCollect(
       const code = body?.error ?? `http_${res.status}`;
       // 401 登录失效：自动打开统一登录页，登录后 redirect 回对话页（token 由登录页自动注入）
       if (res.status === 401) {
+        const loginBase = await getLoginBase();
         const redirect = senderUrl ? encodeURIComponent(senderUrl) : "";
         void chrome.tabs.create({
-          url: `${DEFAULT_LOGIN_BASE}/login${redirect ? `?redirect=${redirect}` : ""}`,
+          url: `${loginBase}/login${redirect ? `?redirect=${redirect}` : ""}`,
         });
       }
       return { ok: false, error: code };

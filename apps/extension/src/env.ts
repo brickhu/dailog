@@ -9,3 +9,5 @@ export const DEFAULT_LOGIN_BASE =
   process.env.DAILOGUES_LOGIN_BASE ?? "https://dailog.fm";
 /** popup 覆盖的 API 地址存储键（chrome.storage.local） */
 export const API_BASE_KEY = "dailogApiBase";
+/** popup 覆盖的登录页地址存储键（默认构建注入值） */
+export const LOGIN_BASE_KEY = "dailogLoginBase";

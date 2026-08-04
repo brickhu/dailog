@@ -42,4 +42,4 @@ export const MSG_COLLECT_RESULT = "dailog:collect-result";
 
 export type CollectResult =
   | { ok: true; dialogue: CollectedDialogue }
-  | { ok: false; error: string };
+  | { ok: false; error: string; loginUrl?: string };
