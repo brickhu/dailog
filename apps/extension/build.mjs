@@ -4,8 +4,8 @@ import { readFileSync, writeFileSync, cpSync, mkdirSync } from "node:fs";
 // 环境注入：DAILOGUES_ENV=dev|prod（默认 prod），define 替换 src/env.ts 的默认值
 const env = process.env.DAILOGUES_ENV === "dev" ? "dev" : "prod";
 const hosts = {
-  dev: { api: "https://api.candelbot.app", app: "https://app.candelbot.app" },
-  prod: { api: "https://api.dailog.fm", app: "https://app.dailog.fm" },
+  dev: { api: "https://api.candelbot.app", app: "https://app.candelbot.app", login: "https://candelbot.app" },
+  prod: { api: "https://api.dailog.fm", app: "https://app.dailog.fm", login: "https://dailog.fm" },
 }[env];
 
 const common = {
@@ -16,6 +16,7 @@ const common = {
   define: {
     "process.env.DAILOGUES_API_BASE": JSON.stringify(hosts.api),
     "process.env.DAILOGUES_APP_BASE": JSON.stringify(hosts.app),
+    "process.env.DAILOGUES_LOGIN_BASE": JSON.stringify(hosts.login),
   },
 };
 
