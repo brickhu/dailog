@@ -1,9 +1,30 @@
 import { createSignal, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import { Button, TextField } from "@dailogues/ui";
+import { Button, Card, TextField } from "@dailogues/ui";
 import { tokens } from "@dailogues/ui/theme.stylex";
 
 const styles = stylex.create({
+  page: {
+    minHeight: "100vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: tokens.colorBg,
+    color: tokens.colorText,
+    fontFamily: "system-ui, -apple-system, sans-serif",
+    padding: tokens.space4,
+  },
+  brand: {
+    fontSize: "28px",
+    fontWeight: tokens.fontWeightBold,
+    color: tokens.colorPrimary,
+    marginBottom: tokens.space1,
+  },
+  tagline: {
+    color: tokens.colorTextMuted,
+    fontSize: tokens.fontSizeSm,
+    marginBottom: tokens.space5,
+  },
   tabs: {
     display: "flex",
     gap: tokens.space2,
@@ -105,8 +126,11 @@ export function LoginForm(props: LoginFormProps) {
   };
 
   return (
-    <>
-      <div {...stylex.props(styles.tabs)}>
+    <div {...stylex.props(styles.page)}>
+      <Card>
+        <div {...stylex.props(styles.brand)}>dailogues</div>
+        <div {...stylex.props(styles.tagline)}>把你的 AI 对话，变成你的播客</div>
+        <div {...stylex.props(styles.tabs)}>
         <button
           {...stylex.props(styles.tab, mode() === "signin" && styles.tabActive)}
           onClick={() => setMode("signin")}
@@ -156,7 +180,8 @@ export function LoginForm(props: LoginFormProps) {
         </Show>
         <div {...stylex.props(styles.hint)}>注册即登录 · 邀请码用于开通频道</div>
       </form>
-    </>
+      </Card>
+    </div>
   );
 }
 

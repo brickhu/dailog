@@ -1,35 +1,8 @@
-import * as stylex from "@stylexjs/stylex";
-import { Card } from "@dailogues/ui";
-import { tokens } from "@dailogues/ui/theme.stylex";
 import { LoginForm, type LoginInput } from "@dailogues/auth-ui";
 import { env } from "../lib/env";
 
-// 全站统一登录页（dailogues.com/login）：薄包装——UI/校验由共享 LoginForm 承担，
-// 提交逻辑（POST 站内代理 + set-cookie SSO + 302 回 redirect）在本页注入。
-const styles = stylex.create({
-  page: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: tokens.colorBg,
-    color: tokens.colorText,
-    fontFamily: "system-ui, -apple-system, sans-serif",
-    padding: tokens.space4,
-  },
-  brand: {
-    fontSize: "28px",
-    fontWeight: tokens.fontWeightBold,
-    color: tokens.colorPrimary,
-    marginBottom: tokens.space1,
-  },
-  tagline: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
-    marginBottom: tokens.space5,
-  },
-});
-
+// 全站统一登录页（dailogues.com/login）：纯逻辑包装——完整页面由共享 LoginForm 渲染，
+// 本页只注入提交逻辑（POST 站内代理 + set-cookie SSO + 302 回 redirect）。
 /** redirect 白名单：仅允许本站/studio 域（防开放重定向）；默认回首页 */
 function sanitizeRedirect(raw: string | null): string {
   if (!raw) return "/";
@@ -67,13 +40,5 @@ export default function LoginPage() {
     return null;
   };
 
-  return (
-    <div {...stylex.props(styles.page)}>
-      <Card>
-        <div {...stylex.props(styles.brand)}>dailogues</div>
-        <div {...stylex.props(styles.tagline)}>把你的 AI 对话，变成你的播客</div>
-        <LoginForm onSubmit={submit} />
-      </Card>
-    </div>
-  );
+  return <LoginForm onSubmit={submit} />;
 }
