@@ -43,7 +43,7 @@ async function withDb<T>(fn: (sql: postgres.Sql) => Promise<T>): Promise<T> {
     }
   }
   const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL 未配置（apps/site/.env.local）");
+  if (!url) throw new Error("DATABASE_URL 未配置：本地在 apps/site/.env.local，部署在 CF Pages 环境变量（用 Railway DATABASE_PUBLIC_URL）");
   const sql = postgres(url, { max: 1 });
   try {
     return await fn(sql);

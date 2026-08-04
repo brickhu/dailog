@@ -56,6 +56,7 @@
 - [ ] site **Production 环境变量**：
   | 变量 | 值 |
   |---|---|
+  | `DATABASE_URL` | **Railway 生产库的 `DATABASE_PUBLIC_URL`**（公网 TCP 代理串——site 在 CF，必须公网可达；勿用内网 DATABASE_URL） |
   | `API_BASE_URL` | `https://api.dailog.fm` |
   | `SITE_BASE_URL` | `https://dailog.fm` |
   | `STUDIO_BASE_URL` | `https://app.dailog.fm` |
