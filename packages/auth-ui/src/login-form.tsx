@@ -3,6 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { Button, Card, TextField } from "@dailogues/ui";
 import { tokens } from "@dailogues/ui/theme.stylex";
 import { getLoginRedirect, type LoginRedirectOptions } from "./login-redirect";
+import { getLoginErrorMessage } from "./error-messages";
 
 const styles = stylex.create({
   page: {
@@ -138,8 +139,9 @@ export function LoginForm(props: LoginFormProps) {
         ),
       });
       if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as { message?: string } | null;
-        setError(data?.message ?? `登录失败（${res.status}）`);
+        // 失败：共享错误文案（错误码映射 → API message → 状态码兜底），停留在表单可重试
+        const data = (await res.json().catch(() => null)) as { message?: string; code?: string } | null;
+        setError(getLoginErrorMessage(data, res.status));
         return;
       }
       const body = (await res.json().catch(() => null)) as
