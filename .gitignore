@@ -19,3 +19,6 @@ services/api/data/
 
 # db-ops 本地配置（连接串/快捷指令/日志）——不上传
 .dbops/
+
+# spike 生成产物
+scripts/spikes/out-*.mp3
