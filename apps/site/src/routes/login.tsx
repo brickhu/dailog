@@ -124,7 +124,8 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(mode() === "signin" ? "/api/auth/sign-in" : "/api/auth/sign-up", {
+      // POST 对齐 better-auth 端点（/sign-in/email）：站内代理路由 sign-in/email.ts 同路径
+      const res = await fetch(mode() === "signin" ? "/api/auth/sign-in/email" : "/api/auth/sign-up/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
