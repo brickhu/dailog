@@ -6,7 +6,7 @@ const schema = z.object({
   BETTER_AUTH_SECRET: z.string().default("dev-secret-change-me-0123456789abcdef"),
   /** better-auth 公开基址（回调/重定向用；本地 dev 默认，生产按环境设置 https://api.*） */
   BETTER_AUTH_URL: z.string().default("http://localhost:8787"),
-  /** SSO 跨子域 cookie 域（生产 .dailogues.com；本地留空 = host-only cookie，localhost 跨端口天然共享） */
+  /** SSO 跨子域 cookie 域（生产 .dailog.fm；本地留空 = host-only cookie，localhost 跨端口天然共享） */
   BETTER_AUTH_COOKIE_DOMAIN: z.string().optional(),
   PORT: z.coerce.number().default(8787),
   // 注意：default("") 会被 zod 内层校验再次校验，故不能用 .min(1)（空串会抛错），
@@ -27,7 +27,7 @@ const schema = z.object({
   ASSETS_DIR: z.string().default("assets/audio"),
   /** Resend 事务邮件（注册邮箱验证/密码重置）：免费 3000 封/月，超出按量计费 */
   RESEND_API_KEY: z.string().default(""),
-  EMAIL_FROM: z.string().default("dailogues <no-reply@dailogues.com>"),
+  EMAIL_FROM: z.string().default("dailog <no-reply@dailog.fm>"),
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY: z.string().optional(),
   R2_SECRET_KEY: z.string().optional(),

@@ -9,7 +9,7 @@ const styles = stylex.create({
     border: `2px solid ${tokens.colorBorder}`,
     borderTopColor: tokens.colorPrimary,
     borderRadius: tokens.radiusFull,
-    animation: "dailogues-spin 0.8s linear infinite",
+    animation: "dailog-spin 0.8s linear infinite",
   },
 });
 

@@ -249,7 +249,7 @@ export function LoginForm(props: LoginFormProps) {
   return (
     <div {...stylex.props(styles.page)}>
       <Card>
-        <div {...stylex.props(styles.brand)}>dailogues</div>
+        <div {...stylex.props(styles.brand)}>dailog</div>
         <div {...stylex.props(styles.tagline)}>把你的 AI 对话，变成你的播客</div>
         <Show
           when={notice()}

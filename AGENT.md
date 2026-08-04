@@ -5,7 +5,7 @@
 
 ## 项目一句话
 
-**dailogues**：把用户与 AI 的对话一键发布为二人对谈播客（用户 = 主持人，克隆音色；AI = 嘉宾，固定音色），每个用户一个可订阅的播客频道（播放页 + RSS）。
+**dailog**：把用户与 AI 的对话一键发布为二人对谈播客（用户 = 主持人，克隆音色；AI = 嘉宾，固定音色），每个用户一个可订阅的播客频道（播放页 + RSS）。
 
 ## 文档索引
 
@@ -14,27 +14,27 @@
 | [PRD.md](./PRD.md) | 产品设计与功能：流程、MVP 功能清单、页面、边界 | ✅ 已确认 |
 | [ARC.md](./ARC.md) | 技术架构：栈、拓扑、API、管线、数据模型、成本、测试 | ✅ 已确认 |
 | [MRD.md](./MRD.md) | 产品定位、市场策略、商业模式、竞争优势、风险 | 🟡 初稿待审（市场部分为起草） |
-| [docs/pitch-narrative.md](./docs/pitch-narrative.md) | 融资叙事：一句话定位、五幕讲稿、质疑反击话术、90 天验证计划 | 🟡 初稿（2026-08-03） |
-| [docs/pitch-deck.md](./docs/pitch-deck.md) | Pitch Deck 大纲：10 页结构 + 每页内容/台词/视觉 + Demo 脚本 + Q&A 预判 | 🟡 初稿（2026-08-03） |
+| [docs/pitch-narrative.md](./docs/pitch-narrative.md) | 融资叙事：一句话定位、三幕讲稿（楔子→形态→平台）、质疑反击话术、90 天消费端验证 | 🟡 v2（2026-08-04） |
+| [docs/pitch-deck.md](./docs/pitch-deck.md) | Pitch Deck 大纲：10 页结构 + 每页内容/台词/视觉 + Demo 脚本 + Q&A 预判 | 🟡 v2（2026-08-04，形态命名入 P4/P10） |
 
 ## 工程目录参考（monorepo，待实施）
 
 ```
-dailogues/
+dailog/
 ├── apps/
-│   ├── studio/                 # app.dailogues.com — 工作台 SPA
+│   ├── studio/                 # app.dailog.fm — 工作台 SPA
 │   │   ├── src/pages/          #   auth / onboarding-voice / dashboard / episodes-new / settings
 │   │   └── src/components/     #   录音器、导入结果、润色编辑器、生成进度、发布表单
-│   ├── site/                   # dailogues.com — 内容分发 SSR（SolidStart + CF adapter）
+│   ├── site/                   # dailog.fm — 内容分发 SSR（SolidStart + CF adapter）
 │   │   └── src/routes/         #   /(首页) /episode/:id(单集页) /@username /@username/feed.xml
 │   └── extension/              # 采集扩展（Manifest V3，Chrome/Edge 商店）— 统一导入通道
 │       ├── manifest.json       #   content_scripts 按平台 URL 匹配 + background 权限
 │       ├── src/content/        #   按平台采集器：claude.ts / deepseek.ts / chatgpt.ts / ...
 │       │   └── core.ts         #   虚拟列表滚动循环 + MutationObserver + 去重排序
-│       ├── src/background.ts   #   service worker：接收 content 消息 → POST api.dailogues.com
+│       ├── src/background.ts   #   service worker：接收 content 消息 → POST api.dailog.fm
 │       └── src/shared.ts       #   采集协议类型（platform/conversation_id/title/url/messages[]）
 ├── services/
-│   └── api/                    # api.dailogues.com — 统一后端（Railway，Node + Hono）
+│   └── api/                    # api.dailog.fm — 统一后端（Railway，Node + Hono）
 │       ├── src/
 │       │   ├── routes/         #   imports / polish / generate / jobs / voice / billing / stripe-webhook
 │       │   ├── pipeline/       #   生成管线（tts → merge → upload）
@@ -64,13 +64,13 @@ dailogues/
 
 | | 开发环境（dev 分支） | 生产环境（master 分支） |
 |---|---|---|
-| 后端 API | `gracious-caring-development.up.railway.app`（Railway Development 环境默认 URL） | `api.dailogues.com`（Railway Production 环境）⚠️ 生产域名待定：`dailog.fm` 或保留 `dailogues.com` |
-| 工作台 SPA | `app.candelbot.app`（CF Pages project `dailogues-studio-dev`，production branch = dev） | `app.dailogues.com`（CF Pages project `dailogues-studio`，production branch = master） |
-| 内容站 SSR | `candelbot.app`（Pages project 预留，等 apps/site 创建） | `dailogues.com`（Pages/Workers） |
+| 后端 API | `gracious-caring-development.up.railway.app`（Railway Development 环境默认 URL） | `api.dailog.fm`（Railway Production 环境）⚠️ 生产域名待定：`dailog.fm` 或保留 `dailog.fm` |
+| 工作台 SPA | `app.candelbot.app`（CF Pages project `dailog-studio-dev`，production branch = dev） | `app.dailog.fm`（CF Pages project `dailog-studio`，production branch = master） |
+| 内容站 SSR | `candelbot.app`（Pages project 预留，等 apps/site 创建） | `dailog.fm`（Pages/Workers） |
 | Postgres | Railway Development 环境内独立实例 | Railway Production 环境内实例 |
-| 采集扩展 | `pnpm build:dev`（API 指向 gracious-caring-development.up.railway.app；popup 可覆盖） | `pnpm build`（API 指向 api.dailogues.com） |
+| 采集扩展 | `pnpm build:dev`（API 指向 gracious-caring-development.up.railway.app；popup 可覆盖） | `pnpm build`（API 指向 api.dailog.fm） |
 
-> **品牌名**：`dailogues`——由 `dialogues` 交换 `ia→ai` 变形（寓意 AI）。开发域名 `candelbot.app`（已确认），生产域名待定（`dailog.fm` / `dailogues.com`），定稿后统一替换文档与扩展 manifest 中的占位。
+> **品牌名**：`dailog`——由 `dialogues` 交换 `ia→ai` 变形（寓意 AI）。开发域名 `candelbot.app`（已确认），生产域名待定（`dailog.fm` / `dailog.fm`），定稿后统一替换文档与扩展 manifest 中的占位。
 
 ## 技术要点速查
 

@@ -3,19 +3,21 @@ import { msgpackEncode } from "./msgpack";
 export interface TtsSegment { speaker: number; text: string; }
 
 export interface TtsClient {
-  /** 多说话人一次调用（全 reference_id 模型 id） */
+  /** 多说话人一次调用（零样本内联：每 speaker 一段参考音频，references 2D，已实测 200——fish-references2d.mjs） */
   synthesizeMultiSpeaker(args: {
     segments: TtsSegment[];
-    referenceIds: string[]; // 下标对应 speaker 序号
+    referenceAudios: Uint8Array[]; // 下标对应 speaker 序号
+    /** 每 speaker 参考音频转录文本（精确克隆；缺省占位） */
+    transcripts?: (string | null)[];
   }): Promise<Uint8Array>;
-  /** 按段零样本（主持人内联参考音频 msgpack）/ 固定音色 */
+  /** 按段合成（降级路径：主持人内联参考音频 msgpack 零样本 / 嘉宾固定音色 reference_id） */
   synthesizeSingle(args: {
     text: string;
     referenceAudio?: Uint8Array; // msgpack references 内联
+    /** 参考音频转录文本（精确克隆；缺省用合成文本占位） */
+    referenceAudioTranscript?: string;
     referenceId?: string;
   }): Promise<Uint8Array>;
-  /** 创建/训练音色模型（POST /model fast 训练 5-8s，免费，0 额度也可用）→ { id }（响应 _id） */
-  createVoiceModel(args: { audio: Uint8Array; name: string }): Promise<{ id: string }>;
 }
 
 export interface TtsOptions {
@@ -65,15 +67,27 @@ export function createTtsClient(opts: TtsOptions): TtsClient {
 
   async function synthesizeMultiSpeaker(args: {
     segments: TtsSegment[];
-    referenceIds: string[];
+    referenceAudios: Uint8Array[];
+    /** 每 speaker 参考音频转录文本（精确克隆；缺省占位） */
+    transcripts?: (string | null)[];
   }): Promise<Uint8Array> {
     const text = args.segments
       .map((s) => `<|speaker:${s.speaker}|>${s.text}`)
       .join("");
+    // references 2D：[[speaker0 样本], [speaker1 样本], ...]——零样本多说话人（已实测 200，
+    // fish-references2d.mjs）。转录文本精确（用户朗读固定文案），缺省占位（ASR 402，见 fish-audio.md §6）。
+    const body = msgpackEncode({
+      text,
+      references: args.referenceAudios.map((audio, i) => [
+        { audio, text: args.transcripts?.[i] ?? REF_TRANSCRIPT },
+      ]),
+      format: "mp3",
+      mp3_bitrate: 128,
+    });
     const res = await requestWithFallback(`${base}/v1/tts`, {
       method: "POST",
-      headers,
-      body: JSON.stringify({ model, text, reference_id: args.referenceIds, format: "mp3" }),
+      headers: { Authorization: `Bearer ${opts.apiKey}`, "Content-Type": "application/msgpack" },
+      body,
     });
     if (!res.ok) throw new Error(`tts http_${res.status}: ${(await res.text()).slice(0, 200)}`);
     return new Uint8Array(await res.arrayBuffer());
@@ -82,6 +96,8 @@ export function createTtsClient(opts: TtsOptions): TtsClient {
   async function synthesizeSingle(args: {
     text: string;
     referenceAudio?: Uint8Array;
+    /** 参考音频转录文本（精确克隆；缺省用合成文本占位） */
+    referenceAudioTranscript?: string;
     referenceId?: string;
   }): Promise<Uint8Array> {
     if (args.referenceAudio !== undefined && args.referenceId !== undefined) {
@@ -90,7 +106,7 @@ export function createTtsClient(opts: TtsOptions): TtsClient {
     }
     const body = args.referenceAudio
       ? // 零样本内联：msgpack references（JSON 无 base64 字段，实测见 fish-audio.md）
-        buildMsgpackReferences(args.referenceAudio, args.text)
+        buildMsgpackReferences(args.referenceAudio, args.text, args.referenceAudioTranscript)
       : JSON.stringify({ model, text: args.text, reference_id: args.referenceId, format: "mp3" });
     const res = await requestWithFallback(`${base}/v1/tts`, {
       method: "POST",
@@ -103,44 +119,24 @@ export function createTtsClient(opts: TtsOptions): TtsClient {
     return new Uint8Array(await res.arrayBuffer());
   }
 
-  async function createVoiceModel(args: { audio: Uint8Array; name: string }): Promise<{ id: string }> {
-    // 校准自 scripts/spikes/fish-audio.mjs createHostModel / docs/spikes/fish-audio.md §3-b：
-    // 表单字段 type=tts、train_mode=fast、title、visibility=private、tags=zh、
-    // voices=@file（文件字段名是 voices 不是 file）；成功 201 → { _id, state }，id 取 _id
-    const form = new FormData();
-    form.append("type", "tts");
-    form.append("train_mode", "fast");
-    form.append("title", args.name);
-    form.append("visibility", "private");
-    form.append("tags", "zh");
-    form.append("voices", new Blob([args.audio as Uint8Array<ArrayBuffer>]), "voice.wav");
-    const res = await f(`${base}/model`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${opts.apiKey}` },
-      body: form,
-    });
-    if (!res.ok) throw new Error(`voice model http_${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const data = (await res.json()) as { _id: string };
-    return { id: data._id };
-  }
-
-  return { synthesizeMultiSpeaker, synthesizeSingle, createVoiceModel };
+  return { synthesizeMultiSpeaker, synthesizeSingle };
 }
+
+/** 参考音频转录占位文本（ASR 402 无法自动转录，见 fish-audio.md §6；转录准确度影响克隆质量） */
+const REF_TRANSCRIPT =
+  "你好，欢迎收听 dailog。这是参考音频的转录文本，用于声音克隆测试。";
 
 /**
  * msgpack 最小编码：{ text, references: [{ audio, text }], format: "mp3" }。
  * 结构与 docs/spikes/fish-audio.md §3-a / scripts/spikes/fish-audio.mjs 实测一致：
  * ReferenceAudio = { audio: 原始 WAV 字节（bin）, text: 参考音频转录 }（两者必填），
  * 服务器对 msgpack 严格校验（fish-audio.md §9-3）。
- *
- * 诚实说明：参考音频转录文本（references[].text）不在本接口暴露，暂以合成文本
- * 占位——与 spike 同样做法（ASR 付费且 0 额度 402，见 fish-audio.md §6：转录准确度
- * 影响克隆质量）。Task 7/9 如需高质量克隆，应给 synthesizeSingle 增加 transcript 参数。
+ * transcript 优先用真实转录（用户朗读固定文案）；缺省以合成文本占位（转录准确度影响克隆质量，§6）。
  */
-function buildMsgpackReferences(audio: Uint8Array, text: string): Uint8Array<ArrayBuffer> {
+function buildMsgpackReferences(audio: Uint8Array, text: string, transcript?: string): Uint8Array<ArrayBuffer> {
   return msgpackEncode({
     text,
-    references: [{ audio, text }],
+    references: [{ audio, text: transcript ?? text }],
     format: "mp3",
   });
 }

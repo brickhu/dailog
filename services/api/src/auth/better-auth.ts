@@ -16,7 +16,7 @@ export interface CreateAuthOptions {
   baseURL?: string;
   /** 跨域白名单（CSRF/URL 校验用，与 CORS APP_ORIGINS 同源）：SPA 经 vite 代理/跨域访问时 Origin 需在此 */
   trustedOrigins?: string[];
-  /** SSO 跨子域 cookie 域（生产 .dailogues.com；未配置 = host-only cookie） */
+  /** SSO 跨子域 cookie 域（生产 .dailog.fm；未配置 = host-only cookie） */
   cookieDomain?: string;
 }
 
@@ -49,8 +49,8 @@ export function createAuth(opts: CreateAuthOptions) {
       sendVerificationEmail: async ({ user, url }) => {
         await sendEmail(opts.env, {
           to: user.email,
-          subject: "验证你的 dailogues 邮箱",
-          html: `<p>欢迎来到 dailogues！点击下方链接验证你的邮箱：</p>
+          subject: "验证你的 dailog 邮箱",
+          html: `<p>欢迎来到 dailog！点击下方链接验证你的邮箱：</p>
                  <p><a href="${url}">${url}</a></p>
                  <p style="color:#8b95a7;font-size:12px">如果链接无法点击，请复制到浏览器地址栏打开。链接 1 小时内有效。</p>`,
         });

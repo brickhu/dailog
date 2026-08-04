@@ -4,7 +4,7 @@ import { loadEnv } from "../src/config/env";
 describe("loadEnv", () => {
   it("parses a valid env", () => {
     const env = loadEnv({
-      DATABASE_URL: "postgres://localhost:5432/dailogues",
+      DATABASE_URL: "postgres://localhost:5432/dailog",
       BETTER_AUTH_SECRET: "test-secret",
     });
     expect(env.PORT).toBe(8787);

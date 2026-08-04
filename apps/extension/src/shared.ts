@@ -37,8 +37,8 @@ export function isCollectedDialogue(value: unknown): value is CollectedDialogue 
 }
 
 /** content → background 的消息协议 */
-export const MSG_COLLECT = "dailogues:collect";
-export const MSG_COLLECT_RESULT = "dailogues:collect-result";
+export const MSG_COLLECT = "dailog:collect";
+export const MSG_COLLECT_RESULT = "dailog:collect-result";
 
 export type CollectResult =
   | { ok: true; dialogue: CollectedDialogue }

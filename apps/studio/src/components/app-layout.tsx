@@ -134,7 +134,7 @@ export default function AppLayout(props: RouteSectionProps) {
     <div {...stylex.props(styles.shell)}>
       <aside {...stylex.props(styles.sidebar)}>
         <div {...stylex.props(styles.brand)} onClick={() => navigate("/episodes")}>
-          dailogues
+          dailog
         </div>
         <nav {...stylex.props(styles.nav)}>
           <For each={NAV}>

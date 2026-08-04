@@ -6,7 +6,7 @@ export interface QualityResult { pass: boolean; reason?: string; language?: "zh"
 export function qualityCheckPrompt(messages: { role: string; content: string }[]): LlmMessage[] {
   return [{
     role: "system",
-    content: `你是 dailogues 播客平台的内容质量审核员。审核一段用户与 AI 的对话是否适合制作成播客单集。
+    content: `你是 dailog 播客平台的内容质量审核员。审核一段用户与 AI 的对话是否适合制作成播客单集。
 拒绝标准（任一命中即拒绝）：
 1. 对话过短（少于 3 轮）
 2. 纯寒暄、无主题
@@ -44,7 +44,7 @@ ${direction}`,
 export function safetyCheckPrompt(segments: { speaker: string; text: string }[]): LlmMessage[] {
   return [{
     role: "system",
-    content: `你是 dailogues 播客平台的内容安全审核员。审核一段播客脚本（用户=host，AI=guest）是否包含违规内容：色情、违法、仇恨言论、诈骗、暴力煽动等。
+    content: `你是 dailog 播客平台的内容安全审核员。审核一段播客脚本（用户=host，AI=guest）是否包含违规内容：色情、违法、仇恨言论、诈骗、暴力煽动等。
 只输出 JSON：{"pass": true|false, "reason": "违规说明（仅 pass=false 时）"}`,
   }, {
     role: "user",

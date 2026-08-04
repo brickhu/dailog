@@ -67,7 +67,7 @@ export function SiteNav() {
   return (
     <header {...stylex.props(styles.header)}>
       <a href="/" {...stylex.props(styles.brand)}>
-        dailogues
+        dailog
       </a>
       <Show when={user()} fallback={<a href="/login" {...stylex.props(styles.login)}>登录</a>}>
         {(u) => (

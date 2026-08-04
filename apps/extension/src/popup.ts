@@ -6,7 +6,7 @@ async function render() {
   if (!status) return;
   const token = await getToken();
   status.textContent = token
-    ? "已连接 dailogues（打开对话页点击采集）"
+    ? "已连接 dailog（打开对话页点击采集）"
     : `未连接：请先登录 ${DEFAULT_APP_BASE}`;
 
   const input = document.getElementById("api-base") as HTMLInputElement | null;

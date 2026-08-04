@@ -67,6 +67,8 @@ export const voiceSamples = pgTable("voice_samples", {
   audioUrl: text("audio_url").notNull(),
   /** 训练好的音色模型 id（fish.audio model id）；为空 = 未训练，走零样本 fallback（Task 7） */
   referenceId: text("reference_id"),
+  /** 参考音频转录文本（用户朗读的固定文案；references 2D 零样本克隆用，缺省占位） */
+  transcript: text("transcript"),
   duration: integer("duration").notNull(),
   status: text("status", { enum: ["ready", "failed"] }).notNull().default("ready"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -93,8 +95,7 @@ export const imports = pgTable(
     sourceTitle: text("source_title"),
     sourceConversationId: text("source_conversation_id").notNull(),
     sourceUrl: text("source_url").notNull(),
-    rawContent: text("raw_content"),
-    parsedDialogue: jsonb("parsed_dialogue"),
+    // 原始对话/解析后对话存 R2（imports/{id}.dialogue.json，见 dialogue-store.ts）——meta 留库
     status: text("status", { enum: ["parsed", "failed"] }).notNull().default("parsed"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

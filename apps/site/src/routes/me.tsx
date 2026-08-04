@@ -4,7 +4,7 @@ import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "@dailogues/ui/theme.stylex";
 
-// 消费端个人页：dailogues.com/me（收藏列表；登录态经 cookie 判定，未登录跳统一登录）
+// 消费端个人页：dailog.fm/me（收藏列表；登录态经 cookie 判定，未登录跳统一登录）
 interface FavoriteRow {
   episodeId: string;
   title: string | null;
@@ -88,7 +88,7 @@ export default function MePage() {
 
   return (
     <div {...stylex.props(styles.page)}>
-      <Title>我的收藏 · dailogues</Title>
+      <Title>我的收藏 · dailog</Title>
       <div {...stylex.props(styles.content)}>
         <Show when={session()}>
           <div {...stylex.props(styles.title)}>我的收藏</div>

@@ -4,7 +4,7 @@ import { tokens } from "@dailogues/ui/theme.stylex";
 import Recorder from "../components/recorder";
 import { api } from "../lib/client";
 import { ApiError } from "../lib/api";
-import { uploadVoiceSample } from "../lib/voice";
+import { uploadVoiceSample, HOST_READING_SCRIPT } from "../lib/voice";
 
 const styles = stylex.create({
   page: {
@@ -92,7 +92,7 @@ export default function Settings() {
     setBusy(true);
     setError(null);
     try {
-      await uploadVoiceSample(b);
+      await uploadVoiceSample(b, HOST_READING_SCRIPT); // 重录同样照固定文案读
       setSample({ status: "ready", duration: 0 });
     } catch (e) {
       if (e instanceof ApiError && e.status === 502) {

@@ -10,6 +10,11 @@ function makeApp(overrides: Partial<Record<string, unknown>> = {}) {
     insertEpisode: async (row: unknown) => ({ id: "ep-1", ...(row as object) }),
     createImport: async () => ({ importId: "imp-1", episodeId: "ep-1" }),
     ...overrides,
+  }, {
+    // R2 存储 fake：断言对话写入 imports/{id}.dialogue.json
+    put: async () => {},
+    get: async () => new Uint8Array(),
+    delete: async () => {},
   }));
   return app;
 }

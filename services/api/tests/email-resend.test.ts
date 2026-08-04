@@ -18,7 +18,7 @@ const baseEnv = {
   APP_ORIGINS: "",
   POLISH_MAX_VERSIONS: 5,
   RESEND_API_KEY: "",
-  EMAIL_FROM: "dailogues <no-reply@dailogues.com>",
+  EMAIL_FROM: "dailog <no-reply@dailog.fm>",
 };
 
 afterEach(() => {
@@ -44,7 +44,7 @@ describe("sendEmail (Resend)", () => {
     expect((init?.headers as Record<string, string>)["Authorization"]).toBe("Bearer re_secret");
     const body = JSON.parse(init?.body as string);
     expect(body).toEqual({
-      from: "dailogues <no-reply@dailogues.com>",
+      from: "dailog <no-reply@dailog.fm>",
       to: ["a@test.local"],
       subject: "验证邮件",
       html: "<p>hi</p>",

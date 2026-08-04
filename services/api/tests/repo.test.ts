@@ -31,7 +31,7 @@ function makeEnv(): Env {
     APP_ORIGINS: "",
     POLISH_MAX_VERSIONS: 5,
       RESEND_API_KEY: "",
-      EMAIL_FROM: "dailogues <no-reply@dailogues.com>",
+      EMAIL_FROM: "dailog <no-reply@dailog.fm>",
   };
 }
 
@@ -71,9 +71,8 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       const conv = `conv-${Date.now()}-1`;
       const result = await repo.imports.createImport(
         {
-          userId: REPO_USER, platform: "claude", sourceTitle: "集成测试", sourceConversationId: conv,
+          id: crypto.randomUUID(), userId: REPO_USER, platform: "claude", sourceTitle: "集成测试", sourceConversationId: conv,
           sourceUrl: `https://claude.ai/chat/${conv}`,
-          parsedDialogue: { platform: "claude", conversationId: conv, title: "集成测试", url: `https://claude.ai/chat/${conv}`, messages: [{ role: "user", content: "你好" }] },
         },
         { userId: REPO_USER, title: "集成测试", status: "draft", language: null },
       );
@@ -84,45 +83,34 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       expect(ep).toMatchObject({ id: result.episodeId, userId: REPO_USER, title: "集成测试", status: "draft" });
     });
 
-    it("getPublishedDialogue: 仅已发布节目返回对话原文（节目页查看原文接口预留）", async () => {
+    it("getPublishedDialogue: 仅已发布节目返回对话来源 meta（内容在 R2）", async () => {
       const conv = `conv-${Date.now()}-pub`;
       const result = await repo.imports.createImport(
         {
-          userId: REPO_USER, platform: "deepseek", sourceTitle: "公开原文", sourceConversationId: conv,
-          sourceUrl: `https://chat.deepseek.com/${conv}`,
-          parsedDialogue: {
-            platform: "deepseek", conversationId: conv, title: "公开原文", url: `https://chat.deepseek.com/${conv}`,
-            messages: [
-              { role: "user", content: "你好" },
-              { role: "assistant", content: "你好！" },
-            ],
-          },
+          id: crypto.randomUUID(), userId: REPO_USER, platform: "deepseek", sourceTitle: "公开原文",
+          sourceConversationId: conv, sourceUrl: `https://chat.deepseek.com/${conv}`,
         },
         { userId: REPO_USER, title: "公开原文", status: "draft", language: null },
       );
       if ("duplicate" in result) throw new Error("unexpected duplicate");
       // 草稿：公开读不可见
       expect(await repo.episodes.getPublishedDialogue(result.episodeId)).toBeNull();
-      // 发布后：对话原文 + 来源元数据可见
+      // 发布后：来源元数据可见（importId 供调用方读 R2 对话内容）
       await repo.episodes.setPublished(result.episodeId);
       const out = await repo.episodes.getPublishedDialogue(result.episodeId);
       expect(out).toMatchObject({
+        importId: result.importId,
         platform: "deepseek",
         sourceTitle: "公开原文",
         sourceUrl: `https://chat.deepseek.com/${conv}`,
-        messages: [
-          { role: "user", content: "你好" },
-          { role: "assistant", content: "你好！" },
-        ],
       });
     });
 
     it("duplicate source: createImport returns { duplicate: true } and leaves no orphan rows", async () => {
       const conv = `conv-${Date.now()}-2`;
       const row: ImportRow = {
-        userId: REPO_USER, platform: "claude", sourceTitle: "重复导入", sourceConversationId: conv,
+        id: crypto.randomUUID(), userId: REPO_USER, platform: "claude", sourceTitle: "重复导入", sourceConversationId: conv,
         sourceUrl: `https://claude.ai/chat/${conv}`,
-        parsedDialogue: { platform: "claude", conversationId: conv, title: "重复导入", url: `https://claude.ai/chat/${conv}`, messages: [{ role: "user", content: "你好" }] },
       };
       const episodeRow: EpisodeRow = { userId: REPO_USER, title: "重复导入", status: "draft", language: null };
       const first = await repo.imports.createImport(row, episodeRow);
@@ -139,9 +127,8 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
     it("insertImport surfaces unique violation as { duplicate: true }", async () => {
       const conv = `conv-${Date.now()}-3`;
       const row: ImportRow = {
-        userId: REPO_USER, platform: "deepseek", sourceTitle: "单条插入", sourceConversationId: conv,
+        id: crypto.randomUUID(), userId: REPO_USER, platform: "deepseek", sourceTitle: "单条插入", sourceConversationId: conv,
         sourceUrl: `https://chat.deepseek.com/${conv}`,
-        parsedDialogue: { platform: "deepseek", conversationId: conv, title: "单条插入", url: `https://chat.deepseek.com/${conv}`, messages: [{ role: "user", content: "你好" }] },
       };
       const first = await repo.imports.insertImport(row);
       if ("duplicate" in first) throw new Error("unexpected duplicate");
@@ -160,9 +147,8 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       const conv = `conv-ep-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const result = await repo.imports.createImport(
         {
-          userId: REPO_USER, platform: "kimi", sourceTitle: title, sourceConversationId: conv,
+          id: crypto.randomUUID(), userId: REPO_USER, platform: "kimi", sourceTitle: title, sourceConversationId: conv,
           sourceUrl: `https://kimi.com/chat/${conv}`,
-          parsedDialogue: { platform: "kimi", conversationId: conv, title, url: `https://kimi.com/chat/${conv}`, messages: [{ role: "user", content: "你好" }] },
         },
         { userId: REPO_USER, title, status: "draft", language: null },
       );
@@ -211,7 +197,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
     it("getEpisode with mismatched userId returns null (IDOR guard)", async () => {
       const conv = `conv-ido-${Date.now()}`;
       const imp = await repo.imports.createImport(
-        { userId: API_USER, platform: "claude", sourceTitle: "t", sourceConversationId: conv, sourceUrl: "https://claude.ai/chat/x", parsedDialogue: { platform: "claude", conversationId: conv, title: "t", url: "u", messages: [{ role: "user", content: "hi" }] } },
+        { id: crypto.randomUUID(), userId: API_USER, platform: "claude", sourceTitle: "t", sourceConversationId: conv, sourceUrl: "https://claude.ai/chat/x" },
         { userId: API_USER, title: "t", status: "draft", language: null },
       );
       if ("duplicate" in imp) throw new Error("unexpected duplicate");
@@ -226,9 +212,8 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       const conv = `conv-job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const result = await repo.imports.createImport(
         {
-          userId: QUOTA_USER, platform: "doubao", sourceTitle: title, sourceConversationId: conv,
-          sourceUrl: `https://doubao.com/chat/${conv}`,
-          parsedDialogue: { platform: "doubao", conversationId: conv, title, url: `https://doubao.com/chat/${conv}`, messages: [{ role: "user", content: "你好" }] },
+          id: crypto.randomUUID(), userId: QUOTA_USER, platform: "doubao", sourceTitle: title,
+          sourceConversationId: conv, sourceUrl: `https://doubao.com/chat/${conv}`,
         },
         { userId: QUOTA_USER, title, status: "draft", language: null },
       );
@@ -332,9 +317,8 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       const conv = `conv-voice-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const result = await repo.imports.createImport(
         {
-          userId: REPO_USER, platform: "plain", sourceTitle: title, sourceConversationId: conv,
-          sourceUrl: `https://example.com/${conv}`,
-          parsedDialogue: { platform: "plain", conversationId: conv, title, url: `https://example.com/${conv}`, messages: [{ role: "user", content: "你好" }] },
+          id: crypto.randomUUID(), userId: REPO_USER, platform: "plain", sourceTitle: title,
+          sourceConversationId: conv, sourceUrl: `https://example.com/${conv}`,
         },
         { userId: REPO_USER, title, status: "draft", language },
       );
@@ -357,10 +341,10 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       expect(await repo.episodes.getVoiceSampleKey(REPO_USER)).toBeNull();
 
       await db.insert(voiceSamples).values([
-        { userId: REPO_USER, audioUrl: "voice/old.wav", duration: 3, status: "ready", referenceId: "old-model", createdAt: new Date(Date.now() - 60_000) },
-        { userId: REPO_USER, audioUrl: "voice/latest.wav", duration: 4, status: "ready", referenceId: "latest-model", createdAt: new Date() },
+        { userId: REPO_USER, audioUrl: "voice/old.wav", duration: 3, status: "ready", referenceId: "old-model", transcript: null, createdAt: new Date(Date.now() - 60_000) },
+        { userId: REPO_USER, audioUrl: "voice/latest.wav", duration: 4, status: "ready", referenceId: "latest-model", transcript: null, createdAt: new Date() },
         // failed 样本不参与（最新但状态失败）
-        { userId: REPO_USER, audioUrl: "voice/failed.wav", duration: 2, status: "failed", referenceId: "failed-model", createdAt: new Date(Date.now() + 60_000) },
+        { userId: REPO_USER, audioUrl: "voice/failed.wav", duration: 2, status: "failed", referenceId: "failed-model", transcript: null, createdAt: new Date(Date.now() + 60_000) },
       ]);
 
       expect(await repo.episodes.getHostModelId(REPO_USER)).toBe("latest-model");
@@ -374,10 +358,10 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       // 幂等：清掉可能残留的样本行
       await db.delete(voiceSamples).where(eq(voiceSamples.userId, REPO_USER));
       await repo.episodes.saveVoiceSample({
-        userId: REPO_USER, audioUrl: "voice/one.wav", referenceId: "m-one", duration: 3, status: "ready",
+        userId: REPO_USER, audioUrl: "voice/one.wav", referenceId: "m-one", transcript: null, duration: 3, status: "ready",
       });
       await repo.episodes.saveVoiceSample({
-        userId: REPO_USER, audioUrl: "voice/two.wav", referenceId: "m-two", duration: 4, status: "ready",
+        userId: REPO_USER, audioUrl: "voice/two.wav", referenceId: "m-two", transcript: null, duration: 4, status: "ready",
       });
       const rows = await db.select().from(voiceSamples).where(eq(voiceSamples.userId, REPO_USER));
       expect(rows).toHaveLength(1);
@@ -386,14 +370,14 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       });
       // failed 覆盖也生效（status 可写失败态）
       await repo.episodes.saveVoiceSample({
-        userId: REPO_USER, audioUrl: "voice/broken.wav", referenceId: null, duration: 0, status: "failed",
+        userId: REPO_USER, audioUrl: "voice/broken.wav", referenceId: null, transcript: null, duration: 0, status: "failed",
       });
       const failed = await db.select().from(voiceSamples).where(eq(voiceSamples.userId, REPO_USER));
       expect(failed).toHaveLength(1);
       expect(failed[0]).toMatchObject({ audioUrl: "voice/broken.wav", referenceId: null, status: "failed" });
       // 其他用户不受影响
       await repo.episodes.saveVoiceSample({
-        userId: API_USER, audioUrl: "voice/other.wav", referenceId: "m-other", duration: 1, status: "ready",
+        userId: API_USER, audioUrl: "voice/other.wav", referenceId: "m-other", transcript: null, duration: 1, status: "ready",
       });
       expect(await db.select().from(voiceSamples).where(eq(voiceSamples.userId, API_USER))).toHaveLength(1);
       expect(await db.select().from(voiceSamples).where(eq(voiceSamples.userId, REPO_USER))).toHaveLength(1);
@@ -402,7 +386,10 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
 
   describe("api via real repo", () => {
     const polish: AppDeps["polish"] = {
-      getDialogueMessages: (episodeId, userId) => repo.episodes.getImportedDialogue(episodeId, userId),
+      getDialogueMessages: async (episodeId, userId) => {
+        const imp = await repo.episodes.getImportedDialogue(episodeId, userId);
+        return imp ? [{ role: "user", content: "你好" }] : null;
+      },
       qualityCheck: async () => ({ pass: true, language: "zh" }),
       savePolished: async (episodeId, _language, segments) => {
         const latest = await repo.episodes.getLatestScript(episodeId);
@@ -435,8 +422,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
     };
     const voice: AppDeps["voice"] = {
       saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row),
-      tts: null,
-      storage: { put: async () => {}, get: async () => new Uint8Array() },
+            storage: { put: async () => {}, get: async () => new Uint8Array(), delete: async () => {} },
     };
     const channel: AppDeps["channel"] = { activateChannel: async () => ({ ok: true }) };
     const favorites = createFavoritesRepo(db);

@@ -45,8 +45,7 @@ function fakeJob(): AppDeps["job"] {
 function fakeVoice(): AppDeps["voice"] {
   return {
     saveVoiceSample: async () => {},
-    tts: null,
-    storage: { put: async () => {}, get: async () => new Uint8Array() },
+    storage: { put: async () => {}, get: async () => new Uint8Array(), delete: async () => {} },
   };
 }
 
@@ -74,7 +73,7 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
       APP_ORIGINS: "",
       POLISH_MAX_VERSIONS: 5,
       RESEND_API_KEY: "",
-      EMAIL_FROM: "dailogues <no-reply@dailogues.com>",
+      EMAIL_FROM: "dailog <no-reply@dailog.fm>",
     };
 
     const auth = createAuth({ db: dbClient.db, secret: "test-secret", env: testEnv });

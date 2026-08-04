@@ -2,7 +2,7 @@
 
 import { env } from "./env";
 
-export const TOKEN_KEY = "dailoguesToken";
+export const TOKEN_KEY = "dailogToken";
 
 export interface AuthUser {
   id: string;
@@ -30,11 +30,11 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
   return res;
 }
 
-/** 非 2xx → 抛 better-auth 错误消息（如 invalid_invite_code） */
+/** 非 2xx → 抛 better-auth/Hono 错误消息（message（better-auth）或 error（业务路由）） */
 async function expectOk(res: Response): Promise<Response> {
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { message?: string } | null;
-    throw new Error(body?.message ?? `http_${res.status}`);
+    const body = (await res.json().catch(() => null)) as { message?: string; error?: string } | null;
+    throw new Error(body?.message ?? body?.error ?? `http_${res.status}`);
   }
   return res;
 }
@@ -88,12 +88,15 @@ export const authApi = {
     return data.user ?? null;
   },
 
-  /** 授权码开通频道（注册开放；生成/发布前需开通） */
-  async activateChannel(token: string, inviteCode: string): Promise<void> {
+  /** 授权码开通频道（注册开放；生成/发布前需开通）；token 可为 null——SSO cookie 会话无需 Bearer */
+  async activateChannel(token: string | null, inviteCode: string): Promise<void> {
     const res = await expectOk(
       await request("/api/me/channel/activate", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ inviteCode }),
       }),
     );

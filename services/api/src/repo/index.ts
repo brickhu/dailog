@@ -59,13 +59,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
 
       async insertImport(row: ImportRow) {
         try {
+          // id 由路由层预生成（R2 对象 key 依赖 importId，先 put 后插库）
           const rows = await db.insert(schema.imports).values({
+            id: row.id,
             userId: row.userId,
             platform: row.platform,
             sourceTitle: row.sourceTitle,
             sourceConversationId: row.sourceConversationId,
             sourceUrl: row.sourceUrl,
-            parsedDialogue: row.parsedDialogue,
           }).returning({ id: schema.imports.id });
           return { id: rows[0].id };
         } catch (err) {
@@ -90,12 +91,12 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           // 事务内先后写入；任何一步失败整体回滚，不产生孤儿行
           return await db.transaction(async (tx) => {
             const imp = await tx.insert(schema.imports).values({
+              id: importRow.id,
               userId: importRow.userId,
               platform: importRow.platform,
               sourceTitle: importRow.sourceTitle,
               sourceConversationId: importRow.sourceConversationId,
               sourceUrl: importRow.sourceUrl,
-              parsedDialogue: importRow.parsedDialogue,
             }).returning({ id: schema.imports.id });
             const ep = await tx.insert(schema.episodes).values({
               userId: episodeRow.userId,
@@ -174,25 +175,25 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       },
 
       async getImportedDialogue(episodeId, userId) {
+        // 对话内容在 R2（imports/{id}.dialogue.json）——只回 importId，由调用方经 storage 读取
         const rows = await db
-          .select({ parsedDialogue: schema.imports.parsedDialogue })
+          .select({ importId: schema.imports.id })
           .from(schema.episodes)
           .innerJoin(schema.imports, eq(schema.episodes.importId, schema.imports.id))
           .where(and(eq(schema.episodes.id, episodeId), eq(schema.episodes.userId, userId)))
           .limit(1);
         const row = rows[0];
-        if (!row?.parsedDialogue) return null;
-        const dialogue = row.parsedDialogue as { messages?: { role: string; content: string }[] };
-        return dialogue.messages ?? null;
+        return row ? { importId: row.importId } : null;
       },
 
       async getPublishedDialogue(episodeId) {
+        // 对话内容在 R2——回 importId + meta，由调用方读 storage
         const rows = await db
           .select({
+            importId: schema.imports.id,
             platform: schema.imports.platform,
             sourceTitle: schema.imports.sourceTitle,
             sourceUrl: schema.imports.sourceUrl,
-            parsedDialogue: schema.imports.parsedDialogue,
           })
           .from(schema.episodes)
           .innerJoin(schema.imports, eq(schema.episodes.importId, schema.imports.id))
@@ -200,14 +201,9 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .where(and(eq(schema.episodes.id, episodeId), eq(schema.episodes.isPublic, true)))
           .limit(1);
         const row = rows[0];
-        if (!row?.parsedDialogue) return null;
-        const dialogue = row.parsedDialogue as { messages?: { role: string; content: string }[] };
-        return {
-          platform: row.platform,
-          sourceTitle: row.sourceTitle ?? null,
-          sourceUrl: row.sourceUrl,
-          messages: dialogue.messages ?? [],
-        };
+        return row
+          ? { importId: row.importId, platform: row.platform, sourceTitle: row.sourceTitle ?? null, sourceUrl: row.sourceUrl }
+          : null;
       },
 
       async setEpisodeLanguage(id, language) {
@@ -283,6 +279,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             userId: schema.voiceSamples.userId,
             status: schema.voiceSamples.status,
             referenceId: schema.voiceSamples.referenceId,
+            transcript: schema.voiceSamples.transcript,
             audioUrl: schema.voiceSamples.audioUrl,
             duration: schema.voiceSamples.duration,
             createdAt: schema.voiceSamples.createdAt,
@@ -311,6 +308,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             userId: row.userId,
             audioUrl: row.audioUrl,
             referenceId: row.referenceId,
+            transcript: row.transcript,
             duration: row.duration,
             status: row.status,
           });

@@ -9,9 +9,9 @@ export interface RunnerDeps {
     getEpisodeUserId(episodeId: string): Promise<string | null>;
     getEpisodeLanguage(episodeId: string): Promise<string | null>;
     getLatestScript(episodeId: string): Promise<{ version: number; segments: { speaker: "host" | "guest"; text: string }[] } | null>;
-    getHostModelId(userId: string): Promise<string | null>;
     getGuestModelId(): Promise<string | null>;
-    getVoiceSampleKey(userId: string): Promise<string | null>;
+    /** 读最新录音样本整行（audioUrl + transcript）；无记录返回 null */
+    getVoiceSample(userId: string): Promise<{ audioUrl: string; transcript: string | null } | null>;
     markJobProgress(jobId: string, status: string, progress: number): Promise<void>;
     markJobDone(jobId: string): Promise<void>;
     updateEpisodeAudio(episodeId: string, audioKey: string, durationSeconds: number): Promise<void>;
@@ -39,18 +39,19 @@ export function createPipelineRunner(deps: RunnerDeps): JobHandler {
     const script = await deps.repo.getLatestScript(job.episodeId);
     if (!script || script.segments.length === 0) throw new Error("script not found");
 
-    // 2. 加载音色：主持人模型 id / 嘉宾固定 id / 零样本录音（storage 键 → 字节）
+    // 2. 加载音色：主持人录音样本（整行：audioUrl + 转录文本）+ 嘉宾参考音频（资产，references 2D 主路径用）
     await progress("tts", 20);
-    const hostModelId = await deps.repo.getHostModelId(userId);
     const guestModelId = await deps.repo.getGuestModelId();
-    const sampleKey = await deps.repo.getVoiceSampleKey(userId);
-    const hostReferenceAudio = sampleKey ? await deps.storage.get(sampleKey) : null;
+    const sample = await deps.repo.getVoiceSample(userId);
+    const hostReferenceAudio = sample ? await deps.storage.get(sample.audioUrl) : null;
+    const hostTranscript = sample?.transcript ?? null;
+    const guestReferenceAudio = await deps.assets.get("assets/guest-voice-zh.mp3");
 
-    // 3. 合成（多说话人一次调用，或零样本逐段 fallback），结果留内存供 merge 使用
+    // 3. 合成（主路径：references 2D 一次调用，转录文本精确；失败/缺样本 → 逐段降级），结果留内存供 merge 使用
     await progress("tts", 30);
     const ttsResult: SynthesizeResult = await synthesizeEpisode({
       segments: script.segments,
-      deps: { tts: deps.tts, hostModelId, guestModelId, hostReferenceAudio },
+      deps: { tts: deps.tts, guestModelId, hostReferenceAudio, hostTranscript, guestReferenceAudio, language },
     });
 
     // 4. ffmpeg 拼接 + 时长探测：intro + 主对话 + outro（资产缺失自动降级），产物留内存供 upload
@@ -64,7 +65,8 @@ export function createPipelineRunner(deps: RunnerDeps): JobHandler {
     // 5. upload：产物写入存储（audio/episodes/{userId}/{episodeId}.mp3）+ 落库完成。
     //    先 updateEpisodeAudio 再 markJobDone：job 标记 done 时音频必已可读（轮询方无竞态窗口）
     await progress("merge", 70);
-    const audioKey = `audio/episodes/${userId}/${job.episodeId}.mp3`;
+    // R2 目录规划：episodes/{userId}/{episodeId}.mp3
+    const audioKey = `episodes/${userId}/${job.episodeId}.mp3`;
     await deps.storage.put(audioKey, audio);
     await progress("upload", 90);
     await deps.repo.updateEpisodeAudio(job.episodeId, audioKey, durationSeconds);

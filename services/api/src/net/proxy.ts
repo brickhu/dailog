@@ -116,7 +116,7 @@ class SocksResponse {
 
 /** FormData → multipart（undici 迭代给 Blob 附加 .name 即 filename，见 tts/client createVoiceModel） */
 async function encodeMultipart(form: FormData): Promise<{ body: Buffer; contentType: string }> {
-  const boundary = "----dailogues" + randomBytes(8).toString("hex");
+  const boundary = "----dailog" + randomBytes(8).toString("hex");
   const parts: Buffer[] = [];
   for (const [name, value] of form.entries()) {
     if (typeof value === "string") {

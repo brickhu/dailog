@@ -3,10 +3,9 @@ import { useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "@dailogues/ui/theme.stylex";
 import Recorder from "../components/recorder";
-import { authApi } from "../lib/auth-api";
 import { useAuth } from "../lib/auth";
+import { uploadVoiceSample, HOST_READING_SCRIPT } from "../lib/voice";
 import { ApiError } from "../lib/api";
-import { uploadVoiceSample } from "../lib/voice";
 
 // /app/onboarding：两步流程——① 授权码开通频道 ② 录声音样本（都完成 → /app/episodes）
 const styles = stylex.create({
@@ -100,12 +99,28 @@ const styles = stylex.create({
     fontSize: tokens.fontSizeSm,
     marginTop: tokens.space3,
   },
+  readingScript: {
+    background: tokens.colorBg,
+    border: `1px solid ${tokens.colorBorder}`,
+    borderRadius: tokens.radiusMd,
+    padding: `${tokens.space3} ${tokens.space4}`,
+    color: tokens.colorText,
+    fontSize: tokens.fontSizeMd,
+    lineHeight: 1.8,
+    marginBottom: tokens.space4,
+  },
+  readingLabel: {
+    color: tokens.colorPrimary,
+    fontWeight: tokens.fontWeightMedium,
+    marginBottom: tokens.space1,
+  },
 });
 
 export default function Onboarding() {
   const auth = useAuth();
   const navigate = useNavigate();
-  const [step, setStep] = createSignal<1 | 2>(1);
+  // 已开通用户访问 = 重录入口（守卫放行），直接进录音步；未开通从授权码步开始
+  const [step, setStep] = createSignal<1 | 2>(auth.channelActive() ? 2 : 1);
   const [code, setCode] = createSignal("");
   const [error, setError] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
@@ -118,19 +133,16 @@ export default function Onboarding() {
       setError("请输入授权码");
       return;
     }
-    const token = auth.token();
-    if (!token) return;
     setBusy(true);
     setError(null);
     try {
-      await authApi.activateChannel(token, c);
-      setStep(2);
-    } catch (err) {
-      if (err instanceof ApiError && err.code === "invalid_invite_code") {
-        setError("授权码无效或已被使用");
-      } else {
-        setError(err instanceof Error ? err.message : "开通失败，请重试");
+      // context 统一管理频道状态：成功后 channelActive=true，守卫自动跳工作台（无需手动 navigate）
+      const { error, code } = await auth.activateChannel(c);
+      if (error) {
+        setError(code === "invalid_invite_code" ? "授权码无效或已被使用" : error);
+        return;
       }
+      setStep(2);
     } finally {
       setBusy(false);
     }
@@ -142,13 +154,14 @@ export default function Onboarding() {
     setBusy(true);
     setError(null);
     try {
-      await uploadVoiceSample(b);
+      // 样本 + 固定朗读文案（转录文本）一起上传：零样本克隆质量依赖转录准确性
+      await uploadVoiceSample(b, HOST_READING_SCRIPT);
+      // 样本保存成功即完成 onboarding（样本直传模式，无训练环节）：同步守卫状态后进工作台
+      auth.markVoiceSampleUploaded();
       navigate("/episodes");
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         setError("登录状态已失效，请重新登录后再试");
-      } else if (e instanceof ApiError && e.status === 502) {
-        setError("音色模型训练失败（可能是 Fish 额度不足）。你仍然可以继续，但声音效果会打折扣。");
       } else {
         setError(e instanceof Error ? e.message : "上传失败，请重试");
       }
@@ -173,8 +186,11 @@ export default function Onboarding() {
             <>
               <div {...stylex.props(styles.title)}>录一段你的声音</div>
               <div {...stylex.props(styles.desc)}>
-                播客里"你"的声音将由这段录音克隆生成。找个安静环境，像和朋友聊天一样说 10–30
-                秒：自我介绍、今天发生的事都行。
+                播客里"你"的声音将由这段录音克隆生成。找个安静环境，照着下面的文字读一遍（10–15 秒）。
+              </div>
+              <div {...stylex.props(styles.readingScript)}>
+                <div {...stylex.props(styles.readingLabel)}>请朗读：</div>
+                {HOST_READING_SCRIPT}
               </div>
               <Recorder onReady={(b) => setBlob(b)} busy={busy()} />
               <Show when={error()}>
@@ -193,7 +209,7 @@ export default function Onboarding() {
         >
           <div {...stylex.props(styles.title)}>开通你的频道</div>
           <div {...stylex.props(styles.desc)}>
-            任何人都可以注册 dailogues，但只有输入授权码开通频道后，才能生成和发布节目。
+            任何人都可以注册 dailog，但只有输入授权码开通频道后，才能生成和发布节目。
             授权码来自邀请你的朋友或社区活动。
           </div>
           <form onSubmit={activateChannel}>

@@ -23,7 +23,7 @@ declare const chrome: {
 import { MSG_COLLECT, type CollectResult, type CollectedDialogue } from "./shared";
 import { API_BASE_KEY, DEFAULT_API_BASE, DEFAULT_LOGIN_BASE } from "./env";
 
-const TOKEN_KEY = "dailoguesToken";
+const TOKEN_KEY = "dailogToken";
 
 /** 当前 API 基址：popup 覆盖值优先（chrome.storage），否则构建注入的默认值 */
 export async function getApiBase(): Promise<string> {
@@ -80,7 +80,7 @@ export async function handleCollect(
 if (typeof chrome !== "undefined" && chrome.runtime?.onMessageExternal) {
   // app 页面（externally_connectable 白名单）经 sendMessage 注入 token
   chrome.runtime.onMessageExternal.addListener((msg, _sender, sendResponse) => {
-    if (msg?.type === "dailogues:set-token" && typeof msg.token === "string") {
+    if (msg?.type === "dailog:set-token" && typeof msg.token === "string") {
       void chrome.storage.local.set({ [TOKEN_KEY]: msg.token }).then(() => sendResponse({ ok: true }));
       return true;
     }

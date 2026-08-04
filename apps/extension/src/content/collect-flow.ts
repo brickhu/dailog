@@ -18,7 +18,7 @@ export async function runCollectFlow(opts: CollectFlowOptions): Promise<void> {
     }
     const res = await opts.send({ type: MSG_COLLECT, dialogue });
     if (res?.ok) {
-      opts.onResult("已采集 ✓ 去 app.dailogues.com 继续编辑", "success");
+      opts.onResult("已采集 ✓ 去 app.dailog.fm 继续编辑", "success");
     } else {
       opts.onResult(`采集失败：${res?.error ?? "未知错误"}`, "error");
     }

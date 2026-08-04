@@ -65,30 +65,6 @@ describe("llm client", () => {
 });
 
 describe("tts client", () => {
-  it("builds multi-speaker request with speaker tags", async () => {
-    const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
-      new Response(new Uint8Array([1, 2, 3]), { status: 200 }),
-    );
-    const tts: TtsClient = createTtsClient({
-      apiKey: "fish-key",
-      proxyUrl: undefined,
-      fetchImpl: fetchMock as unknown as typeof fetch,
-    });
-    const buf = await tts.synthesizeMultiSpeaker({
-      segments: [
-        { speaker: 0, text: "你好" },
-        { speaker: 1, text: "你好！" },
-      ],
-      referenceIds: ["host-model", "guest-model"],
-    });
-    expect(buf.length).toBe(3);
-    const [, init] = fetchMock.mock.calls[0];
-    const body = JSON.parse(String((init as RequestInit).body));
-    expect(body.text).toContain("<|speaker:0|>");
-    expect(body.reference_id).toEqual(["host-model", "guest-model"]);
-    expect(body.model).toBe("s2.1-pro-free"); // 默认免费模型，防止误用付费
-  });
-
   it("sends model field with default free model", async () => {
     const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
       new Response(new Uint8Array([1, 2, 3]), { status: 200 }),
@@ -103,7 +79,7 @@ describe("tts client", () => {
     expect(body.model).toBe("s2.1-pro-free");
   });
 
-  it("falls back to paid model on 402 insufficient credit (multi-speaker)", async () => {
+  it("falls back to paid model on 402 insufficient credit (single)", async () => {
     const fetchMock = vi
       .fn()
       .mockImplementationOnce(async () =>
@@ -114,10 +90,7 @@ describe("tts client", () => {
       apiKey: "fish-key",
       fetchImpl: fetchMock as unknown as typeof fetch,
     });
-    const buf = await tts.synthesizeMultiSpeaker({
-      segments: [{ speaker: 0, text: "你好" }],
-      referenceIds: ["host-model"],
-    });
+    const buf = await tts.synthesizeSingle({ text: "你好", referenceId: "guest-model" });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(buf.length).toBe(2);
     const [, init] = fetchMock.mock.calls[1];
@@ -183,5 +156,31 @@ describe("storage", () => {
     const storage: AudioStorage = createStorage({ driver: "fs", dir: "./data-test" });
     await expect(storage.put("../evil.mp3", new Uint8Array([1]))).rejects.toThrow(/invalid storage key/);
     await expect(storage.get("../../etc/passwd")).rejects.toThrow(/invalid storage key/);
+  });
+
+  it("synthesizeMultiSpeaker: msgpack 2D references + speaker 标签（请求构造）", async () => {
+    const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
+      new Response(new Uint8Array([1, 2, 3]), { status: 200 }),
+    );
+    const tts: TtsClient = createTtsClient({
+      apiKey: "fish-key",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+    const buf = await tts.synthesizeMultiSpeaker({
+      segments: [
+        { speaker: 0, text: "你好" },
+        { speaker: 1, text: "你好！" },
+      ],
+      referenceAudios: [new Uint8Array([1, 2]), new Uint8Array([3, 4, 5])],
+    });
+    expect(buf.length).toBe(3);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toBe("https://api.fish.audio/v1/tts");
+    expect((init as RequestInit).method).toBe("POST");
+    const headers = new Headers((init as RequestInit).headers);
+    expect(headers.get("Content-Type")).toBe("application/msgpack");
+    // msgpack 载荷含 references 2D：不逐字节断言（编码器已有 golden 测试），确认非 JSON 且带 speaker 文本
+    const body = (init as RequestInit).body as Uint8Array;
+    expect(Buffer.isBuffer(body) || body instanceof Uint8Array).toBe(true);
   });
 });

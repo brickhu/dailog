@@ -32,7 +32,7 @@
 ```json
 // POST /v1/tts  application/json
 {
-  "text": "<|speaker:0|>欢迎收听 dailogues，今天我们聊聊如何把 AI 对话变成播客。<|speaker:1|>这个想法很有意思，核心就是把真实的对话变成可订阅的内容。<|speaker:0|>……",
+  "text": "<|speaker:0|>欢迎收听 dailog，今天我们聊聊如何把 AI 对话变成播客。<|speaker:1|>这个想法很有意思，核心就是把真实的对话变成可订阅的内容。<|speaker:0|>……",
   "reference_id": ["<主持人音色模型id>", "<嘉宾固定音色id>"],
   "format": "mp3",
   "mp3_bitrate": 128
@@ -42,7 +42,7 @@
 - **与任务预期的差异**：不是 `text`/`chunks` 数组（每个 chunk 带 reference），而是 **`text` 内嵌 `<|speaker:0|>` / `<|speaker:1|>` 标签 + `reference_id` 数组（顺序对应 speaker 序号）**。多说话人仅 S2-Pro 系模型（`s2-pro`/`s2.1-pro*`），`s1` 不支持（422）。
 - **主持人（克隆音色）**：需要先有音色模型 `_id` → `POST /model` 上传参考音频（fast 训练）拿到（见 §3-b）。
 - **嘉宾（固定音色）**：`reference_id` 直接用音色库模型 `_id`（获取方式见 §8）。
-- 零样本多说话人（两方都内联音频）：`references` 二维数组 `[[speaker0 的 samples], [speaker1 的 samples]]`（官方文档，本次未实测）。
+- 零样本多说话人（两方都内联音频）：`references` 二维数组 `[[speaker0 的 samples], [speaker1 的 samples]]`（官方文档；**2026-08-04 已实测通过**——`scripts/spikes/fish-references2d.mjs`，s2.1-pro-free，一次请求出双人音频 13.4s；**MediaRecorder WebM 样本直接内联也被接受**，无需转码）。
 
 ## 3. 参考音频传法（两条路都实测可用）
 
@@ -107,7 +107,7 @@ OpenAPI schema 对 `text` 无 `maxLength` 约束 → 服务端限制，实测为
 | `out-host-zeroshot.mp3` | 同左（独立会话） | 11.49s | 183,901 |
 
 - 同文本时长波动 **~12%–46%**：默认 `temperature=0.7` 随机采样，口播节奏/停顿存在明显随机性；schema 无 `seed` 参数，未见确定性输出手段 → **长节目如需稳定节奏，建议调低 `temperature`（0.3 量级）做 A/B 或按段重试**
-- **转录文本影响**：`/v1/asr` 在 0 额度下 402，无法自动获取参考音频转录 → 使用了占位文本「你好，欢迎收听 dailogues。这是参考音频的转录文本，用于声音克隆测试。」。官方文档明确「转录准确度对克隆质量重要」，**音质评测请以人工复听为准**（转录修正后克隆质量预期更好）
+- **转录文本影响**：`/v1/asr` 在 0 额度下 402，无法自动获取参考音频转录 → 使用了占位文本「你好，欢迎收听 dailog。这是参考音频的转录文本，用于声音克隆测试。」。官方文档明确「转录准确度对克隆质量重要」，**音质评测请以人工复听为准**（转录修正后克隆质量预期更好）
 
 ## 7. 计费（实测 vs 文档）
 

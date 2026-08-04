@@ -1,11 +1,12 @@
 import { Hono } from "hono";
-import type { TtsClient } from "../tts/client";
 import type { AudioStorage } from "../storage";
 
 export interface VoiceSampleRow {
   userId: string;
   audioUrl: string;   // storage key
-  referenceId: string | null;
+  referenceId: string | null;  // 已废弃（不再训练音色模型），保留列兼容
+  /** 参考音频转录文本（用户朗读的固定文案；零样本克隆用） */
+  transcript: string | null;
   duration: number;
   status: "ready" | "failed";
   createdAt?: Date;   // 仅 GET 回读填充
@@ -15,11 +16,11 @@ export interface VoiceDeps {
   saveVoiceSample(row: VoiceSampleRow): Promise<void>;
   /** 工作台回读最新样本（onboarding 守卫/设置页）；无记录返回 null */
   getVoiceSample?(userId: string): Promise<VoiceSampleRow | null>;
-  tts: TtsClient | null; // null = 未配置（FISH_API_KEY 空）
   storage: AudioStorage;
 }
 
 // 自带 /api 前缀（与 polish/generate/job 路由一致，见 app.ts 挂载说明）：测试对裸 app 请求 /api/...
+// 样本直传模式：上传只保存录音文件，不训练音色模型；生成时由 TTS 管线以 referenceAudio 零样本方式使用
 export function voiceRoutes(deps: VoiceDeps) {
   const app = new Hono<{ Variables: { userId: string } }>();
 
@@ -40,18 +41,14 @@ export function voiceRoutes(deps: VoiceDeps) {
     const form = await c.req.formData().catch(() => null);
     const file = form?.get("file");
     if (!(file instanceof File) || file.size === 0) return c.json({ error: "file_required" }, 400);
-    if (!deps.tts) return c.json({ error: "tts_not_configured" }, 503);
+    // 转录文本（用户朗读的固定文案，前端随上传提交；零样本克隆质量依赖它）
+    const transcript = typeof form?.get("transcript") === "string" ? (form.get("transcript") as string).trim() || null : null;
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const key = `audio/voices/${userId}.wav`;
+    // R2 目录规划：voices/{userId}.webm（MediaRecorder 实际输出 webm，命名一并修正）
+    const key = `voices/${userId}.webm`;
     await deps.storage.put(key, bytes);
-    try {
-      const { id } = await deps.tts.createVoiceModel({ audio: bytes, name: userId });
-      await deps.saveVoiceSample({ userId, audioUrl: key, referenceId: id, duration: 0, status: "ready" });
-      return c.json({ referenceId: id });
-    } catch (e) {
-      await deps.saveVoiceSample({ userId, audioUrl: key, referenceId: null, duration: 0, status: "failed" });
-      return c.json({ error: "voice_model_failed", detail: String(e instanceof Error ? e.message : e) }, 502);
-    }
+    await deps.saveVoiceSample({ userId, audioUrl: key, referenceId: null, transcript, duration: 0, status: "ready" });
+    return c.json({ ok: true });
   });
   return app;
 }

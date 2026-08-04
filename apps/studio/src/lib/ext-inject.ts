@@ -13,7 +13,7 @@ export async function injectExtensionToken(): Promise<void> {
     if (!res.ok) return;
     const data = (await res.json()) as { token?: string };
     if (data.token) {
-      await chrome.runtime.sendMessage(env.extensionId, { type: "dailogues:set-token", token: data.token });
+      await chrome.runtime.sendMessage(env.extensionId, { type: "dailog:set-token", token: data.token });
     }
   } catch {
     // 注入失败静默：采集时扩展会提示登录

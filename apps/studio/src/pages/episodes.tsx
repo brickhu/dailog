@@ -200,7 +200,7 @@ export default function Dashboard() {
     const token = auth.token();
     if (!token || !env.extensionId) return;
     try {
-      await chrome.runtime?.sendMessage?.(env.extensionId, { type: "dailogues:set-token", token });
+      await chrome.runtime?.sendMessage?.(env.extensionId, { type: "dailog:set-token", token });
       setExtConnected(true);
     } catch {
       setError("连接扩展失败：请确认已安装扩展并允许站点访问");
@@ -229,7 +229,7 @@ export default function Dashboard() {
         <Show when={!extConnected() && env.extensionId}>
           <div {...stylex.props(styles.extCard)}>
             <div {...stylex.props(styles.extTitle)}>用浏览器扩展采集对话</div>
-            <div {...stylex.props(styles.extStep)}>1. 安装 dailogues 采集扩展（Chrome 商店）</div>
+            <div {...stylex.props(styles.extStep)}>1. 安装 dailog 采集扩展（Chrome 商店）</div>
             <div {...stylex.props(styles.extStep)}>
               2. 打开你的 ChatGPT / Claude / DeepSeek 对话页，点击扩展采集
             </div>

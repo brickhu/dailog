@@ -79,14 +79,13 @@ function fakeJob(): AppDeps["job"] {
 function fakeVoice(): AppDeps["voice"] {
   return {
     saveVoiceSample: async () => {},
-    tts: null, // 测试环境无 FISH_API_KEY → voice 路由 503
-    storage: { put: async () => {}, get: async () => new Uint8Array() },
+    storage: { put: async () => {}, get: async () => new Uint8Array(), delete: async () => {} },
   };
 }
 
 function fakeEnv(): Env {
   return {
-    DATABASE_URL: "postgres://localhost:5432/dailogues",
+    DATABASE_URL: "postgres://localhost:5432/dailog",
     BETTER_AUTH_SECRET: "test-secret",
       BETTER_AUTH_URL: "http://localhost:8787",
     PORT: 8787,
@@ -100,7 +99,7 @@ function fakeEnv(): Env {
     APP_ORIGINS: "",
     POLISH_MAX_VERSIONS: 5,
       RESEND_API_KEY: "",
-      EMAIL_FROM: "dailogues <no-reply@dailogues.com>",
+      EMAIL_FROM: "dailog <no-reply@dailog.fm>",
   };
 }
 
@@ -130,7 +129,7 @@ function makeApp(envOverride: Partial<Env> = {}) {
 }
 
 describe("CORS", () => {
-  const app = makeApp({ APP_ORIGINS: "http://localhost:5173,https://app.dailogues.com" });
+  const app = makeApp({ APP_ORIGINS: "http://localhost:5173,https://app.dailog.fm" });
 
   it("answers OPTIONS preflight with allow headers for whitelisted origin", async () => {
     const res = await app.request("/api/me", {
@@ -143,13 +142,13 @@ describe("CORS", () => {
   });
 
   it("sets allow-origin on actual requests from whitelisted origin", async () => {
-    const res = await app.request("/health", { headers: { Origin: "https://app.dailogues.com" } });
+    const res = await app.request("/health", { headers: { Origin: "https://app.dailog.fm" } });
     expect(res.status).toBe(200);
-    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://app.dailogues.com");
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://app.dailog.fm");
   });
 
   it("includes Allow-Credentials for whitelisted origin (SSO cookie)", async () => {
-    const res = await app.request("/health", { headers: { Origin: "https://app.dailogues.com" } });
+    const res = await app.request("/health", { headers: { Origin: "https://app.dailog.fm" } });
     expect(res.headers.get("Access-Control-Allow-Credentials")).toBe("true");
   });
 

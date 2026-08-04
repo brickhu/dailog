@@ -7,10 +7,10 @@
 
 | 层 | 选型 | 部署位置 |
 |---|---|---|
-| 工作台 SPA（app.dailogues.com） | SolidJS + Solid Router + StyleX | Cloudflare Pages（静态，免费） |
-| 内容站 SSR（dailogues.com） | SolidStart（SSR）+ StyleX | Cloudflare Pages/Workers（免费） |
+| 工作台 SPA（app.dailog.fm） | SolidJS + Solid Router + StyleX | Cloudflare Pages（静态，免费） |
+| 内容站 SSR（dailog.fm） | SolidStart（SSR）+ StyleX | Cloudflare Pages/Workers（免费） |
 | **采集扩展（浏览器扩展）** | **Manifest V3**：content script 按平台解析 + background service worker 回传 | Chrome/Edge 商店（用户侧安装，登录态采集） |
-| 统一后端（api.dailogues.com） | Node.js + TypeScript + Hono + Drizzle ORM + fluent-ffmpeg | **Railway**（Git 集成自动部署，Docker，按用量约 $5–10/月） |
+| 统一后端（api.dailog.fm） | Node.js + TypeScript + Hono + Drizzle ORM + fluent-ffmpeg | **Railway**（Git 集成自动部署，Docker，按用量约 $5–10/月） |
 | 数据库 | Railway Postgres（纯 Postgres 用法：Drizzle + postgres.js 直连） | Railway（与后端同平台，~$5–15/月） |
 | 认证 | **better-auth**（自托管：邮箱 + 密码 + 会话，跑在统一后端内） | $0 无外部依赖（邮件验证可后接 Resend 免费额度） |
 | 对象存储 | Cloudflare R2（音频/封面/录音样本） | R2 免费 10GB + 流量永久免费 |
@@ -20,7 +20,7 @@
 
 ## 2. 部署拓扑
 
-> **双环境**（2026-08-03）：`dev` 分支集成部署到开发环境（Railway Development 环境 + CF Pages project `dailogues-studio-dev`），`master` 部署到生产。开发环境域名：`gracious-caring-development.up.railway.app`（API，Railway 默认 URL）/ `app.candelbot.app` / `candelbot.app`（SSR，预留）；生产域名待定（`dailog.fm` 或 `dailogues.com`）。拓扑图按生产形态绘制，开发环境结构相同、域名与实例不同。
+> **双环境**（2026-08-03）：`dev` 分支集成部署到开发环境（Railway Development 环境 + CF Pages project `dailog-studio-dev`），`master` 部署到生产。开发环境域名：`gracious-caring-development.up.railway.app`（API，Railway 默认 URL）/ `app.candelbot.app` / `candelbot.app`（SSR，预留）；生产域名待定（`dailog.fm` 或 `dailog.fm`）。拓扑图按生产形态绘制，开发环境结构相同、域名与实例不同。
 
 ```
          ┌────────────────────── 用户浏览器（Chrome/Edge）──────────────────────┐
@@ -32,17 +32,17 @@
                                        │ POST /api/imports（结构化对话 + 元数据）
                                        ▼
                         ┌─────────────────────────────────────────┐
-                        │            dailogues.com                 │
+                        │            dailog.fm                 │
                         │   Cloudflare Pages/Workers (SSR, 免费)  │
                         │   首页浏览 / 频道页 / 节目页 / RSS / 搜索  │
                         └──────────────┬──────────────────────────┘
                                        │
-app.dailogues.com (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
+app.dailog.fm (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
   Solid Router, 静态部署在 CF Pages     │         ┌──────────────┐
   接收采集 → 润色编辑 → 生成 → 发布      └────────►│  *.mp3 / png │
                                        │         └──────────────┘
                               ┌────────▼─────────┐
-                              │ api.dailogues.com │
+                              │ api.dailog.fm │
                               │  统一后端 (Railway, Docker)            │
                               │  · imports 接收（扩展回传）         │
                               │  · LLM 润色(SSE 流式)             │
@@ -122,7 +122,7 @@ queued → tts → merge → upload → done（failed 可重试）
 
 ### 3.5 采集与导入（浏览器扩展统一通道）
 
-- **统一采集器（浏览器扩展）**：用户在 AI 平台**登录态**下打开自己的对话页 → 扩展自动滚动加载完整对话（虚拟列表）→ 按平台 DOM 解析为结构化对话 → POST `api.dailogues.com/imports`
+- **统一采集器（浏览器扩展）**：用户在 AI 平台**登录态**下打开自己的对话页 → 扩展自动滚动加载完整对话（虚拟列表）→ 按平台 DOM 解析为结构化对话 → POST `api.dailog.fm/imports`
 - **元数据随采集回传**：`{ platform, conversation_id, title, url, messages[] }`——对话 ID 取自 URL 路径、标题取 `document.title`，预填节目名；`(user_id, platform, conversation_id)` 唯一约束防重复导入；播放页展示来源信息
 - **平台可行性分级（DOM 勘察结论，`docs/spikes/chat-dom.md`；选择器基于公开逆向资料，各平台开发时逐一实测修正）**：
 
@@ -148,7 +148,7 @@ queued → tts → merge → upload → done（failed 可重试）
 | 表 | 关键字段 |
 |---|---|
 | `profiles` | `id`(=auth.users), `username`(唯一), `display_name`, `bio`, `plan`(free/pro), `credit_balance`(int, 按期付费余额), `created_at` |
-| `voice_samples` | `user_id`, `audio_url`(R2), `reference_id`（训练音色模型 id，空 = 零样本 fallback，迁移 0002）, `duration`, `status`, `created_at`（可重录覆盖） |
+| `voice_samples` | `user_id`, `audio_url`(R2), `reference_id`（已废弃——不再训练音色模型，样本直传模式；`transcript` 为朗读固定文案，零样本克隆用）, `duration`, `status`, `created_at`（可重录覆盖） |
 | `invite_codes` | `code`(唯一), `created_by`, `used_by`, `used_at`, `expires_at`, `source`(admin/reward), `issued_for_episode_id` |
 | `imports` | `user_id`, `platform`(chatgpt/claude/kimi/doubao/tongyi/gemini/deepseek/plain), `source_title`, `source_conversation_id`, `source_url`, `raw_content`, `parsed_dialogue`(JSONB), `status`, `created_at`；唯一约束 `(user_id, platform, source_conversation_id)` 防重复导入 |
 | `episodes` | `id`, `user_id`, `import_id`（来源导入，polish 质量门经它读 `parsed_dialogue`，迁移 0001）, `slug`, `title`, `description`, `cover_url`, `audio_url`, `duration_seconds`, `status`(draft/generating/published/failed), `quality_status`(pending/passed/rejected), `quality_reason`, `language`, `is_public`, `created_at`, `published_at` |
@@ -157,13 +157,19 @@ queued → tts → merge → upload → done（failed 可重试）
 | `payments` | `user_id`, `stripe_session_id`, `amount`, `episodes_granted`, `status`, `created_at`（按期付费购买记录） |
 | `subscriptions` | `user_id`, `stripe_customer_id`, `stripe_subscription_id`, `plan`, `status`, `current_period_end` |
 
-**R2 存储路径**：
+**R2 存储路径（目录规划 v2，2026-08-04）**：
 ```
-audio/episodes/{user_id}/{episode_id}.mp3
-audio/voices/{user_id}.wav
-images/covers/{episode_id}.png
-assets/intro.zh.mp3 / intro.en.mp3 / outro.zh.mp3 / outro.en.mp3   ← 固定片头片尾
+voices/{user_id}.webm                            ← 用户录音样本（MediaRecorder 实际输出 webm；覆盖更新）
+episodes/{user_id}/{episode_id}.mp3              ← 生成产物（不可变）
+imports/{import_id}.dialogue.json                ← 原始对话（meta 存库，内容在 R2；key 由 importId 推导）
+imports/{import_id}.raw.json                     ← 原始导出全文（预留：扩展采集原始导出场景）
+covers/{user_id}/{episode_id}.jpg                ← 封面图（预留）
+assets/guest-voice-zh.mp3 等                     ← 平台资产（嘉宾音色按语言；热更新无需部署）
 ```
+**存储决策**（二进制/大文件 → R2；结构化/可查询文本 → 数据库）：
+- 语音样本/播客音频/封面/原始对话/平台资产 → R2
+- 脚本 segments（jsonb）/ 对话 meta（imports 表）→ 数据库（查询、关联、事务）
+- 本地开发也用 R2（STORAGE_DRIVER=r2 + R2_PROXY_URL socks 代理；大陆网络直连 R2 握手失败）
 
 ## 5. 前端
 

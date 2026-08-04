@@ -1,5 +1,5 @@
 // site server 代理：统一登录会话端点——透传 better-auth 原生 cookie（会话由 api 管理）。
-// 登录成功：api 响应 Set-Cookie: better-auth.session_token（生产 Domain=.dailogues.com，
+// 登录成功：api 响应 Set-Cookie: better-auth.session_token（生产 Domain=.dailog.fm，
 // 本地 host-only localhost 跨端口共享）→ 两站（site/studio）自动带 cookie → SSO。
 import { env } from "../lib/env";
 

@@ -30,7 +30,7 @@ export type AppDeps = {
 export function createApp(deps: AppDeps): Hono<AuthEnv> {
   const app = new Hono<AuthEnv>();
 
-  // 工作台 SPA 跨域（本地 dev + 生产 app.dailogues.com）；OPTIONS 预检在此统一 204。
+  // 工作台 SPA 跨域（本地 dev + 生产 app.dailog.fm）；OPTIONS 预检在此统一 204。
   // 必须先于其它路由注册（Hono middleware 顺序敏感），否则先注册的路由不经 CORS
   const appOrigins = deps.env.APP_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean);
   app.use("*", createCorsMiddleware(appOrigins));
@@ -45,10 +45,11 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   app.get("/api/me", async (c) => {
     const userId = c.get("userId");
     const activated = await deps.repo.episodes.getChannelActivatedAt(userId);
-    return c.json({ userId, channelActive: activated !== null });
+    const sample = await deps.repo.episodes.getVoiceSample(userId);
+    return c.json({ userId, channelActive: activated !== null, hasVoiceSample: sample !== null });
   });
 
-  app.route("/api", importsRoutes(deps.repo.imports));
+  app.route("/api", importsRoutes(deps.repo.imports, deps.voice.storage));
   app.route("/api", episodesRoutes(deps.repo.episodes, (c) => (c as Context<AuthEnv>).get("userId"), deps.voice.storage));
   // polish/generate/job/voice 路由自带 /api 前缀（与各自 test.ts 直接对裸 app 请求 /api/... 一致），故挂载在根路径；
   // 上面的 /api/* 鉴权中间件依然覆盖

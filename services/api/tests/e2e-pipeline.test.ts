@@ -11,13 +11,14 @@
  * 需先启动本地 socks5 代理，如 clash 1081 端口）：
  *
  *   DEEPSEEK_API_KEY=sk-... FISH_API_KEY=... FISH_PROXY_URL=socks5://127.0.0.1:1081 \
- *   DATABASE_URL=postgres://dailogues:dailogues@localhost:5432/dailogues \
+ *   DATABASE_URL=postgres://dailog:dailog@localhost:5432/dailog \
  *   pnpm --filter @dailogues/api test
  *
  * 注意：真实调用 DeepSeek 与 Fish Audio，产生少量费用（免费首期不扣 credit）；
  * 测试数据与临时音频目录在 afterAll 清理（profile 级联删除 imports/episodes/scripts/generation_jobs）。
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { readDialogue } from "../src/dialogue-store";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -75,7 +76,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       "本地出网需 FISH_PROXY_URL（如 socks5://127.0.0.1:1081）；仅当网络可直接访问 api.fish.audio 时留空字符串直连",
     ).toBeDefined();
 
-    storageDir = await mkdtemp(join(tmpdir(), "dailogues-e2e-"));
+    storageDir = await mkdtemp(join(tmpdir(), "dailog-e2e-"));
     const env = loadEnv({
       ...process.env,
       // 认证：真实 better-auth（本地 PG 注册），BETTER_AUTH_SECRET 用 e2e 专属值
@@ -118,8 +119,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
         getEpisodeUserId: repo.episodes.getEpisodeUserId,
         getEpisodeLanguage: repo.episodes.getEpisodeLanguage,
         getLatestScript: repo.episodes.getLatestScript,
-        getHostModelId: repo.episodes.getHostModelId,
-        getVoiceSampleKey: repo.episodes.getVoiceSampleKey,
+        getVoiceSample: repo.episodes.getVoiceSample,
         getGuestModelId: async () => null, // 嘉宾固定音色 id 未提供（Task 10 音色体系），走零样本/默认音色 fallback
         markJobProgress: repo.jobs.markJobProgress,
         markJobDone: repo.jobs.markJobDone,
@@ -132,7 +132,12 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     }), { concurrency: 1, maxAttempts: 2, backoffMs: 1000 });
 
     const polish: PolishDeps = {
-      getDialogueMessages: (id, userId) => repo.episodes.getImportedDialogue(id, userId),
+      getDialogueMessages: async (id, userId) => {
+        const imp = await repo.episodes.getImportedDialogue(id, userId);
+        if (!imp) return null;
+        const dialogue = await readDialogue(storage, imp.importId);
+        return dialogue?.messages ?? null;
+      },
       qualityCheck: async (messages) =>
         parseJsonLoose(await llm.complete(qualityCheckPrompt(messages))) as { pass: boolean; reason?: string; language?: "zh" | "en" },
       savePolished: async (id, language, segments) => {
@@ -167,7 +172,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       getOwnedEpisode: (episodeId, userId) => repo.jobs.getOwnedEpisode(episodeId, userId),
       getLatestJob: (id) => repo.jobs.getLatestJob(id),
     };
-    const voice: VoiceDeps = { saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row), tts, storage };
+    const voice: VoiceDeps = { saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row), storage };
     const channel: ChannelDeps = { activateChannel: createActivateChannel(dbClient.db) };
     const favorites = createFavoritesRepo(dbClient.db);
 

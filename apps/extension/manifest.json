@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "dailogues 采集器",
+  "name": "dailog 采集器",
   "version": "0.1.0",
-  "description": "把你在 AI 平台的对话一键采集到 dailogues",
+  "description": "把你在 AI 平台的对话一键采集到 dailog",
   "permissions": ["storage"],
   "host_permissions": [
     "https://claude.ai/*",
@@ -12,12 +12,12 @@
     "https://kimi.moonshot.cn/*",
     "https://www.doubao.com/*",
     "https://www.tongyi.com/*",
-    "https://api.dailogues.com/*",
+    "https://api.dailog.fm/*",
     "https://api.candelbot.app/*"
   ],
   "externally_connectable": {
     "matches": [
-      "https://app.dailogues.com/*",
+      "https://app.dailog.fm/*",
       "https://app.candelbot.app/*",
       "http://localhost:5173/*"
     ]

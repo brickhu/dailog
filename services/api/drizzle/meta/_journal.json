@@ -57,6 +57,20 @@
       "when": 1785748188415,
       "tag": "0007_same_iceman",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785852486257,
+      "tag": "0008_minor_morlun",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785856478600,
+      "tag": "0009_sour_madame_hydra",
+      "breakpoints": true
     }
   ]
 }

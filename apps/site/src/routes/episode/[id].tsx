@@ -126,7 +126,7 @@ export default function EpisodePage() {
       <SiteNav />
       <div {...stylex.props(styles.content)}>
         <Show when={ep()} fallback={<div {...stylex.props(styles.notFound)}>节目不存在或未发布</div>}>
-          <Title>{ep()!.title || "dailogues"}</Title>
+          <Title>{ep()!.title || "dailog"}</Title>
           <a href={`/@${ep()!.username}`} {...stylex.props(styles.back)}>
             ← @{ep()!.username} 的频道
           </a>

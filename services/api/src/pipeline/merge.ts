@@ -66,7 +66,7 @@ export async function mergeEpisodeAudio(args: MergeInput): Promise<MergeOutput> 
   const { language, deps } = args;
   const result = normalizeResult(args);
   ffmpeg.setFfmpegPath(deps.ffmpegPath);
-  const dir = await mkdtemp(join(tmpdir(), "dailogues-merge-"));
+  const dir = await mkdtemp(join(tmpdir(), "dailog-merge-"));
   try {
     const parts: string[] = [];
     // 片头/片尾资产（缺失 → null，降级）

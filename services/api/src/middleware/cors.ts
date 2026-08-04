@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 
-// CORS：只允许配置的白名单 Origin（dev 本地 + 生产 app.dailogues.com）。
+// CORS：只允许配置的白名单 Origin（dev 本地 + 生产 app.dailog.fm）。
 // 不匹配的 Origin 不加任何 CORS 头（api 仍可被 curl/服务端直调，浏览器跨域被浏览器自己拦截）。
 function corsHeaders(origin: string): Record<string, string> {
   return {

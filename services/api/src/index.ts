@@ -8,10 +8,10 @@ import { createLlmClient } from "./llm/client";
 import { qualityCheckPrompt, safetyCheckPrompt, parseJsonLoose, type QualityResult } from "./llm/prompts";
 import { createJobQueue } from "./pipeline/queue";
 import { createPipelineRunner } from "./pipeline/runner";
-import { createLocalAssetStore } from "./pipeline/assets";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import { createTtsClient } from "./tts/client";
 import { createStorage } from "./storage";
+import { readDialogue } from "./dialogue-store";
 import { createProxyFetch } from "./net/proxy";
 import { recoverQueuedJobs } from "./pipeline/bootstrap";
 import type { PolishDeps } from "./routes/polish";
@@ -40,7 +40,17 @@ const tts = env.FISH_API_KEY
   ? createTtsClient({ apiKey: env.FISH_API_KEY, fetchImpl: createProxyFetch(env.FISH_PROXY_URL) })
   : null;
 
-const storage = createStorage({ driver: env.STORAGE_DRIVER, dir: env.STORAGE_DIR });
+const storage = createStorage({
+  driver: env.STORAGE_DRIVER,
+  dir: env.STORAGE_DIR,
+  // R2 driver 配置（fs 时忽略）；缺任一字段时 S3Client 构造失败会在启动即报错
+  r2: {
+    accountId: env.R2_ACCOUNT_ID ?? "",
+    accessKey: env.R2_ACCESS_KEY ?? "",
+    secretKey: env.R2_SECRET_KEY ?? "",
+    bucket: env.R2_BUCKET ?? "",
+  },
+});
 
 // 进程内串行生成队列（MVP 单实例，ARC §3.1）：重试 + 指数退避
 const queue = createJobQueue(createPipelineRunner({
@@ -48,9 +58,8 @@ const queue = createJobQueue(createPipelineRunner({
     getEpisodeUserId: repo.episodes.getEpisodeUserId,
     getEpisodeLanguage: repo.episodes.getEpisodeLanguage,
     getLatestScript: repo.episodes.getLatestScript,
-    getHostModelId: repo.episodes.getHostModelId,
-    getVoiceSampleKey: repo.episodes.getVoiceSampleKey,
-    // 嘉宾固定音色 id 尚未提供（Task 10 音色体系），暂为 null → 走零样本 fallback
+    getVoiceSample: repo.episodes.getVoiceSample,
+    // 嘉宾固定音色 id（逐段降级路径用；2D 主路径用 guest-voice.mp3 资产）
     getGuestModelId: async () => env.FISH_GUEST_REFERENCE_ID ?? null,
     markJobProgress: repo.jobs.markJobProgress,
     markJobDone: repo.jobs.markJobDone,
@@ -59,7 +68,9 @@ const queue = createJobQueue(createPipelineRunner({
   tts: tts ?? createTtsClient({ apiKey: "", fetchImpl: createProxyFetch(env.FISH_PROXY_URL) }),
   storage,
   // merge 阶段：intro/outro 资产（缺失 → 降级）+ 真实 ffmpeg 二进制
-  assets: createLocalAssetStore(env.ASSETS_DIR),
+  // 资产统一存 storage（R2：assets/ 前缀；换音色/加语言热更新，无需重新部署）。
+  // createLocalAssetStore 已弃用——资产不再随服务端文件系统分发
+  assets: { get: (key) => storage.get(key).catch(() => null) },
   ffmpegPath: ffmpegInstaller.path,
 }), { concurrency: 1, maxAttempts: 2, backoffMs: 1000 });
 
@@ -70,7 +81,13 @@ void recoverQueuedJobs(repo.jobs, (job) => queue.enqueue(job, () => {}).then(() 
 
 const polish: PolishDeps = {
   // 质量门 + 语言检测：一次非流式补全，输出 JSON { pass, reason?, language }
-  getDialogueMessages: (episodeId, userId) => repo.episodes.getImportedDialogue(episodeId, userId),
+  getDialogueMessages: async (episodeId, userId) => {
+    // 对话内容在 R2（imports/{id}.dialogue.json）：repo 只给 importId，这里经 storage 读
+    const imp = await repo.episodes.getImportedDialogue(episodeId, userId);
+    if (!imp) return null;
+    const dialogue = await readDialogue(storage, imp.importId);
+    return dialogue?.messages ?? null;
+  },
   qualityCheck: async (messages) => parseJsonLoose(await llm.complete(qualityCheckPrompt(messages))) as QualityResult,
   savePolished: async (episodeId, language, segments) => {
     const latest = await repo.episodes.getLatestScript(episodeId);
@@ -120,7 +137,6 @@ const job: JobDeps = {
 const voice: VoiceDeps = {
   saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row),
   getVoiceSample: (userId) => repo.episodes.getVoiceSample(userId),
-  tts, // FISH_API_KEY 未配置时为 null → 路由返回 503
   storage,
 };
 
