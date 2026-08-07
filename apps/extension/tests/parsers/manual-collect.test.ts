@@ -9,7 +9,7 @@ const mk = (id: string, offsetTop: number, role: MessageNode["role"], content?: 
   content: content ?? `${id}-content`,
 });
 
-describe("mergeMessageNodes（手动采集合并：按 id 替换/追加，首见顺序）", () => {
+describe("mergeMessageNodes（步进截取合并：自下而上，新节点前插）", () => {
   it("同 id 重读替换最新读数且保持原位置", () => {
     const acc = [mk("m1", 0, "user"), mk("m2", 100, "assistant")];
     mergeMessageNodes(acc, [mk("m2", 999, "assistant", "新内容")]);
@@ -17,15 +17,15 @@ describe("mergeMessageNodes（手动采集合并：按 id 替换/追加，首见
     expect(acc[1].content).toBe("新内容");
   });
 
-  it("新节点追加，首见顺序 = 对话顺序", () => {
+  it("新节点前插（步进向上：新内容在已采内容上方），单轮读取内保持文档序", () => {
     const acc = [mk("m1", 0, "user")];
     mergeMessageNodes(acc, [mk("m2", 100, "assistant"), mk("m3", 200, "user")]);
     mergeMessageNodes(acc, [mk("m4", 300, "assistant")]);
-    expect(acc.map((n) => n.id)).toEqual(["m1", "m2", "m3", "m4"]);
+    expect(acc.map((n) => n.id)).toEqual(["m4", "m2", "m3", "m1"]);
   });
 
-  it("序列 id（rule-N 窗口下标）跨窗口按内容键累积——chatgpt 虚拟列表滚动采集", () => {
-    // 窗口 1：视口渲染 q1/a1/q2/a2（rule-0..3）；窗口 2 向下滚动后：a1/q2/a2/q3（rule-0..3 下标全变）
+  it("序列 id（rule-N 窗口下标）跨窗口按内容键累积——chatgpt 虚拟列表步进采集", () => {
+    // 底部窗口：q1/a1/q2/a2（rule-0..3）；向上一步后窗口上移：a1/q2/a2/q3（rule-0..3 下标全变）
     const acc: MessageNode[] = [];
     mergeMessageNodes(acc, [
       mk("rule-0", 0, "user", "q1"),
@@ -39,9 +39,9 @@ describe("mergeMessageNodes（手动采集合并：按 id 替换/追加，首见
       mk("rule-2", 200, "assistant", "a2"),
       mk("rule-3", 300, "user", "q3"),
     ]);
-    // 首见顺序 + 内容键去重：q1/a1/q2/a2 保留原位，q3 追加
-    expect(acc.map((n) => n.content)).toEqual(["q1", "a1", "q2", "a2", "q3"]);
-    expect(acc.map((n) => n.role)).toEqual(["user", "assistant", "user", "assistant", "user"]);
+    // 已见消息原位替换，新内容（q3 在更上方）前插 → 对话顺序（顶→底）
+    expect(acc.map((n) => n.content)).toEqual(["q3", "q1", "a1", "q2", "a2"]);
+    expect(acc.map((n) => n.role)).toEqual(["user", "user", "assistant", "user", "assistant"]);
   });
 
   it("稳定 id（data-message-id）重复内容不按内容键合并——合法重复保留", () => {

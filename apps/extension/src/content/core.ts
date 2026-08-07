@@ -21,20 +21,21 @@ export function dedupeSort(nodes: MessageNode[]): MessageNode[] {
   return unique.sort((a, b) => a.offsetTop - b.offsetTop);
 }
 
-/** 手动采集合并：按 id 替换（最新读数覆盖旧内容/位置）或追加，
- *  保持首见顺序（用户自上而下滚动 = 对话顺序，offsetTop 是视口相对值、
- *  跨轮无意义，故不做排序）。
+/** 步进截取合并（自下而上）：新节点一律位于已采内容上方 → 前插；
+ *  同 id 替换（最新读数覆盖旧内容/位置）。最终顺序 = 对话顺序（顶 → 底）。
  *  不可靠的序号派生 id（rule-/gen-N——虚拟列表窗口下标会变，同一条消息在
  *  不同窗口的序号不同）→ 按 (role + content) 内容键合并，跨窗口才能累积 */
 export function mergeMessageNodes(acc: MessageNode[], nodes: MessageNode[]): void {
+  const prepend: MessageNode[] = [];
   for (const n of nodes) {
     const seq = /^(rule|gen)-\d+$/.test(n.id);
     const idx = seq
       ? acc.findIndex((x) => /^(rule|gen)-\d+$/.test(x.id) && x.role === n.role && x.content === n.content)
       : acc.findIndex((x) => x.id === n.id);
     if (idx >= 0) acc[idx] = n;
-    else acc.push(n);
+    else prepend.push(n);
   }
+  if (prepend.length > 0) acc.unshift(...prepend);
 }
 
 /** 渲染文本提取（= 用户全选该消息拿到的文本）：对元素建 Range 选区读
