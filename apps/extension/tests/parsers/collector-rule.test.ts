@@ -164,7 +164,7 @@ describe("resolvePlatform（URL 规则数据化分发）", () => {
     expect(resolvePlatform(rules, "https://claude.ai/chat/uuid-1")).toBe("claude");
     expect(resolvePlatform(rules, "https://claude.ai/")).toBeNull(); // 规则与默认表均只认 /chat/
     expect(resolvePlatform(rules, "https://chatgpt.com/c/x")).toBe("chatgpt"); // 默认表兜底
-    expect(resolvePlatform(null, "https://chat.deepseek.com/chat/1")).toBe("deepseek");
+    expect(resolvePlatform(null, "https://chat.deepseek.com/a/chat/s/1")).toBe("deepseek");
     expect(resolvePlatform(rules, "https://example.com/x")).toBeNull();
     expect(resolvePlatform(rules, "not a url")).toBeNull();
   });

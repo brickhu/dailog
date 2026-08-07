@@ -27,7 +27,7 @@ export interface CollectContext {
  *  规则数据化的 fallback——CDN 规则里的 url 字段优先于本表 */
 const DEFAULT_PLATFORM_URLS: ReadonlyArray<{ host: string; path: string; platform: Platform }> = [
   { host: "claude.ai", path: "/chat/", platform: "claude" },
-  { host: "chat.deepseek.com", path: "/chat/", platform: "deepseek" },
+  { host: "chat.deepseek.com", path: "/a/chat/", platform: "deepseek" }, // 2026-08-07 实测：新版对话页 /a/chat/s/{uuid}
   { host: "chatgpt.com", path: "/c/", platform: "chatgpt" },
   { host: "www.doubao.com", path: "/chat/", platform: "doubao" },
   { host: "gemini.google.com", path: "/app/", platform: "gemini" },

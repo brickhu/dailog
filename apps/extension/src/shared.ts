@@ -117,7 +117,8 @@ export function conversationKey(url: string): string {
 }
 
 /** 从 URL 提取会话 id：pattern 为正则字符串（缺省取路径最后一段）。
- *  pattern 需包含捕获组（如 "/chat/([a-f0-9-]+)"）；无匹配返回 null */
+ *  pattern 需包含捕获组（如 "/chat/([a-f0-9-]+)"）；无匹配返回 null。
+ *  缺省路径先剥离 query/hash（分享链接常带 ?source= 等） */
 export function conversationIdFromUrl(url: string, pattern?: string): string | null {
   if (pattern) {
     try {
@@ -127,7 +128,7 @@ export function conversationIdFromUrl(url: string, pattern?: string): string | n
       // 非法正则：回退取最后一段
     }
   }
-  return url.match(/\/([^/?#]+)\/?$/)?.[1] ?? null;
+  return url.replace(/[?#].*$/, "").match(/\/([^/?#]+)\/?$/)?.[1] ?? null;
 }
 
 /** 消息文本规范化：保留换行与行首缩进（代码块/列表结构），只清行尾空白、

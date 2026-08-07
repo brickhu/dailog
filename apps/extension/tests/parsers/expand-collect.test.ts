@@ -21,7 +21,7 @@ describe("collectByScroll（打印式撑开优先 / 滚动保底）", () => {
     };
     const d = await collectFromDocument({
       root: document,
-      url: "https://chat.deepseek.com/chat/conv1",
+      url: "https://chat.deepseek.com/a/chat/s/conv1",
       scroll,
     });
     expect(d?.platform).toBe("deepseek");
@@ -63,7 +63,7 @@ describe("collectByScroll（打印式撑开优先 / 滚动保底）", () => {
     };
     const d = await collectFromDocument({
       root: document,
-      url: "https://chat.deepseek.com/chat/conv1",
+      url: "https://chat.deepseek.com/a/chat/s/conv1",
       scroll,
     });
     expect(d?.messages.map((m) => m.content)).toEqual(["q1", "a1"]);

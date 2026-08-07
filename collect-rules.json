@@ -1,6 +1,6 @@
 {
-  "version": 4,
-  "note": "扩展采集 fallback 规则（jsDelivr 托管：https://cdn.jsdelivr.net/gh/brickhu/dailog@dev/collect-rules.json）。v4：URL 规则数据化——url.host/conversationPath/conversationIdPattern 驱动平台分发、FAB 显隐与会话 id 提取，扩展打开平台页面时静默预热（TTL 10 分钟），规则更新后下次访问即生效。claude 已实测校准（2026-08-07：消息作用域 div[role='article']，user 标记 data-testid='user-message'，assistant 无 data-testid，正文容器 div.font-claude-response > .standard-markdown）；deepseek/chatgpt 选择器沿用实测；doubao/gemini/kimi/tongyi 待实测——打开对话页 DevTools 核对后更新本文件 push 即可，几分钟内 CDN 生效。",
+  "version": 5,
+  "note": "扩展采集 fallback 规则（jsDelivr 托管：https://cdn.jsdelivr.net/gh/brickhu/dailog@dev/collect-rules.json）。v5：deepseek URL 改版校准（2026-08-07 用户实测：新版对话页 /a/chat/s/{uuid}，旧 /chat/ 已废弃）——conversationPath 与 conversationIdPattern 同步更新。v4：URL 规则数据化——url.host/conversationPath/conversationIdPattern 驱动平台分发、FAB 显隐与会话 id 提取，扩展打开平台页面时静默预热（TTL 10 分钟），规则更新后下次访问即生效。claude 已实测校准（消息作用域 div[role='article']，user 标记 data-testid='user-message'，assistant 无 data-testid，正文容器 div.font-claude-response > .standard-markdown）；chatgpt 选择器沿用实测；doubao/gemini/kimi/tongyi 待实测——打开对话页 DevTools 核对后更新本文件 push 即可，几分钟内 CDN 生效。",
   "platforms": {
     "claude": {
       "url": {
@@ -16,8 +16,8 @@
     "deepseek": {
       "url": {
         "host": "chat.deepseek.com",
-        "conversationPath": "/chat/",
-        "conversationIdPattern": "/chat/([^/?#]+)"
+        "conversationPath": "/a/chat/",
+        "conversationIdPattern": "/a/chat/s/([^/?#]+)"
       },
       "userSelector": "[data-message-author-role='user']",
       "assistantSelector": "[data-message-author-role='assistant']",

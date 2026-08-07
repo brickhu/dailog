@@ -28,8 +28,9 @@ describe("collectFromDocument", () => {
       ],
       waitForMutation: async () => {},
     };
-    const r = await collectFromDocument({ root, url: "https://chat.deepseek.com/chat/conv1", scroll });
+    const r = await collectFromDocument({ root, url: "https://chat.deepseek.com/a/chat/s/conv1", scroll });
     expect(r?.platform).toBe("deepseek");
+    expect(r?.conversationId).toBe("conv1");
     expect(r?.messages.map((m) => m.content)).toEqual(["hi", "hello"]);
   });
 });

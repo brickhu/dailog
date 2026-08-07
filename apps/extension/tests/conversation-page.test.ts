@@ -5,7 +5,8 @@ describe("isConversationPage（对话页判定：默认表 + 规则覆盖）", (
   it("默认表：平台对话页 true、首页/非对话路径 false", () => {
     expect(isConversationPage("https://claude.ai/chat/abc")).toBe(true);
     expect(isConversationPage("https://claude.ai/")).toBe(false);
-    expect(isConversationPage("https://chat.deepseek.com/chat/conv1")).toBe(true);
+    expect(isConversationPage("https://chat.deepseek.com/a/chat/s/conv1")).toBe(true);
+    expect(isConversationPage("https://chat.deepseek.com/chat/conv1")).toBe(false); // 旧路径已废弃
     expect(isConversationPage("https://chat.deepseek.com/")).toBe(false);
     expect(isConversationPage("https://chatgpt.com/c/abc")).toBe(true);
     expect(isConversationPage("https://chatgpt.com/")).toBe(false);

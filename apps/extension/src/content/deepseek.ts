@@ -25,8 +25,9 @@ export function parseDeepSeekPage(root: ParentNode): MessageNode[] {
   return nodes;
 }
 
+/** 新版对话页 /a/chat/s/{uuid}（2026-08-07 实测）；兼容旧格式 /chat/{id} */
 export function deepseekConversationId(url: string): string | null {
-  return url.match(/\/chat\/([^/?#]+)/)?.[1] ?? null;
+  return url.match(/\/a\/chat\/s\/([^/?#]+)/)?.[1] ?? url.match(/\/chat\/([^/?#]+)/)?.[1] ?? null;
 }
 
 export function collectDeepSeek(root: ParentNode, url: string): CollectedDialogue | null {

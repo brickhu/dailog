@@ -3,11 +3,11 @@
 // 无规则/未覆盖该平台时回退内置默认表
 import type { CollectRule } from "../shared";
 
-// 默认表：claude/deepseek/kimi/doubao 对话页为 /chat/、chatgpt /c/、gemini /app/；
-// 无条目平台（tongyi 全站、未知域名）维持「注入即显示」
+// 默认表：claude/kimi/doubao 对话页为 /chat/、deepseek 新版为 /a/chat/（2026-08-07 实测）、
+// chatgpt /c/、gemini /app/；无条目平台（tongyi 全站、未知域名）维持「注入即显示」
 const DEFAULT_CONVERSATION_PATHS: Record<string, string> = {
   "claude.ai": "/chat/",
-  "chat.deepseek.com": "/chat/",
+  "chat.deepseek.com": "/a/chat/",
   "chatgpt.com": "/c/",
   "gemini.google.com": "/app/",
   "kimi.moonshot.cn": "/chat/",
