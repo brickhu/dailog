@@ -174,19 +174,33 @@ function initConversationFab(): void {
         }
       }
     });
+    // 滚动事件驱动即时读取（用户滚动快于 300ms 轮询时，窗口间隙不丢消息）；
+    // 滚动停止后补读一次（虚拟列表先渲染骨架后渲染内容，稳定后内容才完整）
+    document.addEventListener("scroll", onUserScroll, { capture: true, passive: true });
     void tickMonitor();
     monitorIv = setInterval(() => void tickMonitor(), 300);
   }
 
+  let scrollDebounce: ReturnType<typeof setTimeout> | undefined;
+  let tickRunning = false;
+
+  /** 滚动触发：即时读一次 + 150ms 停止后补读（等骨架渲染完内容） */
+  function onUserScroll(): void {
+    void tickMonitor();
+    if (scrollDebounce) clearTimeout(scrollDebounce);
+    scrollDebounce = setTimeout(() => void tickMonitor(), 150);
+  }
+
   /** 单轮读取：读当前渲染出的消息 → 暂存合并 → 高亮 → 更新 FAB 计数 */
   async function tickMonitor(): Promise<void> {
-    if (!monitoring || !monitorReadNodes) return;
+    if (!monitoring || !monitorReadNodes || tickRunning) return;
     if (location.href !== monitorUrl) {
       // SPA 导航跳走：自动取消本次采集
       cancelMonitorCollect();
       return;
     }
     if (document.hidden) return; // 后台标签页跳过（回来继续）
+    tickRunning = true;
     try {
       const nodes = await monitorReadNodes();
       if (!monitoring) return; // await 期间被放弃/完成
@@ -196,6 +210,8 @@ function initConversationFab(): void {
       if (monitorNodes.length !== before) fab.updateCollectCount(monitorNodes.length);
     } catch {
       // 单轮读取失败忽略，下一轮重试
+    } finally {
+      tickRunning = false;
     }
   }
 
@@ -214,6 +230,11 @@ function initConversationFab(): void {
       clearInterval(monitorIv);
       monitorIv = undefined;
     }
+    if (scrollDebounce) {
+      clearTimeout(scrollDebounce);
+      scrollDebounce = undefined;
+    }
+    document.removeEventListener("scroll", onUserScroll, { capture: true, passive: true } as EventListenerOptions);
   }
 
   /** 完成采集：组装对话 → 进入确认态（FAB「确认导入 (N)」+ 放弃） */
