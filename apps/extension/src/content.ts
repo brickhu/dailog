@@ -5,13 +5,11 @@ declare const chrome: {
       addListener: (listener: (message: any, sender: any, sendResponse: (response: unknown) => void) => boolean | void) => void;
     };
     sendMessage: (message: unknown) => Promise<unknown>;
-    /** CDP 滚动期间保持 service worker 存活（open port 是可靠的保活手段） */
-    connect: (opts: { name: string }) => { disconnect: () => void };
   };
 };
 
 import {
-  MSG_COLLECT, MSG_CACHE_COLLECT, MSG_LIST_COLLECTS, MSG_GET_RULES, MSG_COLLECTS_CHANGED, MSG_CDP_SCROLL_START, MSG_CDP_SCROLL_STOP, conversationKey,
+  MSG_COLLECT, MSG_CACHE_COLLECT, MSG_LIST_COLLECTS, MSG_GET_RULES, MSG_COLLECTS_CHANGED, conversationKey,
   type CollectedDialogue, type CacheCollectResult, type ListCollectsResult, type CollectSummary,
   type GetRulesResult, type CollectRules, type Platform,
 } from "./shared";
@@ -22,8 +20,7 @@ import { parseDoubaoPage } from "./content/doubao";
 import { createFab, type FabController } from "./content/ui";
 import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback, applyRuleMerge } from "./content/read-fallback";
-import { showCollectHint, hideCollectHint, updateCollectHint } from "./content/collect-hint";
-import { findScrollContainer } from "./content/scroll-driver";
+import { showCollectHint, hideCollectHint } from "./content/collect-hint";
 import { highlightNodes, clearHighlight } from "./content/highlight";
 import { mergeMessageNodes, type MessageNode } from "./content/core";
 
@@ -105,15 +102,13 @@ async function collectPage(): Promise<CollectedDialogue | null> {
   return collectFromDocument({ root: document, url: location.href, getRules });
 }
 
-// 监测采集状态（CDP 真实滚轮驱动滚动，扩展只做观察——轮询读当前渲染出的消息并暂存）：
-// 采集态（monitoring）→ CDP 自动滚动 + FAB「完成 (N)」+ 放弃；完成 → 确认态（confirmMode）
+// 监测采集状态（用户滚动驱动渲染，扩展只做观察——轮询读当前渲染出的消息并暂存）：
+// 采集态（monitoring）→ 提示条 + FAB「完成 (N)」+ 放弃；完成 → 确认态（confirmMode）
 let monitoring = false;
 let monitorNodes: MessageNode[] = [];
 let monitorIv: ReturnType<typeof setInterval> | undefined;
 let monitorUrl = "";
 let monitorReadNodes: (() => Promise<MessageNode[]>) | undefined;
-let cdpWatchIv: ReturnType<typeof setInterval> | undefined;
-let cdpKeepalive: { disconnect: () => void } | undefined;
 let confirmMode = false;
 let pendingDialogue: CollectedDialogue | null = null;
 
@@ -150,7 +145,7 @@ function initConversationFab(): void {
     );
   }
 
-  /** 开始监测采集：滚动锁定到底部 → 提示条 + FAB「完成 (N)」+ 自动匀速滚动驱动 + 轮询暂存 */
+  /** 开始监测采集：滚动锁定到底部 → 非阻断提示条 + FAB「完成 (N)」+ 立即读一次 + 轮询暂存 */
   function startMonitorCollect(): void {
     const readNodes = pageReadNodes();
     if (!readNodes) {
@@ -163,7 +158,7 @@ function initConversationFab(): void {
     monitorReadNodes = readNodes;
     showCollectHint();
     fab.setCollecting(0, { onAbandon: () => cancelMonitorCollect() });
-    fab.showToast("已开始采集：自动向上滚动，可随时点「完成」", "success");
+    fab.showToast("已开始采集：请向上滚动浏览完整对话", "success");
     // 滚动锁定到底部（虚拟列表初始即底部；全文渲染页面滚到最新消息）
     void readNodes().then((init) => {
       const last = init[init.length - 1]?.el;
@@ -178,130 +173,12 @@ function initConversationFab(): void {
           }
         }
       }
-      if (!monitoring || init.length === 0) return;
-      // 等底部滚动稳定后启动 CDP 真实滚轮驱动（模拟用户鼠标向上滚动；
-      // 滚不动自动降级为手动，到顶自动完成）
-      setTimeout(() => {
-        if (!monitoring) return;
-        void startCdpDriver(findScrollContainer(document, init[0]?.el));
-      }, 400);
     });
     // 滚动事件驱动即时读取（用户滚动快于 300ms 轮询时，窗口间隙不丢消息）；
     // 滚动停止后补读一次（虚拟列表先渲染骨架后渲染内容，稳定后内容才完整）
     document.addEventListener("scroll", onUserScroll, { capture: true, passive: true });
     void tickMonitor();
     monitorIv = setInterval(() => void tickMonitor(), 300);
-  }
-
-  /** CDP 真实滚轮驱动：background attach debugger 后按固定节奏向消息区派发
-   *  mouseWheel（isTrusted=true，浏览器层面即用户滚轮——虚拟列表必须响应）。
-   *  滚轮落点优先取中间消息元素中心（避开容器间隙/侧栏）；到顶判定用
-   *  「首条消息到达容器顶部」容器相对坐标（底部窗口首条 rect.top 也是正的，
-   *  视口绝对坐标会误判到顶）。每 300ms 双信号监测进展（内容计数 / 容器位置），
-   *  连续无进展 → 换备选落点重试一次 → 仍不行降级手动 */
-  async function startCdpDriver(container: HTMLElement | null, pointIndex = 0): Promise<void> {
-    if (!monitoring) return;
-    // 候选落点：中间消息元素中心 → 容器中心 → 视口 30%/70% 高度（重试换点用）
-    const rect = container?.getBoundingClientRect();
-    const read = await monitorReadNodes!();
-    const midMsg = read[Math.floor(read.length / 2)]?.el;
-    const midRect = midMsg?.getBoundingClientRect();
-    const points: Array<{ x: number; y: number }> = [];
-    const push = (x: number, y: number): void => {
-      const cx = Math.max(40, Math.min(Math.round(x), window.innerWidth - 40));
-      const cy = Math.max(80, Math.min(Math.round(y), window.innerHeight - 80));
-      if (!points.some((p) => Math.abs(p.x - cx) < 8 && Math.abs(p.y - cy) < 8)) points.push({ x: cx, y: cy });
-    };
-    if (midRect && midRect.width >= 100 && midRect.height >= 30) {
-      push(midRect.left + midRect.width / 2, midRect.top + Math.min(midRect.height / 2, 300));
-    }
-    if (rect && rect.width >= 200 && rect.height >= 200) {
-      push(rect.left + rect.width / 2, rect.top + rect.height / 2);
-    }
-    push(window.innerWidth / 2, window.innerHeight * 0.3);
-    push(window.innerWidth / 2, window.innerHeight * 0.7);
-    const point = points[Math.min(pointIndex, points.length - 1)];
-    if (!point) {
-      updateCollectHint("自动滚动不可用，请手动滚动浏览完整对话；完成后点「完成」");
-      return;
-    }
-    let res: { ok: boolean; error?: string };
-    try {
-      res = (await chrome.runtime.sendMessage({
-        type: MSG_CDP_SCROLL_START,
-        x: point.x,
-        y: point.y,
-        deltaY: -36, // 负 = 向上滚动（≈1500px/s @ 24ms 间隔）
-        intervalMs: 24,
-      })) as { ok: boolean; error?: string };
-    } catch {
-      res = { ok: false, error: "context_invalid" };
-    }
-    if (!res.ok) {
-      updateCollectHint("自动滚动不可用（调试器冲突），请手动滚动浏览完整对话；完成后点「完成」");
-      return;
-    }
-    console.info(`[dailog] cdp-driver start point=(${point.x},${point.y}) idx=${pointIndex} container=${container ? `${container.tagName}.${container.className}` : "null"}`);
-    // 保活：open port 保持 service worker 存活（interval 不保证存活）
-    try {
-      cdpKeepalive = chrome.runtime.connect({ name: "dailog-cdp-scroll" });
-    } catch {
-      // 无 connect 环境（测试）静默
-    }
-    // 双信号进展监测（300ms 一次）：内容计数增长（虚拟列表渲染出新窗口）或
-    // 容器位置前进（全文渲染页滚动）任一即算进展；连续 ~2s 无进展 →
-    // 首条消息到达容器顶部 = 到顶自动完成，否则换点重试/降级手动
-    let lastPos = container?.scrollTop ?? -1;
-    let stallMs = 0;
-    let ticks = 0;
-    cdpWatchIv = setInterval(() => {
-      void (async () => {
-        if (!monitoring) return;
-        const pos = container?.scrollTop ?? -1;
-        const before = monitorNodes.length;
-        await tickMonitor(); // 幂等合并（滚动事件也会触发，此处兜底）
-        const progressed = monitorNodes.length > before || (container ? pos < lastPos - 2 : false);
-        lastPos = pos;
-        if (progressed) {
-          stallMs = 0;
-          return;
-        }
-        stallMs += 300;
-        ticks += 1;
-        // 诊断日志：每 5 轮输出一次状态（定位滚动未达消息区等场景）
-        if (ticks % 5 === 0) {
-          console.info(`[dailog] cdp-driver stall count=${monitorNodes.length} scrollTop=${pos} point=(${point.x},${point.y})`);
-        }
-        if (stallMs < 2000) return;
-        stopCdpDriver();
-        // 到顶判定（容器相对坐标）：首条已渲染消息已到容器顶部边缘；
-        // 容器不可靠时退回视口绝对坐标（≤40px）
-        const first = (await monitorReadNodes?.())?.[0];
-        const firstTop = first?.el ? first.el.getBoundingClientRect().top : -1;
-        const containerTop = container?.getBoundingClientRect().top;
-        const atTop = containerTop !== undefined ? firstTop - containerTop <= 16 : firstTop <= 40;
-        console.info(`[dailog] cdp-driver stop count=${monitorNodes.length} scrollTop=${pos} firstTop=${firstTop} containerTop=${containerTop} atTop=${atTop}`);
-        if (atTop) {
-          void finishMonitorCollect();
-        } else if (pointIndex < points.length - 1) {
-          updateCollectHint("正在尝试调整滚动落点…");
-          void startCdpDriver(container, pointIndex + 1); // 换备选落点重试
-        } else {
-          updateCollectHint("自动滚动失效，请手动滚动浏览完整对话；完成后点「完成」");
-        }
-      })();
-    }, 300);
-  }
-
-  /** 停止 CDP 滚轮（background detach）+ 清理监测循环与保活（幂等） */
-  function stopCdpDriver(): void {
-    if (cdpWatchIv) {
-      clearInterval(cdpWatchIv);
-      cdpWatchIv = undefined;
-    }
-    cdpKeepalive?.disconnect();
-    cdpKeepalive = undefined;
-    void chrome.runtime.sendMessage({ type: MSG_CDP_SCROLL_STOP }).catch(() => {});
   }
 
   let scrollDebounce: ReturnType<typeof setTimeout> | undefined;
@@ -341,7 +218,6 @@ function initConversationFab(): void {
   /** 放弃采集（放弃按钮 / SPA 跳走）：清理状态与 UI */
   function cancelMonitorCollect(): void {
     stopMonitorLoop();
-    stopCdpDriver();
     monitoring = false;
     hideCollectHint();
     clearHighlight();
@@ -364,7 +240,6 @@ function initConversationFab(): void {
   /** 完成采集：组装对话 → 进入确认态（FAB「确认导入 (N)」+ 放弃） */
   async function finishMonitorCollect(): Promise<void> {
     stopMonitorLoop();
-    stopCdpDriver();
     monitoring = false;
     hideCollectHint();
     clearHighlight();

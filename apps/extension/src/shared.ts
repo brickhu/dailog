@@ -61,11 +61,6 @@ export const MSG_LIST_COLLECTS = "dailog:list-collects";
 export const MSG_GET_RULES = "dailog:get-rules";
 /** background → content：缓存条目发生变化（删除/新增）——FAB「已采集」状态立即刷新 */
 export const MSG_COLLECTS_CHANGED = "dailog:collects-changed";
-/** content → background：启动 CDP 真实滚轮自动滚动（模拟用户鼠标向上滚动；
- *  参数：x/y 视口坐标、deltaY 滚动量、intervalMs 事件间隔；返回 { ok } 或错误） */
-export const MSG_CDP_SCROLL_START = "dailog:cdp-scroll-start";
-/** content → background：停止 CDP 滚轮并 detach（幂等） */
-export const MSG_CDP_SCROLL_STOP = "dailog:cdp-scroll-stop";
 
 /** 平台抓取规则（远程托管 JSON 的 schema；选择器驱动，通用解析器消费） */
 export interface CollectRule {

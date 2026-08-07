@@ -9,7 +9,7 @@
     "48": "icons/color/icon48.png",
     "128": "icons/color/icon128.png"
   },
-  "permissions": ["storage", "debugger"],
+  "permissions": ["storage"],
   "host_permissions": [
     "https://claude.ai/*",
     "https://chat.deepseek.com/*",

@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cacheCollect, getCollect, deleteCollect, listCollects, getAppBase, getRuntimeConfig, setRuntimeConfig, getRemoteRules, resetRulesCache, warmRulesCache, handleExternalMessage, handleTabRemoved, isSupportedUrl, startCdpScroll, stopCdpScroll } from "../src/background";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cacheCollect, getCollect, deleteCollect, listCollects, getAppBase, getRuntimeConfig, setRuntimeConfig, getRemoteRules, resetRulesCache, warmRulesCache, handleExternalMessage, handleTabRemoved, isSupportedUrl } from "../src/background";
 import { DEFAULT_RULES_URL } from "../src/env";
 import type { CollectRules } from "../src/shared";
 
@@ -32,14 +32,8 @@ function mockChrome(overrides: Record<string, unknown> = {}) {
     onRemoved: { addListener: vi.fn() },
   };
   const action = { setIcon: vi.fn(async () => {}), setTitle: vi.fn(async () => {}) };
-  const debuggerApi = {
-    attach: vi.fn(async () => {}),
-    detach: vi.fn(async () => {}),
-    sendCommand: vi.fn(async () => {}),
-    onDetach: { addListener: vi.fn() },
-  };
-  (globalThis as Record<string, unknown>).chrome = { storage, tabs, action, debugger: debuggerApi };
-  return { storage, tabs, action, debugger: debuggerApi };
+  (globalThis as Record<string, unknown>).chrome = { storage, tabs, action };
+  return { storage, tabs, action };
 }
 
 function collectPayload() {
@@ -386,58 +380,5 @@ describe("isSupportedUrl（图标状态判定）", () => {
     expect(isSupportedUrl("https://google.com")).toBe(false);
     expect(isSupportedUrl(undefined)).toBe(false);
     expect(isSupportedUrl("not a url")).toBe(false);
-  });
-});
-
-describe("startCdpScroll / stopCdpScroll（CDP 真实滚轮驱动）", () => {
-  afterEach(() => {
-    stopCdpScroll();
-    vi.useRealTimers();
-  });
-
-  it("attach 后按间隔派发 mouseWheel（向上滚动 deltaY 为负）", async () => {
-    vi.useFakeTimers();
-    const { debugger: dbg } = mockChrome();
-    const res = await startCdpScroll(42, { x: 100, y: 200, deltaY: -36, intervalMs: 24 });
-    expect(res).toEqual({ ok: true });
-    expect(dbg.attach).toHaveBeenCalledWith({ tabId: 42 }, "1.3");
-    vi.advanceTimersByTime(48); // 两个间隔
-    expect(dbg.sendCommand).toHaveBeenCalledWith(
-      { tabId: 42 },
-      "Input.dispatchMouseEvent",
-      expect.objectContaining({ type: "mouseWheel", x: 100, y: 200, deltaY: -36 }),
-    );
-    stopCdpScroll();
-    expect(dbg.detach).toHaveBeenCalledWith({ tabId: 42 });
-  });
-
-  it("attach 失败（DevTools 已开/被占用）→ 返回错误，不派发", async () => {
-    vi.useFakeTimers();
-    const { debugger: dbg } = mockChrome();
-    dbg.attach.mockRejectedValueOnce(new Error("Another debugger is already attached"));
-    const res = await startCdpScroll(42, { x: 1, y: 1, deltaY: -36, intervalMs: 24 });
-    expect(res.ok).toBe(false);
-    vi.advanceTimersByTime(100);
-    expect(dbg.sendCommand).not.toHaveBeenCalled();
-  });
-
-  it("已运行中 → already_running；停止幂等", async () => {
-    vi.useFakeTimers();
-    mockChrome();
-    await startCdpScroll(42, { x: 1, y: 1, deltaY: -36, intervalMs: 24 });
-    const res = await startCdpScroll(43, { x: 1, y: 1, deltaY: -36, intervalMs: 24 });
-    expect(res).toEqual({ ok: false, error: "already_running" });
-    stopCdpScroll();
-    stopCdpScroll(); // 幂等不抛
-  });
-
-  it("派发失败（会话丢失：页面刷新/DevTools 打开）→ 自动停止并 detach", async () => {
-    vi.useFakeTimers();
-    const { debugger: dbg } = mockChrome();
-    await startCdpScroll(42, { x: 1, y: 1, deltaY: -36, intervalMs: 24 });
-    dbg.sendCommand.mockRejectedValueOnce(new Error("session lost"));
-    vi.advanceTimersByTime(24);
-    await Promise.resolve(); // flush catch 微任务
-    expect(dbg.detach).toHaveBeenCalledWith({ tabId: 42 });
   });
 });
