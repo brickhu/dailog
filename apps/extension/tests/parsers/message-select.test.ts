@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { renderSelects, selectedNodes, clearSelects } from "../../src/content/message-select";
+import { renderSelects, refreshSelects, selectedNodes, clearSelects } from "../../src/content/message-select";
 
 beforeEach(() => clearSelects());
 
@@ -39,5 +39,24 @@ describe("采集确认态勾选框（message-select）", () => {
     clearSelects();
     expect(document.querySelectorAll("input[type=checkbox]").length).toBe(0);
     expect(el.style.position).toBe(""); // 还原
+  });
+
+  it("refreshSelects：虚拟列表重建消息 DOM 后重建选框并保留勾选状态", () => {
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    const nodes = [{ el }];
+    renderSelects(nodes);
+    // 用户取消勾选
+    const cb = el.querySelector("input[type=checkbox]") as HTMLInputElement;
+    cb.checked = false;
+    cb.dispatchEvent(new Event("change"));
+    // 模拟虚拟列表重建消息 DOM（checkbox 被移除）
+    el.innerHTML = "";
+    expect(el.querySelector("input[type=checkbox]")).toBeNull();
+    // 定期重建
+    refreshSelects(nodes);
+    const rebuilt = el.querySelector("input[type=checkbox]") as HTMLInputElement;
+    expect(rebuilt).not.toBeNull();
+    expect(rebuilt.checked).toBe(false); // 勾选状态保留
   });
 });

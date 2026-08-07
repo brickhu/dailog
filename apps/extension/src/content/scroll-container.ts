@@ -12,6 +12,36 @@ const MESSAGE_HINTS = [
   "div[role='article']", // claude 新版消息作用域
 ].join(", ");
 
+/** 收集全部候选滚动容器（从内到外）：
+ *  1. 平台专有容器（如 deepseek .ds-scroll-area）
+ *  2. 消息祖先链中的 overflow 可滚容器
+ *  3. Virtuoso 标准 scroller 属性（claude 等）
+ *  4. 页面级滚动
+ *  受控虚拟列表可能重置单一容器的 scrollTop——sweep 对全部候选滚动，
+ *  真正的 scroller 一定在其中 */
+export function collectScrollContainers(root: ParentNode, hints?: string[]): HTMLElement[] {
+  const set = new Set<HTMLElement>();
+  // 1. 平台专有容器
+  for (const sel of hints ?? []) {
+    root.querySelectorAll(sel).forEach((el) => set.add(el as HTMLElement));
+  }
+  // 2. 消息祖先链 overflow 容器（消息内部的小容器也可能命中，靠 sweep 全滚覆盖）
+  const first = root.querySelector(MESSAGE_HINTS);
+  let el: HTMLElement | null = (first?.parentElement as HTMLElement | null) ?? null;
+  while (el) {
+    const oy = getComputedStyle(el).overflowY;
+    if (oy === "auto" || oy === "scroll") set.add(el);
+    el = el.parentElement;
+  }
+  // 3. Virtuoso 标准 scroller 属性
+  root.querySelectorAll("[data-virtuoso-scroller]").forEach((el) => set.add(el as HTMLElement));
+  // 4. 页面级滚动
+  const doc = (root as Document).ownerDocument ?? (root as Document);
+  const page = (doc.scrollingElement ?? doc.documentElement) as HTMLElement | null;
+  if (page) set.add(page);
+  return [...set];
+}
+
 /** 找消息区域的可滚动容器：在消息祖先链中选 scrollHeight 最大的 overflow 容器
  *  （真正的消息滚动区最大；消息内部的小 overflow 容器如代码块、折叠面板会被排除）。
  *  注意：虚拟列表容器 scrollHeight≈clientHeight（只渲染视口窗口），

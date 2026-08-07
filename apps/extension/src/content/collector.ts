@@ -12,6 +12,8 @@ export interface CollectContext {
   url: string;
   scroll?: {
     container: Element;
+    /** 候选滚动容器全集（受控虚拟列表可能重置单一容器——对全部滚动） */
+    containers?: HTMLElement[];
     readNodes: () => Promise<MessageNode[]>;
     waitForMutation: () => Promise<void>;
     /** 采集结束清理（如清除滚动进度高亮） */
@@ -95,16 +97,17 @@ async function collectByScroll(
   // 统一采集方式（所有平台一致）：从顶到底步进滚动扫描——
   // 虚拟列表只渲染视口窗口，滚动经过的区域才渲染；事件触发与到底稳定等待内置于 scrollSweep
   const nodes = await scrollSweep({
-    container: scroll.container as HTMLElement,
+    containers: scroll.containers ?? [scroll.container as HTMLElement],
     readNodes: scroll.readNodes,
     waitForMutation: scroll.waitForMutation,
     onNodesRead: onRead,
     settleMs: scroll.settleMs,
   });
-  // 未滚到底（步数上限耗尽）→ 可能未采全（对话过长）
-  const el = scroll.container as HTMLElement;
-  const maxTop = Math.max(0, (el.scrollHeight ?? 0) - (el.clientHeight ?? 0));
-  const incomplete = el.scrollTop < maxTop - 4;
+  // 未滚到底（步数上限耗尽）→ 可能未采全（对话过长）：任一可滚候选未到底即标记
+  const candidates = scroll.containers ?? [scroll.container as HTMLElement];
+  const incomplete = candidates.some(
+    (c) => c.scrollHeight > c.clientHeight + 4 && c.scrollTop < Math.max(0, c.scrollHeight - c.clientHeight) - 4,
+  );
   scroll.restore?.();
   if (nodes.length === 0) return null;
   const conversationId = conversationIdFromUrl(ctx.url, rule?.url?.conversationIdPattern);

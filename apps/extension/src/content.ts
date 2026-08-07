@@ -21,9 +21,9 @@ import { createFab, type FabController } from "./content/ui";
 import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback } from "./content/read-fallback";
 import { highlightNodes, clearHighlight } from "./content/highlight";
-import { findScrollContainer } from "./content/scroll-container";
+import { collectScrollContainers } from "./content/scroll-container";
 import { showCollectOverlay, hideCollectOverlay } from "./content/collect-overlay";
-import { renderSelects, selectedNodes, clearSelects } from "./content/message-select";
+import { renderSelects, refreshSelects, selectedNodes, clearSelects } from "./content/message-select";
 import type { MessageNode } from "./content/core";
 
 /** 平台消息读取：本地专有解析器优先（打印撑开/滚动下全量提取）；
@@ -43,17 +43,23 @@ async function readPlatformMessages(
 /** 滚动采集进度高亮回调（所有平台通用；幂等，重复读取无副作用） */
 const highlightProgress = (nodes: MessageNode[]): void => highlightNodes(nodes);
 
+/** 候选滚动容器（全集：专有 + 祖先链 + Virtuoso + 页面级——受控虚拟列表
+ *  可能重置单一容器 scrollTop，sweep 对全部候选滚动） */
+const scrollContainers = (hints?: string[]): HTMLElement[] => {
+  const all = collectScrollContainers(document, hints);
+  return all.length > 0 ? all : [document.scrollingElement as HTMLElement].filter(Boolean);
+};
+
 function deepSeekScroll() {
-  // 专有容器类名失效（DOM 改版）→ 泛化探测兜底（页面级滚动保底），
-  // 提取器始终用 deepseek 平台（不跨平台套用 claude 选择器）
-  const container = document.querySelector<HTMLElement>(".ds-scroll-area") ?? findScrollContainer(document);
-  if (!container) return undefined;
+  const containers = scrollContainers([".ds-scroll-area"]);
+  if (containers.length === 0) return undefined;
   return {
-    container,
+    container: containers[0],
+    containers,
     readNodes: () => readPlatformMessages("deepseek", parseDeepSeekPage),
     waitForMutation: () => waitForMutation(document.body),
     onNodesRead: highlightProgress,
-    restore: () => restoreContainer(container),
+    restore: () => restoreContainer(containers[0]),
   };
 }
 
@@ -62,17 +68,17 @@ function restoreContainer(_container: HTMLElement): void {
   clearHighlight();
 }
 
-/** claude 长对话：滚动扫描采集（统一采集方式，与其它平台一致——打印撑开会让
- *  claude 无滚动过程，体验不统一，已移除） */
+/** claude 长对话：滚动扫描采集（统一采集方式，与其它平台一致） */
 function claudeScroll() {
-  const container = findScrollContainer(document);
-  if (!container) return undefined;
+  const containers = scrollContainers();
+  if (containers.length === 0) return undefined;
   return {
-    container,
+    container: containers[0],
+    containers,
     readNodes: () => readPlatformMessages("claude", parseClaudePage),
     waitForMutation: () => waitForMutation(document.body),
     onNodesRead: highlightProgress,
-    restore: () => restoreContainer(container),
+    restore: () => restoreContainer(containers[0]),
   };
 }
 
@@ -80,14 +86,15 @@ function claudeScroll() {
  *  （本地解析器恒空 → readPlatformMessages 走规则兜底——platform 缺省按 URL 解析，
  *  滚动扫描下逐批提取完整消息） */
 function ruleOnlyScroll() {
-  const container = findScrollContainer(document);
-  if (!container) return undefined;
+  const containers = scrollContainers();
+  if (containers.length === 0) return undefined;
   return {
-    container,
+    container: containers[0],
+    containers,
     readNodes: () => readPlatformMessages(null, () => [] as MessageNode[]),
     waitForMutation: () => waitForMutation(document.body),
     onNodesRead: highlightProgress,
-    restore: () => restoreContainer(container),
+    restore: () => restoreContainer(containers[0]),
   };
 }
 
@@ -163,6 +170,8 @@ async function collectPage(): Promise<CollectedDialogue | null> {
 let confirmMode = false;
 let collectedNodes: MessageNode[] = [];
 let pendingDialogue: CollectedDialogue | null = null;
+/** 确认态勾选框重建定时器（虚拟列表渲染会回收选框） */
+let selectRefreshTimer: ReturnType<typeof setInterval> | undefined;
 
 // 模块级：FAB「已采集」状态刷新入口（initConversationFab 内赋值；
 // background 缓存变化广播时调用——立即恢复「采集对话」，无需等轮询）
@@ -208,6 +217,9 @@ function initConversationFab(): void {
           confirmMode = true;
           pendingDialogue = dialogue;
           renderSelects(collectedNodes);
+          // 虚拟列表（chatgpt 等）渲染会重建消息 DOM 导致勾选框被回收——
+          // 定期重建丢失的选框并保留勾选状态
+          selectRefreshTimer = setInterval(() => refreshSelects(collectedNodes), 1500);
           fab.setConfirm(true, () => {
             exitConfirm(fab);
             fab.showToast("已取消采集", "success");
@@ -228,6 +240,8 @@ function initConversationFab(): void {
     confirmMode = false;
     pendingDialogue = null;
     collectedNodes = [];
+    if (selectRefreshTimer) clearInterval(selectRefreshTimer);
+    selectRefreshTimer = undefined;
     clearSelects();
     fabRef.setConfirm(false);
     void updateCollectedState();

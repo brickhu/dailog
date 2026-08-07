@@ -58,8 +58,8 @@ export async function scrollCollect(opts: ScrollCollectOptions): Promise<Message
 }
 
 export interface ScrollSweepOptions {
-  /** 消息滚动容器（可滚动区域 = 消息序列 DOM 范围） */
-  container: HTMLElement;
+  /** 候选滚动容器（从内到外；对全部滚动——受控虚拟列表可能重置单一容器的 scrollTop） */
+  containers: HTMLElement[];
   readNodes: () => Promise<MessageNode[]>;
   waitForMutation: () => Promise<void>;
   /** 每轮读取到节点后的回调（滚动进度高亮等 UI 用途） */
@@ -72,7 +72,7 @@ export interface ScrollSweepOptions {
   settleMs?: number;
 }
 
-/** 等滚动位置稳定：受控虚拟列表（Virtuoso/v_list 等）异步响应 wheel 事件，
+/** 等滚动位置稳定：受控虚拟列表（Virtuoso/v_list 等）异步响应滚动，
  *  位置更新有延迟——轮询到不再变化为止 */
 async function settleScroll(el: HTMLElement, settleMs: number): Promise<void> {
   for (let i = 0; i < 10; i++) {
@@ -85,16 +85,16 @@ async function settleScroll(el: HTMLElement, settleMs: number): Promise<void> {
 /**
  * 从顶到底步进滚动采集（虚拟列表——只渲染视口窗口，中间段必须被滚动
  * 经过才渲染）。策略（用户定义的滚动条用法）：
- * 1. 容器 = 消息滚动区（findScrollContainer 已排除不滚动容器）
- * 2. 双通道滚动：scrollTop 直接赋值（非受控容器生效）+ wheel 事件
- *    （受控虚拟列表如 Virtuoso 会重置 scrollTop 赋值、只响应 wheel——
- *    合成 wheel 的默认滚动被禁用，但受控列表自己处理事件不检查 isTrusted）
- * 3. 先滚到顶（wheel 上滚循环——受控列表 scrollTop=0 赋值无效）
+ * 1. 候选容器 = 消息滚动区全集（平台专有 + 消息祖先链 overflow + Virtuoso
+ *    scroller + 页面级）——对全部候选滚动，真正的 scroller 一定在其中
+ * 2. 双通道：scrollTop 直接赋值 + wheel 事件（合成 wheel 默认滚动被禁，
+ *    但部分受控列表自行处理事件）
+ * 3. 先滚到顶（循环上滚直到全部候选 scrollTop=0）
  * 4. 每次滚一屏，经过的区域触发虚拟列表渲染；每步读节点去重合并进内存
- * 5. 到底后等待渲染稳定（懒加载分批插入）：连续 settleRounds 轮无新增停止
+ * 5. 全部可滚候选到底后等待渲染稳定：连续 settleRounds 轮无新增停止
  */
 export async function scrollSweep(opts: ScrollSweepOptions): Promise<MessageNode[]> {
-  const { container, readNodes, waitForMutation, onNodesRead, maxSteps = 300, settleRounds = 2, settleMs = 50 } = opts;
+  const { containers, readNodes, waitForMutation, onNodesRead, maxSteps = 300, settleRounds = 2, settleMs = 50 } = opts;
   const acc: MessageNode[] = [];
   const merge = (nodes: MessageNode[]): void => {
     for (const n of nodes) {
@@ -103,31 +103,35 @@ export async function scrollSweep(opts: ScrollSweepOptions): Promise<MessageNode
       else acc.push(n);
     }
   };
-  const viewport = Math.max(container.clientHeight, 400);
-  /** 双通道滚动一屏：直接赋值 + wheel 事件（受控/非受控容器都覆盖），
-   *  然后等位置稳定（受控列表异步响应） */
+  const viewport = Math.max(containers[0]?.clientHeight ?? 0, 400);
+  const scrollables = (): HTMLElement[] => containers.filter((c) => c.scrollHeight > c.clientHeight + 4);
+  const maxTopOf = (c: HTMLElement): number => Math.max(0, c.scrollHeight - c.clientHeight);
+  /** 双通道滚动：对全部候选 scrollTop 赋值 + wheel 事件（受控/非受控都覆盖），
+   *  然后等位置稳定 */
   const scrollBy = async (deltaY: number): Promise<void> => {
-    container.scrollTop += deltaY;
-    try {
-      container.dispatchEvent(new WheelEvent("wheel", { deltaY, bubbles: true, cancelable: true }));
-    } catch {
-      // 无 dispatchEvent 的环境（测试 mock 容器）静默
+    for (const c of containers) {
+      c.scrollTop += deltaY;
+      try {
+        c.dispatchEvent(new WheelEvent("wheel", { deltaY, bubbles: true, cancelable: true }));
+      } catch {
+        // 无 dispatchEvent 的环境（测试 mock 容器）静默
+      }
     }
-    await settleScroll(container, settleMs);
+    await settleScroll(containers[0], settleMs);
   };
-  // 到顶：受控列表 scrollTop=0 赋值会被框架重置——wheel 上滚循环（大步）直到顶部
-  for (let i = 0; i < 30 && container.scrollTop > 0; i++) {
+  // 到顶：受控列表 scrollTop=0 赋值可能被框架重置——循环上滚直到全部候选到顶
+  for (let i = 0; i < 30 && scrollables().some((c) => c.scrollTop > 0); i++) {
     await scrollBy(-viewport * 2);
   }
-  container.scrollTop = 0;
+  for (const c of containers) c.scrollTop = 0;
   let stable = 0;
   for (let step = 0; step < maxSteps; step++) {
     const before = acc.length;
     const read = await readNodes();
     onNodesRead?.(read); // 进度高亮（幂等）
     merge(read);
-    const maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
-    const atBottom = container.scrollTop >= maxTop - 4;
+    const sc = scrollables();
+    const atBottom = sc.length === 0 || sc.every((c) => c.scrollTop >= maxTopOf(c) - 4);
     if (atBottom && acc.length === before) {
       stable += 1;
       if (stable >= settleRounds) break; // 到底且无新增：采集完成
@@ -135,7 +139,7 @@ export async function scrollSweep(opts: ScrollSweepOptions): Promise<MessageNode
       stable = 0; // 到底但仍有新增（懒加载分批渲染中）：继续等待
     } else {
       stable = 0;
-      await scrollBy(Math.min(maxTop - container.scrollTop, viewport));
+      await scrollBy(viewport);
     }
     await waitForMutation();
   }

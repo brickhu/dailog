@@ -74,6 +74,8 @@ describe("collectByScroll（统一滚动扫描采集）", () => {
   it("滚动扫描补发 wheel/scroll 事件（覆盖监听事件才懒加载的虚拟列表）", async () => {
     const container = document.createElement("div");
     container.scrollTop = 500; // 模拟从中间开始（触发到顶滚动）
+    Object.defineProperty(container, "scrollHeight", { value: 3000, configurable: true });
+    Object.defineProperty(container, "clientHeight", { value: 800, configurable: true });
     const wheelSpy = vi.fn();
     const scrollSpy = vi.fn();
     container.addEventListener("wheel", wheelSpy);
