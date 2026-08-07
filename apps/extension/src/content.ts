@@ -251,7 +251,6 @@ function initConversationFab(): void {
         void updateCollectedState();
         return;
       }
-      if (dialogue.duplicatesRemoved) fab.showToast(`已去除 ${dialogue.duplicatesRemoved} 条重复内容`, "success");
       confirmMode = true;
       pendingDialogue = dialogue;
       fab.setConfirm(true, dialogue.messages.length, () => {

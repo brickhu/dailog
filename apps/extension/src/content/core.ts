@@ -24,7 +24,9 @@ export function dedupeSort(nodes: MessageNode[]): MessageNode[] {
 /** 步进截取合并（自下而上）：新节点一律位于已采内容上方 → 前插；
  *  同 id 替换（最新读数覆盖旧内容/位置）。最终顺序 = 对话顺序（顶 → 底）。
  *  不可靠的序号派生 id（rule-/gen-N——虚拟列表窗口下标会变，同一条消息在
- *  不同窗口的序号不同）→ 按 (role + content) 内容键合并，跨窗口才能累积 */
+ *  不同窗口的序号不同）→ 按 (role + content) 内容键合并，跨窗口才能累积。
+ *  降级保护（"变绿就要获取"）：新内容为旧内容的严格前缀（骨架/截断重渲染）
+ *  → 保留更完整的旧内容，不丢已捕获信息 */
 export function mergeMessageNodes(acc: MessageNode[], nodes: MessageNode[]): void {
   const prepend: MessageNode[] = [];
   for (const n of nodes) {
@@ -32,8 +34,13 @@ export function mergeMessageNodes(acc: MessageNode[], nodes: MessageNode[]): voi
     const idx = seq
       ? acc.findIndex((x) => /^(rule|gen)-\d+$/.test(x.id) && x.role === n.role && x.content === n.content)
       : acc.findIndex((x) => x.id === n.id);
-    if (idx >= 0) acc[idx] = n;
-    else prepend.push(n);
+    if (idx >= 0) {
+      const old = acc[idx].content;
+      if (old.length > n.content.length && old.startsWith(n.content)) continue; // 截断降级 → 保留完整版
+      acc[idx] = n;
+    } else {
+      prepend.push(n);
+    }
   }
   if (prepend.length > 0) acc.unshift(...prepend);
 }

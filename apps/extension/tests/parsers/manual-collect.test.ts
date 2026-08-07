@@ -49,6 +49,15 @@ describe("mergeMessageNodes（步进截取合并：自下而上，新节点前�
     mergeMessageNodes(acc, [mk("m3", 200, "user", "继续")]); // 相同内容、不同 id
     expect(acc.length).toBe(3);
   });
+
+  it("降级保护：新内容为旧内容严格前缀（骨架/截断重渲染）→ 保留更完整的旧内容", () => {
+    const acc: MessageNode[] = [mk("m1", 0, "user", "完整的长内容 ABCDEF")];
+    mergeMessageNodes(acc, [mk("m1", 0, "user", "完整的长内容 AB")]); // 截断中间态
+    expect(acc[0].content).toBe("完整的长内容 ABCDEF");
+    // 正常内容更新（变长/不同）仍替换
+    mergeMessageNodes(acc, [mk("m1", 0, "user", "更新后的完整内容")]);
+    expect(acc[0].content).toBe("更新后的完整内容");
+  });
 });
 
 describe("messageText（渲染文本 = 用户全选该消息所见）", () => {
@@ -92,27 +101,18 @@ describe("buildManualDialogue（手动采集对话组装）", () => {
     expect(await buildManualDialogue({ ...ctx, url: "https://example.com/a/b" }, [mk("m1", 0, "user", "你好")])).toBeNull();
   });
 
-  it("序列 id（rule-）同内容去重 → duplicatesRemoved，稳定 id 重复内容保留", async () => {
-    // doubao 场景：用户重复问「继续」是合法内容，稳定 id（data-message-id）必须保留
-    const stable = [
-      mk("m1", 0, "user", "继续"),
-      mk("m2", 100, "assistant", "好的"),
-      mk("m3", 200, "user", "继续"),
-      mk("m4", 300, "assistant", "好的"),
-    ];
-    const d1 = await buildManualDialogue(ctx, stable);
-    expect(d1?.messages.map((m) => m.content)).toEqual(["继续", "好的", "继续", "好的"]);
-    expect(d1?.duplicatesRemoved).toBeUndefined();
-    // 规则兜底（rule-N 序列 id）：虚拟列表不同窗口下标变化 → 同内容跨窗口重复，需去重
+  it("序列 id（rule-）内容相同：组装层不丢弃（合并层已按内容键去重，合法重复保留）", async () => {
+    // 规则兜底路径：两条内容相同但确实是不同消息（如连续相同的追问）——
+    // 变绿过的内容必须保留，不按内容去重
     const seq = [
-      mk("rule-0", 0, "user", "q1"),
-      mk("rule-1", 100, "assistant", "a1"),
-      mk("rule-0", 0, "user", "q1"),
-      mk("rule-2", 200, "assistant", "a1"),
+      mk("rule-0", 0, "user", "继续"),
+      mk("rule-1", 100, "assistant", "好的"),
+      mk("rule-2", 200, "user", "继续"),
+      mk("rule-3", 300, "assistant", "好的"),
     ];
-    const d2 = await buildManualDialogue(ctx, seq);
-    expect(d2?.messages.map((m) => m.content)).toEqual(["q1", "a1"]);
-    expect(d2?.duplicatesRemoved).toBe(2);
+    const d = await buildManualDialogue(ctx, seq);
+    expect(d?.messages.map((m) => m.content)).toEqual(["继续", "好的", "继续", "好的"]);
+    expect(d?.duplicatesRemoved).toBeUndefined();
   });
 
   it("getRules 提供的规则 conversationIdPattern 生效", async () => {

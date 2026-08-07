@@ -70,8 +70,9 @@ async function collectByRemoteRule(
 
 /** 手动采集组装（用户滚动驱动渲染，节点由 content.ts 轮询累积传入）：
  *  platform 解析 + conversationId（含规则 pattern）+ title。
- *  去重仅针对不可靠的序列 id 节点（rule-/gen- 序号派生——同一消息在虚拟列表
- *  不同窗口下标会变），稳定 id（data-message-id / 内容哈希）保留合法重复内容；
+ *  不丢弃任何已捕获内容（"变绿就要获取"）：重复合并由 mergeMessageNodes 在
+ *  采集层完成（序列 id 按内容键、稳定 id 按 id），组装层原样保留——
+ *  内容相同但确实是不同消息（如连续相同的追问）不会被误删；
  *  缺助手回复（选择器失效）→ null */
 export async function buildManualDialogue(
   ctx: { root: ParentNode; url: string; getRules?: () => Promise<CollectRules | null> },
@@ -81,21 +82,8 @@ export async function buildManualDialogue(
   const rules = (await ctx.getRules?.()) ?? null;
   const platform = resolvePlatform(rules, ctx.url);
   if (!platform) return null;
-  const seen = new Set<string>();
-  let removed = 0;
-  const kept: MessageNode[] = [];
-  for (const n of nodes) {
-    const seq = /^(rule|gen)-\d+$/.test(n.id);
-    const k = `${n.role}\u0000${n.content}`;
-    if (seq && seen.has(k)) {
-      removed += 1;
-      continue;
-    }
-    if (seq) seen.add(k);
-    kept.push(n);
-  }
-  if (!kept.some((m) => m.role === "assistant")) return null;
-  const messages = kept.map(({ role, content }) => ({ role, content }));
+  if (!nodes.some((m) => m.role === "assistant")) return null;
+  const messages = nodes.map(({ role, content }) => ({ role, content }));
   const conversationId = conversationIdFromUrl(ctx.url, rules?.platforms?.[platform]?.url?.conversationIdPattern);
   if (!conversationId) return null;
   const title = extractTitle(ctx.root, messages);
@@ -105,7 +93,6 @@ export async function buildManualDialogue(
     title,
     url: ctx.url,
     messages,
-    ...(removed > 0 ? { duplicatesRemoved: removed } : {}),
   };
 }
 
