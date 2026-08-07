@@ -90,6 +90,56 @@ describe("collectFromDocument（远程规则 fallback）", () => {
     expect(d?.lowConfidence).toBe(true);
     expect(d?.messages[0].content).toBe("q");
   });
+
+  it("内容去重：滚动采集重复读到的消息只保留一条并计数", async () => {
+    document.body.innerHTML = `
+      <div data-message-author-role="user"><p>q1</p></div>
+      <div data-message-author-role="assistant"><div class="markdown">a1</div></div>
+      <div data-message-author-role="user"><p>q1</p></div>
+      <div data-message-author-role="assistant"><div class="markdown">a2</div></div>
+    `;
+    const rules: CollectRules = {
+      version: 7,
+      platforms: {
+        chatgpt: {
+          userSelector: "[data-message-author-role='user']",
+          assistantSelector: "[data-message-author-role='assistant']",
+          contentSelector: ".markdown",
+        },
+      },
+    };
+    const d = await collectFromDocument({
+      root: document,
+      url: "https://chatgpt.com/c/abc",
+      getRules: async () => rules,
+    });
+    expect(d?.duplicatesRemoved).toBe(1);
+    expect(d?.messages.map((m) => m.content)).toEqual(["q1", "a1", "a2"]);
+  });
+
+  it("无重复内容 → duplicatesRemoved 不设置", async () => {
+    document.body.innerHTML = `
+      <div data-message-author-role="user"><p>q1</p></div>
+      <div data-message-author-role="assistant"><div class="markdown">a1</div></div>
+    `;
+    const rules: CollectRules = {
+      version: 7,
+      platforms: {
+        chatgpt: {
+          userSelector: "[data-message-author-role='user']",
+          assistantSelector: "[data-message-author-role='assistant']",
+          contentSelector: ".markdown",
+        },
+      },
+    };
+    const d = await collectFromDocument({
+      root: document,
+      url: "https://chatgpt.com/c/abc",
+      getRules: async () => rules,
+    });
+    expect(d?.duplicatesRemoved).toBeUndefined();
+    expect(d?.messages.length).toBe(2);
+  });
 });
 
 describe("resolvePlatform（URL 规则数据化分发）", () => {

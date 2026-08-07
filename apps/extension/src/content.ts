@@ -21,6 +21,7 @@ import { createFab, type FabController } from "./content/ui";
 import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback } from "./content/read-fallback";
 import { highlightNodes, clearHighlight } from "./content/highlight";
+import { showCollectOverlay, hideCollectOverlay } from "./content/collect-overlay";
 import { runCollectFlow } from "./content/collect-flow";
 import { applyPrintCss } from "./content/print-css";
 import type { MessageNode } from "./content/core";
@@ -202,17 +203,32 @@ function initConversationFab(): void {
   const fab: FabController = createFab({
     onClick: () => {
       fab.setBusy(true);
+      // 整页蒙层：禁用鼠标点击/滚动，防止用户操作干扰滚动扫描
+      showCollectOverlay();
       // 采集 → 本地缓存（background 自动打开确认入库页；同会话重采集自动替换旧条目）。
       // 不校验登录/频道——鉴权是 app 的 auth provider 在入库时的事
       void runCollectFlow({
-        collect: collectPage,
+        collect: async () => {
+          const dialogue = await collectPage();
+          // 采集完成校验提示：重复内容已去重 / 滚动未到底可能未采全
+          if (dialogue?.duplicatesRemoved) {
+            fab.showToast(`已去除 ${dialogue.duplicatesRemoved} 条重复内容`, "success");
+          }
+          if (dialogue?.incomplete) {
+            fab.showToast("对话过长可能未采全，建议分次采集", "error");
+          }
+          return dialogue;
+        },
         cache: async (dialogue) =>
           (await chrome.runtime.sendMessage({
             type: MSG_CACHE_COLLECT,
             dialogue,
           })) as CacheCollectResult,
         onResult: (text, kind) => fab.showToast(text, kind),
-      }).finally(() => fab.setBusy(false));
+      }).finally(() => {
+        fab.setBusy(false);
+        hideCollectOverlay();
+      });
     },
   });
 

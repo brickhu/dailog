@@ -146,4 +146,23 @@ describe("collectByScroll（打印式撑开优先 / 滚动保底）", () => {
     });
     expect(d?.messages.map((m) => m.content)).toEqual(["q1", "a1", "q2", "a2", "q3", "a3", "q4", "a4", "q5", "a5"]);
   });
+
+  it("滚动未到底（对话超长）→ incomplete 标记", async () => {
+    // scrollHeight 远大于 100 步 × 一屏：步数上限耗尽仍未到底
+    const container = { scrollTop: 0, clientHeight: 800, scrollHeight: 1_000_000 } as unknown as Element;
+    const scroll = {
+      container,
+      readNodes: async (): Promise<MessageNode[]> => nodes(["q1", "a1"]),
+      waitForMutation: async () => {},
+      expand: undefined,
+      restore: () => {},
+    };
+    const d = await collectFromDocument({
+      root: document,
+      url: "https://chatgpt.com/c/abc-123",
+      scroll,
+    });
+    expect(d?.incomplete).toBe(true);
+    expect(d?.messages.map((m) => m.content)).toEqual(["q1", "a1"]);
+  });
 });

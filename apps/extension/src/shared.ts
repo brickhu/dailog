@@ -17,6 +17,10 @@ export interface CollectedDialogue {
   messages: DialogueMessage[];
   /** 低置信度采集：结构化解析失败后的整页文本兜底（可能含导航等噪音；确认页提示） */
   lowConfidence?: boolean;
+  /** 内容去重去除的重复消息条数（虚拟列表滚动采集可能重复读到同一消息） */
+  duplicatesRemoved?: number;
+  /** 滚动采集未到底（对话过长超出步数上限）——可能未采全，提示用户 */
+  incomplete?: boolean;
 }
 
 export const PLATFORMS: readonly Platform[] = [

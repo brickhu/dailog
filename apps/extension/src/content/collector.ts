@@ -1,4 +1,4 @@
-import type { CollectedDialogue, CollectRule, CollectRules, Platform } from "../shared";
+import type { CollectedDialogue, CollectRule, CollectRules, DialogueMessage, Platform } from "../shared";
 import { collectClaude } from "./claude";
 import { collectDeepSeek } from "./deepseek";
 import { scrollCollect, scrollSweep, dedupeSort, type MessageNode } from "./core";
@@ -80,6 +80,7 @@ async function collectByScroll(
 ): Promise<CollectedDialogue | null> {
   const scroll = ctx.scroll!;
   let expanded = false;
+  let incomplete = false;
   if (scroll.expand) {
     expanded = await scroll.expand();
     if (!expanded) scroll.restore?.(); // 撑开无效：还原样式，滚动循环才有意义
@@ -108,6 +109,10 @@ async function collectByScroll(
       waitForMutation: scroll.waitForMutation,
       onNodesRead: onRead,
     });
+    // 未滚到底（步数上限耗尽）→ 可能未采全（对话过长）
+    const el = scroll.container as HTMLElement;
+    const maxTop = Math.max(0, (el.scrollHeight ?? 0) - (el.clientHeight ?? 0));
+    if (el.scrollTop < maxTop - 4) incomplete = true;
   }
   scroll.restore?.();
   if (nodes.length === 0) return null;
@@ -115,7 +120,7 @@ async function collectByScroll(
   if (!conversationId) return null;
   const messages = nodes.map(({ role, content }) => ({ role, content }));
   const title = extractTitle(ctx.root, messages);
-  return { platform, conversationId, title, url: ctx.url, messages };
+  return { platform, conversationId, title, url: ctx.url, messages, ...(incomplete ? { incomplete: true } : {}) };
 }
 
 /** 最终兜底：整页文本采集（结构化解析 + 远程规则全失败时；低置信度由确认页提示） */
@@ -163,5 +168,21 @@ export async function collectFromDocument(ctx: CollectContext): Promise<Collecte
   }
   // 完整性校验：正常对话必有助手回复；全 user 说明结构化解析漏了（选择器失效/规则不全）
   if (d && !d.messages.some((m) => m.role === "assistant")) d = null;
+  if (d) {
+    // 内容去重：虚拟列表滚动采集可能重复读到同一消息（同 role + 同 content）——
+    // 去重并记录数量（content 侧 toast 提示）
+    const seen = new Set<string>();
+    let removed = 0;
+    const messages: DialogueMessage[] = [];
+    for (const m of d.messages) {
+      const k = `${m.role}\u0000${m.content}`;
+      if (seen.has(k)) removed += 1;
+      else {
+        seen.add(k);
+        messages.push(m);
+      }
+    }
+    if (removed > 0) d = { ...d, messages, duplicatesRemoved: removed };
+  }
   return d ?? collectPageText(ctx, platform);
 }
