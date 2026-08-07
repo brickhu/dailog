@@ -20,10 +20,9 @@ import { parseDoubaoPage } from "./content/doubao";
 import { createFab, type FabController } from "./content/ui";
 import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback, applyRuleMerge } from "./content/read-fallback";
-import { showCollectMask, hideCollectMask, updateMaskCount, setMaskStatus, setMaskDone } from "./content/collect-mask";
-import { createSweepCapture, type SweepCapture } from "./content/sweep-capture";
+import { showCollectHint, hideCollectHint } from "./content/collect-hint";
 import { highlightNodes, clearHighlight } from "./content/highlight";
-import type { MessageNode } from "./content/core";
+import { mergeMessageNodes, type MessageNode } from "./content/core";
 
 /** 平台消息读取：本地专有解析器优先（用户滚动驱动渲染，轮询读当前渲染出的消息）；
  *  本地为空（站点 DOM 改版）→ 远程规则选择器兜底；本地缺助手回复（claude 旧
@@ -103,11 +102,13 @@ async function collectPage(): Promise<CollectedDialogue | null> {
   return collectFromDocument({ root: document, url: location.href, getRules });
 }
 
-// 自动步进截取采集状态（蒙层接管页面滚动，从底部自动逐屏向上截取）：
-// 采集态（capturing）→ 蒙层「取消/计数」；自动完成 → 蒙层「完成」→ 确认态（confirmMode）
-let capturing = false;
-let sweepSession: SweepCapture | undefined;
-let captureUrl = "";
+// 监测采集状态（用户滚动驱动渲染，扩展只做观察——轮询读当前渲染出的消息并暂存）：
+// 采集态（monitoring）→ FAB「完成 (N)」+ 放弃；完成 → 确认态（confirmMode）
+let monitoring = false;
+let monitorNodes: MessageNode[] = [];
+let monitorIv: ReturnType<typeof setInterval> | undefined;
+let monitorUrl = "";
+let monitorReadNodes: (() => Promise<MessageNode[]>) | undefined;
 let confirmMode = false;
 let pendingDialogue: CollectedDialogue | null = null;
 
@@ -118,13 +119,17 @@ let refreshCollectedState: (() => void) | undefined;
 function initConversationFab(): void {
   const fab: FabController = createFab({
     onClick: () => {
-      if (capturing) return; // 蒙层接管中（FAB 已隐藏）——防御
+      if (monitoring) {
+        // 监测中点击 FAB = 完成采集（进入确认态）
+        void finishMonitorCollect();
+        return;
+      }
       if (confirmMode) {
         // 确认态点 FAB = 确认导入（放弃走 FAB 上方「放弃」小按钮）
         void confirmImport();
         return;
       }
-      startSweepCapture();
+      startMonitorCollect();
     },
   });
 
@@ -140,60 +145,88 @@ function initConversationFab(): void {
     );
   }
 
-  /** 开始自动截取：蒙层接管，从底部逐屏向上自动采集（高亮反馈已截取消息） */
-  function startSweepCapture(): void {
+  /** 开始监测采集：滚动锁定到底部 → 非阻断提示条 + FAB「完成 (N)」+ 立即读一次 + 轮询暂存 */
+  function startMonitorCollect(): void {
     const readNodes = pageReadNodes();
     if (!readNodes) {
       fab.showToast("未识别到对话内容，请确认当前是对话页", "error");
       return;
     }
-    capturing = true;
-    captureUrl = location.href;
-    fab.setVisible(false); // 蒙层全权接管
-    showCollectMask({
-      onCancel: () => cancelSweepCapture(),
-      onDone: () => void finishSweepCapture(),
+    monitoring = true;
+    monitorNodes = [];
+    monitorUrl = location.href;
+    monitorReadNodes = readNodes;
+    showCollectHint();
+    fab.setCollecting(0, { onAbandon: () => cancelMonitorCollect() });
+    fab.showToast("已开始采集：请向上滚动浏览完整对话", "success");
+    // 滚动锁定到底部（虚拟列表初始即底部；全文渲染页面滚到最新消息）
+    void readNodes().then((init) => {
+      const last = init[init.length - 1]?.el;
+      if (last) {
+        try {
+          last.scrollIntoView({ block: "end", behavior: "instant" as ScrollBehavior });
+        } catch {
+          try {
+            last.scrollIntoView();
+          } catch {
+            // 无 scrollIntoView 环境静默
+          }
+        }
+      }
     });
-    sweepSession = createSweepCapture({
-      readNodes,
-      onProgress: (n) => updateMaskCount(n),
-      onWindow: (nodes) => highlightNodes(nodes),
-    });
-    void sweepSession
-      .run()
-      .then((r) => {
-        if (!sweepSession) return; // 已被取消
-        setMaskDone();
-        if (r.status === "stuck") setMaskStatus("滚动被页面拦截，可能未采全——请核对条数后完成");
-      })
-      .catch(() => cancelSweepCapture());
+    void tickMonitor();
+    monitorIv = setInterval(() => void tickMonitor(), 300);
   }
 
-  /** 取消采集：中止自动扫描，清理蒙层与状态，FAB 恢复 */
-  function cancelSweepCapture(): void {
-    sweepSession?.abort();
-    sweepSession = undefined;
-    capturing = false;
-    hideCollectMask();
+  /** 单轮读取：读当前渲染出的消息 → 暂存合并 → 高亮 → 更新 FAB 计数 */
+  async function tickMonitor(): Promise<void> {
+    if (!monitoring || !monitorReadNodes) return;
+    if (location.href !== monitorUrl) {
+      // SPA 导航跳走：自动取消本次采集
+      cancelMonitorCollect();
+      return;
+    }
+    if (document.hidden) return; // 后台标签页跳过（回来继续）
+    try {
+      const nodes = await monitorReadNodes();
+      if (!monitoring) return; // await 期间被放弃/完成
+      const before = monitorNodes.length;
+      mergeMessageNodes(monitorNodes, nodes);
+      highlightNodes(nodes); // 当前渲染消息高亮（幂等）
+      if (monitorNodes.length !== before) fab.updateCollectCount(monitorNodes.length);
+    } catch {
+      // 单轮读取失败忽略，下一轮重试
+    }
+  }
+
+  /** 放弃采集（放弃按钮 / SPA 跳走）：清理状态与 UI */
+  function cancelMonitorCollect(): void {
+    stopMonitorLoop();
+    monitoring = false;
+    hideCollectHint();
     clearHighlight();
-    fab.setVisible(true);
     fab.showToast("已取消采集", "success");
     void updateCollectedState();
   }
 
-  /** 完成：组装对话 → 进入确认态（FAB「确认导入 (N)」+ 放弃） */
-  async function finishSweepCapture(): Promise<void> {
-    const session = sweepSession;
-    if (!session) return;
-    sweepSession = undefined;
-    capturing = false;
-    hideCollectMask();
+  function stopMonitorLoop(): void {
+    if (monitorIv) {
+      clearInterval(monitorIv);
+      monitorIv = undefined;
+    }
+  }
+
+  /** 完成采集：组装对话 → 进入确认态（FAB「确认导入 (N)」+ 放弃） */
+  async function finishMonitorCollect(): Promise<void> {
+    stopMonitorLoop();
+    monitoring = false;
+    hideCollectHint();
     clearHighlight();
-    fab.setVisible(true);
+    const nodes = monitorNodes;
     try {
-      const dialogue = await buildManualDialogue({ root: document, url: location.href, getRules }, session.nodes());
+      const dialogue = await buildManualDialogue({ root: document, url: location.href, getRules }, nodes);
       if (!dialogue) {
-        fab.showToast("未识别到对话内容，请确认当前是对话页", "error");
+        fab.showToast("未识别到对话内容，请确认已滚动浏览完整对话", "error");
         void updateCollectedState();
         return;
       }
@@ -229,9 +262,9 @@ function initConversationFab(): void {
   }
 
   /** 当前对话是否已在缓存中 → 按钮切「已采集 ↻」（跨标签页采集也靠轮询感知）；
-   *  采集/确认进行中不刷新（避免打断蒙层/FAB 确认态） */
+   *  采集/确认进行中不刷新（避免打断 FAB 采集态/确认态） */
   async function updateCollectedState(): Promise<void> {
-    if (capturing || confirmMode) return;
+    if (monitoring || confirmMode) return;
     const key = conversationKey(location.href);
     fab.setCollected((await listPending()).some((i) => conversationKey(i.url) === key));
   }
@@ -239,17 +272,17 @@ function initConversationFab(): void {
 
   // 对话页判定通用化（URL 启发式 + DOM 对话框兜底）——完全同步，不依赖远程规则；
   // SPA 导航后 watchUrl 轮询重判（DOM 已更新，对话框检测随之生效）。
-  // 采集/确认进行中不隐藏（蒙层/FAB 确认导入必须可用）
+  // 采集/确认进行中不隐藏（「完成/确认导入」按钮必须可用）
   const applyVisibility = (url: string) => {
-    if (!capturing && !confirmMode) fab.setVisible(isConversationPage(url, document));
+    if (!monitoring && !confirmMode) fab.setVisible(isConversationPage(url, document));
   };
   applyVisibility(location.href);
 
   // 非对话页（首页等）隐藏按钮；SPA 导航进入对话页后自动显示
   void updateCollectedState();
   watchUrl((url) => {
-    // 采集进行中 SPA 跳走 → 自动取消（蒙层不能让用户卡在别的页面）
-    if (capturing && url !== captureUrl) cancelSweepCapture();
+    // 监测采集进行中 SPA 跳走 → 自动取消（tickMonitor 也会兜底检测）
+    if (monitoring && url !== monitorUrl) cancelMonitorCollect();
     applyVisibility(url);
     void updateCollectedState();
   });

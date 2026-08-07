@@ -6,6 +6,10 @@ export interface FabController {
   setVisible(visible: boolean): void;
   /** 当前对话已采集过：按钮切「已采集 ↻」（刷新图标，点击重采集替换旧条目） */
   setCollected(collected: boolean): void;
+  /** 监测采集态：FAB 变「完成 (N)」+ 放弃小按钮（用户滚动浏览对话，轮询暂存） */
+  setCollecting(count: number, opts: { onAbandon: () => void }): void;
+  /** 监测采集进行中实时更新条数（不切换状态） */
+  updateCollectCount(count: number): void;
   /** 确认态：FAB 变「确认导入 (N)」+ 放弃小按钮（点击 FAB = 确认入库） */
   setConfirm(on: boolean, count: number, onAbandon?: () => void): void;
   showToast(text: string, kind: "success" | "error"): void;
@@ -27,6 +31,7 @@ button.fab:active { transform: translateY(0); }
 button.fab:disabled { opacity: 0.6; cursor: wait; }
 button.fab .dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; }
 button.fab.busy .dot { background: #fbbf24; animation: pulse 1s infinite; }
+button.fab.collecting .dot { animation: pulse 1.2s infinite; }
 button.fab.confirm { background: #16a34a; }
 button.fab.confirm .check { font-size: 14px; line-height: 1; }
 button.fab.collected { background: #334155; }
@@ -82,25 +87,37 @@ export function createFab(opts: { onClick: () => void }): FabController {
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   let busy = false;
   let collected = false;
-  let confirm = false;
+  let phase: "idle" | "collecting" | "confirm" = "idle";
   let count = 0;
 
   function render() {
     const label = busy
       ? "采集中…"
-      : confirm
-        ? `确认导入 (${count})`
-        : collected
-          ? "已采集"
-          : "采集对话";
+      : phase === "collecting"
+        ? `完成 (${count})`
+        : phase === "confirm"
+          ? `确认导入 (${count})`
+          : collected
+            ? "已采集"
+            : "采集对话";
     const icon = busy
       ? '<span class="dot"></span>'
-      : confirm
-        ? '<span class="check">✓</span>'
-        : collected
-          ? '<span class="refresh">↻</span>'
-          : '<span class="dot"></span>';
+      : phase === "collecting"
+        ? '<span class="dot"></span>'
+        : phase === "confirm"
+          ? '<span class="check">✓</span>'
+          : collected
+            ? '<span class="refresh">↻</span>'
+            : '<span class="dot"></span>';
     fab.innerHTML = `${icon}<span>${label}</span>`;
+  }
+
+  /** 回到默认态（采集/确认结束、被 setCollected 等触发） */
+  function resetInteractive(): void {
+    phase = "idle";
+    count = 0;
+    abandon.hidden = true;
+    fab.classList.remove("collecting", "confirm");
   }
 
   render();
@@ -116,21 +133,36 @@ export function createFab(opts: { onClick: () => void }): FabController {
       wrap.style.display = visible ? "" : "none";
     },
     setCollected(c: boolean) {
-      confirm = false;
-      count = 0;
-      abandon.hidden = true;
-      fab.classList.remove("confirm");
+      if (!busy) resetInteractive();
       collected = c;
       fab.classList.toggle("collected", c);
       render();
     },
-    setConfirm(on, n, onAbandon) {
-      confirm = on;
+    setCollecting(n, { onAbandon }) {
+      resetInteractive();
+      phase = "collecting";
       count = n;
-      fab.classList.toggle("confirm", on);
-      fab.classList.toggle("collected", on ? false : collected);
-      abandon.hidden = !on;
-      abandon.onclick = on && onAbandon ? () => onAbandon() : null;
+      abandon.hidden = false;
+      abandon.onclick = () => onAbandon();
+      fab.classList.add("collecting");
+      render();
+    },
+    updateCollectCount(n) {
+      if (phase === "collecting" || phase === "confirm") {
+        count = n;
+        render();
+      }
+    },
+    setConfirm(on, n, onAbandon) {
+      if (on) {
+        phase = "confirm";
+        count = n;
+        abandon.hidden = false;
+        abandon.onclick = onAbandon ? () => onAbandon() : null;
+        fab.classList.add("confirm");
+      } else {
+        resetInteractive();
+      }
       render();
     },
     showToast(text, kind) {
