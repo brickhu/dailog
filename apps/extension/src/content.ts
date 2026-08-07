@@ -21,6 +21,7 @@ import { createFab, type FabController } from "./content/ui";
 import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback } from "./content/read-fallback";
 import { highlightNodes, clearHighlight } from "./content/highlight";
+import { findScrollContainer } from "./content/scroll-container";
 import { showCollectOverlay, hideCollectOverlay } from "./content/collect-overlay";
 import { renderSelects, selectedNodes, clearSelects } from "./content/message-select";
 import type { MessageNode } from "./content/core";
@@ -45,7 +46,7 @@ const highlightProgress = (nodes: MessageNode[]): void => highlightNodes(nodes);
 function deepSeekScroll() {
   // 专有容器类名失效（DOM 改版）→ 泛化探测兜底（页面级滚动保底），
   // 提取器始终用 deepseek 平台（不跨平台套用 claude 选择器）
-  const container = document.querySelector<HTMLElement>(".ds-scroll-area") ?? findScrollContainer();
+  const container = document.querySelector<HTMLElement>(".ds-scroll-area") ?? findScrollContainer(document);
   if (!container) return undefined;
   return {
     container,
@@ -56,24 +57,6 @@ function deepSeekScroll() {
   };
 }
 
-/** 找消息区域向上第一个可滚动容器（泛化：任一平台消息标记起步；
- *  无固定容器类名时探测。claude/chatgpt 长对话滚动加载历史用）。
- *  注意：虚拟列表容器 scrollHeight≈clientHeight（只渲染视口窗口），
- *  不能要求有滚动余量——只要 overflow 可滚就认 */
-function findScrollContainer(): HTMLElement | null {
-  const first = document.querySelector(
-    "[data-testid='user-message'], [data-testid='assistant-message'], [data-message-author-role], .ds-message",
-  );
-  let el: HTMLElement | null = (first?.parentElement as HTMLElement | null) ?? null;
-  while (el) {
-    const oy = getComputedStyle(el).overflowY;
-    if (oy === "auto" || oy === "scroll") return el;
-    el = el.parentElement;
-  }
-  // 兜底：页面级滚动
-  return (document.scrollingElement as HTMLElement | null) ?? null;
-}
-
 /** 采集结束清理：清除滚动进度高亮，页面恢复原样 */
 function restoreContainer(_container: HTMLElement): void {
   clearHighlight();
@@ -82,7 +65,7 @@ function restoreContainer(_container: HTMLElement): void {
 /** claude 长对话：滚动扫描采集（统一采集方式，与其它平台一致——打印撑开会让
  *  claude 无滚动过程，体验不统一，已移除） */
 function claudeScroll() {
-  const container = findScrollContainer();
+  const container = findScrollContainer(document);
   if (!container) return undefined;
   return {
     container,
@@ -97,7 +80,7 @@ function claudeScroll() {
  *  （本地解析器恒空 → readPlatformMessages 走规则兜底——platform 缺省按 URL 解析，
  *  滚动扫描下逐批提取完整消息） */
 function ruleOnlyScroll() {
-  const container = findScrollContainer();
+  const container = findScrollContainer(document);
   if (!container) return undefined;
   return {
     container,
