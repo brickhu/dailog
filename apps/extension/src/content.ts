@@ -20,7 +20,8 @@ import { parseDoubaoPage } from "./content/doubao";
 import { createFab, type FabController } from "./content/ui";
 import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback, applyRuleMerge } from "./content/read-fallback";
-import { showCollectHint, hideCollectHint } from "./content/collect-hint";
+import { showCollectHint, hideCollectHint, updateCollectHint } from "./content/collect-hint";
+import { createScrollDriver, findScrollContainer, type ScrollDriver } from "./content/scroll-driver";
 import { highlightNodes, clearHighlight } from "./content/highlight";
 import { mergeMessageNodes, type MessageNode } from "./content/core";
 
@@ -102,13 +103,14 @@ async function collectPage(): Promise<CollectedDialogue | null> {
   return collectFromDocument({ root: document, url: location.href, getRules });
 }
 
-// 监测采集状态（用户滚动驱动渲染，扩展只做观察——轮询读当前渲染出的消息并暂存）：
-// 采集态（monitoring）→ FAB「完成 (N)」+ 放弃；完成 → 确认态（confirmMode）
+// 监测采集状态（滚动驱动渲染，扩展只做观察——轮询读当前渲染出的消息并暂存）：
+// 采集态（monitoring）→ 自动匀速滚动驱动 + FAB「完成 (N)」+ 放弃；完成 → 确认态（confirmMode）
 let monitoring = false;
 let monitorNodes: MessageNode[] = [];
 let monitorIv: ReturnType<typeof setInterval> | undefined;
 let monitorUrl = "";
 let monitorReadNodes: (() => Promise<MessageNode[]>) | undefined;
+let scrollDriver: ScrollDriver | undefined;
 let confirmMode = false;
 let pendingDialogue: CollectedDialogue | null = null;
 
@@ -145,7 +147,7 @@ function initConversationFab(): void {
     );
   }
 
-  /** 开始监测采集：滚动锁定到底部 → 非阻断提示条 + FAB「完成 (N)」+ 立即读一次 + 轮询暂存 */
+  /** 开始监测采集：滚动锁定到底部 → 提示条 + FAB「完成 (N)」+ 自动匀速滚动驱动 + 轮询暂存 */
   function startMonitorCollect(): void {
     const readNodes = pageReadNodes();
     if (!readNodes) {
@@ -158,7 +160,7 @@ function initConversationFab(): void {
     monitorReadNodes = readNodes;
     showCollectHint();
     fab.setCollecting(0, { onAbandon: () => cancelMonitorCollect() });
-    fab.showToast("已开始采集：请向上滚动浏览完整对话", "success");
+    fab.showToast("已开始采集：自动向上滚动，可随时点「完成」", "success");
     // 滚动锁定到底部（虚拟列表初始即底部；全文渲染页面滚到最新消息）
     void readNodes().then((init) => {
       const last = init[init.length - 1]?.el;
@@ -173,6 +175,23 @@ function initConversationFab(): void {
           }
         }
       }
+      if (!monitoring || init.length === 0) return;
+      // 等底部滚动稳定后启动匀速自动滚动（滚不动自动降级为手动，到顶自动完成）
+      setTimeout(() => {
+        if (!monitoring) return;
+        scrollDriver = createScrollDriver({
+          container: findScrollContainer(document, init[0]?.el),
+          onStall: () => {
+            scrollDriver = undefined;
+            updateCollectHint("自动滚动失效，请手动滚动浏览完整对话；完成后点「完成」");
+          },
+          onTop: () => {
+            scrollDriver = undefined;
+            void finishMonitorCollect();
+          },
+        });
+        scrollDriver.start();
+      }, 400);
     });
     // 滚动事件驱动即时读取（用户滚动快于 300ms 轮询时，窗口间隙不丢消息）；
     // 滚动停止后补读一次（虚拟列表先渲染骨架后渲染内容，稳定后内容才完整）
@@ -218,6 +237,8 @@ function initConversationFab(): void {
   /** 放弃采集（放弃按钮 / SPA 跳走）：清理状态与 UI */
   function cancelMonitorCollect(): void {
     stopMonitorLoop();
+    scrollDriver?.stop();
+    scrollDriver = undefined;
     monitoring = false;
     hideCollectHint();
     clearHighlight();
@@ -240,6 +261,8 @@ function initConversationFab(): void {
   /** 完成采集：组装对话 → 进入确认态（FAB「确认导入 (N)」+ 放弃） */
   async function finishMonitorCollect(): Promise<void> {
     stopMonitorLoop();
+    scrollDriver?.stop();
+    scrollDriver = undefined;
     monitoring = false;
     hideCollectHint();
     clearHighlight();

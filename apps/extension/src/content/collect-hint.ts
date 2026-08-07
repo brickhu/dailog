@@ -28,6 +28,11 @@ export function showCollectHint(text?: string): void {
   document.documentElement.appendChild(hint);
 }
 
+/** 更新提示条文案（已显示时；未显示无操作） */
+export function updateCollectHint(text: string): void {
+  if (hint) hint.textContent = text;
+}
+
 /** 隐藏提示条（幂等） */
 export function hideCollectHint(): void {
   hint?.remove();
