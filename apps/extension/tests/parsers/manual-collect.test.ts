@@ -23,6 +23,32 @@ describe("mergeMessageNodes（手动采集合并：按 id 替换/追加，首见
     mergeMessageNodes(acc, [mk("m4", 300, "assistant")]);
     expect(acc.map((n) => n.id)).toEqual(["m1", "m2", "m3", "m4"]);
   });
+
+  it("序列 id（rule-N 窗口下标）跨窗口按内容键累积——chatgpt 虚拟列表滚动采集", () => {
+    // 窗口 1：视口渲染 q1/a1/q2/a2（rule-0..3）；窗口 2 向下滚动后：a1/q2/a2/q3（rule-0..3 下标全变）
+    const acc: MessageNode[] = [];
+    mergeMessageNodes(acc, [
+      mk("rule-0", 0, "user", "q1"),
+      mk("rule-1", 100, "assistant", "a1"),
+      mk("rule-2", 200, "user", "q2"),
+      mk("rule-3", 300, "assistant", "a2"),
+    ]);
+    mergeMessageNodes(acc, [
+      mk("rule-0", 0, "assistant", "a1"),
+      mk("rule-1", 100, "user", "q2"),
+      mk("rule-2", 200, "assistant", "a2"),
+      mk("rule-3", 300, "user", "q3"),
+    ]);
+    // 首见顺序 + 内容键去重：q1/a1/q2/a2 保留原位，q3 追加
+    expect(acc.map((n) => n.content)).toEqual(["q1", "a1", "q2", "a2", "q3"]);
+    expect(acc.map((n) => n.role)).toEqual(["user", "assistant", "user", "assistant", "user"]);
+  });
+
+  it("稳定 id（data-message-id）重复内容不按内容键合并——合法重复保留", () => {
+    const acc: MessageNode[] = [mk("m1", 0, "user", "继续"), mk("m2", 100, "assistant", "好的")];
+    mergeMessageNodes(acc, [mk("m3", 200, "user", "继续")]); // 相同内容、不同 id
+    expect(acc.length).toBe(3);
+  });
 });
 
 describe("messageText（渲染文本 = 用户全选该消息所见）", () => {

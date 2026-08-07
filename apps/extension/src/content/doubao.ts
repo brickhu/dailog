@@ -17,7 +17,16 @@ export function doubaoMessageId(el: Element, index: number): string {
   return el.getAttribute("data-message-id") ?? `gen-${index}`;
 }
 
-/** doubao 对话页解析（虚拟列表存活节点；滚动扫描下逐窗口提取） */
+/** doubao 消息文本：克隆并移除嵌套的消息子树（真实页面消息容器逐轮嵌套——
+ *  外层 turn 容器包含后续所有轮次，直接全量提取会把整段对话重复进去；
+ *  等价于旧版 contentSelector 取「第一个内容块」的语义，但不受类名漂移影响） */
+function messageContent(el: Element): string {
+  const clone = el.cloneNode(true) as Element;
+  clone.querySelectorAll(MESSAGE_SELECTOR).forEach((n) => n.remove());
+  return messageText(clone);
+}
+
+/** doubao 对话页解析（用户滚动驱动渲染，轮询读当前渲染出的消息） */
 export function parseDoubaoPage(root: ParentNode): MessageNode[] {
   const nodes: MessageNode[] = [];
   root.querySelectorAll(MESSAGE_SELECTOR).forEach((el, i) => {
@@ -25,7 +34,7 @@ export function parseDoubaoPage(root: ParentNode): MessageNode[] {
     if (el.matches(USER_SELECTOR)) role = "user";
     else if (el.matches(ASSISTANT_SELECTOR)) role = "assistant";
     if (!role) return;
-    const content = messageText(el);
+    const content = messageContent(el);
     if (!content) return;
     nodes.push({
       id: doubaoMessageId(el, i),

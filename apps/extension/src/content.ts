@@ -19,23 +19,28 @@ import { parseClaudePage } from "./content/claude";
 import { parseDoubaoPage } from "./content/doubao";
 import { createFab, type FabController } from "./content/ui";
 import { isConversationPage } from "./content/conversation-page";
-import { applyRuleFallback } from "./content/read-fallback";
+import { applyRuleFallback, applyRuleMerge } from "./content/read-fallback";
 import { highlightNodes, clearHighlight } from "./content/highlight";
 import { showCollectHint, hideCollectHint } from "./content/collect-hint";
 import { mergeMessageNodes, type MessageNode } from "./content/core";
 
 /** 平台消息读取：本地专有解析器优先（用户滚动驱动渲染，轮询读当前渲染出的消息）；
- *  本地选择器失配（站点 DOM 改版）→ 远程规则选择器同一文档兜底提取，
- *  避免掉到整页文本兜底（含导航噪音）。platform 缺省 = 按规则解析当前 URL（规则平台） */
+ *  本地为空（站点 DOM 改版）→ 远程规则选择器兜底；本地缺助手回复（claude 旧
+ *  选择器只匹配 user）→ 规则提取补齐合并。platform 缺省 = 按规则解析当前 URL */
 async function readPlatformMessages(
   platform: Platform | null,
   parseLocal: (root: ParentNode) => MessageNode[],
 ): Promise<MessageNode[]> {
   const local = parseLocal(document);
-  if (local.length > 0) return local;
+  if (local.length === 0) {
+    const rules = await getRules();
+    const p = platform ?? resolvePlatform(rules, location.href);
+    return applyRuleFallback(local, p ? rules?.platforms[p] : null, document);
+  }
+  if (local.some((n) => n.role === "assistant")) return local;
   const rules = await getRules();
   const p = platform ?? resolvePlatform(rules, location.href);
-  return applyRuleFallback(local, p ? rules?.platforms[p] : null, document);
+  return applyRuleMerge(local, p ? rules?.platforms[p] : null, document);
 }
 
 /** 当前页的平台消息读取器（按 hostname 分发：专有解析器优先，其余规则兜底——
