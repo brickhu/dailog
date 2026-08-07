@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <title>dailog 采集器 · 配置</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0; padding: 32px; font-size: 14px; color: #0f172a; background: #f8fafc; }
+      .card { max-width: 460px; margin: 0 auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; }
+      h1 { font-size: 16px; margin: 0 0 8px; }
+      .desc { font-size: 12px; color: #64748b; line-height: 1.6; margin: 0 0 16px; }
+      label { display: block; font-size: 13px; color: #334155; margin-bottom: 6px; }
+      input { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; }
+      .row { display: flex; gap: 10px; margin-top: 14px; }
+      button { flex: 1; padding: 8px 0; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; }
+      #save { background: #0f172a; color: #fff; }
+      #save:hover { background: #1e293b; }
+      #clear { background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; }
+      #clear:hover { background: #e2e8f0; }
+      .hint { margin-top: 14px; font-size: 12px; color: #64748b; line-height: 1.6; min-height: 18px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>dailog 采集器 · 配置</h1>
+      <p class="desc">
+        入口：chrome://extensions → 本扩展「详细信息」→「扩展程序选项」。
+        修改保存后立即生效（采集跳转 / 待入库角标按此基址），无需重载扩展。
+      </p>
+      <label>Studio 地址（本地联调填 http://localhost:5173）</label>
+      <input id="app-base" type="text" placeholder="留空 = 构建默认" />
+      <div class="row">
+        <button id="save" type="button">保存</button>
+        <button id="clear" type="button">清除</button>
+      </div>
+      <div id="hint" class="hint"></div>
+    </div>
+    <script src="options.js"></script>
+  </body>
+</html>

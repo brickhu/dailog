@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { runCollectFlow } from "../src/content/collect-flow";
-import type { CollectResult, CollectedDialogue } from "../src/shared";
+import type { CollectedDialogue, CacheCollectResult } from "../src/shared";
 
 const dialogue: CollectedDialogue = {
   platform: "claude",
@@ -10,34 +10,50 @@ const dialogue: CollectedDialogue = {
   messages: [{ role: "user", content: "hi" }],
 };
 
-describe("runCollectFlow", () => {
-  it("collects, sends MSG_COLLECT with dialogue, shows success", async () => {
-    const send = vi.fn(async (): Promise<CollectResult> => ({ ok: true, dialogue }));
+const opts = (overrides: Partial<Parameters<typeof runCollectFlow>[0]> = {}) => ({
+  collect: async (): Promise<CollectedDialogue | null> => dialogue,
+  cache: async (): Promise<CacheCollectResult> => ({ ok: true, collectId: "uuid-1", appUrl: "https://app.dailog.fm/import?collectId=uuid-1" }),
+  onResult: vi.fn(),
+  ...overrides,
+});
+
+describe("runCollectFlow（采集 → 缓存，无鉴权预检）", () => {
+  it("采集 → 缓存 → 成功提示", async () => {
+    const collect = vi.fn(async () => dialogue);
+    const cache = vi.fn(async (): Promise<CacheCollectResult> => ({ ok: true, collectId: "uuid-1", appUrl: "u" }));
     const onResult = vi.fn();
-    await runCollectFlow({ collect: async () => dialogue, send, onResult, loginUrl: "https://dailog.fm/login", channelUrl: "https://app.dailog.fm/onboarding" });
-    expect(send).toHaveBeenCalledWith({ type: "dailog:collect", dialogue });
+    await runCollectFlow(opts({ collect, cache, onResult }));
+    expect(collect).toHaveBeenCalledOnce();
+    expect(cache).toHaveBeenCalledWith(dialogue);
     expect(onResult).toHaveBeenCalledWith(expect.stringContaining("已采集"), "success");
   });
 
-  it("shows error when collect returns null", async () => {
-    const send = vi.fn(async (): Promise<CollectResult | undefined> => undefined);
+  it("采集为空 → 提示，不缓存", async () => {
+    const cache = vi.fn();
     const onResult = vi.fn();
-    await runCollectFlow({ collect: async () => null, send, onResult, loginUrl: "https://dailog.fm/login", channelUrl: "https://app.dailog.fm/onboarding" });
-    expect(send).not.toHaveBeenCalled();
+    await runCollectFlow(opts({ collect: async () => null, cache, onResult }));
     expect(onResult).toHaveBeenCalledWith(expect.stringContaining("未识别到对话内容"), "error");
+    expect(cache).not.toHaveBeenCalled();
   });
 
-  it("shows backend error message when send fails", async () => {
-    const send = vi.fn(async (): Promise<CollectResult> => ({ ok: false, error: "no_token" }));
+  it("缓存失败 → 错误提示", async () => {
+    const cache = vi.fn(async (): Promise<CacheCollectResult> => ({ ok: false, error: "storage_full" }));
     const onResult = vi.fn();
-    await runCollectFlow({ collect: async () => dialogue, send, onResult, loginUrl: "https://dailog.fm/login", channelUrl: "https://app.dailog.fm/onboarding" });
-    expect(onResult).toHaveBeenCalledWith(expect.stringContaining("no_token"), "error");
+    await runCollectFlow(opts({ cache, onResult }));
+    expect(onResult).toHaveBeenCalledWith(expect.stringContaining("storage_full"), "error");
   });
 
-  it("surfaces thrown errors", async () => {
-    const send = vi.fn(async (): Promise<CollectResult> => { throw new Error("boom"); });
+  it("抛出异常 → 错误提示", async () => {
+    const collect = vi.fn(async () => { throw new Error("boom"); });
     const onResult = vi.fn();
-    await runCollectFlow({ collect: async () => dialogue, send, onResult, loginUrl: "https://dailog.fm/login", channelUrl: "https://app.dailog.fm/onboarding" });
+    await runCollectFlow(opts({ collect, onResult }));
     expect(onResult).toHaveBeenCalledWith(expect.stringContaining("boom"), "error");
+  });
+
+  it("扩展上下文失效 → 引导刷新页面", async () => {
+    const collect = vi.fn(async () => { throw new Error("Extension context invalidated."); });
+    const onResult = vi.fn();
+    await runCollectFlow(opts({ collect, onResult }));
+    expect(onResult).toHaveBeenCalledWith(expect.stringContaining("刷新本页面"), "error");
   });
 });

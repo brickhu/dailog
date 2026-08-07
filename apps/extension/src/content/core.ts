@@ -29,6 +29,8 @@ export interface ScrollCollectOptions {
  * 虚拟列表滚动采集循环：
  * 滚动到顶 → 读节点 → 等待新节点渲染（MutationObserver）→ 重复，
  * 连续 settleRounds 轮无新增或达 maxIterations 停止。
+ * 同 id 节点用最新读取替换：懒加载把历史插到顶部后，旧读数的 offsetTop 已过期，
+ * 保留旧值会导致最终排序错乱（历史消息位置在文档中更靠前）。
  */
 export async function scrollCollect(opts: ScrollCollectOptions): Promise<MessageNode[]> {
   const acc: MessageNode[] = [];
@@ -38,7 +40,9 @@ export async function scrollCollect(opts: ScrollCollectOptions): Promise<Message
     const nodes = await opts.readNodes();
     const before = acc.length;
     for (const n of nodes) {
-      if (!acc.some((x) => x.id === n.id)) acc.push(n);
+      const idx = acc.findIndex((x) => x.id === n.id);
+      if (idx >= 0) acc[idx] = n;
+      else acc.push(n);
     }
     if (acc.length === before) {
       stable += 1;

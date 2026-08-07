@@ -1,38 +1,29 @@
-// 采集 → 回传 → 结果反馈 的流程编排（纯逻辑，便于测试）
+// 采集流程编排（纯逻辑，便于测试）：采集 → 本地缓存（background 自动打开确认入库页）。
+// 扩展只做 DOM 解析 + 数据传输；是否登录/开通频道由 app 的 auth provider 在入库时校验。
 
-import { MSG_COLLECT, type CollectResult, type CollectedDialogue } from "../shared";
+import type { CollectedDialogue, CacheCollectResult } from "../shared";
 
 export interface CollectFlowOptions {
+  /** 页面采集（DOM 解析） */
   collect: () => Promise<CollectedDialogue | null>;
-  send: (msg: unknown) => Promise<CollectResult | undefined>;
+  /** 本地缓存（background 实现；成功后自动打开确认入库页） */
+  cache: (dialogue: CollectedDialogue) => Promise<CacheCollectResult>;
   onResult: (text: string, kind: "success" | "error") => void;
-  /** 统一登录页地址（登录后 redirect 回当前对话页）；未登录（no_token）时触发 */
-  loginUrl: string;
-  /** 未登录：展开登录引导面板 */
-  onLoginRequired?: (loginUrl: string) => void;
-  /** 工作台 onboarding 地址；未开通频道（channel_not_activated）时触发 */
-  channelUrl: string;
-  /** 未开通频道：展开创建频道引导面板 */
-  onChannelRequired?: (channelUrl: string) => void;
 }
 
-/** FAB 点击流程：采集 → 送 background → 展示结果 */
+/** FAB 点击流程：采集 → 缓存 → background 打开确认入库页 */
 export async function runCollectFlow(opts: CollectFlowOptions): Promise<void> {
   try {
+    // 1) 采集
     const dialogue = await opts.collect();
     if (!dialogue) {
       opts.onResult("未识别到对话内容，请确认当前是对话页", "error");
       return;
     }
-    const res = await opts.send({ type: MSG_COLLECT, dialogue });
+    // 2) 本地缓存（background 侧自动打开确认入库页）
+    const res = await opts.cache(dialogue);
     if (res?.ok) {
-      opts.onResult("已采集 ✓ 去 app.dailog.fm 继续编辑", "success");
-    } else if (res?.error === "no_token" && opts.onLoginRequired) {
-      // 未登录：展开登录引导（loginUrl 由 background 生成，含 redirect 回当前对话页）
-      opts.onLoginRequired(res.loginUrl ?? opts.loginUrl);
-    } else if (res?.error === "channel_not_activated" && opts.onChannelRequired) {
-      // 已登录但未创建频道：展开创建频道引导
-      opts.onChannelRequired(opts.channelUrl);
+      opts.onResult("已采集 ✓ 请在打开的页面确认入库", "success");
     } else {
       opts.onResult(`采集失败：${res?.error ?? "未知错误"}`, "error");
     }

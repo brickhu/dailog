@@ -3,6 +3,12 @@
   "name": "dailog 采集器",
   "version": "0.1.0",
   "description": "把你在 AI 平台的对话一键采集到 dailog",
+  "icons": {
+    "16": "icons/color/icon16.png",
+    "32": "icons/color/icon32.png",
+    "48": "icons/color/icon48.png",
+    "128": "icons/color/icon128.png"
+  },
   "permissions": ["storage"],
   "host_permissions": [
     "https://claude.ai/*",
@@ -12,8 +18,7 @@
     "https://kimi.moonshot.cn/*",
     "https://www.doubao.com/*",
     "https://www.tongyi.com/*",
-    "https://api.dailog.fm/*",
-    "https://api.candelbot.app/*"
+    "https://cdn.jsdelivr.net/*"
   ],
   "externally_connectable": {
     "matches": [
@@ -23,16 +28,39 @@
     ]
   },
   "background": { "service_worker": "dist/background.js", "type": "module" },
+  "options_page": "options.html",
   "content_scripts": [
     {
       "matches": [
-        "https://claude.ai/chat/*",
+        "https://claude.ai/*",
         "https://chat.deepseek.com/chat/*",
         "https://chatgpt.com/c/*",
         "https://gemini.google.com/app/*",
         "https://kimi.moonshot.cn/chat/*",
         "https://www.doubao.com/chat/*",
         "https://www.tongyi.com/*"
+      ],
+      "js": ["dist/content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://claude.ai/*",
+        "https://chat.deepseek.com/*",
+        "https://chatgpt.com/*",
+        "https://gemini.google.com/*",
+        "https://kimi.moonshot.cn/*",
+        "https://www.doubao.com/*",
+        "https://www.tongyi.com/*"
+      ],
+      "js": ["dist/print-emulation-main.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://app.dailog.fm/*",
+        "http://localhost:5173/*"
       ],
       "js": ["dist/content.js"],
       "run_at": "document_idle"

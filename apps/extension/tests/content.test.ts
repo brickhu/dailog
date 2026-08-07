@@ -3,7 +3,11 @@ import { collectFromDocument } from "../src/content/collector";
 
 describe("collectFromDocument", () => {
   it("dispatches claude and returns null when no messages", async () => {
-    const root = { querySelectorAll: () => [], ownerDocument: { title: "x" } } as unknown as ParentNode;
+    const root = {
+      querySelectorAll: () => [],
+      ownerDocument: { title: "x" },
+      cloneNode: () => ({ querySelectorAll: () => [], textContent: "" }),
+    } as unknown as ParentNode;
     const r = await collectFromDocument({ root, url: "https://claude.ai/chat/uuid-123" });
     expect(r).toBeNull();
   });

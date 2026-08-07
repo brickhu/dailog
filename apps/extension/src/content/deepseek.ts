@@ -1,5 +1,6 @@
 import type { MessageNode } from "./core";
 import type { CollectedDialogue } from "../shared";
+import { normalizeMessageText } from "../shared";
 
 const MESSAGE_SELECTOR = '[data-message-author-role="user"], [data-message-author-role="assistant"]';
 
@@ -13,12 +14,12 @@ export function parseDeepSeekPage(root: ParentNode): MessageNode[] {
   root.querySelectorAll(MESSAGE_SELECTOR).forEach((el, i) => {
     const role = el.getAttribute("data-message-author-role");
     if (role !== "user" && role !== "assistant") return;
-    const content = (el.querySelector(".ds-markdown") ?? el).textContent ?? "";
+    const content = normalizeMessageText((el.querySelector(".ds-markdown") ?? el).textContent ?? "");
     nodes.push({
       id: deepseekMessageId(el, i),
       offsetTop: el.getBoundingClientRect().top,
       role,
-      content: content.replace(/\s+/g, " ").trim(),
+      content,
     });
   });
   return nodes;

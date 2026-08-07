@@ -2,10 +2,11 @@
 
 export interface FabController {
   setBusy(busy: boolean): void;
+  /** SPA 导航下按 URL 显隐（如 claude.ai 首页不显示按钮，进入对话页后显示） */
+  setVisible(visible: boolean): void;
+  /** 当前对话已采集过：按钮切「已采集 ↻」（刷新图标，点击重采集替换旧条目） */
+  setCollected(collected: boolean): void;
   showToast(text: string, kind: "success" | "error"): void;
-  /** 引导面板：登录（no_token）/ 创建频道（channel_not_activated） */
-  showGuidePanel(kind: "login" | "channel", url: string): void;
-  closeGuidePanel(): void;
   destroy(): void;
 }
 
@@ -24,6 +25,8 @@ button.fab:active { transform: translateY(0); }
 button.fab:disabled { opacity: 0.6; cursor: wait; }
 button.fab .dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; }
 button.fab.busy .dot { background: #fbbf24; animation: pulse 1s infinite; }
+button.fab.collected { background: #334155; }
+button.fab.collected .refresh { font-size: 15px; line-height: 1; }
 @keyframes pulse { 50% { opacity: 0.3; } }
 .toast {
   max-width: 260px; padding: 8px 12px; border-radius: 8px; font-size: 13px; line-height: 1.4;
@@ -33,21 +36,6 @@ button.fab.busy .dot { background: #fbbf24; animation: pulse 1s infinite; }
 .toast.show { opacity: 1; transform: translateY(0); }
 .toast.success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
 .toast.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
-.panel {
-  display: none; width: 240px; padding: 14px 16px; border-radius: 12px;
-  background: #fff; color: #0f172a; border: 1px solid #e2e8f0;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
-}
-.panel.show { display: block; }
-.panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.panel-title { font-size: 13px; font-weight: 700; }
-.panel-close { border: none; background: none; cursor: pointer; color: #94a3b8; font-size: 14px; line-height: 1; }
-.panel-desc { font-size: 12px; color: #64748b; line-height: 1.5; margin-bottom: 10px; }
-.panel-btn {
-  width: 100%; padding: 8px 0; border: none; border-radius: 8px; cursor: pointer;
-  background: #0f172a; color: #fff; font-size: 13px; font-weight: 600;
-}
-.panel-btn:hover { background: #1e293b; }
 `;
 
 export function createFab(opts: { onClick: () => void }): FabController {
@@ -65,25 +53,9 @@ export function createFab(opts: { onClick: () => void }): FabController {
   toast.hidden = true;
   wrap.appendChild(toast);
 
-  const panel = document.createElement("div");
-  panel.className = "panel";
-  panel.innerHTML = `
-    <div class="panel-head">
-      <span class="panel-title">需要登录 dailog</span>
-      <button class="panel-close" type="button" aria-label="关闭">✕</button>
-    </div>
-    <div class="panel-desc">登录后即可采集当前对话，并自动同步到你的工作台。</div>
-    <button class="panel-btn" type="button">去登录</button>
-  `;
-  panel.querySelector(".panel-close")!.addEventListener("click", () => {
-    panel.classList.remove("show");
-  });
-  wrap.appendChild(panel);
-
   const fab = document.createElement("button");
   fab.className = "fab";
   fab.type = "button";
-  fab.innerHTML = '<span class="dot"></span><span>采集对话</span>';
   fab.addEventListener("click", opts.onClick);
   wrap.appendChild(fab);
 
@@ -91,12 +63,30 @@ export function createFab(opts: { onClick: () => void }): FabController {
   document.documentElement.appendChild(host);
 
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
+  let busy = false;
+  let collected = false;
+
+  function render() {
+    const label = busy ? "采集中…" : collected ? "已采集" : "采集对话";
+    const icon = collected && !busy ? '<span class="refresh">↻</span>' : '<span class="dot"></span>';
+    fab.innerHTML = `${icon}<span>${label}</span>`;
+  }
+  render();
 
   return {
-    setBusy(busy) {
-      fab.disabled = busy;
-      fab.classList.toggle("busy", busy);
-      fab.querySelector("span:last-child")!.textContent = busy ? "采集中…" : "采集对话";
+    setBusy(b: boolean) {
+      busy = b;
+      fab.disabled = b;
+      fab.classList.toggle("busy", b);
+      render();
+    },
+    setVisible(visible) {
+      wrap.style.display = visible ? "" : "none";
+    },
+    setCollected(c: boolean) {
+      collected = c;
+      fab.classList.toggle("collected", c);
+      render();
     },
     showToast(text, kind) {
       toast.className = `toast ${kind}`;
@@ -110,32 +100,6 @@ export function createFab(opts: { onClick: () => void }): FabController {
         toast.classList.remove("show");
         setTimeout(() => { toast.hidden = true; }, 200);
       }, 3000);
-    },
-    showGuidePanel(kind, url) {
-      const title = panel.querySelector(".panel-title")!;
-      const desc = panel.querySelector(".panel-desc")!;
-      const btn = panel.querySelector(".panel-btn")!;
-      if (kind === "login") {
-        title.textContent = "需要登录 dailog";
-        desc.textContent = "登录后即可采集当前对话，并自动同步到你的工作台。";
-        btn.textContent = "去登录";
-      } else {
-        title.textContent = "先创建你的频道";
-        desc.textContent = "采集前需要先开通频道（输入邀请码 + 录制声音），完成初始化后即可采集。";
-        btn.textContent = "去创建频道";
-      }
-      // 先移除旧监听（每次展开重新绑定，避免重复触发）
-      const clone = btn.cloneNode(true);
-      btn.replaceWith(clone);
-      clone.addEventListener("click", () => {
-        // 用户手势内 window.open：允许新标签打开目标页
-        window.open(url, "_blank");
-        panel.classList.remove("show");
-      });
-      panel.classList.add("show");
-    },
-    closeGuidePanel() {
-      panel.classList.remove("show");
     },
     destroy() {
       if (toastTimer) clearTimeout(toastTimer);

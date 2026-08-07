@@ -2,29 +2,55 @@
 <html lang="zh">
   <head>
     <meta charset="utf-8" />
-    <title>dailogues</title>
+    <title>dailog 采集器</title>
     <style>
-      body { width: 260px; font-family: system-ui, sans-serif; padding: 12px; }
-      label { display: block; margin-top: 10px; font-size: 12px; color: #555; }
-      input { width: 100%; box-sizing: border-box; margin-top: 4px; padding: 4px 6px; }
-      .row { display: flex; gap: 8px; margin-top: 8px; }
-      button { flex: 1; padding: 4px 0; }
-      #hint { margin-top: 8px; font-size: 11px; color: #888; }
+      body { width: 280px; font-family: system-ui, sans-serif; margin: 0; padding: 14px; font-size: 13px; color: #0f172a; }
+      .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+      .brand { font-weight: 700; }
+      .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #f1f5f9; color: #64748b; }
+      .badge.ok { background: #ecfdf5; color: #065f46; }
+      .primary {
+        width: 100%; padding: 10px 0; border: none; border-radius: 8px; cursor: pointer;
+        background: #0f172a; color: #fff; font-size: 14px; font-weight: 600;
+      }
+      .primary:hover { background: #1e293b; }
+      .primary:disabled { opacity: 0.6; cursor: not-allowed; }
+      .status { margin-top: 10px; font-size: 12px; color: #64748b; line-height: 1.5; min-height: 18px; }
+      .pending { margin-top: 12px; padding-top: 10px; border-top: 1px solid #e2e8f0; }
+      .pending-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+      .pending-count { color: #f59e0b; font-weight: 700; }
+      .pending-list { max-height: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+      .pending-item { display: block; width: 100%; text-align: left; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; padding: 7px 9px; cursor: pointer; font: inherit; color: inherit; }
+      .pending-item:hover { background: #f8fafc; }
+      .pending-item-title { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .pending-item-meta { font-size: 11px; color: #64748b; margin-top: 2px; }
+      .foot { margin-top: 14px; padding-top: 10px; border-top: 1px solid #e2e8f0; }
+      .studio { display: block; font-size: 11px; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
     </style>
   </head>
   <body>
-    <div id="status">加载中…</div>
-    <label>API 地址（留空 = 构建默认）
-      <input id="api-base" type="text" placeholder="https://api.dailog.fm" />
-    </label>
-    <label>登录页地址（本地测填 http://localhost:5173；留空 = 构建默认）
-      <input id="login-base" type="text" placeholder="https://dailog.fm" />
-    </label>
-    <div class="row">
-      <button id="save">保存</button>
-      <button id="reset">恢复默认</button>
+    <!-- 主视图：采集按钮 + 待入库列表（设置入口已移除——基址覆盖在 dev 工具页 dev.html 编辑） -->
+    <div id="main-view">
+      <div class="head">
+        <span class="brand">dailog 采集器</span>
+        <span id="state-badge" class="badge">…</span>
+      </div>
+      <button id="btn-primary" class="primary" disabled>加载中…</button>
+      <div id="status-line" class="status"></div>
+
+      <!-- 待入库对话列表（扩展缓存中已采集未确认入库的条目） -->
+      <div id="pending-view" class="pending" hidden>
+        <div class="pending-head">
+          <span>待入库对话</span>
+          <span id="pending-count" class="pending-count">0</span>
+        </div>
+        <div id="pending-list" class="pending-list"></div>
+      </div>
+
+      <div class="foot">
+        <span id="studio-url" class="studio">…</span>
+      </div>
     </div>
-    <div id="hint"></div>
     <script src="popup.js"></script>
   </body>
 </html>

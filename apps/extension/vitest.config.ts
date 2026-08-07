@@ -15,6 +15,7 @@ export default defineConfig({
         test: {
           environment: "jsdom",
           include: ["tests/parsers/**/*.test.ts"],
+          setupFiles: ["tests/setup-matchmedia.ts"], // jsdom 无 matchMedia，提供 polyfill
         },
       },
     ],

@@ -1,7 +1,15 @@
-// 最小 chrome.runtime/storage 类型声明（扩展运行时有全局 chrome，tsconfig 仅含 node types）
+// 最小 chrome.runtime/storage/tabs/action 类型声明（扩展运行时有全局 chrome，tsconfig 仅含 node types）
 declare const chrome: {
   tabs: {
     create: (opts: { url: string }) => Promise<unknown>;
+    remove: (tabId: number) => Promise<void>;
+    get: (tabId: number) => Promise<{ url?: string }>;
+    onActivated: { addListener: (cb: (info: { tabId: number }) => void) => void };
+    onUpdated: { addListener: (cb: (tabId: number, info: { url?: string }) => void) => void };
+  };
+  action: {
+    setIcon: (opts: { tabId: number; path: Record<string, string> }) => Promise<void>;
+    setTitle: (opts: { tabId: number; title: string }) => Promise<void>;
   };
   storage: {
     local: {
@@ -11,6 +19,7 @@ declare const chrome: {
     };
   };
   runtime: {
+    getURL: (path: string) => string;
     onMessage: {
       addListener: (listener: (message: any, sender: any, sendResponse: (response: unknown) => void) => boolean | void) => void;
     };
@@ -20,105 +29,260 @@ declare const chrome: {
   };
 };
 
-import { MSG_COLLECT, type CollectResult, type CollectedDialogue } from "./shared";
-import { API_BASE_KEY, LOGIN_BASE_KEY, DEFAULT_API_BASE, DEFAULT_LOGIN_BASE } from "./env";
+import {
+  MSG_CACHE_COLLECT, MSG_GET_COLLECT, MSG_DELETE_COLLECT, MSG_CLOSE_TAB, MSG_LIST_COLLECTS, MSG_GET_RULES,
+  isCollectedDialogue, conversationKey,
+  type CollectedDialogue, type CacheCollectResult,
+  type GetCollectResult, type DeleteCollectResult,
+  type CollectSummary, type ListCollectsResult,
+  type CollectRules, type GetRulesResult,
+} from "./shared";
+import { DEFAULT_APP_BASE, DEFAULT_RULES_URL } from "./env";
 
-const TOKEN_KEY = "dailogToken";
+/** 本地采集缓存（确认入库页展示用；确认入库/取消后删除） */
+const COLLECTS_KEY = "dailogCollects";
+/** 本地缓存上限（条），超出按 createdAt 裁剪最旧 */
+const MAX_COLLECTS = 20;
 
-/** 当前 API 基址：popup 覆盖值优先（chrome.storage），否则构建注入的默认值 */
-export async function getApiBase(): Promise<string> {
-  const { [API_BASE_KEY]: base } = await chrome.storage.local.get(API_BASE_KEY);
-  return typeof base === "string" && base.length > 0 ? base : DEFAULT_API_BASE;
+// ============ 运行时配置（options 配置页编辑，存 chrome.storage；保存即生效） ============
+
+/** 运行时配置（options 页可编辑；结构可扩展） */
+export interface RuntimeConfig {
+  /** 工作台（studio）基址——采集确认入库页跳转目标 */
+  appBase?: string;
 }
 
-/** 设置 API 基址覆盖；传空串清除覆盖（恢复构建默认） */
-export async function setApiBase(base: string): Promise<void> {
-  const value = base.trim().replace(/\/+$/, "");
-  if (!value) {
-    await chrome.storage.local.remove(API_BASE_KEY);
-    return;
-  }
-  await chrome.storage.local.set({ [API_BASE_KEY]: value });
+const CONFIG_KEY = "dailogConfig";
+
+/** 读运行时配置（直接读 storage：配置页保存后立即生效，无需重载扩展） */
+export async function getRuntimeConfig(): Promise<RuntimeConfig> {
+  const { [CONFIG_KEY]: cfg } = await chrome.storage.local.get(CONFIG_KEY);
+  return cfg && typeof cfg === "object" ? (cfg as RuntimeConfig) : {};
 }
 
-/** 当前登录页基址：popup 覆盖值优先（chrome.storage），否则构建注入的默认值 */
-export async function getLoginBase(): Promise<string> {
-  const { [LOGIN_BASE_KEY]: base } = await chrome.storage.local.get(LOGIN_BASE_KEY);
-  return typeof base === "string" && base.length > 0 ? base : DEFAULT_LOGIN_BASE;
+/** 写运行时配置（options 配置页使用；空对象 = 清除全部覆盖，回退构建默认） */
+export async function setRuntimeConfig(cfg: RuntimeConfig): Promise<void> {
+  await chrome.storage.local.set({ [CONFIG_KEY]: cfg });
 }
 
-export async function setLoginBase(base: string): Promise<void> {
-  const value = base.trim().replace(/\/+$/, "");
-  if (!value) {
-    await chrome.storage.local.remove(LOGIN_BASE_KEY);
-    return;
-  }
-  await chrome.storage.local.set({ [LOGIN_BASE_KEY]: value });
+/** 当前工作台（studio）基址——确认入库页跳转目标（运行时配置优先，构建默认兜底） */
+export async function getAppBase(): Promise<string> {
+  const cfg = await getRuntimeConfig();
+  return cfg.appBase?.trim() || DEFAULT_APP_BASE;
 }
 
-export async function getToken(): Promise<string | null> {
-  const { [TOKEN_KEY]: token } = await chrome.storage.local.get(TOKEN_KEY);
-  return typeof token === "string" && token.length > 0 ? token : null;
+// ============ 本地缓存（采集后暂存，确认入库页读取；确认入库/取消后删除） ============
+
+interface CollectEntry {
+  dialogue: CollectedDialogue;
+  createdAt: number;
+  /** 条目所属 app 基址（采集时的生效基址）——按域隔离：dev(5173)/主网(app.dailog.fm) 的待入库互不串用 */
+  appBase: string;
 }
 
-/** 采集结果回传：带 session token POST {apiBase}/api/imports */
-export async function handleCollect(
-  dialogue: CollectedDialogue,
-  senderUrl?: string,
-): Promise<CollectResult> {
-  const token = await getToken();
-  if (!token) {
-    // 未登录：带登录页地址（含 redirect 回当前对话页），由 content 展开登录引导
-    const loginBase = await getLoginBase();
-    const redirect = senderUrl ? encodeURIComponent(senderUrl) : "";
-    return {
-      ok: false,
-      error: "no_token",
-      loginUrl: `${loginBase}/login${redirect ? `?redirect=${redirect}` : ""}`,
-    };
-  }
-  const apiBase = await getApiBase();
-  try {
-    const res = await fetch(`${apiBase}/api/imports`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify(dialogue),
-    });
-    if (!res.ok) {
-      // 错误码透传（body.error 优先）：channel_not_activated（未开通频道）/ 401（登录失效）等
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      const code = body?.error ?? `http_${res.status}`;
-      // 401 登录失效：自动打开统一登录页，登录后 redirect 回对话页（token 由登录页自动注入）
-      if (res.status === 401) {
-        const loginBase = await getLoginBase();
-        const redirect = senderUrl ? encodeURIComponent(senderUrl) : "";
-        void chrome.tabs.create({
-          url: `${loginBase}/login${redirect ? `?redirect=${redirect}` : ""}`,
-        });
-      }
-      return { ok: false, error: code };
+function readCollects(map: unknown): Record<string, CollectEntry> {
+  return map && typeof map === "object" ? (map as Record<string, CollectEntry>) : {};
+}
+
+/** 缓存采集结果：写入 chrome.storage（限 MAX_COLLECTS 条）。
+ *  同会话（conversationKey 归一）重采：复用原 collectId 原地更新——身份稳定，
+ *  已打开的 /import?<id> 确认页不会因重采而失效。
+ *  自动打开 app 确认入库页（background 的 chrome.tabs.create 不受弹窗拦截限制——
+ *  异步采集流程结束后 content 侧 window.open 已不在用户手势上下文）。
+ *  是否登录/开通频道不在此校验——那是 app 的 auth provider 在入库时的事。 */
+export async function cacheCollect(dialogue: CollectedDialogue): Promise<CacheCollectResult> {
+  if (!isCollectedDialogue(dialogue)) return { ok: false, error: "invalid_dialogue" };
+  const appBase = await getAppBase();
+  const { [COLLECTS_KEY]: map } = await chrome.storage.local.get(COLLECTS_KEY);
+  const collects = readCollects(map);
+  // 重采集：复用同会话旧条目的 collectId（无则新建）
+  const key = conversationKey(dialogue.url);
+  let collectId: string = crypto.randomUUID();
+  for (const id of Object.keys(collects)) {
+    if (conversationKey(collects[id].dialogue.url) === key) {
+      collectId = id;
+      break;
     }
-    return { ok: true, dialogue };
+  }
+  collects[collectId] = { dialogue, createdAt: Date.now(), appBase };
+  const sorted = Object.entries(collects).sort((a, b) => (b[1].createdAt ?? 0) - (a[1].createdAt ?? 0));
+  const pruned = Object.fromEntries(sorted.slice(0, MAX_COLLECTS));
+  await chrome.storage.local.set({ [COLLECTS_KEY]: pruned });
+  const appUrl = `${appBase}/import?collectId=${collectId}`;
+  void chrome.tabs.create({ url: appUrl });
+  return { ok: true, collectId, appUrl };
+}
+
+/** 读取缓存条目摘要（按 createdAt 倒序；appBase 过滤——不传按当前生效基址。
+ *  旧条目（无 appBase 字段，本次改动前采集）视为全域可见，入库/取消后自然消失） */
+export async function listCollects(appBase?: string): Promise<ListCollectsResult> {
+  const base = appBase ?? (await getAppBase());
+  const { [COLLECTS_KEY]: map } = await chrome.storage.local.get(COLLECTS_KEY);
+  const items: CollectSummary[] = Object.entries(readCollects(map))
+    .filter(([, entry]) => !entry.appBase || entry.appBase === base)
+    .map(([collectId, entry]) => ({
+      collectId,
+      title: entry.dialogue.title,
+      platform: entry.dialogue.platform,
+      url: entry.dialogue.url,
+      createdAt: entry.createdAt,
+      messageCount: entry.dialogue.messages.length,
+      appBase: entry.appBase,
+    }))
+    .sort((a, b) => b.createdAt - a.createdAt);
+  return { ok: true, items };
+}
+
+/** 读取本地缓存（确认入库页展示） */
+export async function getCollect(collectId: string): Promise<GetCollectResult> {
+  const { [COLLECTS_KEY]: map } = await chrome.storage.local.get(COLLECTS_KEY);
+  const entry = readCollects(map)[collectId];
+  if (!entry) return { ok: false, error: "collect_not_found" };
+  return { ok: true, dialogue: entry.dialogue };
+}
+
+/** 删除本地缓存（取消采集 / 已入库清理） */
+export async function deleteCollect(collectId: string): Promise<DeleteCollectResult> {
+  const { [COLLECTS_KEY]: map } = await chrome.storage.local.get(COLLECTS_KEY);
+  const collects = readCollects(map);
+  if (collectId in collects) {
+    delete collects[collectId];
+    await chrome.storage.local.set({ [COLLECTS_KEY]: collects });
+  }
+  return { ok: true };
+}
+
+// ============ 图标状态（支持采集的 URL 彩色，其余灰色） ============
+
+/** content_scripts 覆盖的采集平台域名（域名级判定；与 manifest matches 保持一致） */
+const SUPPORTED_HOSTS = new Set([
+  "claude.ai",
+  "chat.deepseek.com",
+  "chatgpt.com",
+  "gemini.google.com",
+  "kimi.moonshot.cn",
+  "www.doubao.com",
+  "www.tongyi.com",
+]);
+
+const COLOR_ICONS: Record<string, string> = {
+  "16": "icons/color/icon16.png",
+  "32": "icons/color/icon32.png",
+  "48": "icons/color/icon48.png",
+  "128": "icons/color/icon128.png",
+};
+const GRAY_ICONS: Record<string, string> = {
+  "16": "icons/gray/icon16.png",
+  "32": "icons/gray/icon32.png",
+  "48": "icons/gray/icon48.png",
+  "128": "icons/gray/icon128.png",
+};
+
+export function isSupportedUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    return SUPPORTED_HOSTS.has(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+async function updateIconForTab(tabId: number): Promise<void> {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    const supported = isSupportedUrl(tab.url);
+    await chrome.action.setIcon({ tabId, path: supported ? COLOR_ICONS : GRAY_ICONS });
+    await chrome.action.setTitle({
+      tabId,
+      title: supported ? "dailog 采集器" : "当前页面不支持采集",
+    });
+  } catch {
+    // 无权限读取的 tab（chrome:// 等）静默：保持默认图标
+  }
+}
+
+// ============ 远程抓取规则（采集失败 fallback；TTL 缓存） ============
+
+const RULES_TTL_MS = 10 * 60_000;
+let rulesCache: { rules: CollectRules; at: number } | null = null;
+/** 测试辅助：清规则缓存 */
+export function resetRulesCache(): void {
+  rulesCache = null;
+}
+
+/** 拉取远程抓取规则（jsDelivr 固定 URL；失败返回 ok:false，content 侧静默跳过） */
+export async function getRemoteRules(): Promise<GetRulesResult> {
+  if (rulesCache && Date.now() - rulesCache.at < RULES_TTL_MS) {
+    return { ok: true, rules: rulesCache.rules };
+  }
+  try {
+    const res = await fetch(DEFAULT_RULES_URL);
+    if (!res.ok) return { ok: false, error: `http_${res.status}` };
+    const rules = (await res.json()) as CollectRules;
+    if (!rules?.platforms || typeof rules.platforms !== "object") {
+      return { ok: false, error: "invalid_rules" };
+    }
+    rulesCache = { rules, at: Date.now() };
+    return { ok: true, rules };
   } catch (e) {
     return { ok: false, error: String(e instanceof Error ? e.message : e) };
   }
 }
 
-// 测试环境（node）无 chrome.runtime —— 仅在浏览器运行时注册监听
+// ============ 消息监听（仅在浏览器运行时注册；node 测试环境跳过） ============
+
+if (typeof chrome !== "undefined" && chrome.tabs?.onActivated) {
+  chrome.tabs.onActivated.addListener(({ tabId }) => void updateIconForTab(tabId));
+}
+if (typeof chrome !== "undefined" && chrome.tabs?.onUpdated) {
+  chrome.tabs.onUpdated.addListener((tabId, info) => {
+    if (info.url) void updateIconForTab(tabId);
+  });
+}
+
+/** app 页面（externally_connectable 白名单）消息处理：读取/删除本地采集缓存、关闭当前标签页。
+ *  导出便于测试；不匹配返回 null */
+export function handleExternalMessage(
+  msg: any,
+  sender: { tab?: { id?: number } },
+): Promise<unknown> | null {
+  if (msg?.type === MSG_GET_COLLECT && typeof msg.collectId === "string") {
+    return getCollect(msg.collectId);
+  }
+  if (msg?.type === MSG_DELETE_COLLECT && typeof msg.collectId === "string") {
+    return deleteCollect(msg.collectId);
+  }
+  // 取消导入：由扩展关闭标签页（网页 window.close 受「只能关脚本打开的窗口」限制）
+  if (msg?.type === MSG_CLOSE_TAB && sender.tab?.id) {
+    return chrome.tabs.remove(sender.tab.id).then(() => ({ ok: true }), () => ({ ok: false }));
+  }
+  return null;
+}
+
 if (typeof chrome !== "undefined" && chrome.runtime?.onMessageExternal) {
-  // app 页面（externally_connectable 白名单）经 sendMessage 注入 token
-  chrome.runtime.onMessageExternal.addListener((msg, _sender, sendResponse) => {
-    if (msg?.type === "dailog:set-token" && typeof msg.token === "string") {
-      void chrome.storage.local.set({ [TOKEN_KEY]: msg.token }).then(() => sendResponse({ ok: true }));
+  chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
+    const p = handleExternalMessage(msg, sender);
+    if (p) {
+      void p.then(sendResponse);
       return true;
     }
   });
 }
+
 if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
-  // content script 采集结果 → 回传
-  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg?.type !== MSG_COLLECT) return;
-    void handleCollect(msg.dialogue as CollectedDialogue, sender?.tab?.url).then(sendResponse);
-    return true;
+  // content script 消息：缓存采集结果 / 读取全部缓存条目 / 拉取远程抓取规则
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === MSG_CACHE_COLLECT) {
+      void cacheCollect(msg.dialogue as CollectedDialogue).then(sendResponse);
+      return true;
+    }
+    if (msg?.type === MSG_LIST_COLLECTS) {
+      void listCollects(typeof msg.appBase === "string" ? msg.appBase : undefined).then(sendResponse);
+      return true;
+    }
+    if (msg?.type === MSG_GET_RULES) {
+      void getRemoteRules().then(sendResponse);
+      return true;
+    }
   });
 }

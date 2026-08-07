@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCollectedDialogue } from "../src/shared";
+import { isCollectedDialogue, conversationKey } from "../src/shared";
 
 describe("isCollectedDialogue", () => {
   it("accepts a valid dialogue", () => {
@@ -33,5 +33,20 @@ describe("isCollectedDialogue", () => {
       url: "u",
       messages: [{ role: "user", content: "hi" }],
     } as never)).toBe(false);
+  });
+});
+
+describe("conversationKey（会话归一：pathname 忽略 query/hash/尾斜杠）", () => {
+  it("query/hash 差异视为同一会话", () => {
+    expect(conversationKey("https://claude.ai/chat/abc-123?source=web")).toBe("/chat/abc-123");
+    expect(conversationKey("https://claude.ai/chat/abc-123#bottom")).toBe("/chat/abc-123");
+  });
+
+  it("去掉尾斜杠", () => {
+    expect(conversationKey("https://chat.deepseek.com/chat/conv1/")).toBe("/chat/conv1");
+  });
+
+  it("非法 URL 原样返回", () => {
+    expect(conversationKey("not a url")).toBe("not a url");
   });
 });
