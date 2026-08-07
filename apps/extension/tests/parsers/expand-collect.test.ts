@@ -17,6 +17,7 @@ describe("collectByScroll（统一滚动扫描采集）", () => {
         historyLoaded ? nodes(["q1", "a1", "q2", "a2"]) : nodes(["q2", "a2"]),
       waitForMutation: async () => { historyLoaded = true; },
       restore: vi.fn(),
+      settleMs: 1,
     };
     const d = await collectFromDocument({
       root: document,
@@ -56,6 +57,7 @@ describe("collectByScroll（统一滚动扫描采集）", () => {
         historyLoaded ? nodes(["q1", "a1", "q2", "a2", "q3", "a3"]) : nodes(["q2", "a2", "q3", "a3"]),
       waitForMutation,
       restore,
+      settleMs: 1,
     };
     const d = await collectFromDocument({
       root: document,
@@ -71,6 +73,7 @@ describe("collectByScroll（统一滚动扫描采集）", () => {
 
   it("滚动扫描补发 wheel/scroll 事件（覆盖监听事件才懒加载的虚拟列表）", async () => {
     const container = document.createElement("div");
+    container.scrollTop = 500; // 模拟从中间开始（触发到顶滚动）
     const wheelSpy = vi.fn();
     const scrollSpy = vi.fn();
     container.addEventListener("wheel", wheelSpy);
@@ -82,6 +85,7 @@ describe("collectByScroll（统一滚动扫描采集）", () => {
         historyLoaded ? nodes(["q1", "a1"]) : nodes(["a1"]),
       waitForMutation: async () => { historyLoaded = true; },
       restore: () => {},
+      settleMs: 1,
     };
     const d = await collectFromDocument({
       root: document,
@@ -89,8 +93,7 @@ describe("collectByScroll（统一滚动扫描采集）", () => {
       scroll,
     });
     expect(d?.messages.map((m) => m.content)).toEqual(["q1", "a1"]);
-    expect(wheelSpy).toHaveBeenCalled(); // 程序化 scrollTop 之外补派发事件
-    expect(scrollSpy).toHaveBeenCalled();
+    expect(wheelSpy).toHaveBeenCalled(); // 受控虚拟列表靠 wheel 事件驱动滚动
   });
 
   it("虚拟列表窗口化：从顶到底步进扫过全部窗口（中间段不缺失）", async () => {
@@ -110,6 +113,7 @@ describe("collectByScroll（统一滚动扫描采集）", () => {
       },
       waitForMutation: async () => {},
       restore: () => {},
+      settleMs: 1,
     };
     const d = await collectFromDocument({
       root: document,
@@ -127,6 +131,7 @@ describe("collectByScroll（统一滚动扫描采集）", () => {
       readNodes: async (): Promise<MessageNode[]> => nodes(["q1", "a1"]),
       waitForMutation: async () => {},
       restore: () => {},
+      settleMs: 1,
     };
     const d = await collectFromDocument({
       root: document,

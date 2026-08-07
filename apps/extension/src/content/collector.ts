@@ -18,6 +18,8 @@ export interface CollectContext {
     restore?: () => void;
     /** 每轮读取到消息节点后的回调（滚动采集进度高亮等 UI 用途） */
     onNodesRead?: (nodes: MessageNode[]) => void;
+    /** 滚动位置稳定等待轮询间隔 ms（默认 50；测试可传小值加速） */
+    settleMs?: number;
   };
   /** 采集失败时拉取远程规则兜底（content.ts 注入；测试环境可省略） */
   getRules?: () => Promise<CollectRules | null>;
@@ -97,6 +99,7 @@ async function collectByScroll(
     readNodes: scroll.readNodes,
     waitForMutation: scroll.waitForMutation,
     onNodesRead: onRead,
+    settleMs: scroll.settleMs,
   });
   // 未滚到底（步数上限耗尽）→ 可能未采全（对话过长）
   const el = scroll.container as HTMLElement;

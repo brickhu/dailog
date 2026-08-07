@@ -68,20 +68,33 @@ export interface ScrollSweepOptions {
   maxSteps?: number;
   /** 到底后连续无新增轮数即停（默认 2） */
   settleRounds?: number;
+  /** 滚动位置稳定等待的轮询间隔 ms（默认 50；测试可传小值加速） */
+  settleMs?: number;
+}
+
+/** 等滚动位置稳定：受控虚拟列表（Virtuoso/v_list 等）异步响应 wheel 事件，
+ *  位置更新有延迟——轮询到不再变化为止 */
+async function settleScroll(el: HTMLElement, settleMs: number): Promise<void> {
+  for (let i = 0; i < 10; i++) {
+    const before = el.scrollTop;
+    await new Promise((r) => setTimeout(r, settleMs));
+    if (el.scrollTop === before) return;
+  }
 }
 
 /**
- * 从顶到底步进滚动采集（chatgpt 等虚拟列表——只渲染视口窗口，中间段
- * 必须被滚动经过才渲染；「回顶循环」只覆盖顶部窗口会导致中间缺失）。
- * 策略（用户定义的滚动条用法）：
+ * 从顶到底步进滚动采集（虚拟列表——只渲染视口窗口，中间段必须被滚动
+ * 经过才渲染）。策略（用户定义的滚动条用法）：
  * 1. 容器 = 消息滚动区（findScrollContainer 已排除不滚动容器）
- * 2. 每次滚一屏（viewport 高度）——经过的区域触发虚拟列表渲染
- * 3. 程序化 scrollTop 赋值外补发 wheel/scroll 事件（部分列表监听事件才懒加载）
- * 4. 每步读节点去重合并进内存（虚拟列表回收已滚过节点也不丢）
+ * 2. 双通道滚动：scrollTop 直接赋值（非受控容器生效）+ wheel 事件
+ *    （受控虚拟列表如 Virtuoso 会重置 scrollTop 赋值、只响应 wheel——
+ *    合成 wheel 的默认滚动被禁用，但受控列表自己处理事件不检查 isTrusted）
+ * 3. 先滚到顶（wheel 上滚循环——受控列表 scrollTop=0 赋值无效）
+ * 4. 每次滚一屏，经过的区域触发虚拟列表渲染；每步读节点去重合并进内存
  * 5. 到底后等待渲染稳定（懒加载分批插入）：连续 settleRounds 轮无新增停止
  */
 export async function scrollSweep(opts: ScrollSweepOptions): Promise<MessageNode[]> {
-  const { container, readNodes, waitForMutation, onNodesRead, maxSteps = 300, settleRounds = 2 } = opts;
+  const { container, readNodes, waitForMutation, onNodesRead, maxSteps = 300, settleRounds = 2, settleMs = 50 } = opts;
   const acc: MessageNode[] = [];
   const merge = (nodes: MessageNode[]): void => {
     for (const n of nodes) {
@@ -91,16 +104,22 @@ export async function scrollSweep(opts: ScrollSweepOptions): Promise<MessageNode
     }
   };
   const viewport = Math.max(container.clientHeight, 400);
-  const dispatchScrollEvents = (): void => {
+  /** 双通道滚动一屏：直接赋值 + wheel 事件（受控/非受控容器都覆盖），
+   *  然后等位置稳定（受控列表异步响应） */
+  const scrollBy = async (deltaY: number): Promise<void> => {
+    container.scrollTop += deltaY;
     try {
-      container.dispatchEvent(new WheelEvent("wheel", { deltaY: 1, bubbles: true, cancelable: true }));
-      container.dispatchEvent(new Event("scroll", { bubbles: true }));
+      container.dispatchEvent(new WheelEvent("wheel", { deltaY, bubbles: true, cancelable: true }));
     } catch {
       // 无 dispatchEvent 的环境（测试 mock 容器）静默
     }
+    await settleScroll(container, settleMs);
   };
+  // 到顶：受控列表 scrollTop=0 赋值会被框架重置——wheel 上滚循环（大步）直到顶部
+  for (let i = 0; i < 30 && container.scrollTop > 0; i++) {
+    await scrollBy(-viewport * 2);
+  }
   container.scrollTop = 0;
-  dispatchScrollEvents();
   let stable = 0;
   for (let step = 0; step < maxSteps; step++) {
     const before = acc.length;
@@ -116,8 +135,7 @@ export async function scrollSweep(opts: ScrollSweepOptions): Promise<MessageNode
       stable = 0; // 到底但仍有新增（懒加载分批渲染中）：继续等待
     } else {
       stable = 0;
-      container.scrollTop = Math.min(maxTop, container.scrollTop + viewport);
-      dispatchScrollEvents();
+      await scrollBy(Math.min(maxTop - container.scrollTop, viewport));
     }
     await waitForMutation();
   }
