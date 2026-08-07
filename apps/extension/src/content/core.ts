@@ -45,6 +45,15 @@ export function mergeMessageNodes(acc: MessageNode[], nodes: MessageNode[]): voi
   if (prepend.length > 0) acc.unshift(...prepend);
 }
 
+/** 在范围选区（顶 → 底有序）中定位消息：id 优先，内容键兜底（rule-N 序号 id
+ *  跨窗口不可靠）。用于「向下滚 = 取消」：顶边消息位置后移 → 其上方消息移出选区 */
+export function findRangeIndex(
+  acc: MessageNode[],
+  target: { id: string; role: "user" | "assistant"; content: string },
+): number {
+  return acc.findIndex((n) => n.id === target.id || (n.role === target.role && n.content === target.content));
+}
+
 /** 渲染文本提取（= 用户全选该消息拿到的文本）：对元素建 Range 选区读
  *  toString()——浏览器按布局输出可见文本，hidden/sr-only/按钮图标等
  *  噪音天然排除；空串（无 Range 环境等）时 textContent 兜底 */

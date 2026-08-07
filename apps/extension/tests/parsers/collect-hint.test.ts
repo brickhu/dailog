@@ -11,7 +11,7 @@ describe("采集提示条（非阻断——不拦截用户滚动/点击）", () 
     showCollectHint();
     const el = document.querySelector("[dailog-hint]");
     expect(el).not.toBeNull();
-    expect(el?.textContent).toContain("向上滚动浏览完整对话");
+    expect(el?.textContent).toContain("向上滚动 = 选中");
     expect(document.body.style.overflow).toBe(""); // 不锁 body 滚动
     expect((el as HTMLElement).style.pointerEvents).toBe("none"); // 不拦截鼠标
   });

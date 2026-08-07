@@ -31,6 +31,12 @@ export function highlightNodes(nodes: Array<{ el?: Element }>): void {
   for (const n of nodes) n.el?.classList.add(HIGHLIGHT_CLASS);
 }
 
+/** 取消指定节点的高亮（范围选区向下滚收缩时：已选消息移出选区，绿框消失；
+ *  虚拟列表已回收的元素无操作） */
+export function unhighlightNodes(nodes: Array<{ el?: Element }>): void {
+  for (const n of nodes) n.el?.classList.remove(HIGHLIGHT_CLASS);
+}
+
 /** 清除全部高亮并移除注入样式（采集结束调用，恢复页面原样） */
 export function clearHighlight(): void {
   document.querySelectorAll(`.${HIGHLIGHT_CLASS}`).forEach((el) => el.classList.remove(HIGHLIGHT_CLASS));

@@ -21,8 +21,8 @@ import { createFab, type FabController } from "./content/ui";
 import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback, applyRuleMerge } from "./content/read-fallback";
 import { showCollectHint, hideCollectHint } from "./content/collect-hint";
-import { highlightNodes, clearHighlight } from "./content/highlight";
-import { mergeMessageNodes, type MessageNode } from "./content/core";
+import { highlightNodes, clearHighlight, unhighlightNodes } from "./content/highlight";
+import { mergeMessageNodes, findRangeIndex, type MessageNode } from "./content/core";
 
 /** 平台消息读取：本地专有解析器优先（用户滚动驱动渲染，轮询读当前渲染出的消息）；
  *  本地为空（站点 DOM 改版）→ 远程规则选择器兜底；本地缺助手回复（claude 旧
@@ -158,7 +158,7 @@ function initConversationFab(): void {
     monitorReadNodes = readNodes;
     showCollectHint();
     fab.setCollecting(0, { onAbandon: () => cancelMonitorCollect() });
-    fab.showToast("已开始采集：请向上滚动浏览完整对话", "success");
+    fab.showToast("已开始采集：向上滚选中，向下滚取消", "success");
     // 滚动锁定到底部（虚拟列表初始即底部；全文渲染页面滚到最新消息）
     void readNodes().then((init) => {
       const last = init[init.length - 1]?.el;
@@ -183,6 +183,8 @@ function initConversationFab(): void {
 
   let scrollDebounce: ReturnType<typeof setTimeout> | undefined;
   let tickRunning = false;
+  /** 范围选区：上次视窗顶边消息在 rangeNodes 中的位置（向下滚 = 位置后移 → 收缩） */
+  let lastTopIndex = 0;
 
   /** 滚动触发：即时读一次 + 150ms 停止后补读（等骨架渲染完内容） */
   function onUserScroll(): void {
@@ -191,7 +193,9 @@ function initConversationFab(): void {
     scrollDebounce = setTimeout(() => void tickMonitor(), 150);
   }
 
-  /** 单轮读取：读当前渲染出的消息 → 暂存合并 → 高亮 → 更新 FAB 计数 */
+  /** 单轮读取：读当前渲染出的消息 → 暂存合并 → 高亮 → 更新 FAB 计数。
+   *  范围选区语义：向上滚 = 新消息前插选中（绿框保留）；向下滚 = 视窗顶边
+   *  消息位置后移 → 其上方（已滚过）的消息移出选区（取消入库 + 绿框消失） */
   async function tickMonitor(): Promise<void> {
     if (!monitoring || !monitorReadNodes || tickRunning) return;
     if (location.href !== monitorUrl) {
@@ -204,9 +208,21 @@ function initConversationFab(): void {
     try {
       const nodes = await monitorReadNodes();
       if (!monitoring) return; // await 期间被放弃/完成
+      // 视窗顶边可见的第一条消息（视口内 rect.top >= 0；页头遮挡的负值区域不算可见）
+      const topMsg = nodes.find((n) => n.el && n.el.getBoundingClientRect().top >= 0);
       const before = monitorNodes.length;
       mergeMessageNodes(monitorNodes, nodes);
       highlightNodes(nodes); // 当前渲染消息高亮（幂等）
+      // 向下滚收缩：顶边消息位置后移（比上次更靠下）→ 取消其上方已选消息
+      if (topMsg) {
+        const idx = findRangeIndex(monitorNodes, topMsg);
+        if (idx > lastTopIndex) {
+          const removed = monitorNodes.splice(0, idx);
+          unhighlightNodes(removed);
+          if (removed.length > 0) fab.updateCollectCount(monitorNodes.length);
+        }
+        if (idx >= 0) lastTopIndex = idx;
+      }
       if (monitorNodes.length !== before) fab.updateCollectCount(monitorNodes.length);
     } catch {
       // 单轮读取失败忽略，下一轮重试

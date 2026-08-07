@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { highlightNodes, clearHighlight } from "../../src/content/highlight";
+import { highlightNodes, clearHighlight, unhighlightNodes } from "../../src/content/highlight";
 
 beforeEach(() => {
   document.body.innerHTML = "";
@@ -29,5 +29,15 @@ describe("滚动采集进度高亮（highlightNodes / clearHighlight）", () => 
     clearHighlight();
     expect(el.classList.contains("dailog-scan-highlight")).toBe(false);
     expect(document.querySelectorAll("style[data-dailog-scan]").length).toBe(0);
+  });
+
+  it("unhighlightNodes 移除指定节点高亮（向下滚取消选区）", () => {
+    const elA = document.createElement("div");
+    const elB = document.createElement("div");
+    document.body.append(elA, elB);
+    highlightNodes([{ el: elA }, { el: elB }]);
+    unhighlightNodes([{ el: elA }]);
+    expect(elA.classList.contains("dailog-scan-highlight")).toBe(false);
+    expect(elB.classList.contains("dailog-scan-highlight")).toBe(true);
   });
 });
