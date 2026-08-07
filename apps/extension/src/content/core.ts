@@ -72,16 +72,6 @@ export interface ScrollSweepOptions {
   settleMs?: number;
 }
 
-/** 等滚动位置稳定：受控虚拟列表（Virtuoso/v_list 等）异步响应滚动，
- *  位置更新有延迟——轮询到不再变化为止 */
-async function settleScroll(el: HTMLElement, settleMs: number): Promise<void> {
-  for (let i = 0; i < 10; i++) {
-    const before = el.scrollTop;
-    await new Promise((r) => setTimeout(r, settleMs));
-    if (el.scrollTop === before) return;
-  }
-}
-
 /**
  * 从顶到底步进滚动采集（虚拟列表——只渲染视口窗口，中间段必须被滚动
  * 经过才渲染）。策略（用户定义的滚动条用法）：
@@ -106,30 +96,30 @@ export async function scrollSweep(opts: ScrollSweepOptions): Promise<MessageNode
   const viewport = Math.max(containers[0]?.clientHeight ?? 0, 400);
   const scrollables = (): HTMLElement[] => containers.filter((c) => c.scrollHeight > c.clientHeight + 4);
   const maxTopOf = (c: HTMLElement): number => Math.max(0, c.scrollHeight - c.clientHeight);
-  /** 等一帧（受控虚拟列表渲染周期；用 settleMs 定时——真实环境 50ms 覆盖一帧，
-   *  测试可传小值加速） */
-  const nextFrame = (): Promise<void> => new Promise((r) => setTimeout(r, settleMs));
-  /** 双通道滚动：对全部候选 scrollTop 赋值 + wheel 事件；
-   *  赋值后等一帧复查——受控列表渲染可能重置 scrollTop，复查后再赋（对抗重置） */
-  const scrollBy = async (deltaY: number): Promise<void> => {
-    const targets = containers.map((c) => ({ c, top: c.scrollTop + deltaY }));
-    for (const { c, top } of targets) {
-      c.scrollTop = top;
+  /** 强制滚动到目标：持续赋值对抗异步重置（自研虚拟列表监听 scroll 事件
+   *  回写状态、重置外部赋值——单次赋值会被还原，反复赋值直到位置站稳） */
+  const forceScrollTo = async (el: HTMLElement, target: number, timeoutMs = 1500): Promise<void> => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      el.scrollTop = target;
       try {
-        c.dispatchEvent(new WheelEvent("wheel", { deltaY, bubbles: true, cancelable: true }));
+        el.dispatchEvent(new WheelEvent("wheel", { deltaY: target - el.scrollTop, bubbles: true, cancelable: true }));
       } catch {
         // 无 dispatchEvent 的环境（测试 mock 容器）静默
       }
+      await new Promise((r) => setTimeout(r, settleMs));
+      if (Math.abs(el.scrollTop - target) <= 2) return; // 到达并保持
     }
-    await nextFrame();
-    for (const { c, top } of targets) {
-      if (Math.abs(c.scrollTop - top) > 2) c.scrollTop = top; // 被重置：再赋
-    }
-    await settleScroll(containers[0], settleMs);
   };
-  // 到顶：受控列表 scrollTop=0 赋值可能被框架重置——循环上滚直到全部候选到顶
-  for (let i = 0; i < 30 && scrollables().some((c) => c.scrollTop > 0); i++) {
-    await scrollBy(-viewport * 2);
+  /** 双通道滚动一屏：对全部候选持续赋值到目标（受控/非受控都覆盖） */
+  const scrollBy = async (deltaY: number): Promise<void> => {
+    for (const c of scrollables()) {
+      await forceScrollTo(c, Math.max(0, c.scrollTop + deltaY));
+    }
+  };
+  // 到顶：对全部可滚候选强制滚到 0（受控列表单次赋值无效，持续对抗）
+  for (const c of scrollables()) {
+    await forceScrollTo(c, 0);
   }
   for (const c of containers) c.scrollTop = 0;
   let stable = 0;
