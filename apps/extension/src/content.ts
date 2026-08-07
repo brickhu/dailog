@@ -23,7 +23,6 @@ import { applyRuleFallback } from "./content/read-fallback";
 import { highlightNodes, clearHighlight } from "./content/highlight";
 import { showCollectOverlay, hideCollectOverlay } from "./content/collect-overlay";
 import { runCollectFlow } from "./content/collect-flow";
-import { applyPrintCss } from "./content/print-css";
 import type { MessageNode } from "./content/core";
 
 /** 平台消息读取：本地专有解析器优先（打印撑开/滚动下全量提取）；
@@ -52,7 +51,6 @@ function deepSeekScroll() {
     container,
     readNodes: () => readPlatformMessages("deepseek", parseDeepSeekPage),
     waitForMutation: () => waitForMutation(document.body),
-    expand: makeExpand(container, () => readPlatformMessages("deepseek", parseDeepSeekPage)),
     onNodesRead: highlightProgress,
     restore: () => restoreContainer(container),
   };
@@ -76,34 +74,13 @@ function findScrollContainer(): HTMLElement | null {
   return (document.scrollingElement as HTMLElement | null) ?? null;
 }
 
-/** 打印式撑开：高度撑开 + 模拟打印样式（claude 等站点的 @media print 规则会展开虚拟列表，
- *  全量渲染消息——等效打印预览但不需要弹打印对话框）。
- *  返回是否撑开成功（节点显著增多 ≥2 条，过滤流式/渲染噪音）；失败由调用方还原后走滚动循环 */
-function makeExpand(container: HTMLElement, readNodes: () => Promise<MessageNode[]>): () => Promise<boolean> {
-  return async () => {
-    const before = (await readNodes()).length;
-    container.style.height = "auto";
-    container.style.maxHeight = "none";
-    container.style.overflow = "visible";
-    applyPrintCss(document);
-    // 全量渲染可能是逐批插入：多等几轮 mutation
-    for (let i = 0; i < 3; i++) await waitForMutation(document.body);
-    const after = (await readNodes()).length;
-    return after > before + 2;
-  };
-}
-
-function restoreContainer(container: HTMLElement): void {
-  container.style.height = "";
-  container.style.maxHeight = "";
-  container.style.overflow = "";
-  // 移除模拟打印样式（虚拟列表随之还原）
-  document.querySelectorAll<HTMLElement>("style[data-dailog-print]").forEach((el) => el.remove());
-  // 采集结束：清除滚动进度高亮，页面恢复原样
+/** 采集结束清理：清除滚动进度高亮，页面恢复原样 */
+function restoreContainer(_container: HTMLElement): void {
   clearHighlight();
 }
 
-/** claude 长对话懒加载：先试打印式撑开（虚拟列表全量渲染），失败则滚动到顶循环补全历史 */
+/** claude 长对话：滚动扫描采集（统一采集方式，与其它平台一致——打印撑开会让
+ *  claude 无滚动过程，体验不统一，已移除） */
 function claudeScroll() {
   const container = findScrollContainer();
   if (!container) return undefined;
@@ -111,15 +88,14 @@ function claudeScroll() {
     container,
     readNodes: () => readPlatformMessages("claude", parseClaudePage),
     waitForMutation: () => waitForMutation(document.body),
-    expand: makeExpand(container, () => readPlatformMessages("claude", parseClaudePage)),
     onNodesRead: highlightProgress,
     restore: () => restoreContainer(container),
   };
 }
 
-/** chatgpt 等无专有解析器的平台：滚动/打印采集用规则选择器提取
+/** chatgpt 等无专有解析器的平台：滚动采集用规则选择器提取
  *  （本地解析器恒空 → readPlatformMessages 走规则兜底——platform 缺省按 URL 解析，
- *  打印全量渲染/滚动循环下逐批提取完整消息） */
+ *  滚动扫描下逐批提取完整消息） */
 function ruleOnlyScroll() {
   const container = findScrollContainer();
   if (!container) return undefined;
@@ -127,7 +103,6 @@ function ruleOnlyScroll() {
     container,
     readNodes: () => readPlatformMessages(null, () => [] as MessageNode[]),
     waitForMutation: () => waitForMutation(document.body),
-    expand: makeExpand(container, () => readPlatformMessages(null, () => [] as MessageNode[])),
     onNodesRead: highlightProgress,
     restore: () => restoreContainer(container),
   };

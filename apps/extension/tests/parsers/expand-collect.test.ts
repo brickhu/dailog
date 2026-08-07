@@ -6,32 +6,9 @@ import type { MessageNode } from "../../src/content/core";
 const nodes = (contents: string[]): MessageNode[] =>
   contents.map((c, i) => ({ id: c, offsetTop: i * 100, role: i % 2 === 0 ? "user" : "assistant", content: c }));
 
-describe("collectByScroll（打印式撑开优先 / 滚动保底）", () => {
-  it("撑开成功 → 等渲染稳定后全量采集（不走滚动循环）", async () => {
-    let expanded = false;
-    const waitForMutation = vi.fn(async () => {});
-    const restore = vi.fn();
-    const scroll = {
-      container: {} as Element,
-      readNodes: async (): Promise<MessageNode[]> =>
-        expanded ? nodes(["q1", "a1", "q2", "a2"]) : nodes(["q2", "a2"]),
-      waitForMutation,
-      expand: async () => { expanded = true; return true; },
-      restore,
-    };
-    const d = await collectFromDocument({
-      root: document,
-      url: "https://chat.deepseek.com/a/chat/s/conv1",
-      scroll,
-    });
-    expect(d?.platform).toBe("deepseek");
-    expect(d?.messages.map((m) => m.content)).toEqual(["q1", "a1", "q2", "a2"]);
-    expect(waitForMutation).toHaveBeenCalled(); // 撑开成功后仍有稳定等待（渲染可能分批）
-    expect(restore).toHaveBeenCalled();
-  });
-
-  it("撑开无效 → 还原样式后走滚动循环补全", async () => {
-    // 懒加载场景：滚动（scrollTop=0）才触发历史加载
+describe("collectByScroll（统一滚动扫描采集）", () => {
+  it("滚动加载历史：从顶到底扫描补全（懒加载等待）", async () => {
+    // 懒加载场景：滚动触发历史加载
     let historyLoaded = false;
     const container = { scrollTop: 999, clientHeight: 800, scrollHeight: 2400 } as unknown as Element;
     const scroll = {
@@ -39,7 +16,6 @@ describe("collectByScroll（打印式撑开优先 / 滚动保底）", () => {
       readNodes: async (): Promise<MessageNode[]> =>
         historyLoaded ? nodes(["q1", "a1", "q2", "a2"]) : nodes(["q2", "a2"]),
       waitForMutation: async () => { historyLoaded = true; },
-      expand: async () => false, // 撑开无效
       restore: vi.fn(),
     };
     const d = await collectFromDocument({
@@ -52,7 +28,7 @@ describe("collectByScroll（打印式撑开优先 / 滚动保底）", () => {
     expect(scroll.restore).toHaveBeenCalled();
   });
 
-  it("无 expand（测试环境省略）→ 直接滚动循环", async () => {
+  it("无 restore（测试环境省略）→ 正常完成", async () => {
     let historyLoaded = false;
     const container = { scrollTop: 999, clientHeight: 800, scrollHeight: 2400 } as unknown as Element;
     const scroll = {
@@ -69,18 +45,16 @@ describe("collectByScroll（打印式撑开优先 / 滚动保底）", () => {
     expect(d?.messages.map((m) => m.content)).toEqual(["q1", "a1"]);
   });
 
-  it("chatgpt（虚拟列表长对话）带 scroll 上下文 → 打印撑开/滚动采集完整消息", async () => {
-    // chatgpt 无专有解析器：content.ts 注入 ruleOnlyScroll（规则选择器提取），
-    // 此处验证 collectFromDocument 对非专有平台也走 collectByScroll
-    let expanded = false;
-    const waitForMutation = vi.fn(async () => {});
+  it("chatgpt（虚拟列表长对话）→ 滚动扫描完整消息", async () => {
+    // chatgpt 无专有解析器：content.ts 注入 ruleOnlyScroll（规则选择器提取）
+    let historyLoaded = false;
+    const waitForMutation = vi.fn(async () => { historyLoaded = true; });
     const restore = vi.fn();
     const scroll = {
-      container: {} as Element,
+      container: { scrollTop: 0, clientHeight: 800, scrollHeight: 3200 } as unknown as Element,
       readNodes: async (): Promise<MessageNode[]> =>
-        expanded ? nodes(["q1", "a1", "q2", "a2", "q3", "a3"]) : nodes(["q2", "a2", "q3", "a3"]),
+        historyLoaded ? nodes(["q1", "a1", "q2", "a2", "q3", "a3"]) : nodes(["q2", "a2", "q3", "a3"]),
       waitForMutation,
-      expand: async () => { expanded = true; return true; },
       restore,
     };
     const d = await collectFromDocument({
@@ -91,11 +65,11 @@ describe("collectByScroll（打印式撑开优先 / 滚动保底）", () => {
     expect(d?.platform).toBe("chatgpt");
     expect(d?.conversationId).toBe("abc-123");
     expect(d?.messages.map((m) => m.content)).toEqual(["q1", "a1", "q2", "a2", "q3", "a3"]);
-    expect(waitForMutation).toHaveBeenCalled(); // 撑开成功后仍有稳定等待
+    expect(waitForMutation).toHaveBeenCalled();
     expect(restore).toHaveBeenCalled();
   });
 
-  it("滚动循环补发 wheel/scroll 事件（覆盖监听事件才懒加载的虚拟列表）", async () => {
+  it("滚动扫描补发 wheel/scroll 事件（覆盖监听事件才懒加载的虚拟列表）", async () => {
     const container = document.createElement("div");
     const wheelSpy = vi.fn();
     const scrollSpy = vi.fn();
@@ -107,7 +81,6 @@ describe("collectByScroll（打印式撑开优先 / 滚动保底）", () => {
       readNodes: async (): Promise<MessageNode[]> =>
         historyLoaded ? nodes(["q1", "a1"]) : nodes(["a1"]),
       waitForMutation: async () => { historyLoaded = true; },
-      expand: undefined, // 无打印撑开：直接走滚动循环
       restore: () => {},
     };
     const d = await collectFromDocument({
@@ -136,7 +109,6 @@ describe("collectByScroll（打印式撑开优先 / 滚动保底）", () => {
         }));
       },
       waitForMutation: async () => {},
-      expand: undefined,
       restore: () => {},
     };
     const d = await collectFromDocument({
@@ -154,7 +126,6 @@ describe("collectByScroll（打印式撑开优先 / 滚动保底）", () => {
       container,
       readNodes: async (): Promise<MessageNode[]> => nodes(["q1", "a1"]),
       waitForMutation: async () => {},
-      expand: undefined,
       restore: () => {},
     };
     const d = await collectFromDocument({

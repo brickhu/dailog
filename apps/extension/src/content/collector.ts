@@ -14,9 +14,7 @@ export interface CollectContext {
     container: Element;
     readNodes: () => Promise<MessageNode[]>;
     waitForMutation: () => Promise<void>;
-    /** 打印式撑开：虚拟列表全量渲染尝试（成功 = 节点显著增多） */
-    expand?: () => Promise<boolean>;
-    /** 还原撑开时改动的内联样式 */
+    /** 采集结束清理（如清除滚动进度高亮） */
     restore?: () => void;
     /** 每轮读取到消息节点后的回调（滚动采集进度高亮等 UI 用途） */
     onNodesRead?: (nodes: MessageNode[]) => void;
@@ -79,41 +77,23 @@ async function collectByScroll(
   rule: CollectRule | undefined,
 ): Promise<CollectedDialogue | null> {
   const scroll = ctx.scroll!;
-  let expanded = false;
-  let incomplete = false;
-  if (scroll.expand) {
-    expanded = await scroll.expand();
-    if (!expanded) scroll.restore?.(); // 撑开无效：还原样式，滚动循环才有意义
-  }
   const onRead = (nodes: MessageNode[]): void => {
     scroll.onNodesRead?.(nodes); // 进度高亮等 UI 回调（幂等）
   };
-  let nodes: MessageNode[];
-  if (expanded) {
-    // 全量渲染可能是逐批插入：读到节点数稳定为止（最多 3 轮）
-    nodes = dedupeSort(await scroll.readNodes());
-    onRead(nodes);
-    for (let i = 0; i < 3; i++) {
-      await scroll.waitForMutation();
-      const next = dedupeSort(await scroll.readNodes());
-      if (next.length <= nodes.length) break;
-      nodes = next;
-      onRead(next);
-    }
-  } else {
-    // 从顶到底步进滚动：虚拟列表（chatgpt 等）中间段必须被滚动经过才渲染，
-    // 回顶循环只覆盖顶部窗口会缺中间消息；事件触发 + 到底稳定等待内置于 scrollSweep
-    nodes = await scrollSweep({
-      container: scroll.container as HTMLElement,
-      readNodes: scroll.readNodes,
-      waitForMutation: scroll.waitForMutation,
-      onNodesRead: onRead,
-    });
-    // 未滚到底（步数上限耗尽）→ 可能未采全（对话过长）
-    const el = scroll.container as HTMLElement;
-    const maxTop = Math.max(0, (el.scrollHeight ?? 0) - (el.clientHeight ?? 0));
-    if (el.scrollTop < maxTop - 4) incomplete = true;
-  }
+  // 统一采集方式（所有平台一致）：从顶到底步进滚动扫描——
+  // 虚拟列表只渲染视口窗口，滚动经过的区域才渲染（打印全量渲染会让
+  // claude 等平台无滚动过程，体验不统一；滚动 + 高亮对所有平台可见）。
+  // 事件触发、到底稳定等待内置于 scrollSweep
+  const nodes = await scrollSweep({
+    container: scroll.container as HTMLElement,
+    readNodes: scroll.readNodes,
+    waitForMutation: scroll.waitForMutation,
+    onNodesRead: onRead,
+  });
+  // 未滚到底（步数上限耗尽）→ 可能未采全（对话过长）
+  const el = scroll.container as HTMLElement;
+  const maxTop = Math.max(0, (el.scrollHeight ?? 0) - (el.clientHeight ?? 0));
+  const incomplete = el.scrollTop < maxTop - 4;
   scroll.restore?.();
   if (nodes.length === 0) return null;
   const conversationId = conversationIdFromUrl(ctx.url, rule?.url?.conversationIdPattern);
