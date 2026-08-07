@@ -64,7 +64,7 @@ export interface ScrollSweepOptions {
   waitForMutation: () => Promise<void>;
   /** 每轮读取到节点后的回调（滚动进度高亮等 UI 用途） */
   onNodesRead?: (nodes: MessageNode[]) => void;
-  /** 步数上限（防死循环；默认 100 步 × 一屏 ≈ 长对话上限） */
+  /** 步数上限（防死循环；默认 300 步 × 一屏 ≈ 超长对话） */
   maxSteps?: number;
   /** 到底后连续无新增轮数即停（默认 2） */
   settleRounds?: number;
@@ -81,7 +81,7 @@ export interface ScrollSweepOptions {
  * 5. 到底后等待渲染稳定（懒加载分批插入）：连续 settleRounds 轮无新增停止
  */
 export async function scrollSweep(opts: ScrollSweepOptions): Promise<MessageNode[]> {
-  const { container, readNodes, waitForMutation, onNodesRead, maxSteps = 100, settleRounds = 2 } = opts;
+  const { container, readNodes, waitForMutation, onNodesRead, maxSteps = 300, settleRounds = 2 } = opts;
   const acc: MessageNode[] = [];
   const merge = (nodes: MessageNode[]): void => {
     for (const n of nodes) {
