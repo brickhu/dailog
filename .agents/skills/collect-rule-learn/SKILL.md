@@ -79,13 +79,13 @@ Platform 枚举：`claude / deepseek / chatgpt / gemini / kimi / doubao / tongyi
 
 ## 平台经验库（已积累的事实，别重复踩）
 
-| 平台 | 已知选择器 | 状态 |
-|---|---|---|
-| chatgpt | `div[data-message-author-role='user'/'assistant']` + `.markdown` | ✅ 实测校准 2026-08-07（**是 div 不是 article**） |
-| deepseek | `[data-message-author-role]` + `.ds-markdown`；滚动容器 `.ds-scroll-area` | ✅ 本地解析器 |
-| claude | `div[role='article']` 作用域 + `[data-testid='user-message']`；assistant 无 data-testid，正文 `div.font-claude-response > .standard-markdown` | ✅ 实测校准 2026-08-07（旧 `[data-testid='assistant-message']` **真实 DOM 失配**） |
-| doubao | `[data-message-author-role]` | ⚠️ 占位规则，**未实测验证** |
-| gemini/kimi/tongyi | 无（仅 url 字段） | 待首次学习 |
+| 平台 | 已知选择器 | URL 形态（2026-08-07） | 状态 |
+|---|---|---|---|
+| chatgpt | `div[data-message-author-role='user'/'assistant']` + `.markdown` | `chatgpt.com/c/{id}` | ✅ 实测校准 2026-08-07（**是 div 不是 article**） |
+| deepseek | `[data-message-author-role]` + `.ds-markdown`；滚动容器 `.ds-scroll-area` | `chat.deepseek.com/a/chat/s/{uuid}`（**2026-08-07 改版**：旧 `/chat/{id}` 已废弃） | ✅ 本地解析器；URL 已校准 |
+| claude | `div[role='article']` 作用域 + `[data-testid='user-message']`；assistant 无 data-testid，正文 `div.font-claude-response > .standard-markdown` | `claude.ai/chat/{uuid}` | ✅ 实测校准 2026-08-07（旧 `[data-testid='assistant-message']` **真实 DOM 失配**） |
+| doubao | `[data-message-author-role]` | `www.doubao.com/chat/…` | ⚠️ 占位规则，**未实测验证** |
+| gemini/kimi/tongyi | 无（仅 url 字段） | 见默认表 | 待首次学习 |
 
 其它经验：
 - **chatgpt 分享页/长对话**：对话内容可能在 RSC flight 载荷里（CSS 选择器拿不到）——
@@ -94,14 +94,17 @@ Platform 枚举：`claude / deepseek / chatgpt / gemini / kimi / doubao / tongyi
 - 长对话平台是虚拟列表/懒加载：滚动采集、打印式撑开由扩展本地逻辑负责，规则层面不用管
 - user 与 assistant 结构常不同（user 无内容容器、assistant 有 .markdown）——contentSelector
   只命中 assistant 是正常的
+- **⚠️ URL 改版是静默杀手**（deepseek 教训 2026-08-07：`/chat/` → `/a/chat/s/`，manifest 窄匹配、
+  默认表、规则、本地解析器四处全失配，FAB 不显示）。收到任何 DOM 都要**同时确认地址栏 URL**，
+  与规则 `conversationPath` 比对——不一致时 URL 校准优先于选择器
 
 ## 工作流（一条龙）
 
 ```
 用户发送 DOM（粘贴 HTML / 文件路径）
-  ↓ ① 确认平台与输入（存为本地样本文件）
+  ↓ ① 确认平台与输入 + 确认 URL 形态（与规则 conversationPath 比对）
   ↓ ② 逆向分析：定位消息节点、角色标识、内容容器
-  ↓ ③ 产出 CollectRule JSON
+  ↓ ③ 产出 CollectRule JSON（URL 变更时同步更新 conversationPath/IdPattern）
   ↓ ④ 落地 fixture + 回归测试（新增或校准）
   ↓ ⑤ vitest 全绿（含既有测试）
   ↓ ⑥ 更新 collect-rules.json（version+1、note 说明）
@@ -110,11 +113,17 @@ Platform 枚举：`claude / deepseek / chatgpt / gemini / kimi / doubao / tongyi
 
 ### ① 输入处理
 
+- **先确认 URL 形态**：向业务人员索取当前对话页**地址栏完整 URL**（或让其确认地址栏形态，
+  如 `chat.deepseek.com/a/chat/s/…`）。与 collect-rules.json 中该平台 `url.conversationPath`
+  比对：
+  - URL 不匹配规则 → **URL 已改版，优先校准 URL 规则**（默认表 + 规则 + 本地解析器的
+    conversationId 提取，三处同步），再做选择器部分
+  - 无法取得 URL（只有粘贴 DOM）→ 从 DOM 里找导航/链接线索推断路径，并在汇报中标注「URL 未经确认」
 - 粘贴 HTML → 保存到 `/tmp/rule-sample-{platform}.html` 备用；粘贴过程可能被聊天窗口
   转义/截断——先检查关键 attribute（如 `data-message-author-role`）是否完整
 - 文件路径 → 直接读取
 - 平台判定：URL 或内容特征。URL 由规则 `url` 字段驱动（`resolvePlatform`），缺省回退
-  内置默认表：`claude.ai/chat/`→claude，`chat.deepseek.com/chat/`→deepseek，
+  内置默认表：`claude.ai/chat/`→claude，`chat.deepseek.com/a/chat/`→deepseek，
   `chatgpt.com/c/`→chatgpt，`www.doubao.com/chat/`→doubao，`gemini.google.com/app/`→gemini，
   `kimi.moonshot.cn/chat/`→kimi，`www.tongyi.com/`→tongyi
 
@@ -131,6 +140,8 @@ Platform 枚举：`claude / deepseek / chatgpt / gemini / kimi / doubao / tongyi
 
 ### ③ 产出检查单
 
+- [ ] **已确认地址栏 URL 与规则 conversationPath 一致**（或本次已更新 URL 规则并同步
+  默认表/本地解析器提取）
 - [ ] 选择器在样本 DOM 上能**同时**匹配 user 与 assistant
 - [ ] contentSelector 取到的是正文，不是头像/时间/操作按钮
 - [ ] 不用索引选择器（`:nth-child`）——虚拟列表/懒加载下不稳定
