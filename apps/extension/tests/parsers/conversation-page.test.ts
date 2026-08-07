@@ -32,20 +32,36 @@ describe("isConversationPage（URL 启发式 OR DOM 对话框兜底）", () => {
     expect(isConversationPage("https://claude.ai/chat/uuid-1", doc)).toBe(true);
   });
 
-  it("URL 不通过但 DOM 有对话输入框（textarea）→ true", () => {
+  it("URL 不通过但 DOM 有输入框 + 消息区（deepseek 新版标记）→ true", () => {
     const doc = new DOMParser().parseFromString(
-      '<html><body><div class="composer"><textarea placeholder="发消息…"></textarea></div></body></html>',
+      '<html><body><textarea placeholder="发消息…"></textarea><div class="ds-message"><div>对话内容</div></div></body></html>',
       "text/html",
     );
     expect(isConversationPage("https://chat.deepseek.com/", doc)).toBe(true);
   });
 
-  it("URL 不通过且 DOM 有 contenteditable → true", () => {
+  it("URL 不通过但 DOM 有输入框 + 消息区（chatgpt 标记）→ true", () => {
     const doc = new DOMParser().parseFromString(
-      '<html><body><div contenteditable="true"></div></body></html>',
+      '<html><body><textarea></textarea><div data-message-author-role="user">q</div></body></html>',
       "text/html",
     );
-    expect(isConversationPage("https://example.com/blog/post-1", doc)).toBe(true);
+    expect(isConversationPage("https://chatgpt.com/", doc)).toBe(true);
+  });
+
+  it("URL 不通过、只有输入框无消息（豆包新建对话页）→ false", () => {
+    const doc = new DOMParser().parseFromString(
+      '<html><body><div class="composer"><textarea placeholder="发消息…"></textarea></div></body></html>',
+      "text/html",
+    );
+    expect(isConversationPage("https://www.doubao.com/chat/", doc)).toBe(false);
+  });
+
+  it("URL 不通过、有消息区但无输入框 → false", () => {
+    const doc = new DOMParser().parseFromString(
+      '<html><body><div class="ds-message"><div>历史消息</div></div></body></html>',
+      "text/html",
+    );
+    expect(isConversationPage("https://chat.deepseek.com/", doc)).toBe(false);
   });
 
   it("URL 不通过、DOM 无对话框（登录页 input 不算）→ false", () => {
