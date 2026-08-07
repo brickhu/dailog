@@ -5,11 +5,13 @@ declare const chrome: {
       addListener: (listener: (message: any, sender: any, sendResponse: (response: unknown) => void) => boolean | void) => void;
     };
     sendMessage: (message: unknown) => Promise<unknown>;
+    /** CDP 滚动期间保持 service worker 存活（open port 是可靠的保活手段） */
+    connect: (opts: { name: string }) => { disconnect: () => void };
   };
 };
 
 import {
-  MSG_COLLECT, MSG_CACHE_COLLECT, MSG_LIST_COLLECTS, MSG_GET_RULES, MSG_COLLECTS_CHANGED, conversationKey,
+  MSG_COLLECT, MSG_CACHE_COLLECT, MSG_LIST_COLLECTS, MSG_GET_RULES, MSG_COLLECTS_CHANGED, MSG_CDP_SCROLL_START, MSG_CDP_SCROLL_STOP, conversationKey,
   type CollectedDialogue, type CacheCollectResult, type ListCollectsResult, type CollectSummary,
   type GetRulesResult, type CollectRules, type Platform,
 } from "./shared";
@@ -21,7 +23,7 @@ import { createFab, type FabController } from "./content/ui";
 import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback, applyRuleMerge } from "./content/read-fallback";
 import { showCollectHint, hideCollectHint, updateCollectHint } from "./content/collect-hint";
-import { createScrollDriver, findScrollContainer, type ScrollDriver } from "./content/scroll-driver";
+import { findScrollContainer } from "./content/scroll-driver";
 import { highlightNodes, clearHighlight } from "./content/highlight";
 import { mergeMessageNodes, type MessageNode } from "./content/core";
 
@@ -103,14 +105,15 @@ async function collectPage(): Promise<CollectedDialogue | null> {
   return collectFromDocument({ root: document, url: location.href, getRules });
 }
 
-// 监测采集状态（滚动驱动渲染，扩展只做观察——轮询读当前渲染出的消息并暂存）：
-// 采集态（monitoring）→ 自动匀速滚动驱动 + FAB「完成 (N)」+ 放弃；完成 → 确认态（confirmMode）
+// 监测采集状态（CDP 真实滚轮驱动滚动，扩展只做观察——轮询读当前渲染出的消息并暂存）：
+// 采集态（monitoring）→ CDP 自动滚动 + FAB「完成 (N)」+ 放弃；完成 → 确认态（confirmMode）
 let monitoring = false;
 let monitorNodes: MessageNode[] = [];
 let monitorIv: ReturnType<typeof setInterval> | undefined;
 let monitorUrl = "";
 let monitorReadNodes: (() => Promise<MessageNode[]>) | undefined;
-let scrollDriver: ScrollDriver | undefined;
+let cdpWatchIv: ReturnType<typeof setInterval> | undefined;
+let cdpKeepalive: { disconnect: () => void } | undefined;
 let confirmMode = false;
 let pendingDialogue: CollectedDialogue | null = null;
 
@@ -176,21 +179,11 @@ function initConversationFab(): void {
         }
       }
       if (!monitoring || init.length === 0) return;
-      // 等底部滚动稳定后启动匀速自动滚动（滚不动自动降级为手动，到顶自动完成）
+      // 等底部滚动稳定后启动 CDP 真实滚轮驱动（模拟用户鼠标向上滚动；
+      // 滚不动自动降级为手动，到顶自动完成）
       setTimeout(() => {
         if (!monitoring) return;
-        scrollDriver = createScrollDriver({
-          container: findScrollContainer(document, init[0]?.el),
-          onStall: () => {
-            scrollDriver = undefined;
-            updateCollectHint("自动滚动失效，请手动滚动浏览完整对话；完成后点「完成」");
-          },
-          onTop: () => {
-            scrollDriver = undefined;
-            void finishMonitorCollect();
-          },
-        });
-        scrollDriver.start();
+        void startCdpDriver(findScrollContainer(document, init[0]?.el));
       }, 400);
     });
     // 滚动事件驱动即时读取（用户滚动快于 300ms 轮询时，窗口间隙不丢消息）；
@@ -198,6 +191,72 @@ function initConversationFab(): void {
     document.addEventListener("scroll", onUserScroll, { capture: true, passive: true });
     void tickMonitor();
     monitorIv = setInterval(() => void tickMonitor(), 300);
+  }
+
+  /** CDP 真实滚轮驱动：background attach debugger 后按固定节奏向消息区中心
+   *  派发 mouseWheel（isTrusted=true，浏览器层面即用户滚轮——虚拟列表必须响应）。
+   *  本侧每 150ms 监测容器位置：前进 → 继续；连续 ~1.2s 未前进 → 到顶自动完成
+   *  或降级手动（容器不可滚/探测错） */
+  async function startCdpDriver(container: HTMLElement | null): Promise<void> {
+    if (!monitoring) return;
+    // 滚轮落点 = 消息区中心（限制在视口内，保证事件落在可滚区域上）
+    const rect = container?.getBoundingClientRect();
+    const x = Math.round(rect ? rect.left + rect.width / 2 : window.innerWidth / 2);
+    const y = Math.round(rect ? rect.top + rect.height / 2 : window.innerHeight / 2);
+    const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
+    let res: { ok: boolean; error?: string };
+    try {
+      res = (await chrome.runtime.sendMessage({
+        type: MSG_CDP_SCROLL_START,
+        x: clamp(x, 40, window.innerWidth - 40),
+        y: clamp(y, 80, window.innerHeight - 80),
+        deltaY: -36, // 负 = 向上滚动（≈1500px/s @ 24ms 间隔）
+        intervalMs: 24,
+      })) as { ok: boolean; error?: string };
+    } catch {
+      res = { ok: false, error: "context_invalid" };
+    }
+    if (!res.ok) {
+      updateCollectHint("自动滚动不可用（调试器冲突），请手动滚动浏览完整对话；完成后点「完成」");
+      return;
+    }
+    // 保活：open port 保持 service worker 存活（interval 不保证存活）
+    try {
+      cdpKeepalive = chrome.runtime.connect({ name: "dailog-cdp-scroll" });
+    } catch {
+      // 无 connect 环境（测试）静默
+    }
+    // 位置监测：前进 → 继续；到顶 → 自动完成；卡住 → 降级手动
+    let lastPos = container?.scrollTop ?? 0;
+    let stallMs = 0;
+    cdpWatchIv = setInterval(() => {
+      if (!monitoring) return;
+      const pos = container?.scrollTop ?? 0;
+      if (pos < lastPos - 2) {
+        lastPos = pos;
+        stallMs = 0;
+        return;
+      }
+      stallMs += 150;
+      if (stallMs < 1200) return;
+      stopCdpDriver();
+      if (container && container.scrollHeight > container.clientHeight + 4 && pos <= 0) {
+        void finishMonitorCollect(); // 到顶：自动完成
+      } else {
+        updateCollectHint("自动滚动失效，请手动滚动浏览完整对话；完成后点「完成」");
+      }
+    }, 150);
+  }
+
+  /** 停止 CDP 滚轮（background detach）+ 清理监测循环与保活（幂等） */
+  function stopCdpDriver(): void {
+    if (cdpWatchIv) {
+      clearInterval(cdpWatchIv);
+      cdpWatchIv = undefined;
+    }
+    cdpKeepalive?.disconnect();
+    cdpKeepalive = undefined;
+    void chrome.runtime.sendMessage({ type: MSG_CDP_SCROLL_STOP }).catch(() => {});
   }
 
   let scrollDebounce: ReturnType<typeof setTimeout> | undefined;
@@ -237,8 +296,7 @@ function initConversationFab(): void {
   /** 放弃采集（放弃按钮 / SPA 跳走）：清理状态与 UI */
   function cancelMonitorCollect(): void {
     stopMonitorLoop();
-    scrollDriver?.stop();
-    scrollDriver = undefined;
+    stopCdpDriver();
     monitoring = false;
     hideCollectHint();
     clearHighlight();
@@ -261,8 +319,7 @@ function initConversationFab(): void {
   /** 完成采集：组装对话 → 进入确认态（FAB「确认导入 (N)」+ 放弃） */
   async function finishMonitorCollect(): Promise<void> {
     stopMonitorLoop();
-    scrollDriver?.stop();
-    scrollDriver = undefined;
+    stopCdpDriver();
     monitoring = false;
     hideCollectHint();
     clearHighlight();

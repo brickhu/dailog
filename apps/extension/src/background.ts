@@ -1,5 +1,11 @@
-// 最小 chrome.runtime/storage/tabs/action 类型声明（扩展运行时有全局 chrome，tsconfig 仅含 node types）
+// 最小 chrome.runtime/storage/tabs/action/debugger 类型声明（扩展运行时有全局 chrome，tsconfig 仅含 node types）
 declare const chrome: {
+  debugger: {
+    attach: (target: { tabId: number }, version: string) => Promise<void>;
+    detach: (target: { tabId: number }) => Promise<void>;
+    sendCommand: (target: { tabId: number }, method: string, params?: unknown) => Promise<unknown>;
+    onDetach: { addListener: (cb: () => void) => void };
+  };
   tabs: {
     create: (opts: { url: string }) => Promise<{ id?: number }>;
     remove: (tabId: number) => Promise<void>;
@@ -34,6 +40,7 @@ declare const chrome: {
 
 import {
   MSG_CACHE_COLLECT, MSG_GET_COLLECT, MSG_DELETE_COLLECT, MSG_CLOSE_TAB, MSG_LIST_COLLECTS, MSG_GET_RULES, MSG_COLLECTS_CHANGED,
+  MSG_CDP_SCROLL_START, MSG_CDP_SCROLL_STOP,
   isCollectedDialogue, conversationKey,
   type CollectedDialogue, type CacheCollectResult,
   type GetCollectResult, type DeleteCollectResult,
@@ -261,6 +268,72 @@ export async function getRemoteRules(): Promise<GetRulesResult> {
   }
 }
 
+// ============ CDP 自动滚动（真实鼠标滚轮事件——虚拟列表必须响应） ============
+
+let cdpScrollTimer: ReturnType<typeof setInterval> | undefined;
+let cdpScrollTab: number | undefined;
+
+export interface CdpScrollOptions {
+  /** 滚轮事件落点（视口坐标，须落在消息区上） */
+  x: number;
+  y: number;
+  /** 滚动量（负 = 向上） */
+  deltaY: number;
+  /** 事件间隔 ms（连续派发 = 模拟按住滚轮匀速滚动） */
+  intervalMs: number;
+}
+
+export type CdpScrollResult = { ok: true } | { ok: false; error: string };
+
+/** 挂载 debugger 并按固定节奏向页面派发真实滚轮事件（isTrusted=true，
+ *  浏览器层面即用户输入——虚拟列表必须响应）。
+ *  失败（DevTools 已开/已被占用/已运行）返回错误，采集侧降级手动 */
+export async function startCdpScroll(tabId: number, opts: CdpScrollOptions): Promise<CdpScrollResult> {
+  if (cdpScrollTimer) return { ok: false, error: "already_running" };
+  try {
+    await chrome.debugger.attach({ tabId }, "1.3");
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  cdpScrollTab = tabId;
+  cdpScrollTimer = setInterval(() => {
+    void chrome.debugger
+      .sendCommand({ tabId }, "Input.dispatchMouseEvent", {
+        type: "mouseWheel",
+        x: opts.x,
+        y: opts.y,
+        deltaX: 0,
+        deltaY: opts.deltaY,
+      })
+      .catch(() => stopCdpScroll()); // attach 失效（页面刷新/DevTools 打开）→ 停止
+  }, opts.intervalMs);
+  return { ok: true };
+}
+
+/** 停止滚轮并 detach（幂等） */
+export function stopCdpScroll(): void {
+  if (cdpScrollTimer) {
+    clearInterval(cdpScrollTimer);
+    cdpScrollTimer = undefined;
+  }
+  if (cdpScrollTab !== undefined) {
+    const tabId = cdpScrollTab;
+    cdpScrollTab = undefined;
+    void chrome.debugger.detach({ tabId }).catch(() => {});
+  }
+}
+
+// 会话丢失（页面刷新/DevTools 打开/扩展重载）→ 清理孤儿定时器
+if (typeof chrome !== "undefined" && chrome.debugger?.onDetach) {
+  chrome.debugger.onDetach.addListener(() => {
+    if (cdpScrollTimer) {
+      clearInterval(cdpScrollTimer);
+      cdpScrollTimer = undefined;
+    }
+    cdpScrollTab = undefined;
+  });
+}
+
 // ============ 消息监听（仅在浏览器运行时注册；node 测试环境跳过） ============
 
 // 平台域名 tab 访问时预热规则缓存：用户打开/刷新目标平台页面即静默拉取
@@ -337,6 +410,21 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
     }
     if (msg?.type === MSG_GET_RULES) {
       void getRemoteRules().then(sendResponse);
+      return true;
+    }
+    if (msg?.type === MSG_CDP_SCROLL_START && _sender.tab?.id) {
+      const tabId = _sender.tab.id;
+      void startCdpScroll(tabId, {
+        x: Number(msg.x) || 0,
+        y: Number(msg.y) || 0,
+        deltaY: Number(msg.deltaY) || -36,
+        intervalMs: Number(msg.intervalMs) || 24,
+      }).then(sendResponse);
+      return true;
+    }
+    if (msg?.type === MSG_CDP_SCROLL_STOP) {
+      stopCdpScroll();
+      sendResponse({ ok: true });
       return true;
     }
   });
