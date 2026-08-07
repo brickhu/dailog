@@ -94,4 +94,29 @@ describe("collectByScroll（打印式撑开优先 / 滚动保底）", () => {
     expect(waitForMutation).toHaveBeenCalled(); // 撑开成功后仍有稳定等待
     expect(restore).toHaveBeenCalled();
   });
+
+  it("滚动循环补发 wheel/scroll 事件（覆盖监听事件才懒加载的虚拟列表）", async () => {
+    const container = document.createElement("div");
+    const wheelSpy = vi.fn();
+    const scrollSpy = vi.fn();
+    container.addEventListener("wheel", wheelSpy);
+    container.addEventListener("scroll", scrollSpy);
+    let historyLoaded = false;
+    const scroll = {
+      container,
+      readNodes: async (): Promise<MessageNode[]> =>
+        historyLoaded ? nodes(["q1", "a1"]) : nodes(["a1"]),
+      waitForMutation: async () => { historyLoaded = true; },
+      expand: undefined, // 无打印撑开：直接走滚动循环
+      restore: () => {},
+    };
+    const d = await collectFromDocument({
+      root: document,
+      url: "https://chatgpt.com/c/abc-123",
+      scroll,
+    });
+    expect(d?.messages.map((m) => m.content)).toEqual(["q1", "a1"]);
+    expect(wheelSpy).toHaveBeenCalled(); // 程序化 scrollTop 之外补派发事件
+    expect(scrollSpy).toHaveBeenCalled();
+  });
 });

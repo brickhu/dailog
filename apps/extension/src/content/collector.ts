@@ -94,7 +94,19 @@ async function collectByScroll(
     }
   } else {
     nodes = await scrollCollect({
-      scrollToTop: async () => { scroll.container.scrollTop = 0; },
+      // 程序化 scrollTop 赋值不会派发事件：部分虚拟列表监听 wheel/scroll
+      // 事件才触发懒加载（多数库不检查 isTrusted）——补派发不可信事件；
+      // 无 dispatchEvent 的环境（测试 mock 容器）静默跳过
+      scrollToTop: async () => {
+        const el = scroll.container as HTMLElement;
+        el.scrollTop = 0;
+        try {
+          el.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true, cancelable: true }));
+          el.dispatchEvent(new Event("scroll", { bubbles: true }));
+        } catch {
+          // 测试 mock / 不支持的环境静默（scrollTop 赋值本身已触发原生 scroll）
+        }
+      },
       readNodes: scroll.readNodes,
       waitForMutation: scroll.waitForMutation,
       maxIterations: 20,
