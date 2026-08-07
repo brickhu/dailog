@@ -1,15 +1,10 @@
 import type { MessageNode } from "./core";
+import { messageText } from "./core";
 import type { CollectedDialogue, Role } from "../shared";
-import { normalizeMessageText } from "../shared";
 import { extractTitle } from "./title";
 
 const USER_SELECTOR = '[data-testid="user-message"]';
 const ASSISTANT_SELECTOR = '[data-testid="assistant-message"]';
-
-/** 从消息节点提取文本（保真规范化：保留换行/代码缩进） */
-function extractText(el: Element): string {
-  return normalizeMessageText(el.textContent ?? "");
-}
 
 const MESSAGE_SELECTOR = `${USER_SELECTOR}, ${ASSISTANT_SELECTOR}`;
 
@@ -27,7 +22,7 @@ export function parseClaudePage(root: ParentNode): MessageNode[] {
   // 与真实浏览器（offsetTop 不同，sort 修正顺序）下均按对话先后输出。
   root.querySelectorAll(MESSAGE_SELECTOR).forEach((el) => {
     const role = el.matches(USER_SELECTOR) ? "user" : "assistant";
-    const content = extractText(el);
+    const content = messageText(el);
     nodes.push({ id: messageId(role, content), offsetTop: el.getBoundingClientRect().top, role, content, el });
   });
   return nodes.sort((a, b) => a.offsetTop - b.offsetTop);

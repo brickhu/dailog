@@ -13,24 +13,18 @@ import {
   type CollectedDialogue, type CacheCollectResult, type ListCollectsResult, type CollectSummary,
   type GetRulesResult, type CollectRules, type Platform,
 } from "./shared";
-import { collectFromDocument, resolvePlatform } from "./content/collector";
+import { collectFromDocument, resolvePlatform, buildManualDialogue } from "./content/collector";
 import { parseDeepSeekPage } from "./content/deepseek";
 import { parseClaudePage } from "./content/claude";
 import { parseDoubaoPage } from "./content/doubao";
-import { waitForMutation } from "./content/mutation";
 import { createFab, type FabController } from "./content/ui";
 import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback } from "./content/read-fallback";
 import { highlightNodes, clearHighlight } from "./content/highlight";
-import { collectScrollContainers } from "./content/scroll-container";
-import { showCollectOverlay, hideCollectOverlay } from "./content/collect-overlay";
-import { createConfirmPanel } from "./content/confirm-panel";
-import type { MessageNode } from "./content/core";
+import { showCollectHint, hideCollectHint } from "./content/collect-hint";
+import { mergeMessageNodes, type MessageNode } from "./content/core";
 
-/** 采集确认面板（模块级单例；确认态选择消息，不依赖页面消息 DOM） */
-const confirmPanel = createConfirmPanel();
-
-/** 平台消息读取：本地专有解析器优先（打印撑开/滚动下全量提取）；
+/** 平台消息读取：本地专有解析器优先（用户滚动驱动渲染，轮询读当前渲染出的消息）；
  *  本地选择器失配（站点 DOM 改版）→ 远程规则选择器同一文档兜底提取，
  *  避免掉到整页文本兜底（含导航噪音）。platform 缺省 = 按规则解析当前 URL（规则平台） */
 async function readPlatformMessages(
@@ -44,95 +38,22 @@ async function readPlatformMessages(
   return applyRuleFallback(local, p ? rules?.platforms[p] : null, document);
 }
 
-/** 滚动采集进度高亮回调（所有平台通用；幂等，重复读取无副作用） */
-const highlightProgress = (nodes: MessageNode[]): void => highlightNodes(nodes);
-
-/** 候选滚动容器（全集：专有 + 祖先链 + Virtuoso + 页面级——受控虚拟列表
- *  可能重置单一容器 scrollTop，sweep 对全部候选滚动） */
-const scrollContainers = (hints?: string[]): HTMLElement[] => {
-  const all = collectScrollContainers(document, hints);
-  return all.length > 0 ? all : [document.scrollingElement as HTMLElement].filter(Boolean);
-};
-
-function deepSeekScroll() {
-  const containers = scrollContainers([".ds-scroll-area"]);
-  if (containers.length === 0) return undefined;
-  return {
-    container: containers[0],
-    containers,
-    readNodes: () => readPlatformMessages("deepseek", parseDeepSeekPage),
-    waitForMutation: () => waitForMutation(document.body),
-    onNodesRead: highlightProgress,
-    restore: () => restoreContainer(containers[0]),
-  };
-}
-
-/** 采集结束清理：清除滚动进度高亮，页面恢复原样 */
-function restoreContainer(_container: HTMLElement): void {
-  clearHighlight();
-}
-
-/** claude 长对话：滚动扫描采集（统一采集方式，与其它平台一致） */
-function claudeScroll() {
-  const containers = scrollContainers();
-  if (containers.length === 0) return undefined;
-  return {
-    container: containers[0],
-    containers,
-    readNodes: () => readPlatformMessages("claude", parseClaudePage),
-    waitForMutation: () => waitForMutation(document.body),
-    onNodesRead: highlightProgress,
-    restore: () => restoreContainer(containers[0]),
-  };
-}
-
-/** chatgpt 等无专有解析器的平台：滚动采集用规则选择器提取
- *  （本地解析器恒空 → readPlatformMessages 走规则兜底——platform 缺省按 URL 解析，
- *  滚动扫描下逐批提取完整消息） */
-function ruleOnlyScroll() {
-  const containers = scrollContainers();
-  if (containers.length === 0) return undefined;
-  return {
-    container: containers[0],
-    containers,
-    readNodes: () => readPlatformMessages(null, () => [] as MessageNode[]),
-    waitForMutation: () => waitForMutation(document.body),
-    onNodesRead: highlightProgress,
-    restore: () => restoreContainer(containers[0]),
-  };
-}
-
-/** 当前页的滚动采集配置：按 hostname 分发平台采集器
- *  （deepseek/claude/doubao 专有解析器优先；其余平台规则提取滚动——chatgpt 长对话
- *  虚拟列表必须滚动/打印采集，纯静态解析只拿得到视口内消息） */
-function pageScroll() {
+/** 当前页的平台消息读取器（按 hostname 分发：专有解析器优先，其余规则兜底——
+ *  chatgpt 等规则平台本地解析器恒空，readPlatformMessages 内部走规则提取） */
+function pageReadNodes(): (() => Promise<MessageNode[]>) | undefined {
   switch (location.hostname) {
     case "chat.deepseek.com":
-      return deepSeekScroll();
+      return () => readPlatformMessages("deepseek", parseDeepSeekPage);
     case "claude.ai":
-      return claudeScroll();
+      return () => readPlatformMessages("claude", parseClaudePage);
     case "www.doubao.com":
-      return doubaoScroll();
+      return () => readPlatformMessages("doubao", parseDoubaoPage);
     default:
-      return ruleOnlyScroll();
+      return () => readPlatformMessages(null, () => [] as MessageNode[]);
   }
 }
 
-/** doubao 滚动采集（本地解析器） */
-function doubaoScroll() {
-  const containers = scrollContainers();
-  if (containers.length === 0) return undefined;
-  return {
-    container: containers[0],
-    containers,
-    readNodes: () => readPlatformMessages("doubao", parseDoubaoPage),
-    waitForMutation: () => waitForMutation(document.body),
-    onNodesRead: highlightProgress,
-    restore: () => restoreContainer(containers[0]),
-  };
-}
-
-// ============ AI 对话页：采集 FAB + 「已采集」状态 ============
+// ============ AI 对话页：采集 FAB + 手动采集状态机 ============
 
 /** 读取扩展缓存中的待入库条目（按 appBase 按域过滤——不传 = 扩展当前生效基址；
  *  扩展上下文失效时返回空） */
@@ -147,8 +68,6 @@ async function listPending(appBase?: string): Promise<CollectSummary[]> {
     return [];
   }
 }
-
-// ---- AI 对话页：采集 FAB + 「已采集」状态 ----
 
 // SPA 导航监听（claude.ai 首页 → 对话页是前端跳转，页面不刷新、content script 不重跑），
 // popstate + 轮询双保险（SPA 框架未必触发 popstate）
@@ -173,22 +92,19 @@ async function getRules(): Promise<CollectRules | null> {
   }
 }
 
-/** 本页采集：统一滚动扫描 + 远程规则兜底（onCollected 回调带 el 的最终节点集，
- *  确认态勾选框用） */
+/** 本页静态采集（popup「采集当前对话」触发；交互式长对话走手动采集状态机） */
 async function collectPage(): Promise<CollectedDialogue | null> {
-  return collectFromDocument({
-    root: document,
-    url: location.href,
-    scroll: pageScroll(),
-    getRules,
-    onCollected: (nodes) => { collectedNodes = nodes; },
-  });
+  return collectFromDocument({ root: document, url: location.href, getRules });
 }
 
-// 采集确认态状态（content script 单页单 FAB）：采集完成停留页面，
-// 确认面板勾选调整后确认导入——不自动跳转 studio
+// 手动采集状态（用户滚动驱动渲染，轮询累积渲染出的消息）：
+// 采集态（collecting）→ FAB「完成 (N)」；完成 → 确认态（confirmMode）→ FAB「确认导入 (N)」
+let collecting = false;
+let manualNodes: MessageNode[] = [];
+let manualIv: ReturnType<typeof setInterval> | undefined;
+let manualUrl = "";
+let manualReadNodes: (() => Promise<MessageNode[]>) | undefined;
 let confirmMode = false;
-let collectedNodes: MessageNode[] = [];
 let pendingDialogue: CollectedDialogue | null = null;
 
 // 模块级：FAB「已采集」状态刷新入口（initConversationFab 内赋值；
@@ -198,61 +114,17 @@ let refreshCollectedState: (() => void) | undefined;
 function initConversationFab(): void {
   const fab: FabController = createFab({
     onClick: () => {
-      if (confirmMode) {
-        // 确认态中点击 FAB = 放弃当前选择并重新采集（面板仍开着会被重新 open 覆盖）
-        confirmPanel.close();
-        confirmMode = false;
-        pendingDialogue = null;
-        collectedNodes = [];
-        void updateCollectedState();
+      if (collecting) {
+        // 采集中点 FAB = 完成采集（进入确认态）
+        void finishCollect();
+        return;
       }
-      fab.setBusy(true);
-      // 整页蒙层：禁用鼠标点击/滚动，防止用户操作干扰滚动扫描
-      showCollectOverlay();
-      void (async () => {
-        try {
-          const dialogue = await collectPage();
-          if (!dialogue) {
-            fab.showToast("未识别到对话内容，请确认当前是对话页", "error");
-            return;
-          }
-          // 采集完成校验提示：重复内容已去重 / 滚动未到底可能未采全
-          if (dialogue.duplicatesRemoved) fab.showToast(`已去除 ${dialogue.duplicatesRemoved} 条重复内容`, "success");
-          if (dialogue.incomplete) fab.showToast("对话过长可能未采全，建议分次采集", "error");
-          if (dialogue.lowConfidence || collectedNodes.length === 0) {
-            // 整页文本兜底/无节点可勾选：维持自动流程（直接缓存 + 打开导入页）
-            await cacheDialogue(dialogue, fab);
-            return;
-          }
-          // 进入确认态：确认面板（Shadow DOM，不依赖页面消息 DOM——虚拟列表
-          // 渲染重建元素，页面勾选框不可持续）+ toast 提示
-          confirmMode = true;
-          pendingDialogue = dialogue;
-          confirmPanel.open(collectedNodes, {
-            onConfirm: (selected) => {
-              confirmMode = false;
-              pendingDialogue = null;
-              collectedNodes = [];
-              const messages = selected.map(({ role, content }) => ({ role, content }));
-              void cacheDialogue({ ...dialogue, messages }, fab);
-              void updateCollectedState();
-            },
-            onAbandon: () => {
-              confirmMode = false;
-              pendingDialogue = null;
-              collectedNodes = [];
-              fab.showToast("已取消采集", "success");
-              void updateCollectedState();
-            },
-          });
-          fab.showToast(`已采集 ${collectedNodes.length} 条，取消勾选可剔除`, "success");
-        } catch (e) {
-          fab.showToast(`采集失败：${e instanceof Error ? e.message : e}`, "error");
-        } finally {
-          fab.setBusy(false);
-          hideCollectOverlay();
-        }
-      })();
+      if (confirmMode) {
+        // 确认态点 FAB = 确认导入（放弃走 FAB 上方「放弃」小按钮）
+        void confirmImport();
+        return;
+      }
+      startCollect();
     },
   });
 
@@ -268,16 +140,122 @@ function initConversationFab(): void {
     );
   }
 
-  /** 当前对话是否已在缓存中 → 按钮切「已采集 ↻」（跨标签页采集也靠轮询感知） */
+  /** 开始手动采集：提示条 + FAB 采集态 + 立即读一次（全文渲染平台首轮即全量）+ 轮询 */
+  function startCollect(): void {
+    const readNodes = pageReadNodes();
+    if (!readNodes) {
+      fab.showToast("未识别到对话内容，请确认当前是对话页", "error");
+      return;
+    }
+    collecting = true;
+    manualNodes = [];
+    manualUrl = location.href;
+    manualReadNodes = readNodes;
+    showCollectHint();
+    fab.setCollecting(0, { onAbandon: () => abortCollect() });
+    fab.showToast("已开始采集：请滚动浏览完整对话", "success");
+    void tickCollect();
+    manualIv = setInterval(() => void tickCollect(), 300);
+  }
+
+  /** 单轮读取：读当前渲染出的消息 → 合并进内存 → 高亮 → 更新 FAB 计数 */
+  async function tickCollect(): Promise<void> {
+    if (!collecting || !manualReadNodes) return;
+    if (location.href !== manualUrl) {
+      // SPA 导航跳走：自动取消本次采集
+      abortCollect();
+      return;
+    }
+    if (document.hidden) return; // 后台标签页跳过（回来继续）
+    try {
+      const nodes = await manualReadNodes();
+      if (!collecting) return; // await 期间被放弃/完成
+      const before = manualNodes.length;
+      mergeMessageNodes(manualNodes, nodes);
+      highlightNodes(nodes); // 当前渲染消息高亮（幂等）
+      if (manualNodes.length !== before) fab.updateCollectCount(manualNodes.length);
+    } catch {
+      // 单轮读取失败忽略，下一轮重试
+    }
+  }
+
+  /** 放弃采集（放弃按钮 / SPA 跳走）：清理状态与 UI */
+  function abortCollect(): void {
+    stopCollectLoop();
+    collecting = false;
+    hideCollectHint();
+    clearHighlight();
+    fab.showToast("已取消采集", "success");
+    void updateCollectedState();
+  }
+
+  function stopCollectLoop(): void {
+    if (manualIv) {
+      clearInterval(manualIv);
+      manualIv = undefined;
+    }
+  }
+
+  /** 完成采集：组装对话 → 进入确认态（FAB「确认导入 (N)」+ 放弃） */
+  async function finishCollect(): Promise<void> {
+    stopCollectLoop();
+    collecting = false;
+    hideCollectHint();
+    clearHighlight();
+    const nodes = manualNodes;
+    try {
+      const dialogue = await buildManualDialogue({ root: document, url: location.href, getRules }, nodes);
+      if (!dialogue) {
+        fab.showToast("未识别到对话内容，请确认已滚动浏览完整对话", "error");
+        void updateCollectedState();
+        return;
+      }
+      if (dialogue.duplicatesRemoved) fab.showToast(`已去除 ${dialogue.duplicatesRemoved} 条重复内容`, "success");
+      confirmMode = true;
+      pendingDialogue = dialogue;
+      fab.setConfirm(true, () => {
+        confirmMode = false;
+        pendingDialogue = null;
+        fab.showToast("已取消采集", "success");
+        void updateCollectedState();
+      });
+      fab.showToast(`已采集 ${dialogue.messages.length} 条，点击「确认导入」入库`, "success");
+    } catch (e) {
+      fab.showToast(`采集失败：${e instanceof Error ? e.message : e}`, "error");
+      void updateCollectedState();
+    }
+  }
+
+  /** 确认导入：缓存结果（background 自动开导入页），FAB 恢复「已采集」 */
+  async function confirmImport(): Promise<void> {
+    const dialogue = pendingDialogue;
+    confirmMode = false;
+    pendingDialogue = null;
+    if (!dialogue) return;
+    fab.setBusy(true);
+    try {
+      await cacheDialogue(dialogue, fab);
+    } finally {
+      fab.setBusy(false);
+      void updateCollectedState();
+    }
+  }
+
+  /** 当前对话是否已在缓存中 → 按钮切「已采集 ↻」（跨标签页采集也靠轮询感知）；
+   *  采集/确认进行中不刷新（避免打断 FAB 采集态/确认态） */
   async function updateCollectedState(): Promise<void> {
+    if (collecting || confirmMode) return;
     const key = conversationKey(location.href);
     fab.setCollected((await listPending()).some((i) => conversationKey(i.url) === key));
   }
   refreshCollectedState = () => void updateCollectedState();
 
   // 对话页判定通用化（URL 启发式 + DOM 对话框兜底）——完全同步，不依赖远程规则；
-  // SPA 导航后 watchUrl 轮询重判（DOM 已更新，对话框检测随之生效）
-  const applyVisibility = (url: string) => fab.setVisible(isConversationPage(url, document));
+  // SPA 导航后 watchUrl 轮询重判（DOM 已更新，对话框检测随之生效）。
+  // 采集/确认进行中不隐藏（「完成/确认导入」按钮必须可用）
+  const applyVisibility = (url: string) => {
+    if (!collecting && !confirmMode) fab.setVisible(isConversationPage(url, document));
+  };
   applyVisibility(location.href);
 
   // 非对话页（首页等）隐藏按钮；SPA 导航进入对话页后自动显示
@@ -300,7 +278,7 @@ try {
   console.error("[dailog] FAB 初始化失败：", e);
 }
 
-// 消息监听：popup「采集当前对话」触发本页采集（返回 dialogue，由 popup 转 background 缓存）；
+// 消息监听：popup「采集当前对话」触发本页静态采集（返回 dialogue，由 popup 转 background 缓存）；
 // background 缓存变化广播 → 立即刷新 FAB「已采集」状态（删除/新增后无需等 3 秒轮询）
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === MSG_COLLECTS_CHANGED) {

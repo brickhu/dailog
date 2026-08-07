@@ -1,15 +1,15 @@
 // doubao 对话页解析（2026-08-07 实测校准，本地解析器——不依赖 CDN 规则）。
 // 新版结构：data-message-author-role 不存在；消息容器
 // data-target-id="message-box-target-id"，角色由 data-message-id 所在 div 的
-// Tailwind 类区分（user=justify-end 右对齐气泡 / assistant=grid 布局），
-// 内容容器 .md-box-root（markdown 渲染）
+// Tailwind 类区分（user=justify-end 右对齐气泡 / assistant=grid 布局）。
+// 内容直接提取消息元素渲染文本（messageText = 全选该气泡所见；工具栏/隐藏
+// 噪音天然排除，不再依赖 .md-box-root 内容选择器）
 import type { MessageNode } from "./core";
+import { messageText } from "./core";
 import type { CollectedDialogue, Role } from "../shared";
-import { normalizeMessageText } from "../shared";
 
 const USER_SELECTOR = "div[data-message-id].justify-end";
 const ASSISTANT_SELECTOR = "div[data-message-id].grid";
-const CONTENT_SELECTOR = ".md-box-root";
 const MESSAGE_SELECTOR = `${USER_SELECTOR}, ${ASSISTANT_SELECTOR}`;
 
 /** doubao 消息 id：data-message-id（数字 id）；缺省按读取序号派生 */
@@ -25,8 +25,7 @@ export function parseDoubaoPage(root: ParentNode): MessageNode[] {
     if (el.matches(USER_SELECTOR)) role = "user";
     else if (el.matches(ASSISTANT_SELECTOR)) role = "assistant";
     if (!role) return;
-    const target = el.querySelector(CONTENT_SELECTOR) ?? el;
-    const content = normalizeMessageText(target.textContent ?? "");
+    const content = messageText(el);
     if (!content) return;
     nodes.push({
       id: doubaoMessageId(el, i),

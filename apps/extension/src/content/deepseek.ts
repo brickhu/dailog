@@ -1,6 +1,6 @@
 import type { MessageNode } from "./core";
+import { messageText } from "./core";
 import type { CollectedDialogue, Role } from "../shared";
-import { normalizeMessageText } from "../shared";
 
 // 新版结构（2026-08-07 实测）：data-message-author-role 已移除；
 // 消息容器 div.ds-message（user/assistant 共用），assistant 内容带语义类
@@ -28,7 +28,7 @@ export function parseDeepSeekPage(root: ParentNode): MessageNode[] {
     if (el.matches(USER_SELECTOR) && !el.querySelector(ASSISTANT_SELECTOR)) role = "user";
     else if (el.matches(ASSISTANT_SELECTOR)) role = "assistant";
     if (!role) return;
-    const content = normalizeMessageText(el.textContent ?? "");
+    const content = messageText(el);
     if (!content) return;
     nodes.push({
       id: deepseekMessageId(el, i),

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { collectFromDocument } from "../src/content/collector";
 
-describe("collectFromDocument", () => {
+describe("collectFromDocument（静态 one-shot 采集）", () => {
   it("dispatches claude and returns null when no messages", async () => {
     const root = {
       querySelectorAll: () => [],
@@ -18,19 +18,16 @@ describe("collectFromDocument", () => {
     expect(r).toBeNull();
   });
 
-  it("uses scroll loop for deepseek when scroll ctx provided", async () => {
-    const root = { querySelectorAll: () => [], ownerDocument: { title: "测试 - DeepSeek" } } as unknown as ParentNode;
-    const scroll = {
-      container: { scrollTop: 0, clientHeight: 800, scrollHeight: 2400 } as unknown as Element,
-      readNodes: async () => [
-        { id: "m1", offsetTop: 100, role: "user" as const, content: "hi" },
-        { id: "m2", offsetTop: 200, role: "assistant" as const, content: "hello" },
-      ],
-      waitForMutation: async () => {},
-    };
-    const r = await collectFromDocument({ root, url: "https://chat.deepseek.com/a/chat/s/conv1", scroll });
-    expect(r?.platform).toBe("deepseek");
+  it("collects deepseek via static parser (full-render platforms need no scrolling)", async () => {
+    const root = {
+      querySelectorAll: () => [],
+      ownerDocument: { title: "测试 - DeepSeek" },
+      cloneNode: () => ({ querySelectorAll: () => [], textContent: "正文内容" }),
+    } as unknown as ParentNode;
+    const r = await collectFromDocument({ root, url: "https://chat.deepseek.com/a/chat/s/conv1" });
+    // 无消息 → 落入整页文本兜底（lowConfidence），conversationId 仍可解析
+    expect(r).not.toBeNull();
     expect(r?.conversationId).toBe("conv1");
-    expect(r?.messages.map((m) => m.content)).toEqual(["hi", "hello"]);
+    expect(r?.lowConfidence).toBe(true);
   });
 });

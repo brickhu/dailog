@@ -3,7 +3,7 @@
 // chatgpt/doubao 等无专有解析器的平台，规则就是它们的首选采集路径。
 
 import type { CollectRule, DialogueMessage, Role } from "../shared";
-import { normalizeMessageText } from "../shared";
+import { messageText } from "./core";
 
 /** 带 DOM 引用的规则解析结果（确认态勾选框需要挂载点；parseByRule 剥离后对外） */
 export interface RuleMessage extends DialogueMessage {
@@ -27,7 +27,7 @@ export function parseByRuleWithEl(root: ParentNode, rule: CollectRule): RuleMess
       if (!role) continue;
       // 取文本子节点（如 .ds-markdown/.markdown）；无则回退节点自身（user 消息通常没有）
       const target = contentSelector ? (el.querySelector(contentSelector) ?? el) : el;
-      const content = normalizeMessageText(target.textContent ?? "");
+      const content = messageText(target);
       if (!content) continue;
       messages.push({ role, content, el });
     }
