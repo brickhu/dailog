@@ -34,10 +34,10 @@
       "matches": [
         "https://claude.ai/*",
         "https://chat.deepseek.com/*",
-        "https://chatgpt.com/c/*",
-        "https://gemini.google.com/app/*",
-        "https://kimi.moonshot.cn/chat/*",
-        "https://www.doubao.com/chat/*",
+        "https://chatgpt.com/*",
+        "https://gemini.google.com/*",
+        "https://kimi.moonshot.cn/*",
+        "https://www.doubao.com/*",
         "https://www.tongyi.com/*"
       ],
       "js": ["dist/content.js"],

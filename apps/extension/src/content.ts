@@ -11,13 +11,14 @@ declare const chrome: {
 import {
   MSG_COLLECT, MSG_CACHE_COLLECT, MSG_LIST_COLLECTS, MSG_GET_RULES, conversationKey,
   type CollectedDialogue, type CacheCollectResult, type ListCollectsResult, type CollectSummary,
-  type GetRulesResult, type CollectRules,
+  type GetRulesResult, type CollectRules, type CollectRule,
 } from "./shared";
-import { collectFromDocument } from "./content/collector";
+import { collectFromDocument, resolvePlatform } from "./content/collector";
 import { parseDeepSeekPage } from "./content/deepseek";
 import { parseClaudePage } from "./content/claude";
 import { waitForMutation } from "./content/mutation";
 import { createFab, type FabController } from "./content/ui";
+import { isConversationPage } from "./content/conversation-page";
 import { createStudioBadge } from "./content/studio-badge";
 import { runCollectFlow } from "./content/collect-flow";
 import { applyPrintCss } from "./content/print-css";
@@ -141,21 +142,6 @@ function initStudioBadge(): void {
 
 // ---- AI 对话页：采集 FAB + 「已采集」状态 ----
 
-// 对话页判定：content script 按域名全站注入后，非对话页（如 claude.ai 首页）隐藏按钮
-function isConversationPage(url: string): boolean {
-  const { hostname, pathname } = new URL(url);
-  switch (hostname) {
-    case "claude.ai":
-      return pathname.startsWith("/chat/");
-    // deepseek 从首页（对话列表）点进对话是 SPA 跳转 → matches 放宽到全站保证注入，
-    // 非对话路径（首页）隐藏按钮，watchUrl 感知导航后自动显示
-    case "chat.deepseek.com":
-      return pathname.startsWith("/chat/");
-    default:
-      return true; // 其他平台维持「注入即显示」
-  }
-}
-
 // SPA 导航监听（claude.ai 首页 → 对话页是前端跳转，页面不刷新、content script 不重跑），
 // popstate + 轮询双保险（SPA 框架未必触发 popstate）
 function watchUrl(onChange: (url: string) => void): void {
@@ -210,11 +196,22 @@ function initConversationFab(): void {
     fab.setCollected((await listPending()).some((i) => conversationKey(i.url) === key));
   }
 
+  // 规则驱动显隐：默认表先行（避免闪烁），远程规则到达后重评
+  // （打开平台页面时 background 已静默预热规则缓存，这里拿到的是最新规则）
+  let rule: CollectRule | undefined;
+  const applyVisibility = (url: string) => fab.setVisible(isConversationPage(url, rule));
+  applyVisibility(location.href);
+  void getRules().then((rules) => {
+    if (!rules) return;
+    const platform = resolvePlatform(rules, location.href);
+    rule = platform ? rules.platforms[platform] : undefined;
+    applyVisibility(location.href);
+  });
+
   // 非对话页（首页等）隐藏按钮；SPA 导航进入对话页后自动显示
-  fab.setVisible(isConversationPage(location.href));
   void updateCollectedState();
   watchUrl((url) => {
-    fab.setVisible(isConversationPage(url));
+    applyVisibility(url);
     void updateCollectedState();
   });
   setInterval(() => void updateCollectedState(), 3000);

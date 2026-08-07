@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cacheCollect, getCollect, deleteCollect, listCollects, getAppBase, getRuntimeConfig, setRuntimeConfig, getRemoteRules, resetRulesCache, handleExternalMessage, isSupportedUrl } from "../src/background";
+import { cacheCollect, getCollect, deleteCollect, listCollects, getAppBase, getRuntimeConfig, setRuntimeConfig, getRemoteRules, resetRulesCache, warmRulesCache, handleExternalMessage, isSupportedUrl } from "../src/background";
 import { DEFAULT_RULES_URL } from "../src/env";
 import type { CollectRules } from "../src/shared";
 
@@ -259,6 +259,32 @@ describe("getRemoteRules（远程抓取规则）", () => {
     (globalThis as Record<string, unknown>).fetch = vi.fn(async () => new Response("", { status: 404 }));
     const r = await getRemoteRules();
     expect(r).toEqual({ ok: false, error: "http_404" });
+  });
+});
+
+describe("warmRulesCache（访问平台页面时预热规则）", () => {
+  it("平台域名 → 触发拉取；TTL 内再次预热复用缓存（只请求一次）", async () => {
+    const rules: CollectRules = {
+      version: 4,
+      platforms: { claude: { userSelector: "a", assistantSelector: "b" } },
+    };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(rules), { status: 200 }));
+    (globalThis as Record<string, unknown>).fetch = fetchMock;
+    warmRulesCache("https://chat.deepseek.com/chat/conv1");
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 50)); // 等首次拉取完成、缓存写入（宏任务排空微任务链）
+    warmRulesCache("https://claude.ai/chat/abc");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fetchMock).toHaveBeenCalledTimes(1); // TTL 内复用，不重复请求
+    expect(fetchMock).toHaveBeenCalledWith(DEFAULT_RULES_URL);
+  });
+
+  it("非平台域名 / 空 URL → 不拉取", () => {
+    const fetchMock = vi.fn();
+    (globalThis as Record<string, unknown>).fetch = fetchMock;
+    warmRulesCache("https://google.com");
+    warmRulesCache(undefined);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

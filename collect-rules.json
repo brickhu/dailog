@@ -1,27 +1,63 @@
 {
-  "version": 3,
-  "note": "扩展采集 fallback 规则（jsDelivr 托管：https://cdn.jsdelivr.net/gh/brickhu/dailog@dev/collect-rules.json）。claude 已用真实 DOM 实测校准（2026-08-07：消息作用域 div[role='article']，user 标记 data-testid='user-message'，assistant 无 data-testid —— 旧选择器 [data-testid='assistant-message'] 失配，正文容器 div.font-claude-response > .standard-markdown）；deepseek 来自本地解析器；chatgpt 已实测校准（消息为 div[data-message-author-role]，非 article；.markdown 为内容容器）；doubao 待验证——打开对话页 DevTools 核对后更新本文件 push 即可，几分钟内 CDN 生效。",
+  "version": 4,
+  "note": "扩展采集 fallback 规则（jsDelivr 托管：https://cdn.jsdelivr.net/gh/brickhu/dailog@dev/collect-rules.json）。v4：URL 规则数据化——url.host/conversationPath/conversationIdPattern 驱动平台分发、FAB 显隐与会话 id 提取，扩展打开平台页面时静默预热（TTL 10 分钟），规则更新后下次访问即生效。claude 已实测校准（2026-08-07：消息作用域 div[role='article']，user 标记 data-testid='user-message'，assistant 无 data-testid，正文容器 div.font-claude-response > .standard-markdown）；deepseek/chatgpt 选择器沿用实测；doubao/gemini/kimi/tongyi 待实测——打开对话页 DevTools 核对后更新本文件 push 即可，几分钟内 CDN 生效。",
   "platforms": {
     "claude": {
+      "url": {
+        "host": "claude.ai",
+        "conversationPath": "/chat/",
+        "conversationIdPattern": "/chat/([a-f0-9-]+)"
+      },
       "messageSelector": "div[role='article']",
       "userSelector": "[data-testid='user-message']",
       "assistantSelector": "div.font-claude-response",
       "contentSelector": ".standard-markdown"
     },
     "deepseek": {
+      "url": {
+        "host": "chat.deepseek.com",
+        "conversationPath": "/chat/",
+        "conversationIdPattern": "/chat/([^/?#]+)"
+      },
       "userSelector": "[data-message-author-role='user']",
       "assistantSelector": "[data-message-author-role='assistant']",
       "contentSelector": ".ds-markdown",
       "scrollContainer": ".ds-scroll-area"
     },
     "chatgpt": {
+      "url": {
+        "host": "chatgpt.com",
+        "conversationPath": "/c/"
+      },
       "userSelector": "[data-message-author-role='user']",
       "assistantSelector": "[data-message-author-role='assistant']",
       "contentSelector": ".markdown"
     },
     "doubao": {
+      "url": {
+        "host": "www.doubao.com",
+        "conversationPath": "/chat/"
+      },
       "userSelector": "[data-message-author-role='user']",
       "assistantSelector": "[data-message-author-role='assistant']"
+    },
+    "gemini": {
+      "url": {
+        "host": "gemini.google.com",
+        "conversationPath": "/app/"
+      }
+    },
+    "kimi": {
+      "url": {
+        "host": "kimi.moonshot.cn",
+        "conversationPath": "/chat/"
+      }
+    },
+    "tongyi": {
+      "url": {
+        "host": "www.tongyi.com",
+        "conversationPath": "/"
+      }
     }
   }
 }

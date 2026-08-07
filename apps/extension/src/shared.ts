@@ -58,6 +58,15 @@ export const MSG_GET_RULES = "dailog:get-rules";
 
 /** 平台抓取规则（远程托管 JSON 的 schema；选择器驱动，通用解析器消费） */
 export interface CollectRule {
+  /** URL 形态（平台分发 / 对话页判定 / 会话 id 提取；缺省回退内置默认表） */
+  url?: {
+    /** 平台域名（hostname，无端口） */
+    host?: string;
+    /** 对话页路径前缀（如 /chat/；FAB 显隐 + 平台分发） */
+    conversationPath?: string;
+    /** 会话 id 提取正则（字符串；缺省取路径最后一段） */
+    conversationIdPattern?: string;
+  };
   /** 消息节点候选（缺省 = userSelector ∪ assistantSelector） */
   messageSelector?: string;
   userSelector: string;
@@ -105,6 +114,20 @@ export function conversationKey(url: string): string {
   } catch {
     return url;
   }
+}
+
+/** 从 URL 提取会话 id：pattern 为正则字符串（缺省取路径最后一段）。
+ *  pattern 需包含捕获组（如 "/chat/([a-f0-9-]+)"）；无匹配返回 null */
+export function conversationIdFromUrl(url: string, pattern?: string): string | null {
+  if (pattern) {
+    try {
+      const m = new RegExp(pattern).exec(url);
+      if (m?.[1]) return m[1];
+    } catch {
+      // 非法正则：回退取最后一段
+    }
+  }
+  return url.match(/\/([^/?#]+)\/?$/)?.[1] ?? null;
 }
 
 /** 消息文本规范化：保留换行与行首缩进（代码块/列表结构），只清行尾空白、

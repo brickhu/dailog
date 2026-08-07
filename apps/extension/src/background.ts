@@ -231,12 +231,23 @@ export async function getRemoteRules(): Promise<GetRulesResult> {
 
 // ============ 消息监听（仅在浏览器运行时注册；node 测试环境跳过） ============
 
+// 平台域名 tab 访问时预热规则缓存：用户打开/刷新目标平台页面即静默拉取
+// （getRemoteRules 内部 TTL 判定——首次访问/缓存过期才请求 CDN，session 内复用），
+// content script 注入后经 MSG_GET_RULES 拿到的即最新规则，无需等采集才拉
+export function warmRulesCache(url: string | undefined): void {
+  if (!url || !isSupportedUrl(url)) return;
+  void getRemoteRules();
+}
+
 if (typeof chrome !== "undefined" && chrome.tabs?.onActivated) {
   chrome.tabs.onActivated.addListener(({ tabId }) => void updateIconForTab(tabId));
 }
 if (typeof chrome !== "undefined" && chrome.tabs?.onUpdated) {
   chrome.tabs.onUpdated.addListener((tabId, info) => {
-    if (info.url) void updateIconForTab(tabId);
+    if (info.url) {
+      void updateIconForTab(tabId);
+      warmRulesCache(info.url);
+    }
   });
 }
 
