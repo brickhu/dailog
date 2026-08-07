@@ -147,6 +147,10 @@ function isConversationPage(url: string): boolean {
   switch (hostname) {
     case "claude.ai":
       return pathname.startsWith("/chat/");
+    // deepseek 从首页（对话列表）点进对话是 SPA 跳转 → matches 放宽到全站保证注入，
+    // 非对话路径（首页）隐藏按钮，watchUrl 感知导航后自动显示
+    case "chat.deepseek.com":
+      return pathname.startsWith("/chat/");
     default:
       return true; // 其他平台维持「注入即显示」
   }

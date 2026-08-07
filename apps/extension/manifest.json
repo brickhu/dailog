@@ -33,7 +33,7 @@
     {
       "matches": [
         "https://claude.ai/*",
-        "https://chat.deepseek.com/chat/*",
+        "https://chat.deepseek.com/*",
         "https://chatgpt.com/c/*",
         "https://gemini.google.com/app/*",
         "https://kimi.moonshot.cn/chat/*",
