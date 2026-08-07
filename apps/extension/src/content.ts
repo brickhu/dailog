@@ -21,7 +21,8 @@ import { createFab, type FabController } from "./content/ui";
 import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback, applyRuleMerge } from "./content/read-fallback";
 import { showCollectMask, hideCollectMask, updateMaskCount, setMaskStatus, setMaskDone } from "./content/collect-mask";
-import { createStepCapture, type StepCapture } from "./content/step-capture";
+import { createSweepCapture, type SweepCapture } from "./content/sweep-capture";
+import { highlightNodes, clearHighlight } from "./content/highlight";
 import type { MessageNode } from "./content/core";
 
 /** 平台消息读取：本地专有解析器优先（用户滚动驱动渲染，轮询读当前渲染出的消息）；
@@ -102,10 +103,10 @@ async function collectPage(): Promise<CollectedDialogue | null> {
   return collectFromDocument({ root: document, url: location.href, getRules });
 }
 
-// 步进截取采集状态（蒙层接管页面滚动，用户点「上」从底部逐屏向上截取）：
-// 采集态（capturing）→ 蒙层「上/取消」；到顶 → 蒙层「完成」→ 确认态（confirmMode）
+// 自动步进截取采集状态（蒙层接管页面滚动，从底部自动逐屏向上截取）：
+// 采集态（capturing）→ 蒙层「取消/计数」；自动完成 → 蒙层「完成」→ 确认态（confirmMode）
 let capturing = false;
-let stepSession: StepCapture | undefined;
+let sweepSession: SweepCapture | undefined;
 let captureUrl = "";
 let confirmMode = false;
 let pendingDialogue: CollectedDialogue | null = null;
@@ -123,7 +124,7 @@ function initConversationFab(): void {
         void confirmImport();
         return;
       }
-      startStepCapture();
+      startSweepCapture();
     },
   });
 
@@ -139,8 +140,8 @@ function initConversationFab(): void {
     );
   }
 
-  /** 开始步进截取：蒙层接管（上/取消），自动滚到底部并首次截取 */
-  function startStepCapture(): void {
+  /** 开始自动截取：蒙层接管，从底部逐屏向上自动采集（高亮反馈已截取消息） */
+  function startSweepCapture(): void {
     const readNodes = pageReadNodes();
     if (!readNodes) {
       fab.showToast("未识别到对话内容，请确认当前是对话页", "error");
@@ -150,50 +151,44 @@ function initConversationFab(): void {
     captureUrl = location.href;
     fab.setVisible(false); // 蒙层全权接管
     showCollectMask({
-      onUp: () => void stepUp(),
-      onCancel: () => cancelStepCapture(),
-      onDone: () => void finishStepCapture(),
+      onCancel: () => cancelSweepCapture(),
+      onDone: () => void finishSweepCapture(),
     });
-    stepSession = createStepCapture({
+    sweepSession = createSweepCapture({
       readNodes,
       onProgress: (n) => updateMaskCount(n),
+      onWindow: (nodes) => highlightNodes(nodes),
     });
-    void stepSession
-      .start()
-      .then(() => stepSession && updateMaskCount(stepSession.count()))
-      .catch(() => cancelStepCapture());
+    void sweepSession
+      .run()
+      .then((r) => {
+        if (!sweepSession) return; // 已被取消
+        setMaskDone();
+        if (r.status === "stuck") setMaskStatus("滚动被页面拦截，可能未采全——请核对条数后完成");
+      })
+      .catch(() => cancelSweepCapture());
   }
 
-  /** 上移一屏并截取；到顶 → 蒙层按钮变「完成」 */
-  async function stepUp(): Promise<void> {
-    if (!stepSession) return;
-    try {
-      const r = await stepSession.stepUp();
-      if (r === "moved") return;
-      setMaskDone(); // top / stuck：滚不动 → 显示「完成」
-      if (r === "stuck") setMaskStatus("滚动被页面拦截，可能未采全——请核对条数后完成");
-    } catch {
-      // 单步失败忽略，可再点「上」重试
-    }
-  }
-
-  /** 取消采集：清理蒙层与状态，FAB 恢复 */
-  function cancelStepCapture(): void {
-    stepSession = undefined;
+  /** 取消采集：中止自动扫描，清理蒙层与状态，FAB 恢复 */
+  function cancelSweepCapture(): void {
+    sweepSession?.abort();
+    sweepSession = undefined;
     capturing = false;
     hideCollectMask();
+    clearHighlight();
     fab.setVisible(true);
     fab.showToast("已取消采集", "success");
     void updateCollectedState();
   }
 
   /** 完成：组装对话 → 进入确认态（FAB「确认导入 (N)」+ 放弃） */
-  async function finishStepCapture(): Promise<void> {
-    const session = stepSession;
+  async function finishSweepCapture(): Promise<void> {
+    const session = sweepSession;
     if (!session) return;
-    stepSession = undefined;
+    sweepSession = undefined;
     capturing = false;
     hideCollectMask();
+    clearHighlight();
     fab.setVisible(true);
     try {
       const dialogue = await buildManualDialogue({ root: document, url: location.href, getRules }, session.nodes());
@@ -254,7 +249,7 @@ function initConversationFab(): void {
   void updateCollectedState();
   watchUrl((url) => {
     // 采集进行中 SPA 跳走 → 自动取消（蒙层不能让用户卡在别的页面）
-    if (capturing && url !== captureUrl) cancelStepCapture();
+    if (capturing && url !== captureUrl) cancelSweepCapture();
     applyVisibility(url);
     void updateCollectedState();
   });

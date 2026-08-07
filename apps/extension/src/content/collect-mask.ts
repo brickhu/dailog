@@ -1,20 +1,19 @@
-// 步进截取蒙层：采集进行中整页覆盖（阻断用户滚动/点击——滚动由扩展接管，
-// 用户通过「上 / 取消」按钮逐屏驱动），面板显示已截取条数与状态。
+// 采集蒙层：自动步进截取进行中整页覆盖（阻断用户滚动/点击——滚动由扩展接管，
+// 用户只需等待自动完成），面板显示已截取条数与状态。
 
 export interface CollectMaskOptions {
-  onUp: () => void;
   onCancel: () => void;
   onDone: () => void;
 }
 
 let mask: HTMLDivElement | null = null;
-let upBtn: HTMLButtonElement | null = null;
+let primaryBtn: HTMLButtonElement | null = null;
 let countEl: HTMLDivElement | null = null;
 let statusEl: HTMLDivElement | null = null;
 let done = false;
 let prevBodyOverflow = "";
 
-/** 显示蒙层（幂等）：阻断页面交互 + 上/取消按钮 + 截取计数 */
+/** 显示蒙层（幂等）：阻断页面交互 + 取消按钮 + 截取计数 */
 export function showCollectMask(opts: CollectMaskOptions): void {
   if (mask) return;
   done = false;
@@ -24,7 +23,7 @@ export function showCollectMask(opts: CollectMaskOptions): void {
     "position:fixed",
     "inset:0",
     "z-index:2147483646", // 略低于 FAB（2147483647），高于页面一切内容
-    "background:rgba(15,23,42,0.6)",
+    "background:rgba(15,23,42,0.45)", // 半透明：页面滚动过程与高亮可见（仅阻断交互）
     "display:flex",
     "align-items:center",
     "justify-content:center",
@@ -46,7 +45,7 @@ export function showCollectMask(opts: CollectMaskOptions): void {
 
   const title = document.createElement("div");
   title.style.cssText = "font-size:15px;font-weight:700;color:#0f172a;";
-  title.textContent = "步进截取";
+  title.textContent = "正在截取";
 
   countEl = document.createElement("div");
   countEl.style.cssText = "font-size:13px;color:#334155;";
@@ -54,45 +53,27 @@ export function showCollectMask(opts: CollectMaskOptions): void {
 
   statusEl = document.createElement("div");
   statusEl.style.cssText = "font-size:12px;color:#94a3b8;line-height:1.5;";
-  statusEl.textContent = "从底部逐屏向上截取，滚不动即完成";
+  statusEl.textContent = "自动从底部逐屏向上截取，请稍候";
 
-  const row = document.createElement("div");
-  row.style.cssText = "display:flex;gap:10px;margin-top:4px;";
-  const upBtnStyle = [
-    "flex:1",
+  primaryBtn = document.createElement("button");
+  primaryBtn.type = "button";
+  primaryBtn.style.cssText = [
     "padding:10px 0",
     "border:none",
     "border-radius:999px",
     "cursor:pointer",
     "background:#16a34a",
     "color:#fff",
-    "font-size:15px",
-    "font-weight:700",
-  ].join(";");
-  upBtn = document.createElement("button");
-  upBtn.type = "button";
-  upBtn.style.cssText = upBtnStyle;
-  upBtn.textContent = "上";
-  upBtn.addEventListener("click", () => {
-    if (done) opts.onDone();
-    else opts.onUp();
-  });
-  const cancelBtn = document.createElement("button");
-  cancelBtn.type = "button";
-  cancelBtn.style.cssText = [
-    "padding:10px 18px",
-    "border:1px solid #cbd5e1",
-    "border-radius:999px",
-    "cursor:pointer",
-    "background:#fff",
-    "color:#64748b",
     "font-size:14px",
-    "font-weight:600",
+    "font-weight:700",
+    "width:100%",
   ].join(";");
-  cancelBtn.textContent = "取消";
-  cancelBtn.addEventListener("click", () => opts.onCancel());
-  row.append(upBtn, cancelBtn);
-  panel.append(title, countEl, statusEl, row);
+  primaryBtn.textContent = "取消";
+  primaryBtn.addEventListener("click", () => {
+    if (done) opts.onDone();
+    else opts.onCancel();
+  });
+  panel.append(title, countEl, statusEl, primaryBtn);
 
   mask.appendChild(panel);
   // 阻断页面滚动/触摸（蒙层自身无可滚内容，事件不落到下层）
@@ -108,7 +89,7 @@ export function showCollectMask(opts: CollectMaskOptions): void {
 export function hideCollectMask(): void {
   mask?.remove();
   mask = null;
-  upBtn = null;
+  primaryBtn = null;
   countEl = null;
   statusEl = null;
   done = false;
@@ -126,11 +107,11 @@ export function setMaskStatus(text: string): void {
   if (statusEl) statusEl.textContent = text;
 }
 
-/** 到顶：主按钮「上」→「完成」（点击触发 onDone） */
+/** 截取完成：主按钮「取消」→「完成」（点击触发 onDone） */
 export function setMaskDone(): void {
   done = true;
-  if (upBtn) {
-    upBtn.textContent = "完成";
-    upBtn.style.background = "#0f172a";
+  if (primaryBtn) {
+    primaryBtn.textContent = "完成";
+    primaryBtn.style.background = "#0f172a";
   }
 }
