@@ -11,7 +11,7 @@ declare const chrome: {
 import {
   MSG_COLLECT, MSG_CACHE_COLLECT, MSG_LIST_COLLECTS, MSG_GET_RULES, conversationKey,
   type CollectedDialogue, type CacheCollectResult, type ListCollectsResult, type CollectSummary,
-  type GetRulesResult, type CollectRules, type CollectRule,
+  type GetRulesResult, type CollectRules, type CollectRule, type Platform,
 } from "./shared";
 import { collectFromDocument, resolvePlatform } from "./content/collector";
 import { parseDeepSeekPage } from "./content/deepseek";
@@ -19,19 +19,35 @@ import { parseClaudePage } from "./content/claude";
 import { waitForMutation } from "./content/mutation";
 import { createFab, type FabController } from "./content/ui";
 import { isConversationPage } from "./content/conversation-page";
+import { applyRuleFallback } from "./content/read-fallback";
 import { createStudioBadge } from "./content/studio-badge";
 import { runCollectFlow } from "./content/collect-flow";
 import { applyPrintCss } from "./content/print-css";
 import type { MessageNode } from "./content/core";
 
+/** 平台消息读取：本地专有解析器优先（打印撑开/滚动下全量提取）；
+ *  本地选择器失配（站点 DOM 改版）→ 远程规则选择器同一文档兜底提取，
+ *  避免掉到整页文本兜底（含导航噪音） */
+async function readPlatformMessages(
+  platform: Platform,
+  parseLocal: (root: ParentNode) => MessageNode[],
+): Promise<MessageNode[]> {
+  const local = parseLocal(document);
+  if (local.length > 0) return local;
+  const rules = await getRules();
+  return applyRuleFallback(local, rules?.platforms[platform], document);
+}
+
 function deepSeekScroll() {
-  const container = document.querySelector<HTMLElement>(".ds-scroll-area");
+  // 专有容器类名失效（DOM 改版）→ 泛化探测兜底（页面级滚动保底），
+  // 提取器始终用 deepseek 平台（不跨平台套用 claude 选择器）
+  const container = document.querySelector<HTMLElement>(".ds-scroll-area") ?? findScrollContainer();
   if (!container) return undefined;
   return {
     container,
-    readNodes: async () => parseDeepSeekPage(document),
+    readNodes: () => readPlatformMessages("deepseek", parseDeepSeekPage),
     waitForMutation: () => waitForMutation(document.body),
-    expand: makeExpand(container, async () => parseDeepSeekPage(document)),
+    expand: makeExpand(container, () => readPlatformMessages("deepseek", parseDeepSeekPage)),
     restore: () => restoreContainer(container),
   };
 }
@@ -82,9 +98,9 @@ function claudeScroll() {
   if (!container) return undefined;
   return {
     container,
-    readNodes: async () => parseClaudePage(document),
+    readNodes: () => readPlatformMessages("claude", parseClaudePage),
     waitForMutation: () => waitForMutation(document.body),
-    expand: makeExpand(container, async () => parseClaudePage(document)),
+    expand: makeExpand(container, () => readPlatformMessages("claude", parseClaudePage)),
     restore: () => restoreContainer(container),
   };
 }
