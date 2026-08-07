@@ -55,6 +55,8 @@ export const MSG_COLLECT = "dailog:collect";
 export const MSG_LIST_COLLECTS = "dailog:list-collects";
 /** content → background：拉取远程抓取规则（本地解析失败时的 fallback；background 侧 TTL 缓存） */
 export const MSG_GET_RULES = "dailog:get-rules";
+/** background → content：缓存条目发生变化（删除/新增）——FAB「已采集」状态立即刷新 */
+export const MSG_COLLECTS_CHANGED = "dailog:collects-changed";
 
 /** 平台抓取规则（远程托管 JSON 的 schema；选择器驱动，通用解析器消费） */
 export interface CollectRule {

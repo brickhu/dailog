@@ -9,7 +9,7 @@ declare const chrome: {
 };
 
 import {
-  MSG_COLLECT, MSG_CACHE_COLLECT, MSG_LIST_COLLECTS, MSG_GET_RULES, conversationKey,
+  MSG_COLLECT, MSG_CACHE_COLLECT, MSG_LIST_COLLECTS, MSG_GET_RULES, MSG_COLLECTS_CHANGED, conversationKey,
   type CollectedDialogue, type CacheCollectResult, type ListCollectsResult, type CollectSummary,
   type GetRulesResult, type CollectRules, type Platform,
 } from "./shared";
@@ -20,7 +20,6 @@ import { waitForMutation } from "./content/mutation";
 import { createFab, type FabController } from "./content/ui";
 import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback } from "./content/read-fallback";
-import { createStudioBadge } from "./content/studio-badge";
 import { runCollectFlow } from "./content/collect-flow";
 import { applyPrintCss } from "./content/print-css";
 import type { MessageNode } from "./content/core";
@@ -110,14 +109,7 @@ function pageScroll() {
   return deepSeekScroll() ?? claudeScroll();
 }
 
-// ============ 页面分流：studio 待入库角标 / AI 对话页采集 FAB ============
-
-/** studio 域（hostname 不带端口；与 manifest matches 的「域名级」注入保持一致） */
-const STUDIO_HOSTS = new Set(["app.dailog.fm", "localhost"]);
-
-function isStudioPage(): boolean {
-  return STUDIO_HOSTS.has(location.hostname);
-}
+// ============ AI 对话页：采集 FAB + 「已采集」状态 ============
 
 /** 读取扩展缓存中的待入库条目（按 appBase 按域过滤——不传 = 扩展当前生效基址；
  *  扩展上下文失效时返回空） */
@@ -131,29 +123,6 @@ async function listPending(appBase?: string): Promise<CollectSummary[]> {
   } catch {
     return [];
   }
-}
-
-// ---- studio 页面：右下角「N 条对话待入库」角标 ----
-
-function initStudioBadge(): void {
-  const badge = createStudioBadge({
-    // 同源跳转（studio SPA 路由；全量刷新无妨，路由由 app 处理）
-    onOpenItem: (collectId) => { window.location.href = `/import?collectId=${collectId}`; },
-  });
-
-  async function refresh(): Promise<void> {
-    // /import 页本身不显示角标（该页已展示条目，确认/取消后条目消失）
-    if (location.pathname.startsWith("/import")) {
-      badge.setItems([]);
-      return;
-    }
-    // 按当前页面 origin 过滤：dev(5173)/主网(app.dailog.fm) 的待入库互不串用
-    badge.setItems(await listPending(location.origin));
-  }
-
-  void refresh();
-  // SPA pushState 不触发 popstate——靠轮询兜底（角标数量跨标签页变化也靠它感知）
-  setInterval(() => void refresh(), 3000);
 }
 
 // ---- AI 对话页：采集 FAB + 「已采集」状态 ----
@@ -188,6 +157,10 @@ async function collectPage(): Promise<CollectedDialogue | null> {
   return collectFromDocument({ root: document, url: location.href, scroll: pageScroll(), getRules });
 }
 
+// 模块级：FAB「已采集」状态刷新入口（initConversationFab 内赋值；
+// background 缓存变化广播时调用——立即恢复「采集对话」，无需等轮询）
+let refreshCollectedState: (() => void) | undefined;
+
 function initConversationFab(): void {
   const fab: FabController = createFab({
     onClick: () => {
@@ -211,6 +184,7 @@ function initConversationFab(): void {
     const key = conversationKey(location.href);
     fab.setCollected((await listPending()).some((i) => conversationKey(i.url) === key));
   }
+  refreshCollectedState = () => void updateCollectedState();
 
   // 对话页判定通用化（URL 启发式 + DOM 对话框兜底）——完全同步，不依赖远程规则；
   // SPA 导航后 watchUrl 轮询重判（DOM 已更新，对话框检测随之生效）
@@ -226,14 +200,18 @@ function initConversationFab(): void {
   setInterval(() => void updateCollectedState(), 3000);
 }
 
-if (isStudioPage()) {
-  initStudioBadge();
-} else {
-  initConversationFab();
-}
+// AI 平台页：采集 FAB（studio 域不再注入 content script——待入库提醒已移除）
+initConversationFab();
 
-// 保留消息监听：popup「采集当前对话」触发本页采集（返回 dialogue，由 popup 转 background 缓存）
+// 消息监听：popup「采集当前对话」触发本页采集（返回 dialogue，由 popup 转 background 缓存）；
+// background 缓存变化广播 → 立即刷新 FAB「已采集」状态（删除/新增后无需等 3 秒轮询）
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type === MSG_COLLECTS_CHANGED) {
+    // 广播通知无需响应；updateCollectedState 在 initConversationFab 闭包内——
+    // 通过重新触发 listPending 轮询逻辑：直接调用对话页状态刷新
+    void refreshCollectedState?.();
+    return;
+  }
   if (msg?.type !== MSG_COLLECT) return;
   collectPage()
     .then((dialogue) => {

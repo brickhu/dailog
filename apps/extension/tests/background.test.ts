@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cacheCollect, getCollect, deleteCollect, listCollects, getAppBase, getRuntimeConfig, setRuntimeConfig, getRemoteRules, resetRulesCache, warmRulesCache, handleExternalMessage, isSupportedUrl } from "../src/background";
+import { cacheCollect, getCollect, deleteCollect, listCollects, getAppBase, getRuntimeConfig, setRuntimeConfig, getRemoteRules, resetRulesCache, warmRulesCache, handleExternalMessage, handleTabRemoved, isSupportedUrl } from "../src/background";
 import { DEFAULT_RULES_URL } from "../src/env";
 import type { CollectRules } from "../src/shared";
 
@@ -22,11 +22,14 @@ function mockChrome(overrides: Record<string, unknown> = {}) {
     },
   };
   const tabs = {
-    create: vi.fn(async () => {}),
+    create: vi.fn(async () => ({ id: 101 })),
     remove: vi.fn(async () => {}),
     get: vi.fn(async () => ({ url: undefined })),
+    query: vi.fn(async (): Promise<Array<{ id?: number }>> => []),
+    sendMessage: vi.fn(async () => {}),
     onActivated: { addListener: vi.fn() },
     onUpdated: { addListener: vi.fn() },
+    onRemoved: { addListener: vi.fn() },
   };
   const action = { setIcon: vi.fn(async () => {}), setTitle: vi.fn(async () => {}) };
   (globalThis as Record<string, unknown>).chrome = { storage, tabs, action };
@@ -200,6 +203,57 @@ describe("getCollect / deleteCollect", () => {
     const res = await deleteCollect("abc");
     expect(res).toEqual({ ok: true });
     expect(storage.local.set).toHaveBeenCalledWith({ dailogCollects: {} });
+  });
+});
+
+describe("导入窗关闭兜底删除（handleTabRemoved）", () => {
+  it("关闭导入确认页 tab → 缓存副本删除", async () => {
+    const { tabs } = mockChrome();
+    const res = await cacheCollect(collectPayload()); // tabs.create 返回 {id: 101}
+    expect(res.ok).toBe(true);
+    const collectId = (res as { ok: true; collectId: string }).collectId;
+    handleTabRemoved(101);
+    await vi.waitFor(async () => {
+      const r = await getCollect(collectId);
+      expect(r).toEqual({ ok: false, error: "collect_not_found" });
+    });
+    expect(tabs.remove).not.toHaveBeenCalled(); // 关闭由浏览器触发，扩展只删缓存
+  });
+
+  it("提交/取消已删缓存 → 关闭 tab 幂等（不重复删）", async () => {
+    const { storage } = mockChrome();
+    const res = await cacheCollect(collectPayload());
+    const collectId = (res as { ok: true; collectId: string }).collectId;
+    await deleteCollect(collectId); // 提交成功/取消路径
+    const setCalls = storage.local.set.mock.calls.length;
+    handleTabRemoved(101); // 无 pendingTabs 记录 → 不触发删除
+    await new Promise((r) => setTimeout(r, 10));
+    expect(storage.local.set.mock.calls.length).toBe(setCalls);
+  });
+
+  it("非导入页 tab 关闭 → 不动缓存", async () => {
+    const { storage } = mockChrome({ dailogCollects: { abc: { dialogue: collectPayload(), createdAt: 1 } } });
+    handleTabRemoved(999); // 无记录
+    await new Promise((r) => setTimeout(r, 10));
+    expect(storage.local.set).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleteCollect 广播缓存变化（FAB 立即恢复）", () => {
+  it("删除成功后向所有 tab 发 MSG_COLLECTS_CHANGED", async () => {
+    const { tabs, storage } = mockChrome({ dailogCollects: { abc: { dialogue: collectPayload(), createdAt: 1 } } });
+    tabs.query.mockResolvedValue([{ id: 1 }, { id: 2 }, {}] as Array<{ id?: number }>);
+    await deleteCollect("abc");
+    await vi.waitFor(() => expect(tabs.sendMessage).toHaveBeenCalledTimes(2));
+    expect(tabs.sendMessage).toHaveBeenCalledWith(1, { type: "dailog:collects-changed" });
+    expect(tabs.sendMessage).toHaveBeenCalledWith(2, { type: "dailog:collects-changed" });
+  });
+
+  it("无 tab 时静默（不抛错）", async () => {
+    const { tabs, storage } = mockChrome({ dailogCollects: { abc: { dialogue: collectPayload(), createdAt: 1 } } });
+    await deleteCollect("abc");
+    await new Promise((r) => setTimeout(r, 10));
+    expect(tabs.sendMessage).not.toHaveBeenCalled();
   });
 });
 

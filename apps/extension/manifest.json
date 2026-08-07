@@ -56,14 +56,6 @@
       "js": ["dist/print-emulation-main.js"],
       "run_at": "document_start",
       "world": "MAIN"
-    },
-    {
-      "matches": [
-        "https://app.dailog.fm/*",
-        "http://localhost:5173/*"
-      ],
-      "js": ["dist/content.js"],
-      "run_at": "document_idle"
     }
   ],
   "action": { "default_popup": "popup.html" }

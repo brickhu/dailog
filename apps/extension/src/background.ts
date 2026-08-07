@@ -1,11 +1,14 @@
 // 最小 chrome.runtime/storage/tabs/action 类型声明（扩展运行时有全局 chrome，tsconfig 仅含 node types）
 declare const chrome: {
   tabs: {
-    create: (opts: { url: string }) => Promise<unknown>;
+    create: (opts: { url: string }) => Promise<{ id?: number }>;
     remove: (tabId: number) => Promise<void>;
     get: (tabId: number) => Promise<{ url?: string }>;
+    query: (opts: Record<string, unknown>) => Promise<Array<{ id?: number }>>;
+    sendMessage: (tabId: number, message: unknown) => Promise<unknown>;
     onActivated: { addListener: (cb: (info: { tabId: number }) => void) => void };
     onUpdated: { addListener: (cb: (tabId: number, info: { url?: string }) => void) => void };
+    onRemoved: { addListener: (cb: (tabId: number) => void) => void };
   };
   action: {
     setIcon: (opts: { tabId: number; path: Record<string, string> }) => Promise<void>;
@@ -30,7 +33,7 @@ declare const chrome: {
 };
 
 import {
-  MSG_CACHE_COLLECT, MSG_GET_COLLECT, MSG_DELETE_COLLECT, MSG_CLOSE_TAB, MSG_LIST_COLLECTS, MSG_GET_RULES,
+  MSG_CACHE_COLLECT, MSG_GET_COLLECT, MSG_DELETE_COLLECT, MSG_CLOSE_TAB, MSG_LIST_COLLECTS, MSG_GET_RULES, MSG_COLLECTS_CHANGED,
   isCollectedDialogue, conversationKey,
   type CollectedDialogue, type CacheCollectResult,
   type GetCollectResult, type DeleteCollectResult,
@@ -80,6 +83,10 @@ interface CollectEntry {
   appBase: string;
 }
 
+/** 打开中的导入确认页（tabId → collectId）：tab 被直接关闭（X/⌘W/崩溃）时兜底删除缓存副本，
+ *  不依赖页面 JS（pagehide 里发扩展消息不可靠）。提交成功/取消删缓存时同步清记录——幂等 */
+const pendingTabs = new Map<number, string>();
+
 function readCollects(map: unknown): Record<string, CollectEntry> {
   return map && typeof map === "object" ? (map as Record<string, CollectEntry>) : {};
 }
@@ -109,7 +116,8 @@ export async function cacheCollect(dialogue: CollectedDialogue): Promise<CacheCo
   const pruned = Object.fromEntries(sorted.slice(0, MAX_COLLECTS));
   await chrome.storage.local.set({ [COLLECTS_KEY]: pruned });
   const appUrl = `${appBase}/import?collectId=${collectId}`;
-  void chrome.tabs.create({ url: appUrl });
+  const tab = await chrome.tabs.create({ url: appUrl });
+  if (tab.id) pendingTabs.set(tab.id, collectId);
   return { ok: true, collectId, appUrl };
 }
 
@@ -141,7 +149,26 @@ export async function getCollect(collectId: string): Promise<GetCollectResult> {
   return { ok: true, dialogue: entry.dialogue };
 }
 
-/** 删除本地缓存（取消采集 / 已入库清理） */
+/** 缓存条目变化广播：通知所有 content script 立即刷新 FAB「已采集」状态
+ *  （删除/新增后无需等 3 秒轮询；sendMessage 失败静默——轮询仍是兜底） */
+async function notifyCollectsChanged(): Promise<void> {
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const t of tabs) {
+      if (!t.id) continue;
+      try {
+        await chrome.tabs.sendMessage(t.id, { type: MSG_COLLECTS_CHANGED });
+      } catch {
+        // 无 content script 的 tab（chrome://、未注入页面等）静默
+      }
+    }
+  } catch {
+    // tabs.query 失败（权限等）静默——轮询兜底
+  }
+}
+
+/** 删除本地缓存（取消采集 / 已入库清理 / 导入窗关闭兜底）；
+ *  成功后广播缓存变化（FAB 立即恢复「采集对话」） */
 export async function deleteCollect(collectId: string): Promise<DeleteCollectResult> {
   const { [COLLECTS_KEY]: map } = await chrome.storage.local.get(COLLECTS_KEY);
   const collects = readCollects(map);
@@ -149,6 +176,11 @@ export async function deleteCollect(collectId: string): Promise<DeleteCollectRes
     delete collects[collectId];
     await chrome.storage.local.set({ [COLLECTS_KEY]: collects });
   }
+  // 同步清理打开的导入窗记录（幂等：取消/提交先删则 onRemoved 不再重复删）
+  for (const [tabId, id] of pendingTabs) {
+    if (id === collectId) pendingTabs.delete(tabId);
+  }
+  void notifyCollectsChanged();
   return { ok: true };
 }
 
@@ -249,6 +281,18 @@ if (typeof chrome !== "undefined" && chrome.tabs?.onUpdated) {
       warmRulesCache(info.url);
     }
   });
+}
+// 导入确认页被直接关闭（X/⌘W/崩溃）→ 兜底删除缓存副本（不依赖页面 JS；
+// 提交成功/取消已删则 pendingTabs 无记录，幂等）。导出便于测试（监听注册在浏览器运行时）
+export function handleTabRemoved(tabId: number): void {
+  const collectId = pendingTabs.get(tabId);
+  if (!collectId) return;
+  pendingTabs.delete(tabId);
+  void deleteCollect(collectId);
+}
+
+if (typeof chrome !== "undefined" && chrome.tabs?.onRemoved) {
+  chrome.tabs.onRemoved.addListener(handleTabRemoved);
 }
 
 /** app 页面（externally_connectable 白名单）消息处理：读取/删除本地采集缓存、关闭当前标签页。
