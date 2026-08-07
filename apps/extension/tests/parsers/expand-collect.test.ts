@@ -33,7 +33,7 @@ describe("collectByScroll（打印式撑开优先 / 滚动保底）", () => {
   it("撑开无效 → 还原样式后走滚动循环补全", async () => {
     // 懒加载场景：滚动（scrollTop=0）才触发历史加载
     let historyLoaded = false;
-    const container = { scrollTop: 999 } as unknown as Element;
+    const container = { scrollTop: 999, clientHeight: 800, scrollHeight: 2400 } as unknown as Element;
     const scroll = {
       container,
       readNodes: async (): Promise<MessageNode[]> =>
@@ -54,7 +54,7 @@ describe("collectByScroll（打印式撑开优先 / 滚动保底）", () => {
 
   it("无 expand（测试环境省略）→ 直接滚动循环", async () => {
     let historyLoaded = false;
-    const container = { scrollTop: 999 } as unknown as Element;
+    const container = { scrollTop: 999, clientHeight: 800, scrollHeight: 2400 } as unknown as Element;
     const scroll = {
       container,
       readNodes: async (): Promise<MessageNode[]> =>
@@ -118,5 +118,32 @@ describe("collectByScroll（打印式撑开优先 / 滚动保底）", () => {
     expect(d?.messages.map((m) => m.content)).toEqual(["q1", "a1"]);
     expect(wheelSpy).toHaveBeenCalled(); // 程序化 scrollTop 之外补派发事件
     expect(scrollSpy).toHaveBeenCalled();
+  });
+
+  it("虚拟列表窗口化：从顶到底步进扫过全部窗口（中间段不缺失）", async () => {
+    // 模拟 chatgpt 虚拟列表：只有视口窗口渲染，滚动位置决定可见消息
+    const container = { scrollTop: 0, clientHeight: 800, scrollHeight: 4000 } as unknown as Element;
+    const windows = [["q1", "a1"], ["q2", "a2"], ["q3", "a3"], ["q4", "a4"], ["q5", "a5"]];
+    const scroll = {
+      container,
+      readNodes: async (): Promise<MessageNode[]> => {
+        const idx = Math.min(windows.length - 1, Math.floor((container as { scrollTop: number }).scrollTop / 800));
+        return windows[idx].map((c, i) => ({
+          id: c,
+          offsetTop: idx * 800 + i * 100,
+          role: i % 2 === 0 ? ("user" as const) : ("assistant" as const),
+          content: c,
+        }));
+      },
+      waitForMutation: async () => {},
+      expand: undefined,
+      restore: () => {},
+    };
+    const d = await collectFromDocument({
+      root: document,
+      url: "https://chatgpt.com/c/abc-123",
+      scroll,
+    });
+    expect(d?.messages.map((m) => m.content)).toEqual(["q1", "a1", "q2", "a2", "q3", "a3", "q4", "a4", "q5", "a5"]);
   });
 });

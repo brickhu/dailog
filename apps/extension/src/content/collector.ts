@@ -1,7 +1,7 @@
 import type { CollectedDialogue, CollectRule, CollectRules, Platform } from "../shared";
 import { collectClaude } from "./claude";
 import { collectDeepSeek } from "./deepseek";
-import { scrollCollect, dedupeSort, type MessageNode } from "./core";
+import { scrollCollect, scrollSweep, dedupeSort, type MessageNode } from "./core";
 import { extractTitle } from "./title";
 import { parseByRule } from "./rule-parser";
 import { extractPageText } from "./page-text";
@@ -93,24 +93,12 @@ async function collectByScroll(
       nodes = next;
     }
   } else {
-    nodes = await scrollCollect({
-      // 程序化 scrollTop 赋值不会派发事件：部分虚拟列表监听 wheel/scroll
-      // 事件才触发懒加载（多数库不检查 isTrusted）——补派发不可信事件；
-      // 无 dispatchEvent 的环境（测试 mock 容器）静默跳过
-      scrollToTop: async () => {
-        const el = scroll.container as HTMLElement;
-        el.scrollTop = 0;
-        try {
-          el.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true, cancelable: true }));
-          el.dispatchEvent(new Event("scroll", { bubbles: true }));
-        } catch {
-          // 测试 mock / 不支持的环境静默（scrollTop 赋值本身已触发原生 scroll）
-        }
-      },
+    // 从顶到底步进滚动：虚拟列表（chatgpt 等）中间段必须被滚动经过才渲染，
+    // 回顶循环只覆盖顶部窗口会缺中间消息；事件触发 + 到底稳定等待内置于 scrollSweep
+    nodes = await scrollSweep({
+      container: scroll.container as HTMLElement,
       readNodes: scroll.readNodes,
       waitForMutation: scroll.waitForMutation,
-      maxIterations: 20,
-      settleRounds: 2,
     });
   }
   scroll.restore?.();

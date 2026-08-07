@@ -21,7 +21,7 @@ describe("collectFromDocument", () => {
   it("uses scroll loop for deepseek when scroll ctx provided", async () => {
     const root = { querySelectorAll: () => [], ownerDocument: { title: "测试 - DeepSeek" } } as unknown as ParentNode;
     const scroll = {
-      container: { scrollTo: null } as unknown as Element,
+      container: { scrollTop: 0, clientHeight: 800, scrollHeight: 2400 } as unknown as Element,
       readNodes: async () => [
         { id: "m1", offsetTop: 100, role: "user" as const, content: "hi" },
         { id: "m2", offsetTop: 200, role: "assistant" as const, content: "hello" },

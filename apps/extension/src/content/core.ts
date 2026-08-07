@@ -54,3 +54,66 @@ export async function scrollCollect(opts: ScrollCollectOptions): Promise<Message
   }
   return dedupeSort(acc);
 }
+
+export interface ScrollSweepOptions {
+  /** 消息滚动容器（可滚动区域 = 消息序列 DOM 范围） */
+  container: HTMLElement;
+  readNodes: () => Promise<MessageNode[]>;
+  waitForMutation: () => Promise<void>;
+  /** 步数上限（防死循环；默认 100 步 × 一屏 ≈ 长对话上限） */
+  maxSteps?: number;
+  /** 到底后连续无新增轮数即停（默认 2） */
+  settleRounds?: number;
+}
+
+/**
+ * 从顶到底步进滚动采集（chatgpt 等虚拟列表——只渲染视口窗口，中间段
+ * 必须被滚动经过才渲染；「回顶循环」只覆盖顶部窗口会导致中间缺失）。
+ * 策略（用户定义的滚动条用法）：
+ * 1. 容器 = 消息滚动区（findScrollContainer 已排除不滚动容器）
+ * 2. 每次滚一屏（viewport 高度）——经过的区域触发虚拟列表渲染
+ * 3. 程序化 scrollTop 赋值外补发 wheel/scroll 事件（部分列表监听事件才懒加载）
+ * 4. 每步读节点去重合并进内存（虚拟列表回收已滚过节点也不丢）
+ * 5. 到底后等待渲染稳定（懒加载分批插入）：连续 settleRounds 轮无新增停止
+ */
+export async function scrollSweep(opts: ScrollSweepOptions): Promise<MessageNode[]> {
+  const { container, readNodes, waitForMutation, maxSteps = 100, settleRounds = 2 } = opts;
+  const acc: MessageNode[] = [];
+  const merge = (nodes: MessageNode[]): void => {
+    for (const n of nodes) {
+      const idx = acc.findIndex((x) => x.id === n.id);
+      if (idx >= 0) acc[idx] = n; // 懒加载插入后旧读数 offsetTop 过期：用最新替换
+      else acc.push(n);
+    }
+  };
+  const viewport = Math.max(container.clientHeight, 400);
+  const dispatchScrollEvents = (): void => {
+    try {
+      container.dispatchEvent(new WheelEvent("wheel", { deltaY: 1, bubbles: true, cancelable: true }));
+      container.dispatchEvent(new Event("scroll", { bubbles: true }));
+    } catch {
+      // 无 dispatchEvent 的环境（测试 mock 容器）静默
+    }
+  };
+  container.scrollTop = 0;
+  dispatchScrollEvents();
+  let stable = 0;
+  for (let step = 0; step < maxSteps; step++) {
+    const before = acc.length;
+    merge(await readNodes());
+    const maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
+    const atBottom = container.scrollTop >= maxTop - 4;
+    if (atBottom && acc.length === before) {
+      stable += 1;
+      if (stable >= settleRounds) break; // 到底且无新增：采集完成
+    } else if (atBottom) {
+      stable = 0; // 到底但仍有新增（懒加载分批渲染中）：继续等待
+    } else {
+      stable = 0;
+      container.scrollTop = Math.min(maxTop, container.scrollTop + viewport);
+      dispatchScrollEvents();
+    }
+    await waitForMutation();
+  }
+  return dedupeSort(acc);
+}
