@@ -5,13 +5,18 @@
 import type { CollectRule, DialogueMessage, Role } from "../shared";
 import { normalizeMessageText } from "../shared";
 
-/** 按规则解析消息（选择器驱动；无有效消息返回 null）。
+/** 带 DOM 引用的规则解析结果（确认态勾选框需要挂载点；parseByRule 剥离后对外） */
+export interface RuleMessage extends DialogueMessage {
+  el: Element;
+}
+
+/** 按规则解析消息（选择器驱动；带 el 引用）。
  *  messageSelector = 消息作用域容器（缺省 = 整页）；user/assistant 选择器在其内匹配 */
-export function parseByRule(root: ParentNode, rule: CollectRule): DialogueMessage[] | null {
+export function parseByRuleWithEl(root: ParentNode, rule: CollectRule): RuleMessage[] | null {
   const { userSelector, assistantSelector, messageSelector, contentSelector } = rule;
   if (!userSelector || !assistantSelector) return null;
   const scopes = messageSelector ? Array.from(root.querySelectorAll(messageSelector)) : [root];
-  const messages: DialogueMessage[] = [];
+  const messages: RuleMessage[] = [];
   for (const scope of scopes) {
     for (const el of Array.from(scope.querySelectorAll(`${userSelector}, ${assistantSelector}`))) {
       let role: Role | null = null;
@@ -24,8 +29,14 @@ export function parseByRule(root: ParentNode, rule: CollectRule): DialogueMessag
       const target = contentSelector ? (el.querySelector(contentSelector) ?? el) : el;
       const content = normalizeMessageText(target.textContent ?? "");
       if (!content) continue;
-      messages.push({ role, content });
+      messages.push({ role, content, el });
     }
   }
   return messages.length > 0 ? messages : null;
+}
+
+/** 按规则解析消息（对外无 el；采集协议用） */
+export function parseByRule(root: ParentNode, rule: CollectRule): DialogueMessage[] | null {
+  const msgs = parseByRuleWithEl(root, rule);
+  return msgs ? msgs.map(({ role, content }) => ({ role, content })) : null;
 }

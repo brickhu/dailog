@@ -1,9 +1,9 @@
-import type { CollectedDialogue, CollectRule, CollectRules, DialogueMessage, Platform } from "../shared";
-import { collectClaude } from "./claude";
-import { collectDeepSeek } from "./deepseek";
-import { scrollCollect, scrollSweep, dedupeSort, type MessageNode } from "./core";
+import type { CollectedDialogue, CollectRule, CollectRules, Platform } from "../shared";
+import { collectClaude, parseClaudePage } from "./claude";
+import { collectDeepSeek, parseDeepSeekPage } from "./deepseek";
+import { scrollSweep, dedupeSort, type MessageNode } from "./core";
 import { extractTitle } from "./title";
-import { parseByRule } from "./rule-parser";
+import { parseByRuleWithEl } from "./rule-parser";
 import { extractPageText } from "./page-text";
 import { conversationIdFromUrl } from "../shared";
 
@@ -21,6 +21,9 @@ export interface CollectContext {
   };
   /** 采集失败时拉取远程规则兜底（content.ts 注入；测试环境可省略） */
   getRules?: () => Promise<CollectRules | null>;
+  /** 采集完成（内容去重后）回调最终节点集（带 el 引用）——确认态勾选框用；
+   *  整页文本兜底（lowConfidence）无节点不回调 */
+  onCollected?: (nodes: MessageNode[]) => void;
 }
 
 /** 平台 URL 默认表（远程规则缺失/未覆盖时兜底；域名级匹配）。
@@ -52,38 +55,43 @@ export function resolvePlatform(rules: CollectRules | null | undefined, url: str
   return DEFAULT_PLATFORM_HOSTS.find(({ host }) => host === hostname)?.platform ?? null;
 }
 
-/** 远程规则兜底采集：规则缺失 / 无有效消息 → null */
+/** 远程规则兜底采集：规则缺失 / 无有效消息 → null（带 el 节点，确认态可用） */
 async function collectByRemoteRule(
   ctx: CollectContext,
   platform: Platform,
   rules?: CollectRules | null,
-): Promise<CollectedDialogue | null> {
+): Promise<{ dialogue: CollectedDialogue; nodes: MessageNode[] } | null> {
   const rule = rules?.platforms?.[platform] ?? (await ctx.getRules?.())?.platforms?.[platform];
   if (!rule) return null;
-  const messages = parseByRule(ctx.root, rule);
-  if (!messages) return null;
+  const msgs = parseByRuleWithEl(ctx.root, rule);
+  if (!msgs) return null;
+  const nodes: MessageNode[] = msgs.map((m, i) => ({
+    id: `rule-${i}`,
+    offsetTop: i,
+    role: m.role,
+    content: m.content,
+    el: m.el,
+  }));
   const conversationId = conversationIdFromUrl(ctx.url, rule.url?.conversationIdPattern);
   if (!conversationId) return null;
+  const messages = msgs.map(({ role, content }) => ({ role, content }));
   const title = extractTitle(ctx.root, messages);
-  return { platform, conversationId, title, url: ctx.url, messages };
+  return { dialogue: { platform, conversationId, title, url: ctx.url, messages }, nodes };
 }
 
-/** 虚拟列表/懒加载平台采集：打印式撑开优先（全量渲染），
- *  撑开成功也需等渲染稳定（分批插入）；撑开无效则还原样式走滚动循环。
+/** 虚拟列表/懒加载平台采集：统一滚动扫描（从顶到底步进，见 scrollSweep）。
  *  conversationId 按规则 url.conversationIdPattern 提取（缺省取路径最后一段） */
 async function collectByScroll(
   ctx: CollectContext,
   platform: Platform,
   rule: CollectRule | undefined,
-): Promise<CollectedDialogue | null> {
+): Promise<{ dialogue: CollectedDialogue; nodes: MessageNode[] } | null> {
   const scroll = ctx.scroll!;
   const onRead = (nodes: MessageNode[]): void => {
     scroll.onNodesRead?.(nodes); // 进度高亮等 UI 回调（幂等）
   };
   // 统一采集方式（所有平台一致）：从顶到底步进滚动扫描——
-  // 虚拟列表只渲染视口窗口，滚动经过的区域才渲染（打印全量渲染会让
-  // claude 等平台无滚动过程，体验不统一；滚动 + 高亮对所有平台可见）。
-  // 事件触发、到底稳定等待内置于 scrollSweep
+  // 虚拟列表只渲染视口窗口，滚动经过的区域才渲染；事件触发与到底稳定等待内置于 scrollSweep
   const nodes = await scrollSweep({
     container: scroll.container as HTMLElement,
     readNodes: scroll.readNodes,
@@ -100,7 +108,10 @@ async function collectByScroll(
   if (!conversationId) return null;
   const messages = nodes.map(({ role, content }) => ({ role, content }));
   const title = extractTitle(ctx.root, messages);
-  return { platform, conversationId, title, url: ctx.url, messages, ...(incomplete ? { incomplete: true } : {}) };
+  return {
+    dialogue: { platform, conversationId, title, url: ctx.url, messages, ...(incomplete ? { incomplete: true } : {}) },
+    nodes,
+  };
 }
 
 /** 最终兜底：整页文本采集（结构化解析 + 远程规则全失败时；低置信度由确认页提示） */
@@ -115,54 +126,80 @@ function collectPageText(ctx: CollectContext, platform: Platform | null): Collec
   return { platform: p, conversationId, title, url: ctx.url, messages, lowConfidence: true };
 }
 
-/** 按 URL 分发到平台采集器；链路：平台解析（滚动/打印媒体模拟）→ 远程规则 → 整页文本兜底。
- *  平台判定由远程规则 url 字段驱动（host + conversationPath），规则缺失回退内置默认表。
+/** 按 URL 分发到平台采集器；链路：平台解析（滚动扫描）→ 远程规则 → 整页文本兜底。
+ *  平台判定由远程规则 url.host 驱动，规则缺失回退内置默认表。
  *  结构化结果缺助手回复（助手选择器失效等，如 claude 无 data-testid="assistant-message"）→
- *  视为不完整，落到整页文本兜底（打印媒体下包含全部可见内容） */
+ *  视为不完整，落到整页文本兜底。
+ *  采集完成（去重后）通过 onCollected 回调带 el 的最终节点集（确认态勾选框用） */
 export async function collectFromDocument(ctx: CollectContext): Promise<CollectedDialogue | null> {
   const { root, url } = ctx;
   const rules = (await ctx.getRules?.()) ?? null;
   const platform = resolvePlatform(rules, url);
   if (!platform) return null; // 未知主机：不采集（与规则/默认表均无匹配的 URL 无关）
   let d: CollectedDialogue | null = null;
+  let nodes: MessageNode[] = [];
   if (platform === "claude") {
-    d = ctx.scroll
-      ? await collectByScroll(ctx, "claude", rules?.platforms.claude)
-      : collectClaude(root, url);
-    // 本地解析结果缺助手回复（新版 DOM 无 data-testid="assistant-message"，
+    if (ctx.scroll) {
+      const r = await collectByScroll(ctx, "claude", rules?.platforms.claude);
+      d = r?.dialogue ?? null;
+      nodes = r?.nodes ?? [];
+    } else {
+      d = collectClaude(root, url);
+      nodes = d ? parseClaudePage(root) : [];
+    }
+    // 本地解析结果缺助手回复/失败（新版 DOM 无 data-testid="assistant-message"，
     // 只匹配到 user 也算「部分成功」）→ 仍尝试远程规则补齐
     if (!d || !d.messages.some((m) => m.role === "assistant")) {
-      d = (await collectByRemoteRule(ctx, "claude", rules)) ?? d;
+      const rr = await collectByRemoteRule(ctx, "claude", rules);
+      if (rr) {
+        d = rr.dialogue;
+        nodes = rr.nodes;
+      }
     }
   } else if (platform === "deepseek") {
-    d = ctx.scroll
-      ? await collectByScroll(ctx, "deepseek", rules?.platforms.deepseek)
-      : collectDeepSeek(root, url);
-    d ??= await collectByRemoteRule(ctx, "deepseek", rules);
+    if (ctx.scroll) {
+      const r = await collectByScroll(ctx, "deepseek", rules?.platforms.deepseek);
+      d = r?.dialogue ?? null;
+      nodes = r?.nodes ?? [];
+    } else {
+      d = collectDeepSeek(root, url);
+      nodes = d ? parseDeepSeekPage(root) : [];
+    }
+    // 本地解析失败 → 远程规则补齐
+    if (!d) {
+      const rr = await collectByRemoteRule(ctx, "deepseek", rules);
+      if (rr) {
+        d = rr.dialogue;
+        nodes = rr.nodes;
+      }
+    }
   } else if (platform) {
-    // 其余平台（chatgpt 等虚拟列表长对话）：有 scroll 上下文（content.ts 注入，
-    // 打印撑开 + 滚动循环）→ 滚动采集；否则纯规则静态解析（视口内消息）
-    d = ctx.scroll
+    // 其余平台（chatgpt 等）：有 scroll 上下文 → 滚动扫描；否则规则静态解析
+    const r = ctx.scroll
       ? await collectByScroll(ctx, platform, rules?.platforms[platform])
       : await collectByRemoteRule(ctx, platform, rules);
+    d = r?.dialogue ?? null;
+    nodes = r?.nodes ?? [];
   }
   // 完整性校验：正常对话必有助手回复；全 user 说明结构化解析漏了（选择器失效/规则不全）
   if (d && !d.messages.some((m) => m.role === "assistant")) d = null;
   if (d) {
-    // 内容去重：虚拟列表滚动采集可能重复读到同一消息（同 role + 同 content）——
-    // 去重并记录数量（content 侧 toast 提示）
+    // 内容去重（nodes 层）：虚拟列表滚动采集可能重复读到同一消息（同 role + 同 content）
     const seen = new Set<string>();
     let removed = 0;
-    const messages: DialogueMessage[] = [];
-    for (const m of d.messages) {
-      const k = `${m.role}\u0000${m.content}`;
+    const kept: MessageNode[] = [];
+    for (const n of nodes) {
+      const k = `${n.role}\u0000${n.content}`;
       if (seen.has(k)) removed += 1;
       else {
         seen.add(k);
-        messages.push(m);
+        kept.push(n);
       }
     }
-    if (removed > 0) d = { ...d, messages, duplicatesRemoved: removed };
+    nodes = kept;
+    d = { ...d, messages: nodes.map(({ role, content }) => ({ role, content })), ...(removed > 0 ? { duplicatesRemoved: removed } : {}) };
+    // 确认态回调（带 el 的最终节点；整页文本兜底无 nodes 不回调）
+    if (nodes.length > 0) ctx.onCollected?.(nodes);
   }
   return d ?? collectPageText(ctx, platform);
 }

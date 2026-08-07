@@ -22,7 +22,7 @@ import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback } from "./content/read-fallback";
 import { highlightNodes, clearHighlight } from "./content/highlight";
 import { showCollectOverlay, hideCollectOverlay } from "./content/collect-overlay";
-import { runCollectFlow } from "./content/collect-flow";
+import { renderSelects, selectedNodes, clearSelects } from "./content/message-select";
 import type { MessageNode } from "./content/core";
 
 /** 平台消息读取：本地专有解析器优先（打印撑开/滚动下全量提取）；
@@ -163,12 +163,23 @@ async function getRules(): Promise<CollectRules | null> {
   }
 }
 
-/** 本页采集：本地解析（滚动 / 打印媒体模拟 / 远程规则兜底）。
- *  打印媒体模拟在 MAIN world 的 matchMedia 覆盖 + ISOLATED world 的 CSSOM 打印规则提取，
- *  零额外权限（过审友好），与真实打印预览等效触发站点全量渲染 */
+/** 本页采集：统一滚动扫描 + 远程规则兜底（onCollected 回调带 el 的最终节点集，
+ *  确认态勾选框用） */
 async function collectPage(): Promise<CollectedDialogue | null> {
-  return collectFromDocument({ root: document, url: location.href, scroll: pageScroll(), getRules });
+  return collectFromDocument({
+    root: document,
+    url: location.href,
+    scroll: pageScroll(),
+    getRules,
+    onCollected: (nodes) => { collectedNodes = nodes; },
+  });
 }
+
+// 采集确认态状态（content script 单页单 FAB）：采集完成停留页面，
+// 用户勾选调整后确认导入——不自动跳转 studio
+let confirmMode = false;
+let collectedNodes: MessageNode[] = [];
+let pendingDialogue: CollectedDialogue | null = null;
 
 // 模块级：FAB「已采集」状态刷新入口（initConversationFab 内赋值；
 // background 缓存变化广播时调用——立即恢复「采集对话」，无需等轮询）
@@ -177,35 +188,79 @@ let refreshCollectedState: (() => void) | undefined;
 function initConversationFab(): void {
   const fab: FabController = createFab({
     onClick: () => {
+      if (confirmMode) {
+        // 确认导入：按勾选过滤消息 → 缓存（background 自动打开 studio/import）
+        const selected = selectedNodes(collectedNodes);
+        if (selected.length === 0) {
+          fab.showToast("未选择任何消息", "error");
+          return;
+        }
+        const dialogue: CollectedDialogue = {
+          ...pendingDialogue!,
+          messages: selected.map(({ role, content }) => ({ role, content })),
+        };
+        exitConfirm(fab);
+        void cacheDialogue(dialogue, fab);
+        return;
+      }
       fab.setBusy(true);
       // 整页蒙层：禁用鼠标点击/滚动，防止用户操作干扰滚动扫描
       showCollectOverlay();
-      // 采集 → 本地缓存（background 自动打开确认入库页；同会话重采集自动替换旧条目）。
-      // 不校验登录/频道——鉴权是 app 的 auth provider 在入库时的事
-      void runCollectFlow({
-        collect: async () => {
+      void (async () => {
+        try {
           const dialogue = await collectPage();
+          if (!dialogue) {
+            fab.showToast("未识别到对话内容，请确认当前是对话页", "error");
+            return;
+          }
           // 采集完成校验提示：重复内容已去重 / 滚动未到底可能未采全
-          if (dialogue?.duplicatesRemoved) {
-            fab.showToast(`已去除 ${dialogue.duplicatesRemoved} 条重复内容`, "success");
+          if (dialogue.duplicatesRemoved) fab.showToast(`已去除 ${dialogue.duplicatesRemoved} 条重复内容`, "success");
+          if (dialogue.incomplete) fab.showToast("对话过长可能未采全，建议分次采集", "error");
+          if (dialogue.lowConfidence || collectedNodes.length === 0) {
+            // 整页文本兜底/无节点可勾选：维持自动流程（直接缓存 + 打开导入页）
+            await cacheDialogue(dialogue, fab);
+            return;
           }
-          if (dialogue?.incomplete) {
-            fab.showToast("对话过长可能未采全，建议分次采集", "error");
-          }
-          return dialogue;
-        },
-        cache: async (dialogue) =>
-          (await chrome.runtime.sendMessage({
-            type: MSG_CACHE_COLLECT,
-            dialogue,
-          })) as CacheCollectResult,
-        onResult: (text, kind) => fab.showToast(text, kind),
-      }).finally(() => {
-        fab.setBusy(false);
-        hideCollectOverlay();
-      });
+          // 进入确认态：勾选框 + FAB「确认导入」+「放弃」
+          confirmMode = true;
+          pendingDialogue = dialogue;
+          renderSelects(collectedNodes);
+          fab.setConfirm(true, () => {
+            exitConfirm(fab);
+            fab.showToast("已取消采集", "success");
+          });
+          fab.showToast(`已采集 ${collectedNodes.length} 条，取消勾选可剔除，点击确认导入`, "success");
+        } catch (e) {
+          fab.showToast(`采集失败：${e instanceof Error ? e.message : e}`, "error");
+        } finally {
+          fab.setBusy(false);
+          hideCollectOverlay();
+        }
+      })();
     },
   });
+
+  /** 退出确认态：清除勾选框、状态与 FAB 恢复 */
+  function exitConfirm(fabRef: FabController): void {
+    confirmMode = false;
+    pendingDialogue = null;
+    collectedNodes = [];
+    clearSelects();
+    fabRef.setConfirm(false);
+    void updateCollectedState();
+  }
+
+  /** 缓存采集结果（background 自动打开确认入库页；同会话重采集自动替换旧条目） */
+  async function cacheDialogue(dialogue: CollectedDialogue, fabRef: FabController): Promise<void> {
+    const res = (await chrome.runtime.sendMessage({
+      type: MSG_CACHE_COLLECT,
+      dialogue,
+    })) as CacheCollectResult;
+    fabRef.showToast(
+      res.ok ? "已采集 ✓ 请在打开的页面确认入库" : `采集失败：${res.error ?? "未知错误"}`,
+      res.ok ? "success" : "error",
+    );
+  }
 
   /** 当前对话是否已在缓存中 → 按钮切「已采集 ↻」（跨标签页采集也靠轮询感知） */
   async function updateCollectedState(): Promise<void> {

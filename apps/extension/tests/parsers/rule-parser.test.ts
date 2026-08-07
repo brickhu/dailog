@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseByRule } from "../../src/content/rule-parser";
+import { parseByRule, parseByRuleWithEl } from "../../src/content/rule-parser";
 
 describe("parseByRule（通用选择器解析）", () => {
   it("按 role 选择器解析（deepseek 风格 + contentSelector）", () => {
@@ -66,5 +66,22 @@ describe("parseByRule（通用选择器解析）", () => {
       assistantSelector: "[data-role='assistant']",
     });
     expect(msgs).toEqual([{ role: "assistant", content: "a" }]);
+  });
+
+  it("parseByRuleWithEl：带 DOM 引用（确认态勾选框挂载点）；parseByRule 剥离", () => {
+    document.body.innerHTML = `
+      <div data-message-author-role="user">q1</div>
+      <div data-message-author-role="assistant">a1</div>
+    `;
+    const rule = {
+      userSelector: "[data-message-author-role='user']",
+      assistantSelector: "[data-message-author-role='assistant']",
+    };
+    const withEl = parseByRuleWithEl(document, rule);
+    expect(withEl?.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(withEl?.[0].el.tagName).toBe("DIV");
+    expect(withEl?.[0].el.textContent).toBe("q1");
+    // parseByRule 输出不含 el（协议纯净）
+    expect(parseByRule(document, rule)?.[0]).toEqual({ role: "user", content: "q1" });
   });
 });
