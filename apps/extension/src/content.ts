@@ -199,10 +199,11 @@ function initConversationFab(): void {
    *  或降级手动（容器不可滚/探测错） */
   async function startCdpDriver(container: HTMLElement | null): Promise<void> {
     if (!monitoring) return;
-    // 滚轮落点 = 消息区中心（限制在视口内，保证事件落在可滚区域上）
+    // 滚轮落点 = 消息区中心（rect 过小 = 探测可疑 → 退回视口中心；限制在视口内）
     const rect = container?.getBoundingClientRect();
-    const x = Math.round(rect ? rect.left + rect.width / 2 : window.innerWidth / 2);
-    const y = Math.round(rect ? rect.top + rect.height / 2 : window.innerHeight / 2);
+    const useRect = Boolean(rect && rect.width >= 200 && rect.height >= 200);
+    const x = Math.round(useRect ? rect!.left + rect!.width / 2 : window.innerWidth / 2);
+    const y = Math.round(useRect ? rect!.top + rect!.height / 2 : window.innerHeight / 2);
     const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
     let res: { ok: boolean; error?: string };
     try {
@@ -226,26 +227,37 @@ function initConversationFab(): void {
     } catch {
       // 无 connect 环境（测试）静默
     }
-    // 位置监测：前进 → 继续；到顶 → 自动完成；卡住 → 降级手动
-    let lastPos = container?.scrollTop ?? 0;
+    // 双信号进展监测（300ms 一次）：内容计数增长（虚拟列表渲染出新窗口）或
+    // 容器位置前进（全文渲染页滚动）任一即算进展；连续 ~2s 无进展 →
+    // 首条消息已到视口顶部 = 到顶自动完成，否则降级手动
+    let lastPos = container?.scrollTop ?? -1;
     let stallMs = 0;
     cdpWatchIv = setInterval(() => {
-      if (!monitoring) return;
-      const pos = container?.scrollTop ?? 0;
-      if (pos < lastPos - 2) {
+      void (async () => {
+        if (!monitoring) return;
+        const pos = container?.scrollTop ?? -1;
+        const before = monitorNodes.length;
+        await tickMonitor(); // 幂等合并（滚动事件也会触发，此处兜底）
+        const progressed = monitorNodes.length > before || (container ? pos < lastPos - 2 : false);
         lastPos = pos;
-        stallMs = 0;
-        return;
-      }
-      stallMs += 150;
-      if (stallMs < 1200) return;
-      stopCdpDriver();
-      if (container && container.scrollHeight > container.clientHeight + 4 && pos <= 0) {
-        void finishMonitorCollect(); // 到顶：自动完成
-      } else {
-        updateCollectHint("自动滚动失效，请手动滚动浏览完整对话；完成后点「完成」");
-      }
-    }, 150);
+        if (progressed) {
+          stallMs = 0;
+          return;
+        }
+        stallMs += 300;
+        if (stallMs < 2000) return;
+        stopCdpDriver();
+        // 到顶判定：可滚容器已到 0（全文渲染页），或首条已渲染消息在视口顶部
+        // （虚拟列表——容器探测不可靠时以内容位置为准）
+        const first = (await monitorReadNodes?.())?.[0];
+        const firstTop = first?.el ? first.el.getBoundingClientRect().top : -1;
+        if ((container && container.scrollHeight > container.clientHeight + 4 && pos <= 0) || firstTop >= -40) {
+          void finishMonitorCollect();
+        } else {
+          updateCollectHint("自动滚动失效，请手动滚动浏览完整对话；完成后点「完成」");
+        }
+      })();
+    }, 300);
   }
 
   /** 停止 CDP 滚轮（background detach）+ 清理监测循环与保活（幂等） */
