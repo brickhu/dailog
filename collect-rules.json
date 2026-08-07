@@ -1,12 +1,10 @@
 {
-  "version": 6,
-  "note": "扩展采集 fallback 规则（jsDelivr 托管：https://cdn.jsdelivr.net/gh/brickhu/dailog@dev/collect-rules.json）。v6：deepseek DOM 改版校准（2026-08-07 真实采样）——data-message-author-role 已移除，消息容器 div.ds-message（user/assistant 共用），assistant 内容语义类 ds-assistant-message-main-content，user 内容为 ds-message 直接子 div；解析器对 user 容器嵌套 assistant 内容的判定同步（parseByRule 增强）。v5：deepseek URL 改版 /a/chat/s/{uuid}。v4：URL 规则数据化 + 平台访问预热。claude 已实测校准（div[role='article'] + data-testid='user-message' + div.font-claude-response > .standard-markdown）；chatgpt 沿用实测；doubao/gemini/kimi/tongyi 待实测。",
+  "version": 7,
+  "note": "扩展采集 fallback 规则（jsDelivr 托管：https://cdn.jsdelivr.net/gh/brickhu/dailog@dev/collect-rules.json）。v7：URL 判定通用化——对话页判定改为 URL 启发式（末端 ID 段）+ DOM 对话框兜底，废弃按平台维护的 conversationPath（deepseek 两次改版教训：/chat/ → /a/chat/s/，精确规则全失配）；会话 id 统一取路径末端段，废弃 conversationIdPattern；规则仅保留 host（域名分发）+ 选择器。deepseek 已实测校准（div.ds-message 容器 + .ds-assistant-message-main-content）；claude 已实测校准（div[role='article'] + data-testid='user-message' + div.font-claude-response > .standard-markdown）；chatgpt 沿用实测；doubao/gemini/kimi/tongyi 待实测。",
   "platforms": {
     "claude": {
       "url": {
-        "host": "claude.ai",
-        "conversationPath": "/chat/",
-        "conversationIdPattern": "/chat/([a-f0-9-]+)"
+        "host": "claude.ai"
       },
       "messageSelector": "div[role='article']",
       "userSelector": "[data-testid='user-message']",
@@ -15,9 +13,7 @@
     },
     "deepseek": {
       "url": {
-        "host": "chat.deepseek.com",
-        "conversationPath": "/a/chat/",
-        "conversationIdPattern": "/a/chat/s/([^/?#]+)"
+        "host": "chat.deepseek.com"
       },
       "userSelector": "div.ds-message",
       "assistantSelector": ".ds-assistant-message-main-content",
@@ -25,8 +21,7 @@
     },
     "chatgpt": {
       "url": {
-        "host": "chatgpt.com",
-        "conversationPath": "/c/"
+        "host": "chatgpt.com"
       },
       "userSelector": "[data-message-author-role='user']",
       "assistantSelector": "[data-message-author-role='assistant']",
@@ -34,28 +29,24 @@
     },
     "doubao": {
       "url": {
-        "host": "www.doubao.com",
-        "conversationPath": "/chat/"
+        "host": "www.doubao.com"
       },
       "userSelector": "[data-message-author-role='user']",
       "assistantSelector": "[data-message-author-role='assistant']"
     },
     "gemini": {
       "url": {
-        "host": "gemini.google.com",
-        "conversationPath": "/app/"
+        "host": "gemini.google.com"
       }
     },
     "kimi": {
       "url": {
-        "host": "kimi.moonshot.cn",
-        "conversationPath": "/chat/"
+        "host": "kimi.moonshot.cn"
       }
     },
     "tongyi": {
       "url": {
-        "host": "www.tongyi.com",
-        "conversationPath": "/"
+        "host": "www.tongyi.com"
       }
     }
   }

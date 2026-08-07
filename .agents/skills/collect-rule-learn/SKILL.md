@@ -40,14 +40,12 @@ dailog 浏览器扩展采集 AI 对话：本地专有解析器失败时，fallba
 
 ```jsonc
 {
-  "version": 4,                              // 每次修改 +1
-  "note": "本次变更说明：平台、实测日期、选择器/URL 依据",
+  "version": 7,                              // 每次修改 +1
+  "note": "本次变更说明：平台、实测日期、选择器依据",
   "platforms": {
     "chatgpt": {
-      "url": {                               // 可选：URL 形态（平台分发/FAB 显隐/会话 id 提取）
-        "host": "chatgpt.com",               //   域名（hostname，无端口）
-        "conversationPath": "/c/",           //   对话页路径前缀
-        "conversationIdPattern": "/c/([a-z0-9-]+)"  // 可选：会话 id 提取正则；缺省取路径最后一段
+      "url": {                               // 可选：URL 形态（平台分发依据）
+        "host": "chatgpt.com"                //   域名（hostname，无端口）——分发唯一依据
       },
       "messageSelector": null,               // 可选：消息作用域容器，缺省 = 整页
       "userSelector": "[data-message-author-role='user']",       // 必填
@@ -61,7 +59,10 @@ dailog 浏览器扩展采集 AI 对话：本地专有解析器失败时，fallba
 ```
 
 Platform 枚举：`claude / deepseek / chatgpt / gemini / kimi / doubao / tongyi / plain`。
-`url` 字段全可选——缺失时扩展回退内置默认表（域名→对话页路径），旧规则/测试 fixture 不受影响。
+`url` 字段全可选——缺失时扩展回退内置默认表（域名→平台），旧规则/测试 fixture 不受影响。
+**对话页判定已通用化**（v7 起）：不再按平台记录路径——URL 启发式（路径 ≥2 段 + 末端是
+ID 形态：6+ 位、含数字或连字符）+ DOM 对话框兜底（textarea/contenteditable），平台改路径
+无需改规则。
 
 ## 执行语义（规则必须与解析器行为一致）
 
@@ -79,13 +80,13 @@ Platform 枚举：`claude / deepseek / chatgpt / gemini / kimi / doubao / tongyi
 
 ## 平台经验库（已积累的事实，别重复踩）
 
-| 平台 | 已知选择器 | URL 形态（2026-08-07） | 状态 |
-|---|---|---|---|
-| chatgpt | `div[data-message-author-role='user'/'assistant']` + `.markdown` | `chatgpt.com/c/{id}` | ✅ 实测校准 2026-08-07（**是 div 不是 article**） |
-| deepseek | `[data-message-author-role]` + `.ds-markdown`；滚动容器 `.ds-scroll-area` | `chat.deepseek.com/a/chat/s/{uuid}`（**2026-08-07 改版**：旧 `/chat/{id}` 已废弃） | ✅ 本地解析器；URL 已校准 |
-| claude | `div[role='article']` 作用域 + `[data-testid='user-message']`；assistant 无 data-testid，正文 `div.font-claude-response > .standard-markdown` | `claude.ai/chat/{uuid}` | ✅ 实测校准 2026-08-07（旧 `[data-testid='assistant-message']` **真实 DOM 失配**） |
-| doubao | `[data-message-author-role]` | `www.doubao.com/chat/…` | ⚠️ 占位规则，**未实测验证** |
-| gemini/kimi/tongyi | 无（仅 url 字段） | 见默认表 | 待首次学习 |
+| 平台 | 已知选择器 | 状态 |
+|---|---|---|
+| chatgpt | `div[data-message-author-role='user'/'assistant']` + `.markdown` | ✅ 实测校准 2026-08-07（**是 div 不是 article**） |
+| deepseek | `div.ds-message` 容器（user/assistant 共用）+ `.ds-assistant-message-main-content`（assistant 语义类）；滚动容器 `.ds-scroll-area` | ✅ 实测校准 2026-08-07（`data-message-author-role` **已移除**；URL 改版 `/a/chat/s/{uuid}`） |
+| claude | `div[role='article']` 作用域 + `[data-testid='user-message']`；assistant 无 data-testid，正文 `div.font-claude-response > .standard-markdown` | ✅ 实测校准 2026-08-07（旧 `[data-testid='assistant-message']` **真实 DOM 失配**） |
+| doubao | `[data-message-author-role]` | ⚠️ 占位规则，**未实测验证** |
+| gemini/kimi/tongyi | 无（仅 url.host） | 待首次学习 |
 
 其它经验：
 - **chatgpt 分享页/长对话**：对话内容可能在 RSC flight 载荷里（CSS 选择器拿不到）——
@@ -94,17 +95,19 @@ Platform 枚举：`claude / deepseek / chatgpt / gemini / kimi / doubao / tongyi
 - 长对话平台是虚拟列表/懒加载：滚动采集、打印式撑开由扩展本地逻辑负责，规则层面不用管
 - user 与 assistant 结构常不同（user 无内容容器、assistant 有 .markdown）——contentSelector
   只命中 assistant 是正常的
-- **⚠️ URL 改版是静默杀手**（deepseek 教训 2026-08-07：`/chat/` → `/a/chat/s/`，manifest 窄匹配、
-  默认表、规则、本地解析器四处全失配，FAB 不显示）。收到任何 DOM 都要**同时确认地址栏 URL**，
-  与规则 `conversationPath` 比对——不一致时 URL 校准优先于选择器
+- **URL 判定已通用化**（v7）：对话页 = 路径 ≥2 段 + 末端 ID 形态，或页面有对话框
+  （textarea/contenteditable）。平台改路径不再影响判定，**无需校准 URL 规则**——
+  只需在收到 DOM 时顺带确认 URL 形态（供记录，不再比对规则）
+- **容器型 userSelector**（如 deepseek 的 `div.ds-message` 同时包住两种角色）：parseByRule
+  判定「user 节点嵌套包含 assistant 匹配 → 不当 user，由内层承接」，选择器可放心用容器
 
 ## 工作流（一条龙）
 
 ```
 用户发送 DOM（粘贴 HTML / 文件路径）
-  ↓ ① 确认平台与输入 + 确认 URL 形态（与规则 conversationPath 比对）
+  ↓ ① 确认平台与输入 + 顺带确认 URL 形态（记录用；对话页判定已通用化）
   ↓ ② 逆向分析：定位消息节点、角色标识、内容容器
-  ↓ ③ 产出 CollectRule JSON（URL 变更时同步更新 conversationPath/IdPattern）
+  ↓ ③ 产出 CollectRule JSON
   ↓ ④ 落地 fixture + 回归测试（新增或校准）
   ↓ ⑤ vitest 全绿（含既有测试）
   ↓ ⑥ 更新 collect-rules.json（version+1、note 说明）
@@ -113,19 +116,16 @@ Platform 枚举：`claude / deepseek / chatgpt / gemini / kimi / doubao / tongyi
 
 ### ① 输入处理
 
-- **先确认 URL 形态**：向业务人员索取当前对话页**地址栏完整 URL**（或让其确认地址栏形态，
-  如 `chat.deepseek.com/a/chat/s/…`）。与 collect-rules.json 中该平台 `url.conversationPath`
-  比对：
-  - URL 不匹配规则 → **URL 已改版，优先校准 URL 规则**（默认表 + 规则 + 本地解析器的
-    conversationId 提取，三处同步），再做选择器部分
-  - 无法取得 URL（只有粘贴 DOM）→ 从 DOM 里找导航/链接线索推断路径，并在汇报中标注「URL 未经确认」
+- **顺带确认 URL 形态**：向业务人员索取当前对话页**地址栏完整 URL**（或让其确认地址栏形态，
+  如 `chat.deepseek.com/a/chat/s/…`）。**对话页判定已通用化，URL 不需要比对/校准规则**——
+  仅用于记录（经验库 URL 列）与平台分发（host 域名级）；无法取得 URL 时在汇报中标注「URL 未经确认」
 - 粘贴 HTML → 保存到 `/tmp/rule-sample-{platform}.html` 备用；粘贴过程可能被聊天窗口
   转义/截断——先检查关键 attribute（如 `data-message-author-role`）是否完整
 - 文件路径 → 直接读取
-- 平台判定：URL 或内容特征。URL 由规则 `url` 字段驱动（`resolvePlatform`），缺省回退
-  内置默认表：`claude.ai/chat/`→claude，`chat.deepseek.com/a/chat/`→deepseek，
-  `chatgpt.com/c/`→chatgpt，`www.doubao.com/chat/`→doubao，`gemini.google.com/app/`→gemini，
-  `kimi.moonshot.cn/chat/`→kimi，`www.tongyi.com/`→tongyi
+- 平台判定：URL 或内容特征。URL 由规则 `url.host` 域名匹配（`resolvePlatform`），缺省回退
+  内置默认表：`claude.ai`→claude，`chat.deepseek.com`→deepseek，`chatgpt.com`→chatgpt，
+  `www.doubao.com`→doubao，`gemini.google.com`→gemini，`kimi.moonshot.cn`→kimi，
+  `www.tongyi.com`→tongyi
 
 ### ② 逆向分析要点
 
@@ -133,20 +133,17 @@ Platform 枚举：`claude / deepseek / chatgpt / gemini / kimi / doubao / tongyi
 2. 角色标识：优先稳定 attribute（`data-message-author-role` / `data-testid`），
    **不要用 react 生成的 class**（每次构建都可能变）
 3. 找**内容容器**：assistant 消息正文的子容器（.markdown / .ds-markdown 之类）
-4. **记录 URL 形态**：对话页路径前缀（`conversationPath`）与会话 id 格式
-   （`conversationIdPattern`，如 claude 的 `/chat/([a-f0-9-]+)`）——与选择器一并入规则；
-   平台 SPA 从首页跳转进入对话页时，注入范围需为域名级（manifest），路径判定交给规则
+4. **容器型 userSelector**（如 deepseek 的 `div.ds-message` 同时包住 user/assistant）可用——
+   parseByRule 会跳过「嵌套包含 assistant 匹配」的 user 候选，由内层 assistant 节点承接
 5. 若 CSS 可匹配直接出选择器；若内容埋在 RSC payload → 按经验库处理并向用户说明取舍
 
 ### ③ 产出检查单
 
-- [ ] **已确认地址栏 URL 与规则 conversationPath 一致**（或本次已更新 URL 规则并同步
-  默认表/本地解析器提取）
 - [ ] 选择器在样本 DOM 上能**同时**匹配 user 与 assistant
 - [ ] contentSelector 取到的是正文，不是头像/时间/操作按钮
 - [ ] 不用索引选择器（`:nth-child`）——虚拟列表/懒加载下不稳定
 - [ ] 风格与既有规则一致（裸 attribute 选择器优先）
-- [ ] `url` 字段齐全：host / conversationPath 必配（已实测的加 conversationIdPattern）
+- [ ] `url.host` 已配（域名分发依据）；无需配置对话页路径/会话 id 正则（已通用化）
 
 ### ④ fixture + 回归测试（照抄 `chatgpt-real.test.ts` 模式）
 

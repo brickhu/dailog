@@ -93,20 +93,16 @@ describe("collectFromDocument（远程规则 fallback）", () => {
 });
 
 describe("resolvePlatform（URL 规则数据化分发）", () => {
-  it("规则 url 字段驱动分发 + conversationIdPattern 提取会话 id", async () => {
+  it("规则 url 字段驱动分发 + 会话 id 取路径末端段（忽略 query）", async () => {
     document.body.innerHTML = `
       <div data-message-author-role="user"><p>q1</p></div>
       <div data-message-author-role="assistant"><div class="markdown">a1</div></div>
     `;
     const rules: CollectRules = {
-      version: 4,
+      version: 7,
       platforms: {
         chatgpt: {
-          url: {
-            host: "chatgpt.com",
-            conversationPath: "/c/",
-            conversationIdPattern: "/c/([a-z0-9]{6})",
-          },
+          url: { host: "chatgpt.com" },
           userSelector: "[data-message-author-role='user']",
           assistantSelector: "[data-message-author-role='assistant']",
           contentSelector: ".markdown",
@@ -115,11 +111,11 @@ describe("resolvePlatform（URL 规则数据化分发）", () => {
     };
     const d = await collectFromDocument({
       root: document,
-      url: "https://chatgpt.com/c/abc123?source=web",
+      url: "https://chatgpt.com/c/abc-123?source=web",
       getRules: async () => rules,
     });
     expect(d?.platform).toBe("chatgpt");
-    expect(d?.conversationId).toBe("abc123");
+    expect(d?.conversationId).toBe("abc-123");
     expect(d?.messages).toEqual([
       { role: "user", content: "q1" },
       { role: "assistant", content: "a1" },
@@ -132,7 +128,7 @@ describe("resolvePlatform（URL 规则数据化分发）", () => {
       <div data-message-author-role="assistant"><div class="markdown">a</div></div>
     `;
     const rules: CollectRules = {
-      version: 4,
+      version: 7,
       platforms: {
         chatgpt: {
           userSelector: "[data-message-author-role='user']",
@@ -150,19 +146,19 @@ describe("resolvePlatform（URL 规则数据化分发）", () => {
     expect(d?.conversationId).toBe("xyz"); // 缺 conversationIdPattern → 取路径最后一段
   });
 
-  it("规则 host+path 匹配优先，未命中回退默认表", () => {
+  it("resolvePlatform：规则 host 匹配优先，未命中回退默认表", () => {
     const rules: CollectRules = {
-      version: 4,
+      version: 7,
       platforms: {
         claude: {
-          url: { host: "claude.ai", conversationPath: "/chat/" },
+          url: { host: "claude.ai" },
           userSelector: "a",
           assistantSelector: "b",
         },
       },
     };
     expect(resolvePlatform(rules, "https://claude.ai/chat/uuid-1")).toBe("claude");
-    expect(resolvePlatform(rules, "https://claude.ai/")).toBeNull(); // 规则与默认表均只认 /chat/
+    expect(resolvePlatform(rules, "https://claude.ai/")).toBe("claude"); // 域名级：首页也归属 claude
     expect(resolvePlatform(rules, "https://chatgpt.com/c/x")).toBe("chatgpt"); // 默认表兜底
     expect(resolvePlatform(null, "https://chat.deepseek.com/a/chat/s/1")).toBe("deepseek");
     expect(resolvePlatform(rules, "https://example.com/x")).toBeNull();

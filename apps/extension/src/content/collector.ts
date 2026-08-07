@@ -23,40 +23,33 @@ export interface CollectContext {
   getRules?: () => Promise<CollectRules | null>;
 }
 
-/** 平台 URL 默认表（远程规则缺失/未覆盖时兜底；host + 对话页路径前缀）。
- *  规则数据化的 fallback——CDN 规则里的 url 字段优先于本表 */
-const DEFAULT_PLATFORM_URLS: ReadonlyArray<{ host: string; path: string; platform: Platform }> = [
-  { host: "claude.ai", path: "/chat/", platform: "claude" },
-  { host: "chat.deepseek.com", path: "/a/chat/", platform: "deepseek" }, // 2026-08-07 实测：新版对话页 /a/chat/s/{uuid}
-  { host: "chatgpt.com", path: "/c/", platform: "chatgpt" },
-  { host: "www.doubao.com", path: "/chat/", platform: "doubao" },
-  { host: "gemini.google.com", path: "/app/", platform: "gemini" },
-  { host: "kimi.moonshot.cn", path: "/chat/", platform: "kimi" },
-  { host: "www.tongyi.com", path: "/", platform: "tongyi" },
+/** 平台 URL 默认表（远程规则缺失/未覆盖时兜底；域名级匹配）。
+ *  规则数据化的 fallback——CDN 规则里的 url.host 优先于本表；
+ *  对话页判定已通用化（启发式 + DOM），此处只管 host → 平台分发 */
+const DEFAULT_PLATFORM_HOSTS: ReadonlyArray<{ host: string; platform: Platform }> = [
+  { host: "claude.ai", platform: "claude" },
+  { host: "chat.deepseek.com", platform: "deepseek" },
+  { host: "chatgpt.com", platform: "chatgpt" },
+  { host: "www.doubao.com", platform: "doubao" },
+  { host: "gemini.google.com", platform: "gemini" },
+  { host: "kimi.moonshot.cn", platform: "kimi" },
+  { host: "www.tongyi.com", platform: "tongyi" },
 ];
 
-/** 按 URL 解析平台：远程规则 url 字段优先（host 匹配 + conversationPath 前缀），
- *  无命中回退默认表；非法 URL → null */
+/** 按 URL 解析平台：远程规则 url.host 域名匹配优先，无命中回退默认表；非法 URL → null */
 export function resolvePlatform(rules: CollectRules | null | undefined, url: string): Platform | null {
   let hostname = "";
-  let pathname = "";
   try {
-    ({ hostname, pathname } = new URL(url));
+    ({ hostname } = new URL(url));
   } catch {
     return null;
   }
   if (rules) {
     for (const [platform, rule] of Object.entries(rules.platforms)) {
-      const u = rule?.url;
-      if (!u?.host || u.host !== hostname) continue;
-      // conversationPath 缺省 = 仅域名命中即归属该平台
-      if (!u.conversationPath || pathname.startsWith(u.conversationPath)) return platform as Platform;
+      if (rule?.url?.host === hostname) return platform as Platform;
     }
   }
-  return (
-    DEFAULT_PLATFORM_URLS.find(({ host, path }) => host === hostname && pathname.startsWith(path))
-      ?.platform ?? null
-  );
+  return DEFAULT_PLATFORM_HOSTS.find(({ host }) => host === hostname)?.platform ?? null;
 }
 
 /** 远程规则兜底采集：规则缺失 / 无有效消息 → null */

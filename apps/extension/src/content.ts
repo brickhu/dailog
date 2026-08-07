@@ -11,9 +11,9 @@ declare const chrome: {
 import {
   MSG_COLLECT, MSG_CACHE_COLLECT, MSG_LIST_COLLECTS, MSG_GET_RULES, conversationKey,
   type CollectedDialogue, type CacheCollectResult, type ListCollectsResult, type CollectSummary,
-  type GetRulesResult, type CollectRules, type CollectRule, type Platform,
+  type GetRulesResult, type CollectRules, type Platform,
 } from "./shared";
-import { collectFromDocument, resolvePlatform } from "./content/collector";
+import { collectFromDocument } from "./content/collector";
 import { parseDeepSeekPage } from "./content/deepseek";
 import { parseClaudePage } from "./content/claude";
 import { waitForMutation } from "./content/mutation";
@@ -212,17 +212,10 @@ function initConversationFab(): void {
     fab.setCollected((await listPending()).some((i) => conversationKey(i.url) === key));
   }
 
-  // 规则驱动显隐：默认表先行（避免闪烁），远程规则到达后重评
-  // （打开平台页面时 background 已静默预热规则缓存，这里拿到的是最新规则）
-  let rule: CollectRule | undefined;
-  const applyVisibility = (url: string) => fab.setVisible(isConversationPage(url, rule));
+  // 对话页判定通用化（URL 启发式 + DOM 对话框兜底）——完全同步，不依赖远程规则；
+  // SPA 导航后 watchUrl 轮询重判（DOM 已更新，对话框检测随之生效）
+  const applyVisibility = (url: string) => fab.setVisible(isConversationPage(url, document));
   applyVisibility(location.href);
-  void getRules().then((rules) => {
-    if (!rules) return;
-    const platform = resolvePlatform(rules, location.href);
-    rule = platform ? rules.platforms[platform] : undefined;
-    applyVisibility(location.href);
-  });
 
   // 非对话页（首页等）隐藏按钮；SPA 导航进入对话页后自动显示
   void updateCollectedState();

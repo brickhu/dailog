@@ -58,13 +58,14 @@ export const MSG_GET_RULES = "dailog:get-rules";
 
 /** 平台抓取规则（远程托管 JSON 的 schema；选择器驱动，通用解析器消费） */
 export interface CollectRule {
-  /** URL 形态（平台分发 / 对话页判定 / 会话 id 提取；缺省回退内置默认表） */
+  /** URL 形态（平台分发 / 会话 id 提取覆盖；缺省回退内置默认表） */
   url?: {
-    /** 平台域名（hostname，无端口） */
+    /** 平台域名（hostname，无端口）——平台分发的唯一依据 */
     host?: string;
-    /** 对话页路径前缀（如 /chat/；FAB 显隐 + 平台分发） */
+    /** 对话页路径前缀——已废弃（v7 起不再消费）；对话页判定通用化为
+     *  URL 启发式 + DOM 对话框兜底，平台改路径无需再维护精确规则 */
     conversationPath?: string;
-    /** 会话 id 提取正则（字符串；缺省取路径最后一段） */
+    /** 会话 id 提取正则（字符串；可选覆盖，缺省取路径最后一段） */
     conversationIdPattern?: string;
   };
   /** 消息节点候选（缺省 = userSelector ∪ assistantSelector） */
