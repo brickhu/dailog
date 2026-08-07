@@ -16,6 +16,7 @@ import {
 import { collectFromDocument, resolvePlatform } from "./content/collector";
 import { parseDeepSeekPage } from "./content/deepseek";
 import { parseClaudePage } from "./content/claude";
+import { parseDoubaoPage } from "./content/doubao";
 import { waitForMutation } from "./content/mutation";
 import { createFab, type FabController } from "./content/ui";
 import { isConversationPage } from "./content/conversation-page";
@@ -99,7 +100,7 @@ function ruleOnlyScroll() {
 }
 
 /** 当前页的滚动采集配置：按 hostname 分发平台采集器
- *  （deepseek/claude 专有解析器优先；其余平台规则提取滚动——chatgpt 长对话
+ *  （deepseek/claude/doubao 专有解析器优先；其余平台规则提取滚动——chatgpt 长对话
  *  虚拟列表必须滚动/打印采集，纯静态解析只拿得到视口内消息） */
 function pageScroll() {
   switch (location.hostname) {
@@ -107,9 +108,25 @@ function pageScroll() {
       return deepSeekScroll();
     case "claude.ai":
       return claudeScroll();
+    case "www.doubao.com":
+      return doubaoScroll();
     default:
       return ruleOnlyScroll();
   }
+}
+
+/** doubao 滚动采集（本地解析器） */
+function doubaoScroll() {
+  const containers = scrollContainers();
+  if (containers.length === 0) return undefined;
+  return {
+    container: containers[0],
+    containers,
+    readNodes: () => readPlatformMessages("doubao", parseDoubaoPage),
+    waitForMutation: () => waitForMutation(document.body),
+    onNodesRead: highlightProgress,
+    restore: () => restoreContainer(containers[0]),
+  };
 }
 
 // ============ AI 对话页：采集 FAB + 「已采集」状态 ============

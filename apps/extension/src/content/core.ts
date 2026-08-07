@@ -106,16 +106,24 @@ export async function scrollSweep(opts: ScrollSweepOptions): Promise<MessageNode
   const viewport = Math.max(containers[0]?.clientHeight ?? 0, 400);
   const scrollables = (): HTMLElement[] => containers.filter((c) => c.scrollHeight > c.clientHeight + 4);
   const maxTopOf = (c: HTMLElement): number => Math.max(0, c.scrollHeight - c.clientHeight);
-  /** 双通道滚动：对全部候选 scrollTop 赋值 + wheel 事件（受控/非受控都覆盖），
-   *  然后等位置稳定 */
+  /** 等一帧（受控虚拟列表渲染周期；用 settleMs 定时——真实环境 50ms 覆盖一帧，
+   *  测试可传小值加速） */
+  const nextFrame = (): Promise<void> => new Promise((r) => setTimeout(r, settleMs));
+  /** 双通道滚动：对全部候选 scrollTop 赋值 + wheel 事件；
+   *  赋值后等一帧复查——受控列表渲染可能重置 scrollTop，复查后再赋（对抗重置） */
   const scrollBy = async (deltaY: number): Promise<void> => {
-    for (const c of containers) {
-      c.scrollTop += deltaY;
+    const targets = containers.map((c) => ({ c, top: c.scrollTop + deltaY }));
+    for (const { c, top } of targets) {
+      c.scrollTop = top;
       try {
         c.dispatchEvent(new WheelEvent("wheel", { deltaY, bubbles: true, cancelable: true }));
       } catch {
         // 无 dispatchEvent 的环境（测试 mock 容器）静默
       }
+    }
+    await nextFrame();
+    for (const { c, top } of targets) {
+      if (Math.abs(c.scrollTop - top) > 2) c.scrollTop = top; // 被重置：再赋
     }
     await settleScroll(containers[0], settleMs);
   };

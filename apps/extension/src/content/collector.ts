@@ -1,6 +1,7 @@
 import type { CollectedDialogue, CollectRule, CollectRules, Platform } from "../shared";
 import { collectClaude, parseClaudePage } from "./claude";
 import { collectDeepSeek, parseDeepSeekPage } from "./deepseek";
+import { collectDoubao, parseDoubaoPage } from "./doubao";
 import { scrollSweep, dedupeSort, type MessageNode } from "./core";
 import { extractTitle } from "./title";
 import { parseByRuleWithEl } from "./rule-parser";
@@ -174,6 +175,24 @@ export async function collectFromDocument(ctx: CollectContext): Promise<Collecte
     // 本地解析失败 → 远程规则补齐
     if (!d) {
       const rr = await collectByRemoteRule(ctx, "deepseek", rules);
+      if (rr) {
+        d = rr.dialogue;
+        nodes = rr.nodes;
+      }
+    }
+  } else if (platform === "doubao") {
+    // doubao 本地解析器（不依赖 CDN 规则——规则缓存滞后会导致提取为空直接跳转）
+    if (ctx.scroll) {
+      const r = await collectByScroll(ctx, "doubao", rules?.platforms.doubao);
+      d = r?.dialogue ?? null;
+      nodes = r?.nodes ?? [];
+    } else {
+      d = collectDoubao(root, url);
+      nodes = d ? parseDoubaoPage(root) : [];
+    }
+    // 本地解析失败 → 远程规则补齐
+    if (!d) {
+      const rr = await collectByRemoteRule(ctx, "doubao", rules);
       if (rr) {
         d = rr.dialogue;
         nodes = rr.nodes;
