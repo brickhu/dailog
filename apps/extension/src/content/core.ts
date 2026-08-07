@@ -3,6 +3,8 @@ export interface MessageNode {
   offsetTop: number;   // 容器内排序依据
   role: "user" | "assistant";
   content: string;
+  /** DOM 引用（本地解析器填充）——滚动采集进度高亮用；规则兜底节点无此字段 */
+  el?: Element;
 }
 
 /** 按 id 去重、按 offsetTop 升序 */
@@ -60,6 +62,8 @@ export interface ScrollSweepOptions {
   container: HTMLElement;
   readNodes: () => Promise<MessageNode[]>;
   waitForMutation: () => Promise<void>;
+  /** 每轮读取到节点后的回调（滚动进度高亮等 UI 用途） */
+  onNodesRead?: (nodes: MessageNode[]) => void;
   /** 步数上限（防死循环；默认 100 步 × 一屏 ≈ 长对话上限） */
   maxSteps?: number;
   /** 到底后连续无新增轮数即停（默认 2） */
@@ -77,7 +81,7 @@ export interface ScrollSweepOptions {
  * 5. 到底后等待渲染稳定（懒加载分批插入）：连续 settleRounds 轮无新增停止
  */
 export async function scrollSweep(opts: ScrollSweepOptions): Promise<MessageNode[]> {
-  const { container, readNodes, waitForMutation, maxSteps = 100, settleRounds = 2 } = opts;
+  const { container, readNodes, waitForMutation, onNodesRead, maxSteps = 100, settleRounds = 2 } = opts;
   const acc: MessageNode[] = [];
   const merge = (nodes: MessageNode[]): void => {
     for (const n of nodes) {
@@ -100,7 +104,9 @@ export async function scrollSweep(opts: ScrollSweepOptions): Promise<MessageNode
   let stable = 0;
   for (let step = 0; step < maxSteps; step++) {
     const before = acc.length;
-    merge(await readNodes());
+    const read = await readNodes();
+    onNodesRead?.(read); // 进度高亮（幂等）
+    merge(read);
     const maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
     const atBottom = container.scrollTop >= maxTop - 4;
     if (atBottom && acc.length === before) {

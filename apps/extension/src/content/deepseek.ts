@@ -35,6 +35,7 @@ export function parseDeepSeekPage(root: ParentNode): MessageNode[] {
       offsetTop: el.getBoundingClientRect().top,
       role,
       content,
+      el,
     });
   });
   return nodes;

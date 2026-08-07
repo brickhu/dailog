@@ -18,6 +18,8 @@ export interface CollectContext {
     expand?: () => Promise<boolean>;
     /** 还原撑开时改动的内联样式 */
     restore?: () => void;
+    /** 每轮读取到消息节点后的回调（滚动采集进度高亮等 UI 用途） */
+    onNodesRead?: (nodes: MessageNode[]) => void;
   };
   /** 采集失败时拉取远程规则兜底（content.ts 注入；测试环境可省略） */
   getRules?: () => Promise<CollectRules | null>;
@@ -82,15 +84,20 @@ async function collectByScroll(
     expanded = await scroll.expand();
     if (!expanded) scroll.restore?.(); // 撑开无效：还原样式，滚动循环才有意义
   }
+  const onRead = (nodes: MessageNode[]): void => {
+    scroll.onNodesRead?.(nodes); // 进度高亮等 UI 回调（幂等）
+  };
   let nodes: MessageNode[];
   if (expanded) {
     // 全量渲染可能是逐批插入：读到节点数稳定为止（最多 3 轮）
     nodes = dedupeSort(await scroll.readNodes());
+    onRead(nodes);
     for (let i = 0; i < 3; i++) {
       await scroll.waitForMutation();
       const next = dedupeSort(await scroll.readNodes());
       if (next.length <= nodes.length) break;
       nodes = next;
+      onRead(next);
     }
   } else {
     // 从顶到底步进滚动：虚拟列表（chatgpt 等）中间段必须被滚动经过才渲染，
@@ -99,6 +106,7 @@ async function collectByScroll(
       container: scroll.container as HTMLElement,
       readNodes: scroll.readNodes,
       waitForMutation: scroll.waitForMutation,
+      onNodesRead: onRead,
     });
   }
   scroll.restore?.();

@@ -20,6 +20,7 @@ import { waitForMutation } from "./content/mutation";
 import { createFab, type FabController } from "./content/ui";
 import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback } from "./content/read-fallback";
+import { highlightNodes, clearHighlight } from "./content/highlight";
 import { runCollectFlow } from "./content/collect-flow";
 import { applyPrintCss } from "./content/print-css";
 import type { MessageNode } from "./content/core";
@@ -38,6 +39,9 @@ async function readPlatformMessages(
   return applyRuleFallback(local, p ? rules?.platforms[p] : null, document);
 }
 
+/** 滚动采集进度高亮回调（所有平台通用；幂等，重复读取无副作用） */
+const highlightProgress = (nodes: MessageNode[]): void => highlightNodes(nodes);
+
 function deepSeekScroll() {
   // 专有容器类名失效（DOM 改版）→ 泛化探测兜底（页面级滚动保底），
   // 提取器始终用 deepseek 平台（不跨平台套用 claude 选择器）
@@ -48,6 +52,7 @@ function deepSeekScroll() {
     readNodes: () => readPlatformMessages("deepseek", parseDeepSeekPage),
     waitForMutation: () => waitForMutation(document.body),
     expand: makeExpand(container, () => readPlatformMessages("deepseek", parseDeepSeekPage)),
+    onNodesRead: highlightProgress,
     restore: () => restoreContainer(container),
   };
 }
@@ -93,6 +98,8 @@ function restoreContainer(container: HTMLElement): void {
   container.style.overflow = "";
   // 移除模拟打印样式（虚拟列表随之还原）
   document.querySelectorAll<HTMLElement>("style[data-dailog-print]").forEach((el) => el.remove());
+  // 采集结束：清除滚动进度高亮，页面恢复原样
+  clearHighlight();
 }
 
 /** claude 长对话懒加载：先试打印式撑开（虚拟列表全量渲染），失败则滚动到顶循环补全历史 */
@@ -104,6 +111,7 @@ function claudeScroll() {
     readNodes: () => readPlatformMessages("claude", parseClaudePage),
     waitForMutation: () => waitForMutation(document.body),
     expand: makeExpand(container, () => readPlatformMessages("claude", parseClaudePage)),
+    onNodesRead: highlightProgress,
     restore: () => restoreContainer(container),
   };
 }
@@ -119,6 +127,7 @@ function ruleOnlyScroll() {
     readNodes: () => readPlatformMessages(null, () => [] as MessageNode[]),
     waitForMutation: () => waitForMutation(document.body),
     expand: makeExpand(container, () => readPlatformMessages(null, () => [] as MessageNode[])),
+    onNodesRead: highlightProgress,
     restore: () => restoreContainer(container),
   };
 }

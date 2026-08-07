@@ -28,7 +28,7 @@ export function parseClaudePage(root: ParentNode): MessageNode[] {
   root.querySelectorAll(MESSAGE_SELECTOR).forEach((el) => {
     const role = el.matches(USER_SELECTOR) ? "user" : "assistant";
     const content = extractText(el);
-    nodes.push({ id: messageId(role, content), offsetTop: el.getBoundingClientRect().top, role, content });
+    nodes.push({ id: messageId(role, content), offsetTop: el.getBoundingClientRect().top, role, content, el });
   });
   return nodes.sort((a, b) => a.offsetTop - b.offsetTop);
 }
