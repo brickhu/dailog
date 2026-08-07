@@ -193,24 +193,44 @@ function initConversationFab(): void {
     monitorIv = setInterval(() => void tickMonitor(), 300);
   }
 
-  /** CDP 真实滚轮驱动：background attach debugger 后按固定节奏向消息区中心
-   *  派发 mouseWheel（isTrusted=true，浏览器层面即用户滚轮——虚拟列表必须响应）。
-   *  本侧每 150ms 监测容器位置：前进 → 继续；连续 ~1.2s 未前进 → 到顶自动完成
-   *  或降级手动（容器不可滚/探测错） */
-  async function startCdpDriver(container: HTMLElement | null): Promise<void> {
+  /** CDP 真实滚轮驱动：background attach debugger 后按固定节奏向消息区派发
+   *  mouseWheel（isTrusted=true，浏览器层面即用户滚轮——虚拟列表必须响应）。
+   *  滚轮落点优先取中间消息元素中心（避开容器间隙/侧栏）；到顶判定用
+   *  「首条消息到达容器顶部」容器相对坐标（底部窗口首条 rect.top 也是正的，
+   *  视口绝对坐标会误判到顶）。每 300ms 双信号监测进展（内容计数 / 容器位置），
+   *  连续无进展 → 换备选落点重试一次 → 仍不行降级手动 */
+  async function startCdpDriver(container: HTMLElement | null, pointIndex = 0): Promise<void> {
     if (!monitoring) return;
-    // 滚轮落点 = 消息区中心（rect 过小 = 探测可疑 → 退回视口中心；限制在视口内）
+    // 候选落点：中间消息元素中心 → 容器中心 → 视口 30%/70% 高度（重试换点用）
     const rect = container?.getBoundingClientRect();
-    const useRect = Boolean(rect && rect.width >= 200 && rect.height >= 200);
-    const x = Math.round(useRect ? rect!.left + rect!.width / 2 : window.innerWidth / 2);
-    const y = Math.round(useRect ? rect!.top + rect!.height / 2 : window.innerHeight / 2);
-    const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
+    const read = await monitorReadNodes!();
+    const midMsg = read[Math.floor(read.length / 2)]?.el;
+    const midRect = midMsg?.getBoundingClientRect();
+    const points: Array<{ x: number; y: number }> = [];
+    const push = (x: number, y: number): void => {
+      const cx = Math.max(40, Math.min(Math.round(x), window.innerWidth - 40));
+      const cy = Math.max(80, Math.min(Math.round(y), window.innerHeight - 80));
+      if (!points.some((p) => Math.abs(p.x - cx) < 8 && Math.abs(p.y - cy) < 8)) points.push({ x: cx, y: cy });
+    };
+    if (midRect && midRect.width >= 100 && midRect.height >= 30) {
+      push(midRect.left + midRect.width / 2, midRect.top + Math.min(midRect.height / 2, 300));
+    }
+    if (rect && rect.width >= 200 && rect.height >= 200) {
+      push(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    }
+    push(window.innerWidth / 2, window.innerHeight * 0.3);
+    push(window.innerWidth / 2, window.innerHeight * 0.7);
+    const point = points[Math.min(pointIndex, points.length - 1)];
+    if (!point) {
+      updateCollectHint("自动滚动不可用，请手动滚动浏览完整对话；完成后点「完成」");
+      return;
+    }
     let res: { ok: boolean; error?: string };
     try {
       res = (await chrome.runtime.sendMessage({
         type: MSG_CDP_SCROLL_START,
-        x: clamp(x, 40, window.innerWidth - 40),
-        y: clamp(y, 80, window.innerHeight - 80),
+        x: point.x,
+        y: point.y,
         deltaY: -36, // 负 = 向上滚动（≈1500px/s @ 24ms 间隔）
         intervalMs: 24,
       })) as { ok: boolean; error?: string };
@@ -221,6 +241,7 @@ function initConversationFab(): void {
       updateCollectHint("自动滚动不可用（调试器冲突），请手动滚动浏览完整对话；完成后点「完成」");
       return;
     }
+    console.info(`[dailog] cdp-driver start point=(${point.x},${point.y}) idx=${pointIndex} container=${container ? `${container.tagName}.${container.className}` : "null"}`);
     // 保活：open port 保持 service worker 存活（interval 不保证存活）
     try {
       cdpKeepalive = chrome.runtime.connect({ name: "dailog-cdp-scroll" });
@@ -229,9 +250,10 @@ function initConversationFab(): void {
     }
     // 双信号进展监测（300ms 一次）：内容计数增长（虚拟列表渲染出新窗口）或
     // 容器位置前进（全文渲染页滚动）任一即算进展；连续 ~2s 无进展 →
-    // 首条消息已到视口顶部 = 到顶自动完成，否则降级手动
+    // 首条消息到达容器顶部 = 到顶自动完成，否则换点重试/降级手动
     let lastPos = container?.scrollTop ?? -1;
     let stallMs = 0;
+    let ticks = 0;
     cdpWatchIv = setInterval(() => {
       void (async () => {
         if (!monitoring) return;
@@ -245,14 +267,25 @@ function initConversationFab(): void {
           return;
         }
         stallMs += 300;
+        ticks += 1;
+        // 诊断日志：每 5 轮输出一次状态（定位滚动未达消息区等场景）
+        if (ticks % 5 === 0) {
+          console.info(`[dailog] cdp-driver stall count=${monitorNodes.length} scrollTop=${pos} point=(${point.x},${point.y})`);
+        }
         if (stallMs < 2000) return;
         stopCdpDriver();
-        // 到顶判定：可滚容器已到 0（全文渲染页），或首条已渲染消息在视口顶部
-        // （虚拟列表——容器探测不可靠时以内容位置为准）
+        // 到顶判定（容器相对坐标）：首条已渲染消息已到容器顶部边缘；
+        // 容器不可靠时退回视口绝对坐标（≤40px）
         const first = (await monitorReadNodes?.())?.[0];
         const firstTop = first?.el ? first.el.getBoundingClientRect().top : -1;
-        if ((container && container.scrollHeight > container.clientHeight + 4 && pos <= 0) || firstTop >= -40) {
+        const containerTop = container?.getBoundingClientRect().top;
+        const atTop = containerTop !== undefined ? firstTop - containerTop <= 16 : firstTop <= 40;
+        console.info(`[dailog] cdp-driver stop count=${monitorNodes.length} scrollTop=${pos} firstTop=${firstTop} containerTop=${containerTop} atTop=${atTop}`);
+        if (atTop) {
           void finishMonitorCollect();
+        } else if (pointIndex < points.length - 1) {
+          updateCollectHint("正在尝试调整滚动落点…");
+          void startCdpDriver(container, pointIndex + 1); // 换备选落点重试
         } else {
           updateCollectHint("自动滚动失效，请手动滚动浏览完整对话；完成后点「完成」");
         }

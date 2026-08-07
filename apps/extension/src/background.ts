@@ -296,6 +296,10 @@ export async function startCdpScroll(tabId: number, opts: CdpScrollOptions): Pro
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
   cdpScrollTab = tabId;
+  // 先移动鼠标到目标点（虚拟鼠标就位——wheel 才作用于该点下的元素）
+  await chrome.debugger
+    .sendCommand({ tabId }, "Input.dispatchMouseEvent", { type: "mouseMoved", x: opts.x, y: opts.y })
+    .catch(() => {});
   cdpScrollTimer = setInterval(() => {
     void chrome.debugger
       .sendCommand({ tabId }, "Input.dispatchMouseEvent", {
