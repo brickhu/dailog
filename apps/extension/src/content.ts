@@ -13,7 +13,7 @@ import {
   type CollectedDialogue, type CacheCollectResult, type ListCollectsResult, type CollectSummary,
   type GetRulesResult, type CollectRules, type Platform,
 } from "./shared";
-import { collectFromDocument } from "./content/collector";
+import { collectFromDocument, resolvePlatform } from "./content/collector";
 import { parseDeepSeekPage } from "./content/deepseek";
 import { parseClaudePage } from "./content/claude";
 import { waitForMutation } from "./content/mutation";
@@ -26,15 +26,16 @@ import type { MessageNode } from "./content/core";
 
 /** 平台消息读取：本地专有解析器优先（打印撑开/滚动下全量提取）；
  *  本地选择器失配（站点 DOM 改版）→ 远程规则选择器同一文档兜底提取，
- *  避免掉到整页文本兜底（含导航噪音） */
+ *  避免掉到整页文本兜底（含导航噪音）。platform 缺省 = 按规则解析当前 URL（规则平台） */
 async function readPlatformMessages(
-  platform: Platform,
+  platform: Platform | null,
   parseLocal: (root: ParentNode) => MessageNode[],
 ): Promise<MessageNode[]> {
   const local = parseLocal(document);
   if (local.length > 0) return local;
   const rules = await getRules();
-  return applyRuleFallback(local, rules?.platforms[platform], document);
+  const p = platform ?? resolvePlatform(rules, location.href);
+  return applyRuleFallback(local, p ? rules?.platforms[p] : null, document);
 }
 
 function deepSeekScroll() {
@@ -51,11 +52,14 @@ function deepSeekScroll() {
   };
 }
 
-/** 找消息区域向上第一个可滚动容器（claude 滚动加载历史用；无固定容器类名，泛化探测）。
+/** 找消息区域向上第一个可滚动容器（泛化：任一平台消息标记起步；
+ *  无固定容器类名时探测。claude/chatgpt 长对话滚动加载历史用）。
  *  注意：虚拟列表容器 scrollHeight≈clientHeight（只渲染视口窗口），
  *  不能要求有滚动余量——只要 overflow 可滚就认 */
 function findScrollContainer(): HTMLElement | null {
-  const first = document.querySelector("[data-testid='user-message'], [data-testid='assistant-message']");
+  const first = document.querySelector(
+    "[data-testid='user-message'], [data-testid='assistant-message'], [data-message-author-role], .ds-message",
+  );
   let el: HTMLElement | null = (first?.parentElement as HTMLElement | null) ?? null;
   while (el) {
     const oy = getComputedStyle(el).overflowY;
@@ -104,9 +108,33 @@ function claudeScroll() {
   };
 }
 
-/** 当前页的滚动采集配置：平台专有容器优先（deepseek），否则泛化探测（claude） */
+/** chatgpt 等无专有解析器的平台：滚动/打印采集用规则选择器提取
+ *  （本地解析器恒空 → readPlatformMessages 走规则兜底——platform 缺省按 URL 解析，
+ *  打印全量渲染/滚动循环下逐批提取完整消息） */
+function ruleOnlyScroll() {
+  const container = findScrollContainer();
+  if (!container) return undefined;
+  return {
+    container,
+    readNodes: () => readPlatformMessages(null, () => [] as MessageNode[]),
+    waitForMutation: () => waitForMutation(document.body),
+    expand: makeExpand(container, () => readPlatformMessages(null, () => [] as MessageNode[])),
+    restore: () => restoreContainer(container),
+  };
+}
+
+/** 当前页的滚动采集配置：按 hostname 分发平台采集器
+ *  （deepseek/claude 专有解析器优先；其余平台规则提取滚动——chatgpt 长对话
+ *  虚拟列表必须滚动/打印采集，纯静态解析只拿得到视口内消息） */
 function pageScroll() {
-  return deepSeekScroll() ?? claudeScroll();
+  switch (location.hostname) {
+    case "chat.deepseek.com":
+      return deepSeekScroll();
+    case "claude.ai":
+      return claudeScroll();
+    default:
+      return ruleOnlyScroll();
+  }
 }
 
 // ============ AI 对话页：采集 FAB + 「已采集」状态 ============

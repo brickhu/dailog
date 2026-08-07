@@ -68,4 +68,30 @@ describe("collectByScroll（打印式撑开优先 / 滚动保底）", () => {
     });
     expect(d?.messages.map((m) => m.content)).toEqual(["q1", "a1"]);
   });
+
+  it("chatgpt（虚拟列表长对话）带 scroll 上下文 → 打印撑开/滚动采集完整消息", async () => {
+    // chatgpt 无专有解析器：content.ts 注入 ruleOnlyScroll（规则选择器提取），
+    // 此处验证 collectFromDocument 对非专有平台也走 collectByScroll
+    let expanded = false;
+    const waitForMutation = vi.fn(async () => {});
+    const restore = vi.fn();
+    const scroll = {
+      container: {} as Element,
+      readNodes: async (): Promise<MessageNode[]> =>
+        expanded ? nodes(["q1", "a1", "q2", "a2", "q3", "a3"]) : nodes(["q2", "a2", "q3", "a3"]),
+      waitForMutation,
+      expand: async () => { expanded = true; return true; },
+      restore,
+    };
+    const d = await collectFromDocument({
+      root: document,
+      url: "https://chatgpt.com/c/abc-123",
+      scroll,
+    });
+    expect(d?.platform).toBe("chatgpt");
+    expect(d?.conversationId).toBe("abc-123");
+    expect(d?.messages.map((m) => m.content)).toEqual(["q1", "a1", "q2", "a2", "q3", "a3"]);
+    expect(waitForMutation).toHaveBeenCalled(); // 撑开成功后仍有稳定等待
+    expect(restore).toHaveBeenCalled();
+  });
 });

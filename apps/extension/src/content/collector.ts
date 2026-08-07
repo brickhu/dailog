@@ -147,8 +147,11 @@ export async function collectFromDocument(ctx: CollectContext): Promise<Collecte
       : collectDeepSeek(root, url);
     d ??= await collectByRemoteRule(ctx, "deepseek", rules);
   } else if (platform) {
-    // 其余平台：无专有解析器，直接走远程规则
-    d = await collectByRemoteRule(ctx, platform, rules);
+    // 其余平台（chatgpt 等虚拟列表长对话）：有 scroll 上下文（content.ts 注入，
+    // 打印撑开 + 滚动循环）→ 滚动采集；否则纯规则静态解析（视口内消息）
+    d = ctx.scroll
+      ? await collectByScroll(ctx, platform, rules?.platforms[platform])
+      : await collectByRemoteRule(ctx, platform, rules);
   }
   // 完整性校验：正常对话必有助手回复；全 user 说明结构化解析漏了（选择器失效/规则不全）
   if (d && !d.messages.some((m) => m.role === "assistant")) d = null;
