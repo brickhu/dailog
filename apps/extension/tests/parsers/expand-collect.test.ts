@@ -71,20 +71,23 @@ describe("collectByScroll（统一滚动扫描采集）", () => {
     expect(restore).toHaveBeenCalled();
   });
 
-  it("滚动扫描补发 wheel/scroll 事件（覆盖监听事件才懒加载的虚拟列表）", async () => {
+  it("原生滚动驱动：scrollIntoView 提示元素触发受控虚拟列表滚动", async () => {
     const container = document.createElement("div");
     container.scrollTop = 500; // 模拟从中间开始（触发到顶滚动）
     Object.defineProperty(container, "scrollHeight", { value: 3000, configurable: true });
     Object.defineProperty(container, "clientHeight", { value: 800, configurable: true });
-    const wheelSpy = vi.fn();
-    const scrollSpy = vi.fn();
-    container.addEventListener("wheel", wheelSpy);
-    container.addEventListener("scroll", scrollSpy);
+    // jsdom 无布局：劫持实例 scrollIntoView 观察调用（受控列表必须响应原生滚动，
+    // scrollTop 赋值会被虚拟列表异步重置——这正是 claude/doubao 滚不到顶的根因）
+    const el = document.createElement("div");
+    const siv = vi.fn();
+    el.scrollIntoView = siv as unknown as typeof el.scrollIntoView;
     let historyLoaded = false;
     const scroll = {
       container,
-      readNodes: async (): Promise<MessageNode[]> =>
-        historyLoaded ? nodes(["q1", "a1"]) : nodes(["a1"]),
+      readNodes: async (): Promise<MessageNode[]> => {
+        const msgs = historyLoaded ? nodes(["q1", "a1"]) : nodes(["a1"]);
+        return msgs.map((m) => ({ ...m, el }));
+      },
       waitForMutation: async () => { historyLoaded = true; },
       restore: () => {},
       settleMs: 1,
@@ -95,7 +98,7 @@ describe("collectByScroll（统一滚动扫描采集）", () => {
       scroll,
     });
     expect(d?.messages.map((m) => m.content)).toEqual(["q1", "a1"]);
-    expect(wheelSpy).toHaveBeenCalled(); // 受控虚拟列表靠 wheel 事件驱动滚动
+    expect(siv).toHaveBeenCalled(); // 滚动全程以 scrollIntoView 驱动（到顶 + 步进）
   });
 
   it("虚拟列表窗口化：从顶到底步进扫过全部窗口（中间段不缺失）", async () => {

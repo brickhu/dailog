@@ -6,8 +6,6 @@ export interface FabController {
   setVisible(visible: boolean): void;
   /** 当前对话已采集过：按钮切「已采集 ↻」（刷新图标，点击重采集替换旧条目） */
   setCollected(collected: boolean): void;
-  /** 采集确认态：按钮变「确认导入 ✓」，上方出现「放弃」按钮（点击 onAbandon） */
-  setConfirm(on: boolean, onAbandon?: () => void): void;
   showToast(text: string, kind: "success" | "error"): void;
   destroy(): void;
 }
@@ -29,14 +27,6 @@ button.fab .dot { width: 8px; height: 8px; border-radius: 50%; background: #34d3
 button.fab.busy .dot { background: #fbbf24; animation: pulse 1s infinite; }
 button.fab.collected { background: #334155; }
 button.fab.collected .refresh { font-size: 15px; line-height: 1; }
-button.fab.confirm { background: #16a34a; }
-button.fab.confirm .check { font-size: 15px; line-height: 1; }
-button.abandon {
-  padding: 6px 14px; border: 1px solid rgba(255,255,255,0.7); border-radius: 999px; cursor: pointer;
-  background: rgba(15, 23, 42, 0.75); color: #fff; font-size: 12px; font-weight: 500;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-button.abandon:hover { background: rgba(15, 23, 42, 0.95); }
 @keyframes pulse { 50% { opacity: 0.3; } }
 .toast {
   max-width: 260px; padding: 8px 12px; border-radius: 8px; font-size: 13px; line-height: 1.4;
@@ -63,13 +53,6 @@ export function createFab(opts: { onClick: () => void }): FabController {
   toast.hidden = true;
   wrap.appendChild(toast);
 
-  const abandon = document.createElement("button");
-  abandon.className = "abandon";
-  abandon.type = "button";
-  abandon.textContent = "放弃";
-  abandon.hidden = true;
-  wrap.appendChild(abandon);
-
   const fab = document.createElement("button");
   fab.className = "fab";
   fab.type = "button";
@@ -82,17 +65,14 @@ export function createFab(opts: { onClick: () => void }): FabController {
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   let busy = false;
   let collected = false;
-  let confirm = false;
 
   function render() {
-    const label = busy ? "采集中…" : confirm ? "确认导入" : collected ? "已采集" : "采集对话";
+    const label = busy ? "采集中…" : collected ? "已采集" : "采集对话";
     const icon = busy
       ? '<span class="dot"></span>'
-      : confirm
-        ? '<span class="check">✓</span>'
-        : collected
-          ? '<span class="refresh">↻</span>'
-          : '<span class="dot"></span>';
+      : collected
+        ? '<span class="refresh">↻</span>'
+        : '<span class="dot"></span>';
     fab.innerHTML = `${icon}<span>${label}</span>`;
   }
   render();
@@ -110,15 +90,6 @@ export function createFab(opts: { onClick: () => void }): FabController {
     setCollected(c: boolean) {
       collected = c;
       fab.classList.toggle("collected", c);
-      render();
-    },
-    setConfirm(on: boolean, onAbandon?: () => void) {
-      confirm = on;
-      fab.classList.toggle("confirm", on);
-      fab.classList.toggle("collected", on ? false : collected);
-      abandon.hidden = !on;
-      // 绑定放弃回调（先解绑旧的，避免多次采集累积监听）
-      abandon.onclick = on && onAbandon ? () => onAbandon() : null;
       render();
     },
     showToast(text, kind) {

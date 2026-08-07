@@ -77,8 +77,8 @@ export interface ScrollSweepOptions {
  * 经过才渲染）。策略（用户定义的滚动条用法）：
  * 1. 候选容器 = 消息滚动区全集（平台专有 + 消息祖先链 overflow + Virtuoso
  *    scroller + 页面级）——对全部候选滚动，真正的 scroller 一定在其中
- * 2. 双通道：scrollTop 直接赋值 + wheel 事件（合成 wheel 默认滚动被禁，
- *    但部分受控列表自行处理事件）
+ * 2. 双通道：scrollTop 直接赋值（非受控容器生效）+ scrollIntoView 原生滚动
+ *   （受控虚拟列表必须响应原生滚动，scrollTop 赋值会被异步重置）
  * 3. 先滚到顶（循环上滚直到全部候选 scrollTop=0）
  * 4. 每次滚一屏，经过的区域触发虚拟列表渲染；每步读节点去重合并进内存
  * 5. 全部可滚候选到底后等待渲染稳定：连续 settleRounds 轮无新增停止
@@ -96,30 +96,36 @@ export async function scrollSweep(opts: ScrollSweepOptions): Promise<MessageNode
   const viewport = Math.max(containers[0]?.clientHeight ?? 0, 400);
   const scrollables = (): HTMLElement[] => containers.filter((c) => c.scrollHeight > c.clientHeight + 4);
   const maxTopOf = (c: HTMLElement): number => Math.max(0, c.scrollHeight - c.clientHeight);
-  /** 强制滚动到目标：持续赋值对抗异步重置（自研虚拟列表监听 scroll 事件
-   *  回写状态、重置外部赋值——单次赋值会被还原，反复赋值直到位置站稳） */
-  const forceScrollTo = async (el: HTMLElement, target: number, timeoutMs = 1500): Promise<void> => {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-      el.scrollTop = target;
+  /** 当前滚动进度（所有可滚候选的最大 scrollTop） */
+  const progress = (): number => Math.max(0, ...scrollables().map((c) => c.scrollTop));
+  /** 浏览器原生滚动到元素顶部（不受 isTrusted 限制——自研虚拟列表对 scrollTop
+   *  赋值会异步重置，但必须响应原生滚动产生的 scroll 事件） */
+  const scrollIntoViewTop = (el: Element): void => {
+    try {
+      el.scrollIntoView({ block: "start", behavior: "instant" as ScrollBehavior });
+    } catch {
       try {
-        el.dispatchEvent(new WheelEvent("wheel", { deltaY: target - el.scrollTop, bubbles: true, cancelable: true }));
+        el.scrollIntoView();
       } catch {
-        // 无 dispatchEvent 的环境（测试 mock 容器）静默
+        // 无 scrollIntoView 的环境（测试 mock 元素）静默
       }
-      await new Promise((r) => setTimeout(r, settleMs));
-      if (Math.abs(el.scrollTop - target) <= 2) return; // 到达并保持
     }
   };
-  /** 双通道滚动一屏：对全部候选持续赋值到目标（受控/非受控都覆盖） */
-  const scrollBy = async (deltaY: number): Promise<void> => {
-    for (const c of scrollables()) {
-      await forceScrollTo(c, Math.max(0, c.scrollTop + deltaY));
-    }
+  /** 双通道滚动：scrollTop 赋值（非受控/mock 生效）+ scrollIntoView
+   *  （真实浏览器受控虚拟列表生效）；hintEl = 目标消息元素 */
+  const scrollBy = async (deltaY: number, hintEl?: Element): Promise<void> => {
+    for (const c of scrollables()) c.scrollTop += deltaY;
+    if (hintEl) scrollIntoViewTop(hintEl);
+    await new Promise((r) => setTimeout(r, settleMs));
   };
-  // 到顶：对全部可滚候选强制滚到 0（受控列表单次赋值无效，持续对抗）
-  for (const c of scrollables()) {
-    await forceScrollTo(c, 0);
+  // 到顶：反复把「当前视口第一条消息」滚到顶部（原生滚动驱动受控列表），
+  // 直到位置不再上移（到顶）或达上限
+  for (let i = 0; i < 50; i++) {
+    const before = progress();
+    const first = (await readNodes())[0]?.el;
+    if (!first) break;
+    await scrollBy(-viewport * 2, first);
+    if (progress() >= before - 2) break; // 不再上移 = 到顶（或元素已到顶）
   }
   for (const c of containers) c.scrollTop = 0;
   let stable = 0;
@@ -137,7 +143,9 @@ export async function scrollSweep(opts: ScrollSweepOptions): Promise<MessageNode
       stable = 0; // 到底但仍有新增（懒加载分批渲染中）：继续等待
     } else {
       stable = 0;
-      await scrollBy(viewport);
+      // 向下步进：把「当前视口最后一条消息」滚到顶部（原生滚动驱动受控列表下移）
+      const last = read[read.length - 1]?.el;
+      await scrollBy(viewport, last);
     }
     await waitForMutation();
   }

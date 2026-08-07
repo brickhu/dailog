@@ -24,8 +24,11 @@ import { applyRuleFallback } from "./content/read-fallback";
 import { highlightNodes, clearHighlight } from "./content/highlight";
 import { collectScrollContainers } from "./content/scroll-container";
 import { showCollectOverlay, hideCollectOverlay } from "./content/collect-overlay";
-import { renderSelects, refreshSelects, selectedNodes, clearSelects } from "./content/message-select";
+import { createConfirmPanel } from "./content/confirm-panel";
 import type { MessageNode } from "./content/core";
+
+/** 采集确认面板（模块级单例；确认态选择消息，不依赖页面消息 DOM） */
+const confirmPanel = createConfirmPanel();
 
 /** 平台消息读取：本地专有解析器优先（打印撑开/滚动下全量提取）；
  *  本地选择器失配（站点 DOM 改版）→ 远程规则选择器同一文档兜底提取，
@@ -183,12 +186,10 @@ async function collectPage(): Promise<CollectedDialogue | null> {
 }
 
 // 采集确认态状态（content script 单页单 FAB）：采集完成停留页面，
-// 用户勾选调整后确认导入——不自动跳转 studio
+// 确认面板勾选调整后确认导入——不自动跳转 studio
 let confirmMode = false;
 let collectedNodes: MessageNode[] = [];
 let pendingDialogue: CollectedDialogue | null = null;
-/** 确认态勾选框重建定时器（虚拟列表渲染会回收选框） */
-let selectRefreshTimer: ReturnType<typeof setInterval> | undefined;
 
 // 模块级：FAB「已采集」状态刷新入口（initConversationFab 内赋值；
 // background 缓存变化广播时调用——立即恢复「采集对话」，无需等轮询）
@@ -198,19 +199,12 @@ function initConversationFab(): void {
   const fab: FabController = createFab({
     onClick: () => {
       if (confirmMode) {
-        // 确认导入：按勾选过滤消息 → 缓存（background 自动打开 studio/import）
-        const selected = selectedNodes(collectedNodes);
-        if (selected.length === 0) {
-          fab.showToast("未选择任何消息", "error");
-          return;
-        }
-        const dialogue: CollectedDialogue = {
-          ...pendingDialogue!,
-          messages: selected.map(({ role, content }) => ({ role, content })),
-        };
-        exitConfirm(fab);
-        void cacheDialogue(dialogue, fab);
-        return;
+        // 确认态中点击 FAB = 放弃当前选择并重新采集（面板仍开着会被重新 open 覆盖）
+        confirmPanel.close();
+        confirmMode = false;
+        pendingDialogue = null;
+        collectedNodes = [];
+        void updateCollectedState();
       }
       fab.setBusy(true);
       // 整页蒙层：禁用鼠标点击/滚动，防止用户操作干扰滚动扫描
@@ -230,18 +224,28 @@ function initConversationFab(): void {
             await cacheDialogue(dialogue, fab);
             return;
           }
-          // 进入确认态：勾选框 + FAB「确认导入」+「放弃」
+          // 进入确认态：确认面板（Shadow DOM，不依赖页面消息 DOM——虚拟列表
+          // 渲染重建元素，页面勾选框不可持续）+ toast 提示
           confirmMode = true;
           pendingDialogue = dialogue;
-          renderSelects(collectedNodes);
-          // 虚拟列表（chatgpt 等）渲染会重建消息 DOM 导致勾选框被回收——
-          // 定期重建丢失的选框并保留勾选状态
-          selectRefreshTimer = setInterval(() => refreshSelects(collectedNodes), 1500);
-          fab.setConfirm(true, () => {
-            exitConfirm(fab);
-            fab.showToast("已取消采集", "success");
+          confirmPanel.open(collectedNodes, {
+            onConfirm: (selected) => {
+              confirmMode = false;
+              pendingDialogue = null;
+              collectedNodes = [];
+              const messages = selected.map(({ role, content }) => ({ role, content }));
+              void cacheDialogue({ ...dialogue, messages }, fab);
+              void updateCollectedState();
+            },
+            onAbandon: () => {
+              confirmMode = false;
+              pendingDialogue = null;
+              collectedNodes = [];
+              fab.showToast("已取消采集", "success");
+              void updateCollectedState();
+            },
           });
-          fab.showToast(`已采集 ${collectedNodes.length} 条，取消勾选可剔除，点击确认导入`, "success");
+          fab.showToast(`已采集 ${collectedNodes.length} 条，取消勾选可剔除`, "success");
         } catch (e) {
           fab.showToast(`采集失败：${e instanceof Error ? e.message : e}`, "error");
         } finally {
@@ -251,18 +255,6 @@ function initConversationFab(): void {
       })();
     },
   });
-
-  /** 退出确认态：清除勾选框、状态与 FAB 恢复 */
-  function exitConfirm(fabRef: FabController): void {
-    confirmMode = false;
-    pendingDialogue = null;
-    collectedNodes = [];
-    if (selectRefreshTimer) clearInterval(selectRefreshTimer);
-    selectRefreshTimer = undefined;
-    clearSelects();
-    fabRef.setConfirm(false);
-    void updateCollectedState();
-  }
 
   /** 缓存采集结果（background 自动打开确认入库页；同会话重采集自动替换旧条目） */
   async function cacheDialogue(dialogue: CollectedDialogue, fabRef: FabController): Promise<void> {
