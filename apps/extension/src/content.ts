@@ -264,10 +264,18 @@ function initConversationFab(): void {
     void updateCollectedState();
   });
   setInterval(() => void updateCollectedState(), 3000);
+  // 定期重判显隐（兜底：SPA/DOM 延迟渲染——初始判定时输入框可能未渲染，
+  // URL 未变则不触发 watchUrl，靠此定期补判）
+  setInterval(() => applyVisibility(location.href), 2000);
 }
 
-// AI 平台页：采集 FAB（studio 域不再注入 content script——待入库提醒已移除）
-initConversationFab();
+// AI 平台页：采集 FAB（studio 域不再注入 content script——待入库提醒已移除）。
+// 初始化包保护：真实页面异常时 Console 输出 [dailog] 错误（可诊断），不静默失败
+try {
+  initConversationFab();
+} catch (e) {
+  console.error("[dailog] FAB 初始化失败：", e);
+}
 
 // 消息监听：popup「采集当前对话」触发本页采集（返回 dialogue，由 popup 转 background 缓存）；
 // background 缓存变化广播 → 立即刷新 FAB「已采集」状态（删除/新增后无需等 3 秒轮询）
