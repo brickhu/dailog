@@ -15,7 +15,9 @@ export function parseByRule(root: ParentNode, rule: CollectRule): DialogueMessag
   for (const scope of scopes) {
     for (const el of Array.from(scope.querySelectorAll(`${userSelector}, ${assistantSelector}`))) {
       let role: Role | null = null;
-      if (el.matches(userSelector)) role = "user";
+      // user 节点若嵌套包含 assistant 匹配（容器型 userSelector 命中 assistant 外层容器，
+      // 如 deepseek 新版 div.ds-message 同时包住两种角色）→ 不作为 user，由内层 assistant 节点承接
+      if (el.matches(userSelector) && !el.querySelector(assistantSelector)) role = "user";
       else if (el.matches(assistantSelector)) role = "assistant";
       if (!role) continue;
       // 取文本子节点（如 .ds-markdown/.markdown）；无则回退节点自身（user 消息通常没有）

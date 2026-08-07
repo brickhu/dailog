@@ -6,7 +6,7 @@ import { deepseekMessageId, parseDeepSeekPage } from "../../src/content/deepseek
 const html = readFileSync(join(import.meta.dirname, "../fixtures/deepseek-chat.html"), "utf-8");
 
 describe("parseDeepSeekPage", () => {
-  it("extracts messages by data-message-author-role", () => {
+  it("extracts messages by 新版结构（ds-message 容器 + ds-assistant-message-main-content）", () => {
     const doc = new DOMParser().parseFromString(html, "text/html");
     const nodes = parseDeepSeekPage(doc);
     expect(nodes.map((n) => n.role)).toEqual(["user", "assistant", "user"]);
