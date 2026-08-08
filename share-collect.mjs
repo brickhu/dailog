@@ -159,16 +159,19 @@ async function collectWithPlaywright(url) {
       } catch (e) { /* 非 JSON 跳过 */ }
     });
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
-    const deadline = Date.now() + 90000;
-    while (!result && Date.now() < deadline) await page.waitForTimeout(500);
-    if (!result && url.includes("chatgpt.com/share/")) {
-      // chatgpt 分享页无接口：直接读渲染后的 DOM
+    if (url.includes("chatgpt.com/share/")) {
+      // chatgpt 分享页无接口响应：静态 HTML 渲染，等 3s 后直接读 DOM
+      await page.waitForTimeout(3000);
       const shareId = url.match(/share\/([^/?#]+)/)?.[1] ?? "?";
       const texts = await page.locator("[data-message-author-role]").evaluateAll((els) =>
         els.map((el) => ({ role: el.getAttribute("data-message-author-role"), content: (el.textContent ?? "").trim() }))
           .filter((x) => x.content && (x.role === "user" || x.role === "assistant")),
       );
       if (texts.length) result = { platform: "chatgpt", conversationId: shareId, title: "ChatGPT 分享对话", url, messages: texts };
+    } else {
+      // 有接口的平台（claude/deepseek）：等接口响应
+      const deadline = Date.now() + 90000;
+      while (!result && Date.now() < deadline) await page.waitForTimeout(500);
     }
     await page.close();
     return result;
