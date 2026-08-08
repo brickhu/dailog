@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dedupeSort, groupIntoUnits, isCompleteUnit, messageKey, unitRect, unitVisibility, type MessageNode } from "../src/content/core";
+import { dedupeSort, groupIntoUnits, isCompleteUnit, messageKey, mergeUnitMembers, unitRect, unitVisibility, type MessageNode } from "../src/content/core";
 
 const mk = (id: string, offsetTop: number, role: MessageNode["role"]): MessageNode =>
   ({ id, offsetTop, role, content: `${id}-content` });
@@ -86,8 +86,8 @@ describe("unitVisibility（视窗可见性判定：进入视窗选中 / 滚出�
 });
 
 describe("unitRect（问答单元几何：成员消息 rect 并集）", () => {
-  const elAt = (top: number, bottom: number): Element =>
-    ({ getBoundingClientRect: () => ({ top, bottom, left: 0, right: 0, width: 0, height: bottom - top, x: 0, y: 0, toJSON: () => ({}) }) }) as unknown as Element;
+  const elAt = (top: number, bottom: number, left = 0, right = 200): Element =>
+    ({ getBoundingClientRect: () => ({ top, bottom, left, right, width: right - left, height: bottom - top, x: left, y: top, toJSON: () => ({}) }) }) as unknown as Element;
 
   it("单元 = user + assistant 的并集（底边取 assistant）", () => {
     const unit = {
@@ -97,6 +97,35 @@ describe("unitRect（问答单元几何：成员消息 rect 并集）", () => {
         { id: "a", offsetTop: 0, role: "assistant" as const, content: "a", el: elAt(200, 600) },
       ],
     };
-    expect(unitRect(unit)).toEqual({ top: 100, bottom: 600 });
+    expect(unitRect(unit)).toEqual({ top: 100, bottom: 600, left: 0, right: 200 });
+  });
+});
+
+describe("mergeUnitMembers（选中单元成员合并：去重 + 内容只增不减）", () => {
+  const mk = (id: string, role: MessageNode["role"], content: string): MessageNode =>
+    ({ id, offsetTop: 0, role, content });
+
+  it("窗口切分读到局部 → 合并不替换，已选内容不丢", () => {
+    const target = { id: "u", messages: [mk("u1", "user", "问题"), mk("a1", "assistant", "回答")] };
+    // 局部读取（只含 user）——合并后 assistant 保留
+    mergeUnitMembers(target, { id: "u", messages: [mk("u1", "user", "问题")] });
+    expect(target.messages.map((m) => m.id)).toEqual(["u1", "a1"]);
+    // 补充完整读取——已存在成员去重
+    mergeUnitMembers(target, { id: "u", messages: [mk("u1", "user", "问题"), mk("a1", "assistant", "回答")] });
+    expect(target.messages.length).toBe(2);
+  });
+
+  it("内容只增不减（流式/截断中间态）", () => {
+    const target = { id: "u", messages: [mk("a1", "assistant", "完整回答 ABC")] };
+    mergeUnitMembers(target, { id: "u", messages: [mk("a1", "assistant", "完整回答 AB")] }); // 截断
+    expect(target.messages[0].content).toBe("完整回答 ABC");
+    mergeUnitMembers(target, { id: "u", messages: [mk("a1", "assistant", "完整回答 ABCDEF")] }); // 流式增长
+    expect(target.messages[0].content).toBe("完整回答 ABCDEF");
+  });
+
+  it("新成员按 incoming 文档序追加（多 assistant）", () => {
+    const target = { id: "u", messages: [mk("u1", "user", "q")] };
+    mergeUnitMembers(target, { id: "u", messages: [mk("u1", "user", "q"), mk("a1", "assistant", "a1"), mk("a2", "assistant", "a2")] });
+    expect(target.messages.map((m) => m.id)).toEqual(["u1", "a1", "a2"]);
   });
 });

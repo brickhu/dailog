@@ -21,8 +21,8 @@ import { createFab, type FabController } from "./content/ui";
 import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback, applyRuleMerge } from "./content/read-fallback";
 import { showCollectHint, hideCollectHint, showScanline, hideScanline } from "./content/collect-hint";
-import { highlightNodes, clearHighlight, unhighlightNodes } from "./content/highlight";
-import { groupIntoUnits, isCompleteUnit, unitRect, unitVisibility, messageKey, type MessageNode, type QaUnit } from "./content/core";
+import { renderUnitBoxes, clearUnitBoxes } from "./content/unit-boxes";
+import { groupIntoUnits, isCompleteUnit, unitRect, unitVisibility, messageKey, mergeUnitMembers, type MessageNode, type QaUnit } from "./content/core";
 
 /** 平台消息读取：本地专有解析器优先（用户滚动驱动渲染，轮询读当前渲染出的消息）；
  *  本地为空（站点 DOM 改版）→ 远程规则选择器兜底；本地缺助手回复（claude 旧
@@ -231,31 +231,33 @@ function initConversationFab(): void {
         const vis = unitVisibility(top, bottom, viewportHeight);
         const idx = rangeUnits.findIndex((u) => u.id === unit.id);
         if (idx >= 0) {
-          // 已选单元：刷新成员/几何 → 完全滚出视窗上方（向下滚滚过）→ 取消
-          rangeUnits[idx].messages = unit.messages;
+          // 已选单元：合并成员（稳定键去重、内容只增不减——窗口切分读到局部
+          // 时合并不替换，已选内容不丢）→ 完全滚出视窗上方（向下滚滚过）→ 取消
+          mergeUnitMembers(rangeUnits[idx], unit);
           if (vis === "above") {
             rangeUnits.splice(idx, 1);
             changed = true;
           }
         } else if (unit.messages[0]?.role === "user" && vis === "visible" && isCompleteUnit(unit)) {
-          // 完整问答单元（有问有答）进入视窗 → 选中追加
+          // 完整问答单元（有问有答）进入视窗 → 选中追加（数组方式，必入数组）
           rangeUnits.push(unit);
           changed = true;
         } else if (unit.messages[0]?.role === "assistant") {
-          // assistant 片段（窗口切分）：匹配数组内所属单元——滚出上方则取消父单元
+          // assistant 片段（窗口切分）：匹配数组内所属单元——合并成员刷新内容，
+          // 滚出上方则取消父单元
           const key = messageKey(unit.messages[0]);
           const parent = rangeUnits.find((u) => u.messages.some((m) => messageKey(m) === key));
-          if (parent && vis === "above") {
-            rangeUnits.splice(rangeUnits.indexOf(parent), 1);
-            changed = true;
+          if (parent) {
+            mergeUnitMembers(parent, unit);
+            if (vis === "above") {
+              rangeUnits.splice(rangeUnits.indexOf(parent), 1);
+              changed = true;
+            }
           }
         }
       }
-      // 高亮同步：渲染消息中属于已选单元的加绿，否则取消绿框
-      const inRange = (n: MessageNode): boolean =>
-        rangeUnits.some((u) => u.messages.some((m) => messageKey(m) === messageKey(n)));
-      highlightNodes(nodes.filter(inRange));
-      unhighlightNodes(nodes.filter((n) => !inRange(n)));
+      // 选区框渲染（问答单元容器 outline，替代消息级 outline）
+      renderUnitBoxes(rangeUnits);
       if (changed) fab.updateCollectCount(rangeUnits.length); // 问答单元数
     } catch {
       // 单轮读取失败忽略，下一轮重试
@@ -270,7 +272,7 @@ function initConversationFab(): void {
     monitoring = false;
     hideCollectHint();
     hideScanline();
-    clearHighlight();
+    clearUnitBoxes();
     fab.showToast("已取消采集", "success");
     void updateCollectedState();
   }
@@ -293,7 +295,7 @@ function initConversationFab(): void {
     monitoring = false;
     hideCollectHint();
     hideScanline();
-    clearHighlight();
+    clearUnitBoxes();
     const unitCount = rangeUnits.length;
     const nodes = rangeUnits.flatMap((u) => u.messages);
     try {

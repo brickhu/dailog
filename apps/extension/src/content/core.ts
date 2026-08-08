@@ -82,10 +82,31 @@ export function isCompleteUnit(unit: QaUnit): boolean {
 
 /** 问答单元的当前视口几何（成员消息 rect 的并集；虚拟列表回收的元素 rect 归零，
  *  由仍渲染的成员决定——向下滚时单元重新渲染，几何保持新鲜） */
-export function unitRect(unit: QaUnit): { top: number; bottom: number } {
+export function unitRect(unit: QaUnit): { top: number; bottom: number; left: number; right: number } {
   const tops = unit.messages.map((m) => m.el?.getBoundingClientRect().top ?? 0);
   const bottoms = unit.messages.map((m) => m.el?.getBoundingClientRect().bottom ?? 0);
-  return { top: Math.min(...tops), bottom: Math.max(...bottoms) };
+  const lefts = unit.messages.map((m) => m.el?.getBoundingClientRect().left ?? 0);
+  const rights = unit.messages.map((m) => m.el?.getBoundingClientRect().right ?? 0);
+  return {
+    top: Math.min(...tops),
+    bottom: Math.max(...bottoms),
+    left: Math.min(...lefts),
+    right: Math.max(...rights),
+  };
+}
+
+/** 合并问答单元成员（稳定键去重、内容只增不减——流式/截断中间态不丢内容；
+ *  新成员按 incoming 文档序追加）。选中单元必须完整保留在数组中——
+ *  窗口切分读到单元局部时合并而非替换，避免已选内容丢失 */
+export function mergeUnitMembers(target: QaUnit, incoming: QaUnit): void {
+  for (const m of incoming.messages) {
+    const i = target.messages.findIndex((x) => messageKey(x) === messageKey(m));
+    if (i >= 0) {
+      if (m.content.length > target.messages[i].content.length) target.messages[i] = m;
+    } else {
+      target.messages.push(m);
+    }
+  }
 }
 
 /** 扫码采集的视窗可见性判定（方向修正：向上滚 = 内容在视窗中下移，消息进入
