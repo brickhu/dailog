@@ -129,6 +129,7 @@ let refreshCollectedState: (() => void) | undefined;
 
 function initConversationFab(): void {
   const fab: FabController = createFab({
+    badge: BUILD_TAG,
     onClick: () => {
       if (monitoring) {
         // 监测中点击 FAB = 完成采集（进入确认态）
@@ -438,40 +439,12 @@ function initConversationFab(): void {
 // 初始化包保护：真实页面异常时 Console 输出 [dailog] 错误（可诊断），不静默失败
 try {
   initConversationFab();
-  showBuildBadge();
 } catch (e) {
   console.error("[dailog] FAB 初始化失败：", e);
 }
 
-/** 构建标识（每次打包更新——左上角徽标，便于验证扩展新版本是否成功加载） */
-const BUILD_TAG = "20260808-7";
-
-/** 页面左上角构建徽标（小号、半透明、不阻断交互；验证加载用） */
-function showBuildBadge(): void {
-  const badge = document.createElement("div");
-  badge.setAttribute("dailog-build", ""); // 可识别标记（测试/调试）
-  badge.style.cssText = [
-    "position:fixed",
-    "top:6px",
-    "left:6px",
-    "z-index:2147483646",
-    "width:160px",
-    "height:40px",
-    "display:flex",
-    "align-items:center",
-    "justify-content:center",
-    "white-space:nowrap",
-    "box-sizing:border-box",
-    "border-radius:6px",
-    "background:rgba(220,38,38,0.92)",
-    "color:#fff",
-    "font-size:12px",
-    "font-family:system-ui,-apple-system,sans-serif",
-    "pointer-events:none",
-  ].join(";");
-  badge.textContent = BUILD_TAG;
-  document.documentElement.appendChild(badge);
-}
+/** 构建标识（每次打包更新——FAB 左侧红底白字徽标，验证扩展新版本是否成功加载） */
+const BUILD_TAG = "20260808-8";
 
 // 消息监听：popup「采集当前对话」触发本页静态采集（返回 dialogue，由 popup 转 background 缓存）；
 // background 缓存变化广播 → 立即刷新 FAB「已采集」状态（删除/新增后无需等 3 秒轮询）

@@ -20,6 +20,12 @@ const STYLE = `
 :host { all: initial; }
 * { box-sizing: border-box; }
 .wrap { position: fixed; right: 24px; bottom: 24px; z-index: 2147483647; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; font-family: system-ui, -apple-system, sans-serif; }
+.row { display: flex; align-items: center; gap: 8px; }
+.badge {
+  height: 40px; padding: 0 12px; display: flex; align-items: center; justify-content: center;
+  background: #dc2626; color: #fff; font-size: 12px; font-weight: 600;
+  border-radius: 8px; white-space: nowrap; pointer-events: none;
+}
 button.fab {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 18px; border: none; border-radius: 999px; cursor: pointer;
@@ -53,7 +59,7 @@ button.abandon:hover { background: #f1f5f9; }
 .toast.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
 `;
 
-export function createFab(opts: { onClick: () => void }): FabController {
+export function createFab(opts: { onClick: () => void; badge?: string }): FabController {
   const host = document.createElement("div");
   const shadow = host.attachShadow({ mode: "open" });
   const style = document.createElement("style");
@@ -72,14 +78,26 @@ export function createFab(opts: { onClick: () => void }): FabController {
   fab.className = "fab";
   fab.type = "button";
   fab.addEventListener("click", opts.onClick);
-  wrap.appendChild(fab);
+
+  // 构建徽标：FAB 左侧红底白字容器（验证扩展版本是否成功加载）
+  const row = document.createElement("div");
+  row.className = "row";
+  if (opts.badge) {
+    const badge = document.createElement("div");
+    badge.className = "badge";
+    badge.setAttribute("dailog-build", ""); // 可识别标记（测试/调试）
+    badge.textContent = opts.badge;
+    row.appendChild(badge);
+  }
+  row.appendChild(fab);
+  wrap.appendChild(row);
 
   const abandon = document.createElement("button");
   abandon.className = "abandon";
   abandon.textContent = "放弃";
   abandon.type = "button";
   abandon.hidden = true;
-  wrap.insertBefore(abandon, fab);
+  wrap.insertBefore(abandon, row);
 
   shadow.appendChild(wrap);
   document.documentElement.appendChild(host);
