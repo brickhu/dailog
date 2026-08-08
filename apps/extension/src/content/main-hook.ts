@@ -17,9 +17,9 @@
     win.postMessage({ type: "dailog:conversation", url, data }, "*");
   };
 
-  const of = win.fetch;
+  const of = win.fetch as unknown as (...args: unknown[]) => Promise<Response>;
   if (typeof of === "function") {
-    win.fetch = ((...args: Parameters<typeof of>) => {
+    win.fetch = ((...args: unknown[]) => {
       const p = of.apply(win, args);
       const url = typeof args[0] === "string" ? args[0] : ((args[0] as { url?: string })?.url ?? "");
       p.then((res: Response) => {
@@ -39,7 +39,7 @@
     (this as XMLHttpRequest & { __dailogUrl?: string }).__dailogUrl = String(url);
     return ox.call(this, method, url);
   };
-  XMLHttpRequest.prototype.send = function (this: XMLHttpRequest, ...args: Parameters<typeof os>) {
+  XMLHttpRequest.prototype.send = function (this: XMLHttpRequest, ...args: unknown[]) {
     this.addEventListener("load", () => {
       try {
         const j: unknown = JSON.parse(this.responseText);
