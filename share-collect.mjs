@@ -66,7 +66,8 @@ function parseClaudeSnapshot(d, id, url) {
 async function tryFetchShare(url, reqCtx) {
   if (url.includes("claude.ai/share/")) return tryClaudeShareFetch(url, reqCtx);
   if (url.includes("chat.deepseek.com/share/")) return tryDeepSeekShareFetch(url, reqCtx);
-  // chatgpt/doubao 分享页解析器后续按同样模式补充
+  if (url.includes("chatgpt.com/share/")) return tryChatgptShareFetch(url, reqCtx);
+  // doubao 分享页解析器后续补充
   return null;
 }
 
@@ -97,6 +98,36 @@ async function tryDeepSeekShareFetch(url, reqCtx) {
   if (!apiRes.ok()) return null;
   const d = await apiRes.json();
   return parseDeepSeekShare(d, shareId, url);
+}
+
+/** chatgpt 分享解析：静态 HTML 里 data-message-author-role 标记的消息 */
+function parseChatgptShareHtml(html, id, url) {
+  const messages = [];
+  // 逐段匹配消息元素（含嵌套 div 文本；用标签计数找闭合——HTML 结构固定可简化：
+  // 每个消息 div 后跟 3 层闭合，直接对剩余片段做惰性匹配）
+  const re = /data-message-author-role="(user|assistant)"[^>]*>([\s\S]*?)(?=data-message-author-role="|<\/div>\s*<\/div>\s*<\/div>\s*<\/div>\s*<\/section>)/g;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const role = m[1];
+    let frag = m[2];
+    // 去掉 sr-only 标签与多余换行
+    frag = frag.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (frag && (role === "user" || role === "assistant")) messages.push({ role, content: frag });
+  }
+  if (messages.length === 0) return null;
+  return { platform: "chatgpt", conversationId: id, title: "ChatGPT 分享对话", url, messages };
+}
+
+/** chatgpt 分享：Tier 1 直连分享页 HTML + 提取（可能被 CF 拦 → null 落 Tier 2） */
+async function tryChatgptShareFetch(url, reqCtx) {
+  const shareId = url.match(/chatgpt\.com\/share\/([^/?#]+)/)?.[1];
+  if (!shareId) return null;
+  const htmlRes = await reqCtx.get(url, {
+    headers: { "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36" },
+  });
+  if (!htmlRes.ok()) return null;
+  const html = await htmlRes.text();
+  return parseChatgptShareHtml(html, shareId, url);
 }
 
 // ============ Tier 2：Playwright 兜底 ============
@@ -130,6 +161,15 @@ async function collectWithPlaywright(url) {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     const deadline = Date.now() + 90000;
     while (!result && Date.now() < deadline) await page.waitForTimeout(500);
+    if (!result && url.includes("chatgpt.com/share/")) {
+      // chatgpt 分享页无接口：直接读渲染后的 DOM
+      const shareId = url.match(/share\/([^/?#]+)/)?.[1] ?? "?";
+      const texts = await page.locator("[data-message-author-role]").evaluateAll((els) =>
+        els.map((el) => ({ role: el.getAttribute("data-message-author-role"), content: (el.textContent ?? "").trim() }))
+          .filter((x) => x.content && (x.role === "user" || x.role === "assistant")),
+      );
+      if (texts.length) result = { platform: "chatgpt", conversationId: shareId, title: "ChatGPT 分享对话", url, messages: texts };
+    }
     await page.close();
     return result;
   } finally {
