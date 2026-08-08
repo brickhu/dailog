@@ -20,12 +20,6 @@ const STYLE = `
 :host { all: initial; }
 * { box-sizing: border-box; }
 .wrap { position: fixed; right: 24px; bottom: 24px; z-index: 2147483647; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; font-family: system-ui, -apple-system, sans-serif; }
-.row { display: flex; align-items: center; gap: 8px; }
-.badge {
-  height: 40px; padding: 0 12px; display: flex; align-items: center; justify-content: center;
-  background: #dc2626; color: #fff; font-size: 12px; font-weight: 600;
-  border-radius: 8px; white-space: nowrap; pointer-events: none;
-}
 button.fab {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 18px; border: none; border-radius: 999px; cursor: pointer;
@@ -78,26 +72,14 @@ export function createFab(opts: { onClick: () => void; badge?: string }): FabCon
   fab.className = "fab";
   fab.type = "button";
   fab.addEventListener("click", opts.onClick);
-
-  // 构建徽标：FAB 左侧红底白字容器（验证扩展版本是否成功加载）
-  const row = document.createElement("div");
-  row.className = "row";
-  if (opts.badge) {
-    const badge = document.createElement("div");
-    badge.className = "badge";
-    badge.setAttribute("dailog-build", ""); // 可识别标记（测试/调试）
-    badge.textContent = opts.badge;
-    row.appendChild(badge);
-  }
-  row.appendChild(fab);
-  wrap.appendChild(row);
+  wrap.appendChild(fab);
 
   const abandon = document.createElement("button");
   abandon.className = "abandon";
   abandon.textContent = "放弃";
   abandon.type = "button";
   abandon.hidden = true;
-  wrap.insertBefore(abandon, row);
+  wrap.insertBefore(abandon, fab);
 
   shadow.appendChild(wrap);
   document.documentElement.appendChild(host);
@@ -117,7 +99,7 @@ export function createFab(opts: { onClick: () => void; badge?: string }): FabCon
           ? `确认导入 (${count})`
           : collected
             ? "已采集"
-            : "采集对话";
+            : (opts.badge ?? "采集对话");
     const icon = busy
       ? '<span class="dot"></span>'
       : phase === "collecting"

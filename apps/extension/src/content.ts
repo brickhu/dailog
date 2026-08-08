@@ -444,7 +444,7 @@ try {
 }
 
 /** 构建标识（每次打包更新——FAB 左侧红底白字徽标，验证扩展新版本是否成功加载） */
-const BUILD_TAG = "20260808-8";
+const BUILD_TAG = "20260808-9";
 
 // 消息监听：popup「采集当前对话」触发本页静态采集（返回 dialogue，由 popup 转 background 缓存）；
 // background 缓存变化广播 → 立即刷新 FAB「已采集」状态（删除/新增后无需等 3 秒轮询）
