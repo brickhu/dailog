@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dedupeSort, groupIntoUnits, isCompleteUnit, messageKey, mergeUnitMembers, unitRect, unitVisibility, type MessageNode } from "../src/content/core";
+import { dedupeSort, groupIntoUnits, isCompleteUnit, messageKey, mergeUnitMembers, scanCrossing, unitRect, type MessageNode } from "../src/content/core";
 
 const mk = (id: string, offsetTop: number, role: MessageNode["role"]): MessageNode =>
   ({ id, offsetTop, role, content: `${id}-content` });
@@ -63,25 +63,34 @@ describe("isCompleteUnit（问答单元完整性：必须问+答齐全）", () =
   });
 });
 
-describe("unitVisibility（视窗可见性判定：进入视窗选中 / 滚出上方取消 / 滚出下方保留）", () => {
-  // core.test 为 node 环境（无 document）——用纯对象 mock 元素
-  const elAt = (top: number, bottom: number): Element =>
-    ({ getBoundingClientRect: () => ({ top, bottom, left: 0, right: 0, width: 0, height: bottom - top, x: 0, y: 0, toJSON: () => ({}) }) }) as unknown as Element;
-  const unitOf = (top: number, bottom: number): ReturnType<typeof groupIntoUnits>[number] => ({
-    id: "u",
-    messages: [{ id: "u", offsetTop: 0, role: "user", content: "q", el: elAt(top, bottom) }],
+describe("scanCrossing（扫码线穿越判定：底线相对中线的方向穿越）", () => {
+  const CENTER = 400;
+
+  it("往上滚：底线从 < 中线 变为 > 中线 → add（追加到数组）", () => {
+    expect(scanCrossing(300, 450, CENTER)).toBe("add");
   });
 
-  it("任意部分进入视窗（可见）→ 选中", () => {
-    expect(unitVisibility(100, 500, 800)).toBe("visible"); // 完整可见
-    expect(unitVisibility(-100, 300, 800)).toBe("visible"); // 顶部裁切仍可见
-    expect(unitVisibility(600, 900, 800)).toBe("visible"); // 底部裁切仍可见
+  it("往下滚：底线从 > 中线 变为 < 中线 → remove（从数组移出）", () => {
+    expect(scanCrossing(450, 350, CENTER)).toBe("remove");
   });
-  it("完全滚出视窗上方（向下滚滚过）→ 取消", () => {
-    expect(unitVisibility(-300, -100, 800)).toBe("above");
+
+  it("首次见到：底线已在中线以下（> 中线）→ add（起点底部单元默认选中）", () => {
+    expect(scanCrossing(undefined, 500, CENTER)).toBe("add");
   });
-  it("完全滚出视窗下方（向上滚滚过）→ 保留", () => {
-    expect(unitVisibility(900, 1200, 800)).toBe("below");
+
+  it("首次见到：底线在中线以上 → none（尚未扫过）", () => {
+    expect(scanCrossing(undefined, 200, CENTER)).toBe("none");
+  });
+
+  it("未穿越中线（两侧停留）→ none", () => {
+    expect(scanCrossing(300, 350, CENTER)).toBe("none"); // 都在线上方
+    expect(scanCrossing(500, 550, CENTER)).toBe("none"); // 都在线下方
+    expect(scanCrossing(400, 400, CENTER)).toBe("none"); // 恰在中线
+  });
+
+  it("滚到顶：顶部短单元静止在中线上方（向下穿越过才移出）→ 从未向下穿越则保留", () => {
+    // 向上滚过程中底线持续增大，最后停在 300（< 中线）——但从未从 > 中线 变为 < 中线
+    expect(scanCrossing(250, 300, CENTER)).toBe("none"); // 保持选中，不误删
   });
 });
 

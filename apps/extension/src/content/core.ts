@@ -109,15 +109,19 @@ export function mergeUnitMembers(target: QaUnit, incoming: QaUnit): void {
   }
 }
 
-/** 扫码采集的视窗可见性判定（方向修正：向上滚 = 内容在视窗中下移，消息进入
- *  视窗即选中；完全滚出视窗上方 = 向下滚滚过 = 取消；滚出视窗下方 = 向上滚
- *  滚过 = 保留——到顶时全部保留） */
-export type UnitVisibility = "visible" | "above" | "below";
+/** 扫码线穿越判定（问答单元底线相对视窗中线的方向穿越——用户规则）：
+ *  - 往上滚：底线从 < 中线 变为 > 中线（底线实际 Y 值跨过中线）→ add（追加到数组）
+ *  - 往下滚：底线从 > 中线 变为 < 中线 → remove（从数组移出）
+ *  - 首次见到：底线已在中线以下（> 中线）→ add（起点底部单元默认选中）；
+ *    底线在中线以上 → none（尚未扫过）
+ *  滚到顶时顶部短单元静止在中线上方，但从未向下穿越 → 保留（不误删） */
+export type ScanCrossing = "add" | "remove" | "none";
 
-export function unitVisibility(top: number, bottom: number, viewportHeight: number): UnitVisibility {
-  if (bottom < 0) return "above"; // 完全滚出视窗上方（向下滚取消）
-  if (top >= viewportHeight) return "below"; // 完全滚出视窗下方（向上滚保留）
-  return "visible";
+export function scanCrossing(prevBottom: number | undefined, bottom: number, centerY: number): ScanCrossing {
+  if (prevBottom === undefined) return bottom > centerY ? "add" : "none";
+  if (prevBottom <= centerY && bottom > centerY) return "add"; // 向上穿越（往上滚）
+  if (prevBottom >= centerY && bottom < centerY) return "remove"; // 向下穿越（往下滚）
+  return "none";
 }
 
 /** 渲染文本提取（= 用户全选该消息拿到的文本）：对元素建 Range 选区读

@@ -22,7 +22,7 @@ import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback, applyRuleMerge } from "./content/read-fallback";
 import { showCollectHint, hideCollectHint, showScanline, hideScanline } from "./content/collect-hint";
 import { renderUnitBoxes, clearUnitBoxes } from "./content/unit-boxes";
-import { groupIntoUnits, isCompleteUnit, unitRect, unitVisibility, messageKey, mergeUnitMembers, type MessageNode, type QaUnit } from "./content/core";
+import { groupIntoUnits, isCompleteUnit, unitRect, scanCrossing, messageKey, mergeUnitMembers, type MessageNode, type QaUnit } from "./content/core";
 
 /** 平台消息读取：本地专有解析器优先（用户滚动驱动渲染，轮询读当前渲染出的消息）；
  *  本地为空（站点 DOM 改版）→ 远程规则选择器兜底；本地缺助手回复（claude 旧
@@ -107,6 +107,8 @@ async function collectPage(): Promise<CollectedDialogue | null> {
 // 采集态（monitoring）→ 提示条 + 扫码线 + FAB「完成 (N)」+ 放弃；完成 → 确认态（confirmMode）
 let monitoring = false;
 let rangeUnits: QaUnit[] = [];
+/** 各单元最近一次渲染的底线 Y（扫码线穿越判定用；起点重置） */
+const lastBottoms = new Map<string, number>();
 let monitorIv: ReturnType<typeof setInterval> | undefined;
 let monitorUrl = "";
 let monitorReadNodes: (() => Promise<MessageNode[]>) | undefined;
@@ -155,6 +157,7 @@ function initConversationFab(): void {
     }
     monitoring = true;
     rangeUnits = [];
+    lastBottoms.clear();
     monitorUrl = location.href;
     monitorReadNodes = readNodes;
     showCollectHint();
@@ -187,6 +190,7 @@ function initConversationFab(): void {
           const lastComplete = groupIntoUnits(bottom).filter(isCompleteUnit).pop();
           if (lastComplete && !rangeUnits.some((u) => u.id === lastComplete.id)) {
             rangeUnits.push(lastComplete);
+            lastBottoms.set(lastComplete.id, unitRect(lastComplete).bottom);
             fab.updateCollectCount(rangeUnits.length);
           }
         })();
@@ -209,8 +213,9 @@ function initConversationFab(): void {
     scrollDebounce = setTimeout(() => void tickMonitor(), 150);
   }
 
-  /** 单轮协调：读当前渲染消息 → 分组问答单元 → 视窗可见性判定（进入视窗 =
-   *  选中追加、完全滚出视窗上方 = 取消移除、滚出下方 = 保留）→ 高亮同步 */
+  /** 单轮协调：读当前渲染消息 → 分组问答单元 → 底线相对中线的方向穿越判定
+   *  （往上滚底线 < 中线 → > 中线 = 追加；往下滚 > 中线 → < 中线 = 移出）→
+   *  选区框渲染 */
   async function tickMonitor(): Promise<void> {
     if (!monitoring || !monitorReadNodes || tickRunning) return;
     if (location.href !== monitorUrl) {
@@ -223,33 +228,35 @@ function initConversationFab(): void {
     try {
       const nodes = await monitorReadNodes();
       if (!monitoring) return; // await 期间被放弃/完成
-      const viewportHeight = window.innerHeight;
+      const centerY = window.innerHeight / 2;
       const units = groupIntoUnits(nodes);
       let changed = false;
       for (const unit of units) {
-        const { top, bottom } = unitRect(unit);
-        const vis = unitVisibility(top, bottom, viewportHeight);
+        const { bottom } = unitRect(unit);
+        const prev = lastBottoms.get(unit.id);
+        lastBottoms.set(unit.id, bottom);
+        const crossing = scanCrossing(prev, bottom, centerY);
         const idx = rangeUnits.findIndex((u) => u.id === unit.id);
         if (idx >= 0) {
           // 已选单元：合并成员（稳定键去重、内容只增不减——窗口切分读到局部
-          // 时合并不替换，已选内容不丢）→ 完全滚出视窗上方（向下滚滚过）→ 取消
+          // 时合并不替换，已选内容不丢）→ 底线向下穿越中线（往下滚）→ 移出
           mergeUnitMembers(rangeUnits[idx], unit);
-          if (vis === "above") {
+          if (crossing === "remove") {
             rangeUnits.splice(idx, 1);
             changed = true;
           }
-        } else if (unit.messages[0]?.role === "user" && vis === "visible" && isCompleteUnit(unit)) {
-          // 完整问答单元（有问有答）进入视窗 → 选中追加（数组方式，必入数组）
+        } else if (crossing === "add" && unit.messages[0]?.role === "user" && isCompleteUnit(unit)) {
+          // 完整问答单元（有问有答）底线跨过中线 → 追加到数组（必入数组）
           rangeUnits.push(unit);
           changed = true;
         } else if (unit.messages[0]?.role === "assistant") {
           // assistant 片段（窗口切分）：匹配数组内所属单元——合并成员刷新内容，
-          // 滚出上方则取消父单元
+          // 底线向下穿越中线则移出父单元
           const key = messageKey(unit.messages[0]);
           const parent = rangeUnits.find((u) => u.messages.some((m) => messageKey(m) === key));
           if (parent) {
             mergeUnitMembers(parent, unit);
-            if (vis === "above") {
+            if (crossing === "remove") {
               rangeUnits.splice(rangeUnits.indexOf(parent), 1);
               changed = true;
             }
