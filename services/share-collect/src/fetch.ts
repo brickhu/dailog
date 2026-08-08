@@ -3,7 +3,7 @@
 // SOCKS_PROXY 支持逗号分隔多代理——按请求轮换（claude/gemini 被 CF 拦时
 // 换下一个代理重试，见 platforms/claude.ts）。
 
-import { request, Socks5ProxyAgent, type Dispatcher } from "undici";
+import { request, Socks5ProxyAgent, ProxyAgent, type Dispatcher } from "undici";
 
 // request() 的重载参数：Omit 掉由 url 参数提供的字段
 type RequestOptions = Omit<Dispatcher.RequestOptions, "origin" | "method" | "path"> & Partial<Pick<Dispatcher.RequestOptions, "method">>;
@@ -70,6 +70,22 @@ export async function httpGet(
     bodyTimeout: timeoutMs,
   };
   return runRequest(url, options, "GET");
+}
+
+/** 经 Bright Data Web Unlocker HTTP 代理抓取（专治 CF 挑战）。
+ *  BRIGHTDATA_PROXY 形如 http://<zone-user>:<zone-pass>@brd.superproxy.io:22225
+ *  ——zone 凭据（username:password）连接代理端点，无需 API token */
+export async function httpGetViaBrightdataProxy(targetUrl: string): Promise<HttpResult> {
+  const proxyUrl = process.env.BRIGHTDATA_PROXY;
+  if (!proxyUrl) throw new Error("BRIGHTDATA_PROXY 未配置");
+  const options: RequestOptions = {
+    method: "GET",
+    headers: { "user-agent": UA, accept: "application/json, text/html, */*" },
+    dispatcher: new ProxyAgent(proxyUrl),
+    headersTimeout: 60000,
+    bodyTimeout: 60000,
+  };
+  return runRequest(targetUrl, options, "GET");
 }
 
 /** 经 Cloudflare Worker 转发（出口 = CF 网络，访问 CF 保护的域名通常放行）。

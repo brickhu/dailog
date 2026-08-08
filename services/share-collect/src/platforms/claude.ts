@@ -1,9 +1,9 @@
 // claude 分享：API 优先（chat_snapshots 直连，改版后无需 orgId）
-// → 通道重试：默认直连 → Web Unlocker（配 BRIGHTDATA_TOKEN 时）→
-//   CF Worker 转发 → 代理池。
+// → 通道重试：默认直连 → Web Unlocker HTTP 代理（配 BRIGHTDATA_PROXY 时）→
+//   Web Unlocker API（配 BRIGHTDATA_TOKEN 时）→ CF Worker 转发 → 代理池。
 // DOM 兜底：分享页是客户端渲染（41KB 壳无消息）——无 DOM 可提，靠通道切换。
 
-import { httpGet, httpGetViaWorker, proxyForIndex, hasProxies } from "../fetch";
+import { httpGet, httpGetViaWorker, httpGetViaBrightdataProxy, proxyForIndex, hasProxies } from "../fetch";
 import { fetchViaBrightdata } from "../unlocker";
 import type { CollectedDialogue } from "../types";
 
@@ -14,9 +14,12 @@ export async function collectClaudeShare(url: string): Promise<CollectedDialogue
   const shareId = url.match(/claude\.ai\/share\/([0-9a-f-]{36})/)?.[1];
   if (!shareId) return null;
 
-  // 通道顺序：默认（直连/首个代理）→ Web Unlocker → CF Worker 转发 → 代理池其余。
-  // 失败（CF 拦截/超时/解析失败）都换下一个通道，统一重试到所有通道耗尽
-  const attempts: Array<{ proxy?: string; viaWorker?: boolean; viaUnlocker?: boolean }> = [{ proxy: undefined }];
+  // 通道顺序：默认（直连/首个代理）→ Web Unlocker 代理 → Web Unlocker API →
+  // CF Worker 转发 → 代理池其余。失败都换下一个通道，重试到所有通道耗尽
+  const attempts: Array<{ proxy?: string; viaWorker?: boolean; viaUnlocker?: boolean; viaBdProxy?: boolean }> = [
+    { proxy: undefined },
+  ];
+  if (process.env.BRIGHTDATA_PROXY) attempts.push({ viaBdProxy: true });
   if (process.env.BRIGHTDATA_TOKEN) attempts.push({ viaUnlocker: true });
   if (process.env.CF_WORKER_URL) attempts.push({ viaWorker: true });
   if (hasProxies) {
@@ -30,7 +33,9 @@ export async function collectClaudeShare(url: string): Promise<CollectedDialogue
         ? await httpGetViaWorker(API(shareId))
         : a.viaUnlocker
           ? await fetchViaBrightdata(API(shareId))
-          : await httpGet(API(shareId), { proxy: a.proxy });
+          : a.viaBdProxy
+            ? await httpGetViaBrightdataProxy(API(shareId))
+            : await httpGet(API(shareId), { proxy: a.proxy });
       const d = parseClaudeSnapshot(res.body, shareId, url);
       if (d) return d;
       lastErr = new Error("claude 响应解析失败"); // 挑战页/结构变化 → 换通道

@@ -11,23 +11,34 @@ export interface UnlockerResult {
 }
 
 /** 经 Web Unlocker 抓取目标 URL。响应体为 HTML/JSON 原文（unlocker 已过挑战）。
- *  单次请求较慢（内部等解锁流程）——超时放宽到 60s */
+ *  单次请求较慢（内部等解锁流程）——超时放宽到 60s
+ *  配置（三种值）：
+ *    BRIGHTDATA_ZONE   = zone 名称（web_unlocker1）
+ *    BRIGHTDATA_TOKEN  = 凭据密钥（账号 API token 或 zone 的 Password）
+ *    BRIGHTDATA_USER   = 可选。配了用 zone 凭据认证（Username:Password，
+ *                        形如 brd-customer-xxx-zone-web_unlocker1）；
+ *                        不配则用账号 API token 认证（token:） */
 export async function fetchViaBrightdata(
   targetUrl: string,
   opts: { timeoutMs?: number } = {},
 ): Promise<UnlockerResult> {
   const token = process.env.BRIGHTDATA_TOKEN;
+  const zone = process.env.BRIGHTDATA_ZONE;
+  const zoneUser = process.env.BRIGHTDATA_USER;
   if (!token) throw new Error("BRIGHTDATA_TOKEN 未配置");
+  if (!zone) throw new Error("BRIGHTDATA_ZONE 未配置（Web Unlocker 产品的 zone 名）");
+  const auth = zoneUser ? `${zoneUser}:${token}` : `${token}:`;
   const timeoutMs = opts.timeoutMs ?? 60000;
   let res;
   try {
     res = await request("https://api.brightdata.com/request", {
       method: "POST",
       headers: {
-        authorization: `Bearer ${token}`,
+        // Web Unlocker API 用 Basic auth：账号 API token 或 zone 凭据（username:password）
+        authorization: `Basic ${Buffer.from(auth).toString("base64")}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ url: targetUrl }),
+      body: JSON.stringify({ zone, url: targetUrl }),
       headersTimeout: timeoutMs,
       bodyTimeout: timeoutMs,
     });
