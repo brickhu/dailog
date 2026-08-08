@@ -83,9 +83,40 @@ interface CollectEntry {
   appBase: string;
 }
 
-/** 打开中的导入确认页（tabId → collectId）：tab 被直接关闭（X/⌘W/崩溃）时兜底删除缓存副本，
- *  不依赖页面 JS（pagehide 里发扩展消息不可靠）。提交成功/取消删缓存时同步清记录——幂等 */
-const pendingTabs = new Map<number, string>();
+/** 打开中的导入确认页（tabId → collectId）：tab 被直接关闭（X/⌘W/崩溃）时兜底
+ *  删除缓存副本，不依赖页面 JS。持久化到 storage——MV3 service worker 空闲会被
+ *  终止重启，内存 Map 会丢失映射（导致关闭导入窗后缓存不删、AI 页一直显示已采集） */
+const PENDING_TABS_KEY = "dailogPendingTabs";
+
+async function readPendingTabs(): Promise<Record<string, string>> {
+  const { [PENDING_TABS_KEY]: map } = await chrome.storage.local.get(PENDING_TABS_KEY);
+  return map && typeof map === "object" ? (map as Record<string, string>) : {};
+}
+
+async function writePendingTab(tabId: number, collectId: string): Promise<void> {
+  const map = await readPendingTabs();
+  map[String(tabId)] = collectId;
+  await chrome.storage.local.set({ [PENDING_TABS_KEY]: map });
+}
+
+async function deletePendingTab(tabId: number): Promise<void> {
+  const map = await readPendingTabs();
+  if (!(String(tabId) in map)) return;
+  delete map[String(tabId)];
+  await chrome.storage.local.set({ [PENDING_TABS_KEY]: map });
+}
+
+async function deletePendingTabsByCollectId(collectId: string): Promise<void> {
+  const map = await readPendingTabs();
+  let changed = false;
+  for (const [tabId, id] of Object.entries(map)) {
+    if (id === collectId) {
+      delete map[tabId];
+      changed = true;
+    }
+  }
+  if (changed) await chrome.storage.local.set({ [PENDING_TABS_KEY]: map });
+}
 
 function readCollects(map: unknown): Record<string, CollectEntry> {
   return map && typeof map === "object" ? (map as Record<string, CollectEntry>) : {};
@@ -118,7 +149,7 @@ export async function cacheCollect(dialogue: CollectedDialogue): Promise<CacheCo
   await chrome.storage.local.set({ [COLLECTS_KEY]: pruned });
   const appUrl = `${appBase}/import?collectId=${collectId}`;
   const tab = await chrome.tabs.create({ url: appUrl });
-  if (tab.id) pendingTabs.set(tab.id, collectId);
+  if (tab.id) await writePendingTab(tab.id, collectId);
   return { ok: true, collectId, appUrl, messageCount: dialogue.messages.length };
 }
 
@@ -178,9 +209,7 @@ export async function deleteCollect(collectId: string): Promise<DeleteCollectRes
     await chrome.storage.local.set({ [COLLECTS_KEY]: collects });
   }
   // 同步清理打开的导入窗记录（幂等：取消/提交先删则 onRemoved 不再重复删）
-  for (const [tabId, id] of pendingTabs) {
-    if (id === collectId) pendingTabs.delete(tabId);
-  }
+  await deletePendingTabsByCollectId(collectId);
   void notifyCollectsChanged();
   return { ok: true };
 }
@@ -284,11 +313,12 @@ if (typeof chrome !== "undefined" && chrome.tabs?.onUpdated) {
   });
 }
 // 导入确认页被直接关闭（X/⌘W/崩溃）→ 兜底删除缓存副本（不依赖页面 JS；
-// 提交成功/取消已删则 pendingTabs 无记录，幂等）。导出便于测试（监听注册在浏览器运行时）
-export function handleTabRemoved(tabId: number): void {
-  const collectId = pendingTabs.get(tabId);
+// 提交成功/取消已删则映射无记录，幂等）。导出便于测试（监听注册在浏览器运行时）
+export async function handleTabRemoved(tabId: number): Promise<void> {
+  const map = await readPendingTabs();
+  const collectId = map[String(tabId)];
   if (!collectId) return;
-  pendingTabs.delete(tabId);
+  await deletePendingTab(tabId);
   void deleteCollect(collectId);
 }
 

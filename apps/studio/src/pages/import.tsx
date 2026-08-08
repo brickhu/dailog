@@ -125,6 +125,12 @@ export default function CollectPage() {
   const [busy, setBusy] = createSignal(false);
   const [actionError, setActionError] = createSignal<string | null>(null);
 
+  // 页面生命周期兜底：关窗/导航离开时自动清缓存（扩展侧 tab 关闭监听是主保险，
+  // 此处双保险——极端情况下扩展 SW 未及时处理也能清掉）
+  window.addEventListener("pagehide", () => {
+    if (collectId) void deleteCollect(collectId);
+  });
+
   onMount(async () => {
     if (!collectId) {
       setState({ kind: "error", message: "缺少采集 ID——请从扩展的「采集对话」进入本页。" });
