@@ -1,16 +1,33 @@
 // chatgpt 分享：API 优先（RSC payload 解码——全量 34 单元免滚动）
-// → DOM 兜底：静态 HTML 的 data-message-author-role 标记（仅渲染部分，最后手段）。
+// → ScraperAPI 兜底（直连被拦/无直连环境时抓 HTML 再走 RSC）
+// → DOM 兜底：静态 HTML 的 data-message-author-role 标记（最后手段）。
 
-import { httpGet } from "../fetch";
+import { httpGet, httpGetViaScraperApi } from "../fetch";
 import type { CollectedDialogue } from "../types";
 
 export async function collectChatgptShare(url: string): Promise<CollectedDialogue | null> {
   const shareId = url.match(/chatgpt\.com\/share\/([^/?#]+)/)?.[1];
   if (!shareId) return null;
-  const res = await httpGet(url);
-  const rsc = parseChatgptShareRsc(res.body, shareId, url);
+  let html = "";
+  // 直连（Railway 直连可用；本机无代理环境失败）
+  try {
+    const res = await httpGet(url);
+    html = res.body;
+  } catch {
+    /* 落 ScraperAPI */
+  }
+  if (!html && process.env.SCRAPERAPI_KEY) {
+    try {
+      const res = await httpGetViaScraperApi(url);
+      html = res.body;
+    } catch {
+      /* 全失败 */
+    }
+  }
+  if (!html) return null;
+  const rsc = parseChatgptShareRsc(html, shareId, url);
   if (rsc) return rsc;
-  return parseChatgptShareHtml(res.body, shareId, url);
+  return parseChatgptShareHtml(html, shareId, url);
 }
 
 // ---------- RSC payload 解码（React Router flight 格式，全量对话） ----------
