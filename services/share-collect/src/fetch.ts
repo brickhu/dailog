@@ -89,11 +89,16 @@ export async function httpGetViaBrightdataProxy(targetUrl: string): Promise<Http
 }
 
 /** 经 ScraperAPI 抓取（免费 1000 次/月，IP 池含住宅，能过 CF 挑战）。
- *  一个 GET 请求：api.scraperapi.com/?api_key=<key>&url=<目标>，响应体即目标内容 */
-export async function httpGetViaScraperApi(targetUrl: string): Promise<HttpResult> {
+ *  一个 GET 请求：api.scraperapi.com/?api_key=<key>&url=<目标>，响应体即目标内容。
+ *  country 可选：指定出口国家（doubao 等国内平台需 country_code=hk） */
+export async function httpGetViaScraperApi(
+  targetUrl: string,
+  opts: { country?: string } = {},
+): Promise<HttpResult> {
   const apiKey = process.env.SCRAPERAPI_KEY;
   if (!apiKey) throw new Error("SCRAPERAPI_KEY 未配置");
-  const apiUrl = `https://api.scraperapi.com/?api_key=${encodeURIComponent(apiKey)}&url=${encodeURIComponent(targetUrl)}`;
+  const country = opts.country ? `&country_code=${encodeURIComponent(opts.country)}` : "";
+  const apiUrl = `https://api.scraperapi.com/?api_key=${encodeURIComponent(apiKey)}&url=${encodeURIComponent(targetUrl)}${country}`;
   const options: RequestOptions = {
     method: "GET",
     headers: { accept: "application/json, text/html, */*" },

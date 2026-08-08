@@ -20,7 +20,7 @@ export async function collectDoubaoShare(url: string): Promise<CollectedDialogue
   // ScraperAPI（IP 池含住宅/亚洲，海外访问国内平台）→ Web Unlocker API
   if (process.env.SCRAPERAPI_KEY) {
     try {
-      const res = await httpGetViaScraperApi(url);
+      const res = await httpGetViaScraperApi(url, { country: "hk" }); // 香港出口：doubao 拒绝美区 IP
       const d = parseDoubaoShare(res.body, shareId, url);
       if (d) return d;
     } catch {
