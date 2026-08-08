@@ -33,7 +33,7 @@
     }) as typeof win.fetch;
   }
 
-  const ox = XMLHttpRequest.prototype.open;
+  const ox = XMLHttpRequest.prototype.open as (this: XMLHttpRequest, method: string, url: string | URL) => void;
   const os = XMLHttpRequest.prototype.send;
   XMLHttpRequest.prototype.open = function (this: XMLHttpRequest, method: string, url: string | URL) {
     (this as XMLHttpRequest & { __dailogUrl?: string }).__dailogUrl = String(url);
