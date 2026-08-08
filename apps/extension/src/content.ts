@@ -24,7 +24,7 @@ import { showCollectHint, hideCollectHint, showScanline, hideScanline } from "./
 import { renderUnitBoxes, clearUnitBoxes } from "./content/unit-boxes";
 import { groupIntoUnits, isCompleteUnit, unitRect, messageKey, mergeUnitMembers, type MessageNode, type QaUnit } from "./content/core";
 import { findOrgIdFromPage, fetchClaudeConversation, parseClaudeConversation } from "./content/claude-api";
-import { fetchChatgptConversation, parseChatgptConversation } from "./content/chatgpt-api";
+import { fetchChatgptConversation, parseChatgptConversation, extractChatgptSharePage } from "./content/chatgpt-api";
 import { installResponseSniff, findCapturedConversation } from "./content/response-sniff";
 
 /** 平台消息读取：本地专有解析器优先（用户滚动驱动渲染，轮询读当前渲染出的消息）；
@@ -158,7 +158,9 @@ function initConversationFab(): void {
       ? location.pathname.match(/^\/share\/([0-9a-f-]{36})/)?.[1]
       : location.hostname === "chat.deepseek.com"
         ? location.pathname.match(/^\/share\/([A-Za-z0-9]+)/)?.[1]
-        : undefined;
+        : location.hostname === "chatgpt.com"
+          ? location.pathname.match(/^\/share\/([^/?#]+)/)?.[1]
+          : undefined;
   const fab: FabController = createFab({
     badge: BUILD_TAG,
     idleLabel: sharePageId ? "采集此对话" : undefined,
@@ -204,6 +206,14 @@ function initConversationFab(): void {
       dialogue = await tryDeepSeekShareCollect();
       if (dialogue) {
         console.info(`[dailog] deepseek-share collected msgs=${dialogue.messages.length}`);
+        enterConfirm(dialogue, dialogue.messages.filter((m) => m.role === "user").length);
+        return;
+      }
+    }
+    if (location.hostname === "chatgpt.com") {
+      dialogue = extractChatgptSharePage(document, id, location.href);
+      if (dialogue) {
+        console.info(`[dailog] chatgpt-share collected msgs=${dialogue.messages.length} (${dialogue.title})`);
         enterConfirm(dialogue, dialogue.messages.filter((m) => m.role === "user").length);
         return;
       }
@@ -596,7 +606,8 @@ function initConversationFab(): void {
     if (!monitoring && !confirmMode) {
       const shareMatch =
         (location.hostname === "claude.ai" && /^\/share\/[0-9a-f-]{36}/.test(new URL(url).pathname)) ||
-        (location.hostname === "chat.deepseek.com" && /^\/share\/[A-Za-z0-9]+/.test(new URL(url).pathname));
+        (location.hostname === "chat.deepseek.com" && /^\/share\/[A-Za-z0-9]+/.test(new URL(url).pathname)) ||
+        (location.hostname === "chatgpt.com" && /^\/share\//.test(new URL(url).pathname));
       fab.setVisible(shareMatch || isConversationPage(url, document));
     }
   };
@@ -617,7 +628,7 @@ function initConversationFab(): void {
 }
 
 /** 构建标识（每次打包更新——FAB 默认文案，验证扩展新版本是否成功加载） */
-const BUILD_TAG = "20260808-29";
+const BUILD_TAG = "20260808-30";
 
 // AI 平台页：采集 FAB（studio 域不再注入 content script——待入库提醒已移除）。
 // 初始化包保护：真实页面异常时 Console 输出 [dailog] 错误（可诊断），不静默失败

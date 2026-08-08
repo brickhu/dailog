@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { getChatgptAccessToken, fetchChatgptConversation } from "../../src/content/chatgpt-api";
+import { getChatgptAccessToken, fetchChatgptConversation, extractChatgptSharePage } from "../../src/content/chatgpt-api";
 
 describe("getChatgptAccessToken（localStorage __session）", () => {
   beforeEach(() => {
@@ -87,5 +87,36 @@ describe("fetchChatgptConversation（mapping 节点图 → dialogue）", () => {
     expect(await fetchChatgptConversation("abc-123")).toBeNull();
     vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ title: "x" }) } as unknown as Response);
     expect(await fetchChatgptConversation("abc-123")).toBeNull();
+  });
+});
+
+describe("extractChatgptSharePage（分享页静态 HTML 提取）", () => {
+  it("按 data-message-author-role 提取消息（含嵌套文本）", () => {
+    document.body.innerHTML = `
+      <section data-testid="conversation-turn-1">
+        <h4 class="sr-only">你说：</h4>
+        <div data-message-author-role="user" data-message-id="u1">
+          <div class="bubble"><div>翻译这句话：基于AI对话的知识收集平台</div></div>
+        </div>
+      </section>
+      <section data-testid="conversation-turn-2">
+        <div data-message-author-role="assistant" data-message-id="a1">
+          <div class="markdown"><p>翻译：基于 AI 对话的知识收集平台</p></div>
+        </div>
+      </section>`;
+    document.title = "翻译测试 - ChatGPT";
+    const d = extractChatgptSharePage(document, "share-1", "https://chatgpt.com/share/share-1");
+    expect(d?.platform).toBe("chatgpt");
+    expect(d?.conversationId).toBe("share-1");
+    expect(d?.title).toBe("翻译测试");
+    expect(d?.messages).toEqual([
+      { role: "user", content: "翻译这句话：基于AI对话的知识收集平台" },
+      { role: "assistant", content: "翻译：基于 AI 对话的知识收集平台" },
+    ]);
+  });
+
+  it("无消息 → null", () => {
+    document.body.innerHTML = `<div>无对话内容</div>`;
+    expect(extractChatgptSharePage(document, "id", "url")).toBeNull();
   });
 });

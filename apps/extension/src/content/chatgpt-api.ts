@@ -3,7 +3,7 @@
 // token 在 localStorage __session 里（content script 可读，同源共享）。
 // 失败（未登录/token 结构变化）→ null，回退 DOM 采集。
 
-import type { CollectedDialogue } from "../shared";
+import { normalizeMessageText, type CollectedDialogue } from "../shared";
 
 /** 从 localStorage __session 读取 accessToken（JSON 或含 accessToken 字段的对象） */
 export function getChatgptAccessToken(): string | null {
@@ -85,4 +85,21 @@ export function parseChatgptConversation(d: ChatgptConversation, id: string): Co
     url: `https://chatgpt.com/c/${id}`,
     messages,
   };
+}
+
+/** chatgpt 分享页提取：对话静态渲染在 HTML 里（[data-message-author-role] 标记，
+ *  消息文本直接可见）——无接口、无登录、无滚动，读 DOM 即可 */
+export function extractChatgptSharePage(root: ParentNode, id: string, url: string): CollectedDialogue | null {
+  const messages: { role: "user" | "assistant"; content: string }[] = [];
+  root.querySelectorAll("[data-message-author-role]").forEach((el) => {
+    const role = el.getAttribute("data-message-author-role");
+    if (role !== "user" && role !== "assistant") return;
+    const content = normalizeMessageText(el.textContent ?? "");
+    if (content) messages.push({ role, content });
+  });
+  if (messages.length === 0) return null;
+  const doc = root.ownerDocument;
+  const title =
+    (doc?.title ?? "").replace(/\s*[-|·]\s*(ChatGPT|OpenAI)\s*$/, "").trim() || "ChatGPT 分享对话";
+  return { platform: "chatgpt", conversationId: id, title, url, messages };
 }
