@@ -121,6 +121,7 @@ let lastScrollTop = 0;
 /** 单元最近一次渲染的底线 Y（消失移除判定：滚出顶部被回收时轮询读不到 bottom<0） */
 const lastBottomByUnit = new Map<string, number>();
 let monitorIv: ReturnType<typeof setInterval> | undefined;
+let tickCount = 0;
 let monitorUrl = "";
 let monitorReadNodes: (() => Promise<MessageNode[]>) | undefined;
 let confirmMode = false;
@@ -320,20 +321,29 @@ function initConversationFab(): void {
       // 新单元前插（往上滚进来的单元一定比已选单元更早——对话顺序 顶→底）
       if (newUnits.length > 0) rangeUnits.unshift(...newUnits);
       // 消失移除（claude Virtuoso 滚出顶部瞬间回收元素，轮询读不到 bottom<0）：
-      // 数组内单元本轮未渲染 + 滚动方向向下 + 上次底线还在视口内 → 已滚出顶部
-      if (scrolledDown) {
-        for (const u of [...rangeUnits]) {
-          if (units.some((x) => x.id === u.id)) continue; // 本轮渲染中（上面已处理）
-          const lb = lastBottomByUnit.get(u.id) ?? viewportHeight + 1;
-          if (lb <= viewportHeight && now - (removalCooldown.get(u.id) ?? 0) >= 0) {
-            const i = rangeUnits.indexOf(u);
-            if (i >= 0) {
-              rangeUnits.splice(i, 1);
-              removalCooldown.set(u.id, now);
-              changed = true;
-            }
+      // 数组内单元本轮未渲染 = 已从 DOM 消失，两条判定：
+      // ① 方向无关：上次底线已贴近视口顶部（≤100px，必然是从顶部滚出被回收）
+      // ② 方向判定：滚动向下 + 上次底线仍在视口内（快滚跳过中间读数的兜底）
+      const notInRead = rangeUnits.filter((u) => !units.some((x) => x.id === u.id));
+      for (const u of notInRead) {
+        const lb = lastBottomByUnit.get(u.id) ?? viewportHeight + 1;
+        const exitedTop = lb <= 100 || (scrolledDown && lb <= viewportHeight);
+        if (exitedTop) {
+          const i = rangeUnits.indexOf(u);
+          if (i >= 0) {
+            rangeUnits.splice(i, 1);
+            removalCooldown.set(u.id, now);
+            changed = true;
+            console.info(`[dailog] remove unit=${u.id} lb=${lb} down=${scrolledDown} (disappeared)`);
           }
         }
+      }
+      // 诊断日志：每 5 轮输出滚动/容器状态（定位 claude 回滚失效场景）
+      tickCount += 1;
+      if (tickCount % 5 === 0) {
+        console.info(
+          `[dailog] tick st=${st} down=${scrolledDown} cont=${scrollContainer ? `${scrollContainer.tagName}.${String(scrollContainer.className).slice(0, 30)}` : "null"} arr=${rangeUnits.length} notInRead=${notInRead.length}`,
+        );
       }
       // 清理过期冷却（防 map 无限增长）
       for (const [id, at] of removalCooldown) {
