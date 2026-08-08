@@ -53,6 +53,13 @@ export async function fetchChatgptConversation(id: string): Promise<CollectedDia
   } catch {
     return null;
   }
+  return parseChatgptConversation(d, id);
+}
+
+/** 解析 chatgpt 对话数据（直连响应或主世界拦截捕获的数据）→ dialogue。
+ *  mapping 是节点图：message 为空的节点是根；从根沿 children 深度优先
+ *  遍历即对话顺序；parts 为文本数组（含代码等），拼接为消息内容 */
+export function parseChatgptConversation(d: ChatgptConversation, id: string): CollectedDialogue | null {
   const mapping = d.mapping ?? {};
   // 找根节点：无 message（或 parent 缺失）的节点
   const rootId = Object.keys(mapping).find((k) => !mapping[k]?.message);

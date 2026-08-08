@@ -41,7 +41,7 @@
         "https://www.tongyi.com/*"
       ],
       "js": ["dist/content.js"],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     }
   ],
   "action": { "default_popup": "popup.html" }

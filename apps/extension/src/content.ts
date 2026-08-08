@@ -24,7 +24,8 @@ import { showCollectHint, hideCollectHint, showScanline, hideScanline } from "./
 import { renderUnitBoxes, clearUnitBoxes } from "./content/unit-boxes";
 import { groupIntoUnits, isCompleteUnit, unitRect, messageKey, mergeUnitMembers, type MessageNode, type QaUnit } from "./content/core";
 import { findOrgIdFromPage, fetchClaudeConversation } from "./content/claude-api";
-import { fetchChatgptConversation } from "./content/chatgpt-api";
+import { fetchChatgptConversation, parseChatgptConversation } from "./content/chatgpt-api";
+import { installResponseSniff, findCapturedConversation } from "./content/response-sniff";
 
 /** 平台消息读取：本地专有解析器优先（用户滚动驱动渲染，轮询读当前渲染出的消息）；
  *  本地为空（站点 DOM 改版）→ 远程规则选择器兜底；本地缺助手回复（claude 旧
@@ -214,10 +215,18 @@ function initConversationFab(): void {
     return dialogue;
   }
 
-  /** chatgpt 官方 API 采集：URL /c/{id} → 详情接口（mapping 图遍历） */
+  /** chatgpt 采集：优先用主世界拦截捕获的对话数据（免 token），直连接口兜底 */
   async function tryChatgptApiCollect(): Promise<CollectedDialogue | null> {
     const m = location.pathname.match(/\/c\/([0-9a-f-]+)/);
     if (!m) return null;
+    const captured = findCapturedConversation(m[1]);
+    if (captured) {
+      const dialogue = parseChatgptConversation(captured as Parameters<typeof parseChatgptConversation>[0], m[1]);
+      if (dialogue) {
+        console.info(`[dailog] chatgpt-sniff collected msgs=${dialogue.messages.length} (${dialogue.title})`);
+        return dialogue;
+      }
+    }
     const dialogue = await fetchChatgptConversation(m[1]);
     if (dialogue) console.info(`[dailog] chatgpt-api collected msgs=${dialogue.messages.length} (${dialogue.title})`);
     return dialogue;
@@ -529,11 +538,12 @@ function initConversationFab(): void {
 }
 
 /** 构建标识（每次打包更新——FAB 默认文案，验证扩展新版本是否成功加载） */
-const BUILD_TAG = "20260808-24";
+const BUILD_TAG = "20260808-25";
 
 // AI 平台页：采集 FAB（studio 域不再注入 content script——待入库提醒已移除）。
 // 初始化包保护：真实页面异常时 Console 输出 [dailog] 错误（可诊断），不静默失败
 try {
+  installResponseSniff(); // 主世界拦截（须早于页面自身请求——manifest 已改 document_start）
   initConversationFab();
 } catch (e) {
   console.error("[dailog] FAB 初始化失败：", e);
