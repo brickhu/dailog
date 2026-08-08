@@ -240,12 +240,11 @@ export default function NewEpisode() {
         <Show when={step() === 1}>
           <div {...stylex.props(styles.pickTitle)}>选择要制作的对话</div>
           <div {...stylex.props(styles.pickHint)}>
-            用浏览器扩展在 AI 对话页采集，或粘贴分享链接导入
+            粘贴 AI 对话分享链接导入，或选择已有对话
           </div>
           <Show when={episodes().length === 0}>
             <div {...stylex.props(styles.empty)}>
-              还没有导入的对话。打开 AI 对话页（DeepSeek / Claude / ChatGPT…）点击扩展采集，
-              或粘贴对话分享链接导入。
+              还没有导入的对话。粘贴 Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 的对话分享链接即可导入。
               <div {...stylex.props(styles.emptyAction)}>
                 <Button onClick={() => navigate("/import")}>从分享链接导入</Button>
               </div>

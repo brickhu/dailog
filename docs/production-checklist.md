@@ -64,7 +64,6 @@
   | 变量 | 值 |
   |---|---|
   | `VITE_API_BASE_URL` | `https://api.dailog.fm` |
-  | `VITE_EXTENSION_ID` | 生产扩展 id（如未上架可留空） |
 
 ## ⑤ 初始化数据（生产库）
 

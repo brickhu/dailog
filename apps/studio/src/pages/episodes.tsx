@@ -1,13 +1,9 @@
 import { createSignal, For, onMount, Show } from "solid-js";
-import { useNavigate, A } from "@solidjs/router";
+import { useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "@dailogues/ui/theme.stylex";
+import { Button } from "@dailogues/ui";
+import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
-import { useAuth } from "../lib/auth";
-import { env } from "../lib/env";
-
-// chrome.runtime（扩展注入 token 用；无扩展环境则跳过）
-declare const chrome: { runtime?: { sendMessage?: (id: string, msg: unknown) => Promise<unknown> } };
 
 export interface Episode {
   id: string;
@@ -38,156 +34,112 @@ const STATUS_LABEL: Record<Episode["status"], { text: string; color: string }> =
 const styles = stylex.create({
   page: {
     minHeight: "100vh",
-    background: tokens.colorBg,
-    color: tokens.colorText,
+    backgroundColor: colors.background,
+    color: colors.foreground,
   },
   content: {
     maxWidth: "720px",
     margin: "0 auto",
-    padding: tokens.space6,
+    padding: dimensions.spacing8,
   },
   hero: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: tokens.space5,
+    marginBottom: dimensions.spacing6,
+  },
+  heroActions: {
+    display: "flex",
+    gap: dimensions.spacing3,
   },
   title: {
-    fontSize: tokens.fontSizeXl,
-    fontWeight: tokens.fontWeightBold,
-  },
-  newButton: {
-    padding: `${tokens.space2} ${tokens.space4}`,
-    borderRadius: tokens.radiusMd,
-    border: "none",
-    background: tokens.colorPrimary,
-    color: "#fff",
-    cursor: "pointer",
-    fontSize: tokens.fontSizeMd,
+    fontSize: dimensions.fontSize2xl,
+    fontWeight: dimensions.fontWeightBold,
   },
   card: {
-    padding: tokens.space4,
-    borderRadius: tokens.radiusMd,
-    background: tokens.colorSurface,
-    border: `1px solid ${tokens.colorBorder}`,
-    marginBottom: tokens.space3,
+    padding: dimensions.spacing4,
+    borderRadius: dimensions.radiusMd,
+    backgroundColor: colors.surface,
+    border: `1px solid ${colors.ink}`,
+    marginBottom: dimensions.spacing3,
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: tokens.space3,
+    gap: dimensions.spacing3,
   },
   cardMain: {
     minWidth: 0,
   },
   epTitle: {
-    fontWeight: tokens.fontWeightMedium,
-    fontSize: tokens.fontSizeMd,
+    fontWeight: dimensions.fontWeightMedium,
+    fontSize: dimensions.fontSizeMd,
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
   epMeta: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
-    marginTop: tokens.space1,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    marginTop: dimensions.spacing1,
   },
   badge: {
-    padding: `2px ${tokens.space2}`,
-    borderRadius: tokens.radiusFull,
+    padding: `2px ${dimensions.spacing2}`,
+    borderRadius: dimensions.radiusFull,
     fontSize: "12px",
     flexShrink: 0,
   },
   extCard: {
-    padding: tokens.space5,
-    borderRadius: tokens.radiusMd,
-    background: tokens.colorSurface,
-    border: `1px solid ${tokens.colorBorder}`,
-    marginBottom: tokens.space5,
+    padding: dimensions.spacing6,
+    borderRadius: dimensions.radiusMd,
+    backgroundColor: colors.surface,
+    border: `1px solid ${colors.ink}`,
+    marginBottom: dimensions.spacing6,
   },
   extTitle: {
-    fontWeight: tokens.fontWeightBold,
-    marginBottom: tokens.space2,
+    fontWeight: dimensions.fontWeightBold,
+    marginBottom: dimensions.spacing2,
   },
   extStep: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeMd,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeMd,
     lineHeight: 1.7,
-    marginBottom: tokens.space1,
-  },
-  extButton: {
-    marginTop: tokens.space3,
-    padding: `${tokens.space2} ${tokens.space4}`,
-    borderRadius: tokens.radiusMd,
-    border: "none",
-    background: tokens.colorPrimary,
-    color: "#fff",
-    cursor: "pointer",
-    fontSize: tokens.fontSizeMd,
-  },
-  extConnected: {
-    color: tokens.colorSuccess,
-    fontSize: tokens.fontSizeSm,
-    marginTop: tokens.space2,
+    marginBottom: dimensions.spacing1,
   },
   placeholderRow: {
     display: "flex",
-    gap: tokens.space3,
-    marginTop: tokens.space5,
+    gap: dimensions.spacing3,
+    marginTop: dimensions.spacing6,
   },
   placeholder: {
     flex: 1,
-    padding: tokens.space4,
-    borderRadius: tokens.radiusMd,
-    border: `1px dashed ${tokens.colorBorder}`,
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
+    padding: dimensions.spacing4,
+    borderRadius: dimensions.radiusMd,
+    border: `1px dashed ${colors.ink}`,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
     textAlign: "center",
   },
   empty: {
-    padding: tokens.space7,
+    padding: dimensions.spacing12,
     textAlign: "center",
-    color: tokens.colorTextMuted,
-    border: `1px dashed ${tokens.colorBorder}`,
-    borderRadius: tokens.radiusMd,
+    color: colors.neutral,
+    border: `1px dashed ${colors.ink}`,
+    borderRadius: dimensions.radiusMd,
   },
   error: {
-    color: tokens.colorDanger,
-    marginBottom: tokens.space3,
-  },
-  channelBanner: {
-    padding: tokens.space3,
-    borderRadius: tokens.radiusMd,
-    background: "rgba(224, 162, 60, 0.12)",
-    border: `1px solid rgba(224, 162, 60, 0.4)`,
-    color: tokens.colorWarning,
-    fontSize: tokens.fontSizeSm,
-    marginBottom: tokens.space4,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: tokens.space3,
-  },
-  channelLink: {
-    color: tokens.colorWarning,
-    fontWeight: tokens.fontWeightMedium,
-    textDecoration: "underline",
-    flexShrink: 0,
+    color: colors.danger,
+    marginBottom: dimensions.spacing3,
   },
 });
 
 export default function Dashboard() {
-  const auth = useAuth();
   const navigate = useNavigate();
   const [episodes, setEpisodes] = createSignal<Episode[]>([]);
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
-  const [extConnected, setExtConnected] = createSignal(false);
-  const [channelActive, setChannelActive] = createSignal(true);
 
   onMount(async () => {
     try {
-      const me = await api.get<{ channelActive: boolean }>("/api/me");
-      setChannelActive(me.channelActive);
       setEpisodes(await api.get<Episode[]>("/api/episodes"));
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
@@ -196,52 +148,16 @@ export default function Dashboard() {
     }
   });
 
-  const connectExtension = async () => {
-    const token = auth.token();
-    if (!token || !env.extensionId) return;
-    try {
-      await chrome.runtime?.sendMessage?.(env.extensionId, { type: "dailog:set-token", token });
-      setExtConnected(true);
-    } catch {
-      setError("连接扩展失败：请确认已安装扩展并允许站点访问");
-    }
-  };
-
   return (
     <div {...stylex.props(styles.page)}>
       <div {...stylex.props(styles.content)}>
         <div {...stylex.props(styles.hero)}>
           <div {...stylex.props(styles.title)}>我的节目</div>
-          <button {...stylex.props(styles.newButton)} onClick={() => navigate("/episodes/new")}>
-            开始新节目
-          </button>
+          <div {...stylex.props(styles.heroActions)}>
+            <Button appear="ghost" onClick={() => navigate("/import")}>从分享链接导入</Button>
+            <Button onClick={() => navigate("/episodes/new")}>开始新节目</Button>
+          </div>
         </div>
-
-        <Show when={!channelActive()}>
-          <div {...stylex.props(styles.channelBanner)}>
-            <span>你的频道尚未开通：开通后才能生成和发布节目</span>
-            <A href="/onboarding" {...stylex.props(styles.channelLink)}>
-              去开通 →
-            </A>
-          </div>
-        </Show>
-
-        <Show when={!extConnected() && env.extensionId}>
-          <div {...stylex.props(styles.extCard)}>
-            <div {...stylex.props(styles.extTitle)}>用浏览器扩展采集对话</div>
-            <div {...stylex.props(styles.extStep)}>1. 安装 dailog 采集扩展（Chrome 商店）</div>
-            <div {...stylex.props(styles.extStep)}>
-              2. 打开你的 ChatGPT / Claude / DeepSeek 对话页，点击扩展采集
-            </div>
-            <div {...stylex.props(styles.extStep)}>3. 回到这里继续编辑发布</div>
-            <button {...stylex.props(styles.extButton)} onClick={connectExtension}>
-              连接扩展
-            </button>
-            <Show when={extConnected()}>
-              <div {...stylex.props(styles.extConnected)}>扩展已连接 ✓</div>
-            </Show>
-          </div>
-        </Show>
 
         <Show when={error()}>
           <div {...stylex.props(styles.error)}>{error()}</div>
@@ -249,7 +165,7 @@ export default function Dashboard() {
 
         <Show when={!loading() && episodes().length === 0}>
           <div {...stylex.props(styles.empty)}>
-            还没有节目。安装扩展、打开 AI 对话页点击采集，第一期的内容就有了。
+            还没有节目。粘贴 AI 对话分享链接（Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包），第一期的内容就有了。
           </div>
         </Show>
 

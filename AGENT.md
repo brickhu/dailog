@@ -1,7 +1,7 @@
 # AGENT — 项目总览
 
 > 本项目所有文档的入口与汇总。任何 Agent / 协作者先读本文件。
-> 最后更新：2026-08-03（M1-M4 已完成：spike 定稿 + 后端骨架 + 扩展采集器 + 生成管线全链代码；M4 门控 E2E 待 DEEPSEEK_API_KEY 实跑；商店上架与 M5+ 排期中）
+> 最后更新：2026-08-09（M1-M4 已完成；**采集已切换为分享链接服务**（extract.dailog.fm，六平台全通）——扩展采集停用、源码保留在 apps/extension；M4 门控 E2E 待 DEEPSEEK_API_KEY 实跑）
 
 ## 项目一句话
 
@@ -27,7 +27,8 @@ dailog/
 │   │   └── src/components/     #   录音器、导入结果、润色编辑器、生成进度、发布表单
 │   ├── site/                   # dailog.fm — 内容分发 SSR（SolidStart + CF adapter）
 │   │   └── src/routes/         #   /(首页) /episode/:id(单集页) /@username /@username/feed.xml
-│   └── extension/              # 采集扩展（Manifest V3，Chrome/Edge 商店）— 统一导入通道
+│   └── extension/              # 采集扩展（已停用，源码保留——登录态 DOM 采集历史实现）
+│   └── share-collect/          # 分享链接采集服务（独立部署 extract.dailog.fm，六平台解析器）
 │       ├── manifest.json       #   content_scripts 按平台 URL 匹配 + background 权限
 │       ├── src/content/        #   按平台采集器：claude.ts / deepseek.ts / chatgpt.ts / ...
 │       │   └── core.ts         #   虚拟列表滚动循环 + MutationObserver + 去重排序
@@ -68,7 +69,8 @@ dailog/
 | 工作台 SPA | `app.candelbot.app`（CF Pages project `dailog-studio-dev`，production branch = dev） | `app.dailog.fm`（CF Pages project `dailog-studio`，production branch = master） |
 | 内容站 SSR | `candelbot.app`（Pages project 预留，等 apps/site 创建） | `dailog.fm`（Pages/Workers） |
 | Postgres | Railway Development 环境内独立实例 | Railway Production 环境内实例 |
-| 采集扩展 | `pnpm build:dev`（API 指向 gracious-caring-development.up.railway.app；popup 可覆盖） | `pnpm build`（API 指向 api.dailog.fm） |
+| ~~采集扩展~~ | ~~已停用~~（源码保留；不再构建/部署） | |
+| 分享采集服务 | `pnpm --filter @dailogues/share-collect dev` | Railway 部署（Nixpacks，`SHARE_COLLECT_URL`/`SCRAPERAPI_KEY` env） |
 
 > **品牌名**：`dailog`——由 `dialogues` 交换 `ia→ai` 变形（寓意 AI）。开发域名 `candelbot.app`（已确认），生产域名待定（`dailog.fm` / `dailog.fm`），定稿后统一替换文档与扩展 manifest 中的占位。
 
@@ -81,7 +83,7 @@ dailog/
 - 后端 LLM：**DeepSeek**（OpenAI 兼容，`deepseek-chat` 默认，配置化可切换）
 - 润色：LLM SSE 流式；**打磨前质量审核前置** + **生成前内容安全审核**（编辑后脚本提交生成时，DeepSeek 安全审核通过才合成，拒绝不扣配额）；语言跟随对话内容（与界面语言无关）；单期目标 5–10 分钟
 - 计费：Stripe Checkout/Portal/Webhook；**按脚本字数计费**（LLM/TTS 成本随字数线性，对齐成本结构）；**脚本硬上限 5000 字**；润色免费（获客）+ 对话级润色上限（每对话 ≤5 版，pro 不限）；免费首期 0 扣费；Pro 订阅无限
-- 导入：**浏览器扩展统一采集**（登录态下读取本人对话，含元数据：标题/对话ID/平台/原始链接，无验证码、无分享链接）；**平台分级（`docs/spikes/chat-dom.md`）**：首发 Claude/DeepSeek（高），次批 ChatGPT（中~高），Gemini（中）/Kimi、豆包（中~低）/通义（低）按需；虚拟列表平台（ChatGPT/DeepSeek/Gemini/豆包）走**滚动采集循环 + 去重**；元数据取 URL + `document.title`；回传统一走 **background service worker**（Claude CSP）；**扩展定位=采集器（thin）**，创作发布仍在 SPA
+- 导入：**分享链接采集服务**（用户粘贴平台分享链接 → `share-collect` 解析（Claude/ChatGPT/DeepSeek/Gemini/Kimi/豆包，公开接口/SSR/RSC/batchexecute 通道）→ 工作台预览确认入库）；被 CF 拦时通道重试（ScraperAPI 兜底）；**扩展采集已停用**（源码保留 `apps/extension`，历史实现见 `docs/spikes/chat-dom.md`）
 - 邀请码：管理员 CLI + 用户奖励（>3 期后每发布一期 +1）；**注册开放，授权码开通频道**
 - 成本策略：除 LLM/TTS/Stripe 外：CF/R2 免费 + better-auth $0；Railway（API+DB）约 $10–25/月
 
@@ -107,9 +109,9 @@ dailog/
 - [ ] M0：文档定稿（PRD/ARC/MRD 审阅通过）
 - [x] M1：Fish Audio 集成 spike（多说话人格式、单请求限额、克隆音质、计费实测）—— 已完成（`docs/spikes/fish-audio.md`；真实扣费金额上线前用付费账号核对）
 - [x] M2：统一后端骨架（Hono + Drizzle + 9 表迁移 + 本地 Postgres 集成测试 + JWT 认证 + Docker/Railway 配置 + CI）—— 代码完成，**待用户：GitHub 仓库推送 + Railway（Postgres + 应用）绑定部署**
-- [x] M3：浏览器扩展采集器（Manifest V3，首发 Claude/DeepSeek）—— 已完成（fixture 基于公开资料，待真实登录态页面校准，见 `docs/spikes/chat-dom.md` 待实测清单）
+- [x] M3：采集器—— 扩展版（Manifest V3）已完成（历史实现，已停用）；分享链接服务版（六平台）已完成并部署（extract.dailog.fm，实测全通）
 - [x] M4：质量审核 + 润色（LLM 流式）+ 生成前内容安全审核 + 生成管线（TTS → ffmpeg → R2）—— 已完成（代码全链 + 门控 E2E 待 DEEPSEEK_API_KEY 实跑；真实扣费沿用 M1 核对注记）
-- [ ] M5：认证与数据层迁移——**better-auth 替换 Supabase Auth**（api 认证中间件 + studio auth 基建 + 扩展 token 注入 + env 清理）+ 数据库切换 Railway Postgres（换连接串 + 跑迁移）工作台 SPA（录音引导 → 向导 → 发布）
+- [ ] M5：认证与数据层迁移——**better-auth 替换 Supabase Auth**（api 认证中间件 + studio auth 基建 + env 清理）+ 数据库切换 Railway Postgres（换连接串 + 跑迁移）工作台 SPA（录音引导 → 向导 → 发布）
 - [ ] M6：内容站 SSR + RSS + 首页/搜索
 - [ ] M7：邀请码 + Stripe 计费（**按脚本字数** + 5000 字上限校验 + 免费首期 + 对话级润色上限 5 版 + 包月订阅）—— 实现要点见 PRD §4.7：quota 判定从"期数制"改"字数制"（generate 读已存脚本统计字数扣减）；polish 输出截断兜底；润色限次按 `episodes.polish_count`（仅计 LLM 润色，手动保存不计）
 - [ ] M8：E2E + 上线（邀请制）
