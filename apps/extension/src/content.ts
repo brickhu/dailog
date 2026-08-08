@@ -239,9 +239,12 @@ function initConversationFab(): void {
         const idx = rangeUnits.findIndex((u) => u.id === unit.id);
         if (idx >= 0) {
           // 已选单元：合并成员（稳定键去重、内容只增不减——窗口切分读到局部
-          // 时合并不替换，已选内容不丢）→ 底线向下穿越中线（往下滚）→ 移出
+          // 时合并不替换，已选内容不丢）→ 移除条件二选一：
+          // ① 底线向下穿越中线（往下滚跨过中线）；② 完全滚出视窗上方
+          // （底边 < 0 = 往下滚滚过——顶部短单元静止在中线上方时，底边继续
+          // 减小永远不会发生向下穿越，靠此条件移除）
           mergeUnitMembers(rangeUnits[idx], unit);
-          if (crossing === "remove") {
+          if (crossing === "remove" || bottom < 0) {
             rangeUnits.splice(idx, 1);
             changed = true;
           }
@@ -256,7 +259,7 @@ function initConversationFab(): void {
           const parent = rangeUnits.find((u) => u.messages.some((m) => messageKey(m) === key));
           if (parent) {
             mergeUnitMembers(parent, unit);
-            if (crossing === "remove") {
+            if (crossing === "remove" || bottom < 0) {
               rangeUnits.splice(rangeUnits.indexOf(parent), 1);
               changed = true;
             }
