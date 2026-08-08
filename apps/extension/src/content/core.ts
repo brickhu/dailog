@@ -101,31 +101,21 @@ export function unitRect(unit: QaUnit): { top: number; bottom: number; left: num
 
 /** 合并问答单元成员（稳定键去重、内容只增不减——流式/截断中间态不丢内容；
  *  新成员按 incoming 文档序追加）。选中单元必须完整保留在数组中——
- *  窗口切分读到单元局部时合并而非替换，避免已选内容丢失 */
+ *  窗口切分读到单元局部时合并而非替换，避免已选内容丢失。
+ *  同键成员始终换用新鲜 el（选区框几何用），截断态保留旧内容 */
 export function mergeUnitMembers(target: QaUnit, incoming: QaUnit): void {
   for (const m of incoming.messages) {
     const i = target.messages.findIndex((x) => messageKey(x) === messageKey(m));
     if (i >= 0) {
-      if (m.content.length > target.messages[i].content.length) target.messages[i] = m;
+      const old = target.messages[i];
+      target.messages[i] =
+        old.content.length > m.content.length && old.content.startsWith(m.content)
+          ? { ...m, content: old.content } // 截断中间态：保留完整内容 + 新鲜 el
+          : m;
     } else {
       target.messages.push(m);
     }
   }
-}
-
-/** 扫码线穿越判定（问答单元底线相对视窗中线的方向穿越——用户规则）：
- *  - 往上滚：底线从 < 中线 变为 > 中线（底线实际 Y 值跨过中线）→ add（追加到数组）
- *  - 往下滚：底线从 > 中线 变为 < 中线 → remove（从数组移出）
- *  - 首次见到：底线已在中线以下（> 中线）→ add（起点底部单元默认选中）；
- *    底线在中线以上 → none（尚未扫过）
- *  滚到顶时顶部短单元静止在中线上方，但从未向下穿越 → 保留（不误删） */
-export type ScanCrossing = "add" | "remove" | "none";
-
-export function scanCrossing(prevBottom: number | undefined, bottom: number, centerY: number): ScanCrossing {
-  if (prevBottom === undefined) return bottom > centerY ? "add" : "none";
-  if (prevBottom <= centerY && bottom > centerY) return "add"; // 向上穿越（往上滚）
-  if (prevBottom >= centerY && bottom < centerY) return "remove"; // 向下穿越（往下滚）
-  return "none";
 }
 
 /** 渲染文本提取（= 用户全选该消息拿到的文本）：对元素建 Range 选区读

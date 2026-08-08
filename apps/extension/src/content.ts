@@ -22,7 +22,7 @@ import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback, applyRuleMerge } from "./content/read-fallback";
 import { showCollectHint, hideCollectHint, showScanline, hideScanline } from "./content/collect-hint";
 import { renderUnitBoxes, clearUnitBoxes } from "./content/unit-boxes";
-import { groupIntoUnits, isCompleteUnit, unitRect, scanCrossing, messageKey, mergeUnitMembers, type MessageNode, type QaUnit } from "./content/core";
+import { groupIntoUnits, isCompleteUnit, unitRect, messageKey, mergeUnitMembers, type MessageNode, type QaUnit } from "./content/core";
 
 /** 平台消息读取：本地专有解析器优先（用户滚动驱动渲染，轮询读当前渲染出的消息）；
  *  本地为空（站点 DOM 改版）→ 远程规则选择器兜底；本地缺助手回复（claude 旧
@@ -102,13 +102,21 @@ async function collectPage(): Promise<CollectedDialogue | null> {
   return collectFromDocument({ root: document, url: location.href, getRules });
 }
 
-// 扫码线采集状态（用户滚动驱动渲染，扩展只做观察——中线固定，内容上移，
-// 问答单元底边扫过中线即选中入库，向下滚回中线以下取消）：
+// 扫码采集状态（用户滚动驱动渲染，扩展只做观察——IntersectionObserver 以视窗
+// 为相交根：问答单元进入视窗（相交）= 追加；离开视窗上方（向下滚过）= 移除；
+// 离开视窗下方（向上滚过）= 保留。50vh 扫码线为选择前沿的视觉标记）：
 // 采集态（monitoring）→ 提示条 + 扫码线 + FAB「完成 (N)」+ 放弃；完成 → 确认态（confirmMode）
 let monitoring = false;
 let rangeUnits: QaUnit[] = [];
-/** 各单元最近一次渲染的底线 Y（扫码线穿越判定用；起点重置） */
-const lastBottoms = new Map<string, number>();
+let zoneObserver: IntersectionObserver | undefined;
+/** 已观察的消息元素（虚拟列表回收后解除观察，防误触发） */
+const observedEls = new Set<Element>();
+/** 元素 → 所属单元 id（片段映射到数组内父单元） */
+const elToUnit = new Map<Element, string>();
+/** 元素最近一次相交状态（离开处理只对之前相交过的元素生效） */
+const wasIntersecting = new Map<Element, boolean>();
+/** 最近一轮读取的单元快照（IO 回调完整性检查用） */
+const lastUnitsById = new Map<string, QaUnit>();
 let monitorIv: ReturnType<typeof setInterval> | undefined;
 let monitorUrl = "";
 let monitorReadNodes: (() => Promise<MessageNode[]>) | undefined;
@@ -148,7 +156,7 @@ function initConversationFab(): void {
     );
   }
 
-  /** 开始扫码线采集：滚动锁定到底部 → 提示条 + 扫码线 + FAB「完成 (N)」+ 轮询 */
+  /** 开始扫码采集：滚动锁定到底部 → 提示条 + 扫码线 + FAB「完成 (N)」+ 轮询 */
   function startMonitorCollect(): void {
     const readNodes = pageReadNodes();
     if (!readNodes) {
@@ -157,13 +165,14 @@ function initConversationFab(): void {
     }
     monitoring = true;
     rangeUnits = [];
-    lastBottoms.clear();
+    disposeZoneObserver();
+    ensureZoneObserver();
     monitorUrl = location.href;
     monitorReadNodes = readNodes;
     showCollectHint();
     showScanline();
     fab.setCollecting(0, { onAbandon: () => cancelMonitorCollect() });
-    fab.showToast("已开始采集：向上滚动扫描，扫过中线即选中", "success");
+    fab.showToast("已开始采集：向上滚动，问答单元进入视窗即选中", "success");
     // 滚动锁定到底部（虚拟列表初始即底部；全文渲染页面滚到最新消息）
     void readNodes().then((init) => {
       const last = init[init.length - 1]?.el;
@@ -190,7 +199,6 @@ function initConversationFab(): void {
           const lastComplete = groupIntoUnits(bottom).filter(isCompleteUnit).pop();
           if (lastComplete && !rangeUnits.some((u) => u.id === lastComplete.id)) {
             rangeUnits.push(lastComplete);
-            lastBottoms.set(lastComplete.id, unitRect(lastComplete).bottom);
             fab.updateCollectCount(rangeUnits.length);
           }
         })();
@@ -203,6 +211,47 @@ function initConversationFab(): void {
     monitorIv = setInterval(() => void tickMonitor(), 300);
   }
 
+  /** 创建 IntersectionObserver（视窗为相交根）：进入视窗 = 相交 = 追加；
+   *  离开视窗上方（向下滚过）= 移除；离开视窗下方（向上滚过）= 保留 */
+  function ensureZoneObserver(): void {
+    if (zoneObserver || typeof IntersectionObserver === "undefined") return;
+    zoneObserver = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const unitId = elToUnit.get(entry.target);
+        if (!unitId) continue;
+        const prev = wasIntersecting.get(entry.target) ?? false;
+        wasIntersecting.set(entry.target, entry.isIntersecting);
+        if (entry.isIntersecting) {
+          // 进入视窗（相交）→ 追加（完整问答单元；快照可能比数组单元更新）
+          if (!rangeUnits.some((u) => u.id === unitId)) {
+            const unit = lastUnitsById.get(unitId) ?? rangeUnits.find((u) => u.id === unitId);
+            if (unit && isCompleteUnit(unit)) {
+              rangeUnits.push(unit);
+              fab.updateCollectCount(rangeUnits.length);
+            }
+          }
+        } else if (prev && entry.boundingClientRect.bottom <= 0) {
+          // 离开视窗上方（向下滚过）→ 移除（虚拟列表回收前 IO 必触发，不遗漏）
+          const idx = rangeUnits.findIndex((u) => u.id === unitId);
+          if (idx >= 0) {
+            rangeUnits.splice(idx, 1);
+            fab.updateCollectCount(rangeUnits.length);
+          }
+        }
+      }
+    });
+  }
+
+  /** 销毁观察器与全部映射（采集结束/取消/重开） */
+  function disposeZoneObserver(): void {
+    zoneObserver?.disconnect();
+    zoneObserver = undefined;
+    observedEls.clear();
+    elToUnit.clear();
+    wasIntersecting.clear();
+    lastUnitsById.clear();
+  }
+
   let scrollDebounce: ReturnType<typeof setTimeout> | undefined;
   let tickRunning = false;
 
@@ -213,9 +262,8 @@ function initConversationFab(): void {
     scrollDebounce = setTimeout(() => void tickMonitor(), 150);
   }
 
-  /** 单轮协调：读当前渲染消息 → 分组问答单元 → 底线相对中线的方向穿越判定
-   *  （往上滚底线 < 中线 → > 中线 = 追加；往下滚 > 中线 → < 中线 = 移出）→
-   *  选区框渲染 */
+  /** 单轮协调：读当前渲染消息 → 分组问答单元 → 观察新元素（IO 驱动追加/移除）
+   *  → 刷新已选单元成员（el 新鲜）→ 兜底 ADD → 选区框渲染 */
   async function tickMonitor(): Promise<void> {
     if (!monitoring || !monitorReadNodes || tickRunning) return;
     if (location.href !== monitorUrl) {
@@ -228,45 +276,53 @@ function initConversationFab(): void {
     try {
       const nodes = await monitorReadNodes();
       if (!monitoring) return; // await 期间被放弃/完成
-      const centerY = window.innerHeight / 2;
       const units = groupIntoUnits(nodes);
-      let changed = false;
+      // 1) 单元快照（IO 回调完整性检查用）+ 元素观察/映射
+      lastUnitsById.clear();
+      for (const u of units) lastUnitsById.set(u.id, u);
+      const seen = new Set<Element>();
       for (const unit of units) {
-        const { bottom } = unitRect(unit);
-        const prev = lastBottoms.get(unit.id);
-        lastBottoms.set(unit.id, bottom);
-        const crossing = scanCrossing(prev, bottom, centerY);
-        const idx = rangeUnits.findIndex((u) => u.id === unit.id);
-        if (idx >= 0) {
-          // 已选单元：合并成员（稳定键去重、内容只增不减——窗口切分读到局部
-          // 时合并不替换，已选内容不丢）→ 移除条件二选一：
-          // ① 底线向下穿越中线（往下滚跨过中线）；② 完全滚出视窗上方
-          // （底边 < 0 = 往下滚滚过——顶部短单元静止在中线上方时，底边继续
-          // 减小永远不会发生向下穿越，靠此条件移除）
-          mergeUnitMembers(rangeUnits[idx], unit);
-          if (crossing === "remove" || bottom < 0) {
-            rangeUnits.splice(idx, 1);
-            changed = true;
-          }
-        } else if (crossing === "add" && unit.messages[0]?.role === "user" && isCompleteUnit(unit)) {
-          // 完整问答单元（有问有答）底线跨过中线 → 追加到数组（必入数组）
-          rangeUnits.push(unit);
-          changed = true;
-        } else if (unit.messages[0]?.role === "assistant") {
-          // assistant 片段（窗口切分）：匹配数组内所属单元——合并成员刷新内容，
-          // 底线向下穿越中线则移出父单元
-          const key = messageKey(unit.messages[0]);
-          const parent = rangeUnits.find((u) => u.messages.some((m) => messageKey(m) === key));
-          if (parent) {
-            mergeUnitMembers(parent, unit);
-            if (crossing === "remove" || bottom < 0) {
-              rangeUnits.splice(rangeUnits.indexOf(parent), 1);
-              changed = true;
-            }
+        // 片段（assistant 开头）映射到数组内父单元，保证 IO 回调命中同一单元
+        const mapId =
+          unit.messages[0]?.role === "user"
+            ? unit.id
+            : (rangeUnits.find((u) => u.messages.some((m) => messageKey(m) === messageKey(unit.messages[0])))?.id ??
+              unit.id);
+        for (const m of unit.messages) {
+          if (!m.el) continue;
+          seen.add(m.el);
+          elToUnit.set(m.el, mapId);
+          if (!observedEls.has(m.el) && zoneObserver) {
+            observedEls.add(m.el);
+            zoneObserver.observe(m.el);
           }
         }
       }
-      // 选区框渲染（问答单元容器 outline，替代消息级 outline）
+      // 2) 清理：不在当前渲染窗口的元素解除观察（虚拟列表回收的元素防误触发）
+      for (const el of [...observedEls]) {
+        if (!seen.has(el)) {
+          zoneObserver?.unobserve(el);
+          observedEls.delete(el);
+          elToUnit.delete(el);
+          wasIntersecting.delete(el);
+        }
+      }
+      // 3) 刷新已选单元成员（el 新鲜——选区框几何）→ 兜底 ADD（进入视窗且完整，
+      //    IO 回调前的间隙 / 无 IO 环境）
+      let changed = false;
+      for (const unit of units) {
+        const idx = rangeUnits.findIndex((u) => u.id === unit.id);
+        if (idx >= 0) {
+          mergeUnitMembers(rangeUnits[idx], unit);
+        } else if (unit.messages[0]?.role === "user" && isCompleteUnit(unit)) {
+          const { top, bottom } = unitRect(unit);
+          if (bottom > 0 && top < window.innerHeight) {
+            rangeUnits.push(unit);
+            changed = true;
+          }
+        }
+      }
+      // 4) 选区框渲染（问答单元容器 outline）+ 计数
       renderUnitBoxes(rangeUnits);
       if (changed) fab.updateCollectCount(rangeUnits.length); // 问答单元数
     } catch {
@@ -280,6 +336,7 @@ function initConversationFab(): void {
   function cancelMonitorCollect(): void {
     stopMonitorLoop();
     monitoring = false;
+    disposeZoneObserver();
     hideCollectHint();
     hideScanline();
     clearUnitBoxes();
@@ -303,6 +360,7 @@ function initConversationFab(): void {
   async function finishMonitorCollect(): Promise<void> {
     stopMonitorLoop();
     monitoring = false;
+    disposeZoneObserver();
     hideCollectHint();
     hideScanline();
     clearUnitBoxes();
