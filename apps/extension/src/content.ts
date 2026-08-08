@@ -479,7 +479,7 @@ function initConversationFab(): void {
 }
 
 /** 构建标识（每次打包更新——FAB 默认文案，验证扩展新版本是否成功加载） */
-const BUILD_TAG = "20260808-20";
+const BUILD_TAG = "20260808-21";
 
 // AI 平台页：采集 FAB（studio 域不再注入 content script——待入库提醒已移除）。
 // 初始化包保护：真实页面异常时 Console 输出 [dailog] 错误（可诊断），不静默失败

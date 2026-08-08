@@ -8,11 +8,12 @@ const ASSISTANT_SELECTOR = '[data-testid="assistant-message"]';
 
 const MESSAGE_SELECTOR = `${USER_SELECTOR}, ${ASSISTANT_SELECTOR}`;
 
-/** 稳定消息 id：内容哈希（滚动采集时历史消息插到顶部，基于位置的序号会变——去重失效） */
+/** 稳定消息 id：内容键（role+content）——与规则兜底路径的 id 方案一致。
+ *  之前本地解析器用 u-/a- 内容哈希、规则路径用内容键，同一消息在不同轮读取
+ *  走不同路径 → id 不稳定 → 数组单元永远匹配不上后续读取（claude 回滚失效
+ *  的根因，位置数据冻结在起点） */
 function messageId(role: Role, content: string): string {
-  let h = 0;
-  for (let i = 0; i < content.length; i++) h = (h * 31 + content.charCodeAt(i)) >>> 0;
-  return `${role === "user" ? "u" : "a"}-${h.toString(36)}`;
+  return `${role}\u0000${content}`;
 }
 
 /** Claude 对话页解析（选择器依据 docs/spikes/chat-dom.md，待真实页面校准） */
