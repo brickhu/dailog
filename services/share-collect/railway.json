@@ -2,7 +2,7 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "npm install -g pnpm@9.15.0 && pnpm install --filter @dailogues/share-collect"
+    "buildCommand": "npm install --no-package-lock"
   },
   "deploy": {
     "startCommand": "npx tsx src/index.ts",
