@@ -12,7 +12,7 @@ describe("采集提示条（非阻断——不拦截用户滚动/点击）", () 
     showCollectHint();
     const el = document.querySelector("[dailog-hint]");
     expect(el).not.toBeNull();
-    expect(el?.textContent).toContain("扫过中线即选中");
+    expect(el?.textContent).toContain("进入视窗即选中");
     expect(document.body.style.overflow).toBe(""); // 不锁 body 滚动
     expect((el as HTMLElement).style.pointerEvents).toBe("none"); // 不拦截鼠标
   });
