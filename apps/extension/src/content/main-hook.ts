@@ -19,8 +19,8 @@
 
   const of = win.fetch;
   if (typeof of === "function") {
-    win.fetch = ((...args: unknown[]) => {
-      const p = of.apply(win, args as [RequestInfo | URL, RequestInit?]);
+    win.fetch = ((...args: Parameters<typeof of>) => {
+      const p = of.apply(win, args);
       const url = typeof args[0] === "string" ? args[0] : ((args[0] as { url?: string })?.url ?? "");
       p.then((res: Response) => {
         try {
