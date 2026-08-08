@@ -37,7 +37,7 @@
   const os = XMLHttpRequest.prototype.send;
   XMLHttpRequest.prototype.open = function (this: XMLHttpRequest, method: string, url: string | URL) {
     (this as XMLHttpRequest & { __dailogUrl?: string }).__dailogUrl = String(url);
-    return ox.apply(this, [method, url]);
+    return ox.call(this, method, url);
   };
   XMLHttpRequest.prototype.send = function (this: XMLHttpRequest, ...args: Parameters<typeof os>) {
     this.addEventListener("load", () => {
