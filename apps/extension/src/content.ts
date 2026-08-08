@@ -308,24 +308,15 @@ function initConversationFab(): void {
           wasIntersecting.delete(el);
         }
       }
-      // 3) 刷新已选单元成员（el 新鲜——选区框几何）→ 兜底 ADD（进入视窗且完整，
-      //    IO 回调前的间隙 / 无 IO 环境）
-      let changed = false;
+      // 3) 刷新已选单元成员（el 新鲜——选区框几何）。选择完全由 IO 驱动——
+      //    禁止轮询侧 ADD：读取有 300ms 延迟（滚动前旧 rect），会把刚被 IO
+      //    移除（滚出视口）的单元误加回来（回滚时计数 7→6→7 弹跳的根源）
       for (const unit of units) {
         const idx = rangeUnits.findIndex((u) => u.id === unit.id);
-        if (idx >= 0) {
-          mergeUnitMembers(rangeUnits[idx], unit);
-        } else if (unit.messages[0]?.role === "user" && isCompleteUnit(unit)) {
-          const { top, bottom } = unitRect(unit);
-          if (bottom > 0 && top < window.innerHeight) {
-            rangeUnits.push(unit);
-            changed = true;
-          }
-        }
+        if (idx >= 0) mergeUnitMembers(rangeUnits[idx], unit);
       }
-      // 4) 选区框渲染（问答单元容器 outline）+ 计数
+      // 4) 选区框渲染（问答单元容器 outline）
       renderUnitBoxes(rangeUnits);
-      if (changed) fab.updateCollectCount(rangeUnits.length); // 问答单元数
     } catch {
       // 单轮读取失败忽略，下一轮重试
     } finally {
