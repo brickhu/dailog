@@ -12,7 +12,7 @@ const dialogue: CollectedDialogue = {
 
 const opts = (overrides: Partial<Parameters<typeof runCollectFlow>[0]> = {}) => ({
   collect: async (): Promise<CollectedDialogue | null> => dialogue,
-  cache: async (): Promise<CacheCollectResult> => ({ ok: true, collectId: "uuid-1", appUrl: "https://app.dailog.fm/import?collectId=uuid-1" }),
+  cache: async (): Promise<CacheCollectResult> => ({ ok: true, collectId: "uuid-1", appUrl: "https://app.dailog.fm/import?collectId=uuid-1", messageCount: 2 }),
   onResult: vi.fn(),
   ...overrides,
 });
@@ -20,7 +20,7 @@ const opts = (overrides: Partial<Parameters<typeof runCollectFlow>[0]> = {}) => 
 describe("runCollectFlow（采集 → 缓存，无鉴权预检）", () => {
   it("采集 → 缓存 → 成功提示", async () => {
     const collect = vi.fn(async () => dialogue);
-    const cache = vi.fn(async (): Promise<CacheCollectResult> => ({ ok: true, collectId: "uuid-1", appUrl: "u" }));
+    const cache = vi.fn(async (): Promise<CacheCollectResult> => ({ ok: true, collectId: "uuid-1", appUrl: "u", messageCount: 2 }));
     const onResult = vi.fn();
     await runCollectFlow(opts({ collect, cache, onResult }));
     expect(collect).toHaveBeenCalledOnce();
