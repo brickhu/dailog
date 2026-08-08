@@ -222,6 +222,88 @@ async function tryChatgptShareFetch(url, reqCtx) {
 
 // ============ Tier 2：Playwright 兜底 ============
 
+/** chatgpt 分享页步进采集（虚拟列表）。
+ *  分享页初始只渲染尾部几条真实消息，其余为 h-[--estimated-turn-height] 占位
+ *  slot（slot 顺序 = 对话顺序）；向上滚动时占位替换为真实消息——与登录态
+ *  对话页同款虚拟列表。从底部向上逐屏步进：目标 = 视口内第 2 条消息
+ *  scrollIntoView（留重叠防漏），等渲染稳定后读取当前渲染消息，按内容键合并
+ *  （虚拟列表无稳定 id，跨窗口累积靠 role+content 键 + 前缀降级保护）；
+ *  到顶（scrollTop≈0）且无新增 → 完成。 */
+async function collectChatgptShareByScroll(page, shareId, url) {
+  await page.waitForSelector("[data-message-author-role]", { timeout: 30000 });
+  await page.waitForTimeout(1200);
+
+  const readRendered = () =>
+    page.locator("[data-message-author-role]").evaluateAll((els) => {
+      const sc = [...document.querySelectorAll("div")].find((d) => d.scrollHeight > d.clientHeight + 500);
+      const scTop = sc ? sc.getBoundingClientRect().top : 0;
+      const scST = sc ? sc.scrollTop : 0;
+      return els
+        .map((el) => ({
+          role: el.getAttribute("data-message-author-role"),
+          content: (el.textContent ?? "").trim(),
+          // 绝对文档位置（虚拟列表窗口漂移时首见序不可靠——占位高度是估计值，
+          // 槽位可能延迟渲染；按文档位置排序才是真实对话顺序）
+          pos: scST + el.getBoundingClientRect().top - scTop,
+        }))
+        .filter((x) => x.content && (x.role === "user" || x.role === "assistant"));
+    });
+
+  // 内容键合并（同 key 保留首见位置；跨窗口累积靠 role+content 键 + 前缀降级保护）
+  const acc = new Map();
+  const merge = (nodes) => {
+    for (const n of nodes) {
+      const k = `${n.role}\u0000${n.content}`;
+      const old = acc.get(k);
+      if (old && old.length > n.content.length && old.startsWith(n.content)) continue; // 截断重渲染 → 保留完整版
+      acc.set(k, n);
+    }
+  };
+
+  /** 向上一步：把视口内最上方消息滚到容器顶部上方 80px（留重叠）。
+   *  关键：虚拟列表按 IntersectionObserver 渲染——只有未渲染的占位 slot
+   *  进入视口才触发渲染；固定小步长（如 620px）会停在高消息内部导致
+   *  无新 slot 进入 → 不渲染。滚动到最上方消息顶部必然把上方占位拉进视口。 */
+  const stepUp = () =>
+    page.evaluate(() => {
+      const sc = [...document.querySelectorAll("div")].find((d) => d.scrollHeight > d.clientHeight + 500);
+      if (!sc) return { atTop: true, scrollTop: 0 };
+      const msgs = [...document.querySelectorAll("[data-message-author-role]")];
+      if (!msgs.length) return { atTop: true, scrollTop: sc.scrollTop };
+      if (sc.scrollTop <= 4) return { atTop: true, scrollTop: 0 };
+      const first = msgs[0];
+      const scTop = sc.getBoundingClientRect().top;
+      const target = Math.max(0, sc.scrollTop + first.getBoundingClientRect().top - scTop - 80);
+      sc.scrollTop = target;
+      return { atTop: sc.scrollTop <= 4, scrollTop: sc.scrollTop };
+    });
+
+  let lastCount = 0;
+  let stuck = 0;
+  for (let i = 0; i < 120; i++) {
+    merge(await readRendered());
+    const grew = acc.size > lastCount;
+    lastCount = acc.size;
+    const step = await stepUp();
+    await page.waitForTimeout(250); // 虚拟列表渲染周期（实测 250ms 足够窗口切换）
+    if (step.atTop && !grew && i > 2) break; // 到顶且无新增 → 完成
+    if (!grew) {
+      // 位置未动且无新增 → 卡住计数；3 次放弃
+      const next = await page.evaluate(() => {
+        const sc = [...document.querySelectorAll("div")].find((d) => d.scrollHeight > d.clientHeight + 500);
+        return sc ? sc.scrollTop : 0;
+      });
+      if (Math.abs(next - step.scrollTop) < 2) {
+        if (++stuck >= 3) break;
+      } else stuck = 0;
+    }
+  }
+  const messages = [...acc.values()].sort((a, b) => a.pos - b.pos).map(({ role, content }) => ({ role, content }));
+  if (messages.length === 0) return null;
+  const title = (await page.title()).replace(/\s*[-|·]\s*(ChatGPT|OpenAI)\s*$/, "").trim() || "ChatGPT 分享对话";
+  return { platform: "chatgpt", conversationId: shareId, title, url, messages };
+}
+
 /** Playwright 加载分享页 → 拦截对话数据响应 → 解析（持久化 profile 免挑战） */
 async function collectWithPlaywright(url) {
   const context = await chromium.launchPersistentContext(PROFILE, {
@@ -250,23 +332,10 @@ async function collectWithPlaywright(url) {
     });
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     if (url.includes("chatgpt.com/share/")) {
-      // chatgpt 分享页无接口响应且懒渲染（滚动才渲染更多）——滚动到底循环，
-      // 直到消息数稳定，再读全部
-      await page.waitForTimeout(2000);
+      // chatgpt 分享页无公开接口且虚拟列表懒渲染（window 滚动无效——滚动容器
+      // 是内部 div）→ 步进策略：底部向上逐屏 + 内容键合并（见 collectChatgptShareByScroll）
       const shareId = url.match(/share\/([^/?#]+)/)?.[1] ?? "?";
-      let texts = [];
-      let last = -1;
-      for (let i = 0; i < 40; i++) {
-        texts = await page.locator("[data-message-author-role]").evaluateAll((els) =>
-          els.map((el) => ({ role: el.getAttribute("data-message-author-role"), content: (el.textContent ?? "").trim() }))
-            .filter((x) => x.content && (x.role === "user" || x.role === "assistant")),
-        );
-        if (texts.length === last && i > 1) break; // 消息数稳定 = 全部渲染
-        last = texts.length;
-        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-        await page.waitForTimeout(700);
-      }
-      if (texts.length) result = { platform: "chatgpt", conversationId: shareId, title: "ChatGPT 分享对话", url, messages: texts };
+      result = await collectChatgptShareByScroll(page, shareId, url);
     } else {
       // 有接口的平台（claude/deepseek）：等接口响应
       const deadline = Date.now() + 90000;
@@ -282,13 +351,15 @@ async function collectWithPlaywright(url) {
 // ============ 主流程 ============
 
 async function collectShare(url) {
-  // Tier 1：直连公开接口（快路径，无浏览器进程）
-  const reqCtx = await request.newContext({ proxy: { server: PROXY } });
-  try {
-    const t1 = await tryFetchShare(url, reqCtx);
-    if (t1) return { tier: "fetch", ...t1 };
-  } finally {
-    await reqCtx.dispose().catch(() => {});
+  // Tier 1：直连公开接口（快路径，无浏览器进程）；DAILOG_TIER=tier2 可跳过
+  if (process.env.DAILOG_TIER !== "tier2") {
+    const reqCtx = await request.newContext({ proxy: { server: PROXY } });
+    try {
+      const t1 = await tryFetchShare(url, reqCtx);
+      if (t1) return { tier: "fetch", ...t1 };
+    } finally {
+      await reqCtx.dispose().catch(() => {});
+    }
   }
   // Tier 2：Playwright 兜底
   const t2 = await collectWithPlaywright(url);
@@ -305,7 +376,9 @@ const t0 = Date.now();
 const d = await collectShare(url);
 if (d) {
   console.log(`[${d.tier}] ${d.messages.length} 条消息 | "${d.title}" | ${Date.now() - t0}ms`);
-  console.log(JSON.stringify({ platform: d.platform, conversationId: d.conversationId, title: d.title, messages: d.messages }, null, 2).slice(0, 800));
+  const summary = { platform: d.platform, conversationId: d.conversationId, title: d.title, messages: d.messages };
+  if (process.env.DAILOG_FULL === "1") console.log(JSON.stringify(summary));
+  else console.log(JSON.stringify(summary, null, 2).slice(0, 800));
 } else {
   console.error("采集失败");
   process.exit(1);
