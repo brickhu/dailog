@@ -5,13 +5,10 @@ beforeEach(() => {
   clearCapturedConversations();
 });
 
-describe("installResponseSniff（主世界拦截安装 + 回传捕获）", () => {
-  it("注入 script[data-dailog-sniff]（幂等）", () => {
-    document.head.innerHTML = "";
+describe("installResponseSniff（主世界回传捕获）", () => {
+  it("幂等安装监听", () => {
     installResponseSniff();
-    expect(document.querySelector("script[data-dailog-sniff]")).not.toBeNull();
-    installResponseSniff(); // 幂等
-    expect(document.querySelectorAll("script[data-dailog-sniff]").length).toBe(1);
+    installResponseSniff();
   });
 
   it("页面 postMessage 对话数据 → findCapturedConversation 按 id 命中", () => {

@@ -42,6 +42,20 @@
       ],
       "js": ["dist/content.js"],
       "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://claude.ai/*",
+        "https://chat.deepseek.com/*",
+        "https://chatgpt.com/*",
+        "https://gemini.google.com/*",
+        "https://kimi.moonshot.cn/*",
+        "https://www.doubao.com/*",
+        "https://www.tongyi.com/*"
+      ],
+      "js": ["dist/main-hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ],
   "action": { "default_popup": "popup.html" }

@@ -27,6 +27,7 @@ const common = {
 };
 
 await build({ ...common, entryPoints: ["src/content.ts"], format: "iife" });
+await build({ ...common, entryPoints: ["src/content/main-hook.ts"], format: "iife" });
 await build({ ...common, entryPoints: ["src/background.ts"], format: "esm" });
 await build({ ...common, entryPoints: ["src/popup.ts"], format: "iife" });
 await build({ ...common, entryPoints: ["src/options.ts"], format: "iife" });
@@ -35,6 +36,7 @@ await build({ ...common, entryPoints: ["src/options.ts"], format: "iife" });
 mkdirSync("dist", { recursive: true });
 const manifest = readFileSync("manifest.json", "utf8")
   .replaceAll("dist/content.js", "content.js")
+  .replaceAll("dist/main-hook.js", "main-hook.js")
   .replaceAll("dist/background.js", "background.js");
 writeFileSync("dist/manifest.json", manifest);
 cpSync("popup.html", "dist/popup.html");
