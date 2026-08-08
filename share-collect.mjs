@@ -100,7 +100,94 @@ async function tryDeepSeekShareFetch(url, reqCtx) {
   return parseDeepSeekShare(d, shareId, url);
 }
 
-/** chatgpt 分享解析：静态 HTML 里 data-message-author-role 标记的消息 */
+// ---------- chatgpt RSC payload 解码（React Router flight 格式，全量对话） ----------
+// 分享页 HTML 内嵌 streamController.enqueue("...") 多段 payload：每段为一个 JSON 数组
+// （值表：对象 {"_N": M} 引用表中键名/值；N 负数/越界 = undefined；原始数值时间戳
+// 直接落表）。根元素即 loaderData 所在对象。多个 enqueue chunk 各自独立成表，
+// 首个 chunk（P1: 前缀）含全部数据，其余是空对象占位。
+
+/** 提取并解析全部 enqueue chunk → 表格数组列表（已剥离 P\d+: 前缀） */
+function extractRscChunks(html) {
+  const chunks = [];
+  const re = /streamController\.enqueue\("((?:[^"\\]|\\.)*)"\)/g;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    try {
+      const doc = JSON.parse(`"${m[1]}"`);
+      chunks.push(JSON.parse(doc.replace(/^P\d+:/, "")));
+    } catch { /* 非 JSON 片段跳过 */ }
+  }
+  return chunks;
+}
+
+/** 值表解码：共享引用记忆化（每个索引只展开一次，避免共享子树指数爆炸） */
+function decodeRscTable(arr) {
+  const cache = new Map();
+  const resolve = (v, depth = 0) => {
+    if (depth > 40) return undefined;
+    if (typeof v === "number") {
+      if (v < 0 || v >= arr.length) return v; // 越界/负数 → 原样（时间戳等）
+      if (cache.has(v)) return cache.get(v);
+      const val = resolve(arr[v], depth + 1);
+      cache.set(v, val);
+      return val;
+    }
+    if (Array.isArray(v)) return v.map((x) => resolve(x, depth + 1));
+    if (v && typeof v === "object") {
+      const out = {};
+      for (const k of Object.keys(v)) {
+        if (k.startsWith("_")) {
+          const name = resolve(arr[Number(k.slice(1))], depth + 1);
+          out[name] = resolve(v[k], depth + 1);
+        } else out[k] = resolve(v[k], depth + 1);
+      }
+      return out;
+    }
+    return v;
+  };
+  return resolve(0);
+}
+
+/** chatgpt 分享 RSC 解析：解码 loaderData → serverResponse.data（与登录态
+ *  backend-api/conversation 同构的 mapping 节点图）→ 全量消息（免滚动、免登录） */
+function parseChatgptShareRsc(html, id, url) {
+  const chunks = extractRscChunks(html);
+  if (chunks.length === 0) return null;
+  let d = null;
+  for (const chunk of chunks) {
+    const root = decodeRscTable(chunk);
+    const data = root?.loaderData?.["routes/share.$shareId.($action)"]?.serverResponse?.data;
+    if (data?.mapping) { d = data; break; }
+  }
+  if (!d) return null;
+  // 与扩展 parseChatgptConversation 一致：根节点 → children DFS → 拼接 parts → 过滤空
+  const mapping = d.mapping;
+  const rootId = Object.keys(mapping).find((k) => !mapping[k]?.message);
+  if (!rootId) return null;
+  const messages = [];
+  const visit = (nodeId) => {
+    const node = mapping[nodeId];
+    if (!node) return;
+    const role = node.message?.author?.role;
+    if (role === "user" || role === "assistant") {
+      const parts = (node.message?.content?.parts ?? []).filter((p) => typeof p === "string");
+      const content = parts.join("\n\n");
+      if (content) messages.push({ role, content });
+    }
+    for (const c of node.children ?? []) visit(c);
+  };
+  visit(rootId);
+  if (messages.length === 0) return null;
+  return {
+    platform: "chatgpt",
+    conversationId: typeof d.conversation_id === "string" && d.conversation_id ? d.conversation_id : id,
+    title: typeof d.title === "string" && d.title ? d.title : "ChatGPT 分享对话",
+    url,
+    messages,
+  };
+}
+
+/** chatgpt 分享解析：静态 HTML 里 data-message-author-role 标记的消息（降级：仅渲染部分） */
 function parseChatgptShareHtml(html, id, url) {
   const messages = [];
   // 逐段匹配消息元素（含嵌套 div 文本；用标签计数找闭合——HTML 结构固定可简化：
@@ -118,7 +205,8 @@ function parseChatgptShareHtml(html, id, url) {
   return { platform: "chatgpt", conversationId: id, title: "ChatGPT 分享对话", url, messages };
 }
 
-/** chatgpt 分享：Tier 1 直连分享页 HTML + 提取（可能被 CF 拦 → null 落 Tier 2） */
+/** chatgpt 分享：Tier 1 直连分享页 HTML（可能被 CF 拦 → null 落 Tier 2）。
+ *  优先 RSC 解码（全量消息）；RSC 缺失/结构变化 → 降级静态 HTML（仅渲染部分） */
 async function tryChatgptShareFetch(url, reqCtx) {
   const shareId = url.match(/chatgpt\.com\/share\/([^/?#]+)/)?.[1];
   if (!shareId) return null;
@@ -127,6 +215,8 @@ async function tryChatgptShareFetch(url, reqCtx) {
   });
   if (!htmlRes.ok()) return null;
   const html = await htmlRes.text();
+  const rsc = parseChatgptShareRsc(html, shareId, url);
+  if (rsc) return rsc;
   return parseChatgptShareHtml(html, shareId, url);
 }
 
@@ -160,13 +250,22 @@ async function collectWithPlaywright(url) {
     });
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     if (url.includes("chatgpt.com/share/")) {
-      // chatgpt 分享页无接口响应：静态 HTML 渲染，等 3s 后直接读 DOM
-      await page.waitForTimeout(3000);
+      // chatgpt 分享页无接口响应且懒渲染（滚动才渲染更多）——滚动到底循环，
+      // 直到消息数稳定，再读全部
+      await page.waitForTimeout(2000);
       const shareId = url.match(/share\/([^/?#]+)/)?.[1] ?? "?";
-      const texts = await page.locator("[data-message-author-role]").evaluateAll((els) =>
-        els.map((el) => ({ role: el.getAttribute("data-message-author-role"), content: (el.textContent ?? "").trim() }))
-          .filter((x) => x.content && (x.role === "user" || x.role === "assistant")),
-      );
+      let texts = [];
+      let last = -1;
+      for (let i = 0; i < 40; i++) {
+        texts = await page.locator("[data-message-author-role]").evaluateAll((els) =>
+          els.map((el) => ({ role: el.getAttribute("data-message-author-role"), content: (el.textContent ?? "").trim() }))
+            .filter((x) => x.content && (x.role === "user" || x.role === "assistant")),
+        );
+        if (texts.length === last && i > 1) break; // 消息数稳定 = 全部渲染
+        last = texts.length;
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+        await page.waitForTimeout(700);
+      }
       if (texts.length) result = { platform: "chatgpt", conversationId: shareId, title: "ChatGPT 分享对话", url, messages: texts };
     } else {
       // 有接口的平台（claude/deepseek）：等接口响应
