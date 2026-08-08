@@ -118,8 +118,9 @@ let scrollContainer: HTMLElement | null = null;
  *  随后底部窗口前插导致顺序错乱） */
 let lockSettled = false;
 let lastScrollTop = 0;
-/** 单元最近一次渲染的底线 Y（消失移除判定：滚出顶部被回收时轮询读不到 bottom<0） */
-const lastBottomByUnit = new Map<string, number>();
+/** 单元最近一次渲染的底线 Y + 当时的 scrollTop（消失移除判定：用滚动位移
+ *  推算单元当前位置——滚出顶部被回收后轮询读不到，但 scrollTop 位移可算） */
+const lastBottomByUnit = new Map<string, { bottom: number; st: number }>();
 let monitorIv: ReturnType<typeof setInterval> | undefined;
 let tickCount = 0;
 let monitorUrl = "";
@@ -282,8 +283,8 @@ function initConversationFab(): void {
       const st = scrollContainer?.scrollTop ?? 0;
       const scrolledDown = st > lastScrollTop + 2;
       lastScrollTop = st;
-      // 记录本轮渲染单元的底线（消失移除判定用）
-      for (const unit of units) lastBottomByUnit.set(unit.id, unitRect(unit).bottom);
+      // 记录本轮渲染单元的底线 + 当时 scrollTop（消失移除用滚动位移推算位置）
+      for (const unit of units) lastBottomByUnit.set(unit.id, { bottom: unitRect(unit).bottom, st });
       let changed = false;
       const newUnits: QaUnit[] = [];
       for (const unit of units) {
@@ -321,28 +322,38 @@ function initConversationFab(): void {
       // 新单元前插（往上滚进来的单元一定比已选单元更早——对话顺序 顶→底）
       if (newUnits.length > 0) rangeUnits.unshift(...newUnits);
       // 消失移除（claude Virtuoso 滚出顶部瞬间回收元素，轮询读不到 bottom<0）：
-      // 数组内单元本轮未渲染 = 已从 DOM 消失，两条判定：
-      // ① 方向无关：上次底线已贴近视口顶部（≤100px，必然是从顶部滚出被回收）
-      // ② 方向判定：滚动向下 + 上次底线仍在视口内（快滚跳过中间读数的兜底）
+      // 数组内单元本轮未渲染时，用滚动位移推算其当前位置：
+      //   推算底线 = 上次读取底线 + (上次 scrollTop − 当前 scrollTop)
+      // 推算底线 < 0 = 单元已滚出视口顶部（向下滚过）→ 移除。
+      // 不依赖重新读到该单元（notInRead 恒定时 lastBottom 冻结是回滚失效根因），
+      // 也不依赖滚动方向——向上滚时推算底线只会增大（保持选中）
       const notInRead = rangeUnits.filter((u) => !units.some((x) => x.id === u.id));
       for (const u of notInRead) {
-        const lb = lastBottomByUnit.get(u.id) ?? viewportHeight + 1;
-        const exitedTop = lb <= 100 || (scrolledDown && lb <= viewportHeight);
-        if (exitedTop) {
+        const rec = lastBottomByUnit.get(u.id);
+        if (!rec) continue;
+        const estBottom = rec.bottom + rec.st - st;
+        if (estBottom < 0) {
           const i = rangeUnits.indexOf(u);
           if (i >= 0) {
             rangeUnits.splice(i, 1);
             removalCooldown.set(u.id, now);
             changed = true;
-            console.info(`[dailog] remove unit=${u.id} lb=${lb} down=${scrolledDown} (disappeared)`);
+            console.info(`[dailog] remove unit=${u.id.slice(0, 10)} est=${Math.round(estBottom)} (scrolled past)`);
           }
         }
       }
       // 诊断日志：每 5 轮输出滚动/容器状态（定位 claude 回滚失效场景）
       tickCount += 1;
       if (tickCount % 5 === 0) {
+        const ests = notInRead
+          .slice(0, 5)
+          .map((u) => {
+            const rec = lastBottomByUnit.get(u.id);
+            return rec ? `${u.id.slice(0, 6)}:${Math.round(rec.bottom + rec.st - st)}` : `${u.id.slice(0, 6)}:?`;
+          })
+          .join(",");
         console.info(
-          `[dailog] tick st=${st} down=${scrolledDown} cont=${scrollContainer ? `${scrollContainer.tagName}.${String(scrollContainer.className).slice(0, 30)}` : "null"} arr=${rangeUnits.length} notInRead=${notInRead.length}`,
+          `[dailog] tick st=${st} down=${scrolledDown} cont=${scrollContainer ? `${scrollContainer.tagName}.${String(scrollContainer.className).slice(0, 30)}` : "null"} arr=${rangeUnits.length} notInRead=${notInRead.length} est=${ests}`,
         );
       }
       // 清理过期冷却（防 map 无限增长）
@@ -468,7 +479,7 @@ function initConversationFab(): void {
 }
 
 /** 构建标识（每次打包更新——FAB 默认文案，验证扩展新版本是否成功加载） */
-const BUILD_TAG = "20260808-19";
+const BUILD_TAG = "20260808-20";
 
 // AI 平台页：采集 FAB（studio 域不再注入 content script——待入库提醒已移除）。
 // 初始化包保护：真实页面异常时 Console 输出 [dailog] 错误（可诊断），不静默失败
