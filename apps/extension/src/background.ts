@@ -98,6 +98,7 @@ function readCollects(map: unknown): Record<string, CollectEntry> {
  *  异步采集流程结束后 content 侧 window.open 已不在用户手势上下文）。
  *  是否登录/开通频道不在此校验——那是 app 的 auth provider 在入库时的事。 */
 export async function cacheCollect(dialogue: CollectedDialogue): Promise<CacheCollectResult> {
+  console.info(`[dailog] cacheCollect msgs=${dialogue.messages.length}`);
   if (!isCollectedDialogue(dialogue)) return { ok: false, error: "invalid_dialogue" };
   const appBase = await getAppBase();
   const { [COLLECTS_KEY]: map } = await chrome.storage.local.get(COLLECTS_KEY);

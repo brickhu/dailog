@@ -120,6 +120,10 @@ const elToReadUnit = new Map<Element, string>();
 const wasIntersecting = new Map<Element, boolean>();
 /** 最近一轮读取的单元快照（IO 回调完整性检查用） */
 const lastUnitsById = new Map<string, QaUnit>();
+/** 单元移除冷却时间戳——虚拟列表边界闪烁（移除后立即重新进入视口）会触发
+ *  误重加（claude 计数 4-5-4 横跳）：冷却期内不重加 */
+const removalCooldown = new Map<string, number>();
+const REMOVAL_COOLDOWN_MS = 800;
 let monitorIv: ReturnType<typeof setInterval> | undefined;
 let monitorUrl = "";
 let monitorReadNodes: (() => Promise<MessageNode[]>) | undefined;
@@ -230,7 +234,10 @@ function initConversationFab(): void {
         wasIntersecting.set(entry.target, entry.isIntersecting);
         if (entry.isIntersecting) {
           // 进入视窗（相交）→ 追加（完整问答单元；快照可能比数组单元更新）
-          if (!rangeUnits.some((u) => u.id === unitId)) {
+          if (
+            !rangeUnits.some((u) => u.id === unitId) &&
+            Date.now() - (removalCooldown.get(unitId) ?? 0) >= REMOVAL_COOLDOWN_MS
+          ) {
             const unit = lastUnitsById.get(unitId) ?? rangeUnits.find((u) => u.id === unitId);
             if (unit && isCompleteUnit(unit)) {
               // 推入克隆（防与读取快照共享对象被后续操作改动）
@@ -243,6 +250,7 @@ function initConversationFab(): void {
           const idx = rangeUnits.findIndex((u) => u.id === unitId);
           if (idx >= 0) {
             rangeUnits.splice(idx, 1);
+            removalCooldown.set(unitId, Date.now()); // 记录移除时间，防闪烁重加
             fab.updateCollectCount(rangeUnits.length);
           }
         }
@@ -259,6 +267,7 @@ function initConversationFab(): void {
     elToReadUnit.clear();
     wasIntersecting.clear();
     lastUnitsById.clear();
+    removalCooldown.clear();
   }
 
   let scrollDebounce: ReturnType<typeof setTimeout> | undefined;
@@ -318,15 +327,34 @@ function initConversationFab(): void {
           wasIntersecting.delete(el);
         }
       }
-      // 3) 刷新已选单元成员（el 新鲜——选区框几何）。选择完全由 IO 驱动——
-      //    禁止轮询侧 ADD：读取有 300ms 延迟（滚动前旧 rect），会把刚被 IO
-      //    移除（滚出视口）的单元误加回来（回滚时计数 7→6→7 弹跳的根源）
+      // 3) 刷新已选单元成员（el 新鲜——选区框几何）+ 兜底 ADD：
+      //    读取有 300ms 延迟，旧 rect 会把刚被 IO 移除的单元误加回——冷却期内
+      //    跳过（7→6→7 弹跳修复）；冷却期外真实可见（用户重新滚回）则补加
+      let changed = false;
       for (const unit of units) {
         const idx = rangeUnits.findIndex((u) => u.id === unit.id);
-        if (idx >= 0) mergeUnitMembers(rangeUnits[idx], unit);
+        if (idx >= 0) {
+          mergeUnitMembers(rangeUnits[idx], unit);
+        } else if (unit.messages[0]?.role === "user" && isCompleteUnit(unit)) {
+          const { top, bottom } = unitRect(unit);
+          if (
+            bottom > 0 &&
+            top < window.innerHeight &&
+            Date.now() - (removalCooldown.get(unit.id) ?? 0) >= REMOVAL_COOLDOWN_MS
+          ) {
+            rangeUnits.push({ id: unit.id, messages: [...unit.messages] });
+            changed = true;
+          }
+        }
+      }
+      // 清理过期冷却（防 map 无限增长）
+      const now = Date.now();
+      for (const [id, at] of removalCooldown) {
+        if (now - at >= REMOVAL_COOLDOWN_MS) removalCooldown.delete(id);
       }
       // 4) 选区框渲染（问答单元容器 outline）
       renderUnitBoxes(rangeUnits);
+      if (changed) fab.updateCollectCount(rangeUnits.length);
     } catch {
       // 单轮读取失败忽略，下一轮重试
     } finally {
