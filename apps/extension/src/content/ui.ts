@@ -53,7 +53,7 @@ button.abandon:hover { background: #f1f5f9; }
 .toast.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
 `;
 
-export function createFab(opts: { onClick: () => void; badge?: string }): FabController {
+export function createFab(opts: { onClick: () => void; badge?: string; idleLabel?: string }): FabController {
   const host = document.createElement("div");
   const shadow = host.attachShadow({ mode: "open" });
   const style = document.createElement("style");
@@ -99,7 +99,7 @@ export function createFab(opts: { onClick: () => void; badge?: string }): FabCon
           ? `确认导入 (${count})`
           : collected
             ? "已采集"
-            : (opts.badge ?? "采集对话");
+            : (opts.idleLabel ?? opts.badge ?? "采集对话");
     const icon = busy
       ? '<span class="dot"></span>'
       : phase === "collecting"

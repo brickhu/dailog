@@ -23,7 +23,7 @@ import { applyRuleFallback, applyRuleMerge } from "./content/read-fallback";
 import { showCollectHint, hideCollectHint, showScanline, hideScanline } from "./content/collect-hint";
 import { renderUnitBoxes, clearUnitBoxes } from "./content/unit-boxes";
 import { groupIntoUnits, isCompleteUnit, unitRect, messageKey, mergeUnitMembers, type MessageNode, type QaUnit } from "./content/core";
-import { findOrgIdFromPage, fetchClaudeConversation } from "./content/claude-api";
+import { findOrgIdFromPage, fetchClaudeConversation, parseClaudeConversation } from "./content/claude-api";
 import { fetchChatgptConversation, parseChatgptConversation } from "./content/chatgpt-api";
 import { installResponseSniff, findCapturedConversation } from "./content/response-sniff";
 
@@ -111,6 +111,8 @@ async function collectPage(): Promise<CollectedDialogue | null> {
 // 虚拟列表回收复用元素不会污染判定（claude 4-5-4 横跳的根治））：
 // 采集态（monitoring）→ 提示条 + 扫码线 + FAB「完成 (N)」+ 放弃；完成 → 确认态（confirmMode）
 let monitoring = false;
+/** 当前是否为 claude 分享页（/share/{id}——公开数据，走分享采集） */
+let sharePageId: string | undefined;
 let rangeUnits: QaUnit[] = [];
 /** 单元移除冷却时间戳——视口边界闪烁（移除后立即重新可见）防误重加 */
 const removalCooldown = new Map<string, number>();
@@ -151,8 +153,13 @@ function findScrollContainer(root: ParentNode, from?: Element | null): HTMLEleme
 let refreshCollectedState: (() => void) | undefined;
 
 function initConversationFab(): void {
+  sharePageId =
+    location.hostname === "claude.ai"
+      ? location.pathname.match(/^\/share\/([0-9a-f-]{36})/)?.[1]
+      : undefined;
   const fab: FabController = createFab({
     badge: BUILD_TAG,
+    idleLabel: sharePageId ? "采集此对话" : undefined,
     onClick: () => {
       if (monitoring) {
         // 监测中点击 FAB = 完成采集（进入确认态）
@@ -162,6 +169,10 @@ function initConversationFab(): void {
       if (confirmMode) {
         // 确认态点 FAB = 确认导入（放弃走 FAB 上方「放弃」小按钮）
         void confirmImport();
+        return;
+      }
+      if (sharePageId) {
+        void tryShareCollect();
         return;
       }
       void startCollect();
@@ -179,6 +190,45 @@ function initConversationFab(): void {
       res.ok ? "已采集 ✓ 请在打开的页面确认入库" : `采集失败：${res.error ?? "未知错误"}`,
       res.ok ? "success" : "error",
     );
+  }
+
+  /** claude 分享页采集：优先用主世界拦截捕获的 chat_snapshots 数据，
+   *  未捕获则直连公开接口（分享页无需登录）；成功直接进确认态 */
+  async function tryShareCollect(): Promise<void> {
+    const id = sharePageId;
+    if (!id) return;
+    let dialogue: CollectedDialogue | null = null;
+    const captured = findCapturedConversation(id);
+    if (captured) {
+      dialogue = parseClaudeConversation(
+        captured as Parameters<typeof parseClaudeConversation>[0],
+        id,
+        location.href,
+      );
+    }
+    if (!dialogue) {
+      // 兜底：直连 chat_snapshots 公开接口（org id 从资源时序/捕获 URL 获取）
+      const orgId = findOrgIdFromPage();
+      if (orgId) {
+        try {
+          const res = await fetch(
+        `/api/organizations/${orgId}/chat_snapshots/${id}?rendering_mode=messages&render_all_tools=true`,
+          );
+          if (res.ok) {
+            const d = (await res.json()) as Parameters<typeof parseClaudeConversation>[0];
+            dialogue = parseClaudeConversation(d, id, location.href);
+          }
+        } catch {
+          // 直连失败静默（可能未登录兜底场景）
+        }
+      }
+    }
+    if (dialogue) {
+      console.info(`[dailog] share collected msgs=${dialogue.messages.length} (${dialogue.title})`);
+      enterConfirm(dialogue, dialogue.messages.filter((m) => m.role === "user").length);
+    } else {
+      fab.showToast("未能获取分享对话数据，请刷新页面后重试", "error");
+    }
   }
 
   /** 开始采集：优先走平台官方 API（免滚动秒级全量）——成功直接进确认态；
@@ -519,7 +569,10 @@ function initConversationFab(): void {
   // SPA 导航后 watchUrl 轮询重判（DOM 已更新，对话框检测随之生效）。
   // 采集/确认进行中不隐藏（「完成/确认导入」按钮必须可用）
   const applyVisibility = (url: string) => {
-    if (!monitoring && !confirmMode) fab.setVisible(isConversationPage(url, document));
+    if (!monitoring && !confirmMode) {
+      const shareMatch = location.hostname === "claude.ai" && /^\/share\/[0-9a-f-]{36}/.test(new URL(url).pathname);
+      fab.setVisible(shareMatch || isConversationPage(url, document));
+    }
   };
   applyVisibility(location.href);
 
@@ -538,7 +591,7 @@ function initConversationFab(): void {
 }
 
 /** 构建标识（每次打包更新——FAB 默认文案，验证扩展新版本是否成功加载） */
-const BUILD_TAG = "20260808-26";
+const BUILD_TAG = "20260808-27";
 
 // AI 平台页：采集 FAB（studio 域不再注入 content script——待入库提醒已移除）。
 // 初始化包保护：真实页面异常时 Console 输出 [dailog] 错误（可诊断），不静默失败

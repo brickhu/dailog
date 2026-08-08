@@ -42,11 +42,20 @@ export async function fetchClaudeConversation(orgId: string, uuid: string): Prom
   } catch {
     return null;
   }
+  return parseClaudeConversation(d, uuid, `https://claude.ai/chat/${uuid}`);
+}
+
+/** 解析 claude 对话数据（直连详情接口 / 分享页 chat_snapshots 响应）→ dialogue。
+ *  sender: human→user / assistant→assistant；附件正文追加到消息文本 */
+export function parseClaudeConversation(
+  d: { name?: string; chat_messages?: ClaudeApiMessage[] },
+  conversationId: string,
+  url: string,
+): CollectedDialogue | null {
   const msgs = Array.isArray(d.chat_messages) ? d.chat_messages : [];
   const messages = msgs
     .filter((m) => m.sender === "human" || m.sender === "assistant")
     .map((m) => {
-      // 附件正文（MRD.md 等）追加到消息文本——用户正文常在附件里
       const attach = (m.attachments ?? [])
         .filter((a) => a.extracted_content)
         .map((a) => a.extracted_content)
@@ -60,9 +69,9 @@ export async function fetchClaudeConversation(orgId: string, uuid: string): Prom
   if (messages.length === 0 || !messages.some((m) => m.role === "assistant")) return null;
   return {
     platform: "claude",
-    conversationId: uuid,
+    conversationId,
     title: typeof d.name === "string" && d.name ? d.name : "Claude 对话",
-    url: `https://claude.ai/chat/${uuid}`,
+    url,
     messages,
   };
 }
