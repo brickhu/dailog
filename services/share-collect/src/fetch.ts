@@ -88,6 +88,21 @@ export async function httpGetViaBrightdataProxy(targetUrl: string): Promise<Http
   return runRequest(targetUrl, options, "GET");
 }
 
+/** 经 ScraperAPI 抓取（免费 1000 次/月，IP 池含住宅，能过 CF 挑战）。
+ *  一个 GET 请求：api.scraperapi.com/?api_key=<key>&url=<目标>，响应体即目标内容 */
+export async function httpGetViaScraperApi(targetUrl: string): Promise<HttpResult> {
+  const apiKey = process.env.SCRAPERAPI_KEY;
+  if (!apiKey) throw new Error("SCRAPERAPI_KEY 未配置");
+  const apiUrl = `https://api.scraperapi.com/?api_key=${encodeURIComponent(apiKey)}&url=${encodeURIComponent(targetUrl)}`;
+  const options: RequestOptions = {
+    method: "GET",
+    headers: { accept: "application/json, text/html, */*" },
+    headersTimeout: 60000,
+    bodyTimeout: 60000,
+  };
+  return runRequest(apiUrl, options, "GET");
+}
+
 /** 经 Cloudflare Worker 转发（出口 = CF 网络，访问 CF 保护的域名通常放行）。
  *  CF_WORKER_URL 形如 https://<worker>.workers.dev/?token=<TOKEN> */
 export async function httpGetViaWorker(targetUrl: string): Promise<HttpResult> {
