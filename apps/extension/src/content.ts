@@ -20,9 +20,9 @@ import { parseDoubaoPage } from "./content/doubao";
 import { createFab, type FabController } from "./content/ui";
 import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback, applyRuleMerge } from "./content/read-fallback";
-import { showCollectHint, hideCollectHint } from "./content/collect-hint";
+import { showCollectHint, hideCollectHint, showScanline, hideScanline } from "./content/collect-hint";
 import { highlightNodes, clearHighlight, unhighlightNodes } from "./content/highlight";
-import { mergeMessageNodes, findRangeIndex, type MessageNode } from "./content/core";
+import { groupIntoUnits, isUnitSelected, messageKey, type MessageNode, type QaUnit } from "./content/core";
 
 /** 平台消息读取：本地专有解析器优先（用户滚动驱动渲染，轮询读当前渲染出的消息）；
  *  本地为空（站点 DOM 改版）→ 远程规则选择器兜底；本地缺助手回复（claude 旧
@@ -102,10 +102,11 @@ async function collectPage(): Promise<CollectedDialogue | null> {
   return collectFromDocument({ root: document, url: location.href, getRules });
 }
 
-// 监测采集状态（用户滚动驱动渲染，扩展只做观察——轮询读当前渲染出的消息并暂存）：
-// 采集态（monitoring）→ 提示条 + FAB「完成 (N)」+ 放弃；完成 → 确认态（confirmMode）
+// 扫码线采集状态（用户滚动驱动渲染，扩展只做观察——中线固定，内容上移，
+// 问答单元底边扫过中线即选中入库，向下滚回中线以下取消）：
+// 采集态（monitoring）→ 提示条 + 扫码线 + FAB「完成 (N)」+ 放弃；完成 → 确认态（confirmMode）
 let monitoring = false;
-let monitorNodes: MessageNode[] = [];
+let rangeUnits: QaUnit[] = [];
 let monitorIv: ReturnType<typeof setInterval> | undefined;
 let monitorUrl = "";
 let monitorReadNodes: (() => Promise<MessageNode[]>) | undefined;
@@ -145,7 +146,7 @@ function initConversationFab(): void {
     );
   }
 
-  /** 开始监测采集：滚动锁定到底部 → 非阻断提示条 + FAB「完成 (N)」+ 立即读一次 + 轮询暂存 */
+  /** 开始扫码线采集：滚动锁定到底部 → 提示条 + 扫码线 + FAB「完成 (N)」+ 轮询 */
   function startMonitorCollect(): void {
     const readNodes = pageReadNodes();
     if (!readNodes) {
@@ -153,12 +154,13 @@ function initConversationFab(): void {
       return;
     }
     monitoring = true;
-    monitorNodes = [];
+    rangeUnits = [];
     monitorUrl = location.href;
     monitorReadNodes = readNodes;
     showCollectHint();
+    showScanline();
     fab.setCollecting(0, { onAbandon: () => cancelMonitorCollect() });
-    fab.showToast("已开始采集：向上滚选中，向下滚取消", "success");
+    fab.showToast("已开始采集：向上滚动扫描，扫过中线即选中", "success");
     // 滚动锁定到底部（虚拟列表初始即底部；全文渲染页面滚到最新消息）
     void readNodes().then((init) => {
       const last = init[init.length - 1]?.el;
@@ -183,8 +185,6 @@ function initConversationFab(): void {
 
   let scrollDebounce: ReturnType<typeof setTimeout> | undefined;
   let tickRunning = false;
-  /** 范围选区：上次视窗顶边消息在 rangeNodes 中的位置（向下滚 = 位置后移 → 收缩） */
-  let lastTopIndex = 0;
 
   /** 滚动触发：即时读一次 + 150ms 停止后补读（等骨架渲染完内容） */
   function onUserScroll(): void {
@@ -193,9 +193,8 @@ function initConversationFab(): void {
     scrollDebounce = setTimeout(() => void tickMonitor(), 150);
   }
 
-  /** 单轮读取：读当前渲染出的消息 → 暂存合并 → 高亮 → 更新 FAB 计数。
-   *  范围选区语义：向上滚 = 新消息前插选中（绿框保留）；向下滚 = 视窗顶边
-   *  消息位置后移 → 其上方（已滚过）的消息移出选区（取消入库 + 绿框消失） */
+  /** 单轮协调：读当前渲染消息 → 分组问答单元 → 扫过中线的追加、回中线以下的
+   *  移除（数组天然文档序）→ 高亮同步（选中单元变绿，未选中取消）→ 计数 */
   async function tickMonitor(): Promise<void> {
     if (!monitoring || !monitorReadNodes || tickRunning) return;
     if (location.href !== monitorUrl) {
@@ -208,22 +207,41 @@ function initConversationFab(): void {
     try {
       const nodes = await monitorReadNodes();
       if (!monitoring) return; // await 期间被放弃/完成
-      // 视窗顶边可见的第一条消息（视口内 rect.top >= 0；页头遮挡的负值区域不算可见）
-      const topMsg = nodes.find((n) => n.el && n.el.getBoundingClientRect().top >= 0);
-      const before = monitorNodes.length;
-      mergeMessageNodes(monitorNodes, nodes);
-      highlightNodes(nodes); // 当前渲染消息高亮（幂等）
-      // 向下滚收缩：顶边消息位置后移（比上次更靠下）→ 取消其上方已选消息
-      if (topMsg) {
-        const idx = findRangeIndex(monitorNodes, topMsg);
-        if (idx > lastTopIndex) {
-          const removed = monitorNodes.splice(0, idx);
-          unhighlightNodes(removed);
-          if (removed.length > 0) fab.updateCollectCount(monitorNodes.length);
+      const centerY = window.innerHeight / 2;
+      const viewportHeight = window.innerHeight;
+      const units = groupIntoUnits(nodes);
+      let changed = false;
+      for (const unit of units) {
+        const idx = rangeUnits.findIndex((u) => u.id === unit.id);
+        if (idx >= 0) {
+          // 已选单元：刷新几何（最新渲染成员）→ 底边回中线以下 → 移除（取消）
+          rangeUnits[idx].messages = unit.messages;
+          if (!isUnitSelected(rangeUnits[idx], centerY, viewportHeight)) {
+            rangeUnits.splice(idx, 1);
+            changed = true;
+          }
+        } else if (unit.messages[0]?.role === "user") {
+          // 完整单元（user 开头）且已扫过中线 → 追加（文档序）
+          if (isUnitSelected(unit, centerY, viewportHeight)) {
+            rangeUnits.push(unit);
+            changed = true;
+          }
+        } else {
+          // assistant 片段（窗口切分）：匹配数组内所属单元刷新几何并判移除
+          const key = messageKey(unit.messages[0]);
+          const parent = rangeUnits.find((u) => u.messages.some((m) => messageKey(m) === key));
+          if (parent && !isUnitSelected({ ...parent, messages: unit.messages }, centerY, viewportHeight)) {
+            rangeUnits.splice(rangeUnits.indexOf(parent), 1);
+            changed = true;
+          }
         }
-        if (idx >= 0) lastTopIndex = idx;
       }
-      if (monitorNodes.length !== before) fab.updateCollectCount(monitorNodes.length);
+      // 高亮同步：渲染消息中属于已选单元的加绿，否则取消绿框
+      const inRange = (n: MessageNode): boolean =>
+        rangeUnits.some((u) => u.messages.some((m) => messageKey(m) === messageKey(n)));
+      highlightNodes(nodes.filter(inRange));
+      unhighlightNodes(nodes.filter((n) => !inRange(n)));
+      if (changed) fab.updateCollectCount(totalMessages());
     } catch {
       // 单轮读取失败忽略，下一轮重试
     } finally {
@@ -231,11 +249,17 @@ function initConversationFab(): void {
     }
   }
 
+  /** 已选单元内的消息总数（FAB 计数与导入条数一致） */
+  function totalMessages(): number {
+    return rangeUnits.reduce((s, u) => s + u.messages.length, 0);
+  }
+
   /** 放弃采集（放弃按钮 / SPA 跳走）：清理状态与 UI */
   function cancelMonitorCollect(): void {
     stopMonitorLoop();
     monitoring = false;
     hideCollectHint();
+    hideScanline();
     clearHighlight();
     fab.showToast("已取消采集", "success");
     void updateCollectedState();
@@ -258,8 +282,9 @@ function initConversationFab(): void {
     stopMonitorLoop();
     monitoring = false;
     hideCollectHint();
+    hideScanline();
     clearHighlight();
-    const nodes = monitorNodes;
+    const nodes = rangeUnits.flatMap((u) => u.messages);
     try {
       const dialogue = await buildManualDialogue({ root: document, url: location.href, getRules }, nodes);
       if (!dialogue) {

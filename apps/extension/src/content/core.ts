@@ -45,13 +45,45 @@ export function mergeMessageNodes(acc: MessageNode[], nodes: MessageNode[]): voi
   if (prepend.length > 0) acc.unshift(...prepend);
 }
 
-/** 在范围选区（顶 → 底有序）中定位消息：id 优先，内容键兜底（rule-N 序号 id
- *  跨窗口不可靠）。用于「向下滚 = 取消」：顶边消息位置后移 → 其上方消息移出选区 */
-export function findRangeIndex(
-  acc: MessageNode[],
-  target: { id: string; role: "user" | "assistant"; content: string },
-): number {
-  return acc.findIndex((n) => n.id === target.id || (n.role === target.role && n.content === target.content));
+/** 消息稳定键：data-message-id / 内容哈希等稳定 id 直接用；序列派生 id
+ *  （rule-/gen-N，虚拟列表窗口下标不可靠）→ role+content 内容键 */
+export function messageKey(n: { id: string; role: "user" | "assistant"; content: string }): string {
+  return /^(rule|gen)-\d+$/.test(n.id) ? `${n.role}\u0000${n.content}` : n.id;
+}
+
+/** 问答单元（一问一答的 DOM 父级容器语义——动态分组，不依赖平台选择器）：
+ *  从 user 消息开始，到下一个 user 消息前结束（中间的 assistant 归属该单元）；
+ *  assistant 开头的片段单独成组（窗口切分，几何归属由调用方按成员匹配） */
+export interface QaUnit {
+  /** 单元标识：首个消息的稳定键（片段 = 首个 assistant 的键） */
+  id: string;
+  /** 单元内消息（文档序） */
+  messages: MessageNode[];
+}
+
+export function groupIntoUnits(nodes: MessageNode[]): QaUnit[] {
+  const units: QaUnit[] = [];
+  for (const n of nodes) {
+    const last = units[units.length - 1];
+    if (n.role === "user" || !last) {
+      units.push({ id: messageKey(n), messages: [n] });
+    } else {
+      last.messages.push(n);
+    }
+  }
+  return units;
+}
+
+/** 扫码线选中判定：视窗纵向中线的固定扫描线，内容向上移动——
+ *  单元底边扫过中线（底边 Y < 中线）即选中；超视口高的单元（底边永远无法
+ *  越过中线）→ 顶边扫过中线即选中。向下滚动底边回到中线以下 = 取消 */
+export function isUnitSelected(unit: QaUnit, centerY: number, viewportHeight: number): boolean {
+  const tops = unit.messages.map((m) => m.el?.getBoundingClientRect().top ?? 0);
+  const bottoms = unit.messages.map((m) => m.el?.getBoundingClientRect().bottom ?? 0);
+  const top = Math.min(...tops);
+  const bottom = Math.max(...bottoms);
+  const height = bottom - top;
+  return bottom < centerY || (height > viewportHeight && top < centerY);
 }
 
 /** 渲染文本提取（= 用户全选该消息拿到的文本）：对元素建 Range 选区读

@@ -24,7 +24,7 @@ export function showCollectHint(text?: string): void {
     "font-family:system-ui,-apple-system,sans-serif",
     "box-shadow:0 4px 16px rgba(15,23,42,0.3)",
   ].join(";");
-  hint.textContent = text ?? "已锁定到底部：向上滚动 = 选中（变绿入库），向下滚动 = 取消；滚到顶部点「完成」";
+  hint.textContent = text ?? "已锁定到底部：向上滚动扫描，消息扫过中线即选中（变绿）；向下滚动取消；滚到顶部点「完成」";
   document.documentElement.appendChild(hint);
 }
 
@@ -37,4 +37,33 @@ export function updateCollectHint(text: string): void {
 export function hideCollectHint(): void {
   hint?.remove();
   hint = null;
+}
+
+// ============ 扫码线（视窗纵向中线的固定扫描线，采集期间可见） ============
+
+let scanline: HTMLDivElement | null = null;
+
+/** 显示扫码线（幂等）：消息扫过中线即选中（变绿入库），向下滚回中线以下取消 */
+export function showScanline(): void {
+  if (scanline) return;
+  scanline = document.createElement("div");
+  scanline.setAttribute("dailog-scanline", ""); // 可识别标记（测试/调试）
+  scanline.style.cssText = [
+    "position:fixed",
+    "left:0",
+    "right:0",
+    "top:50%",
+    "height:2px",
+    "z-index:2147483645", // 略低于提示条/FAB，高于页面内容
+    "pointer-events:none", // 不阻断交互
+    "background:linear-gradient(90deg,transparent,rgba(74,222,128,0.95) 15%,rgba(74,222,128,0.95) 85%,transparent)",
+    "box-shadow:0 0 10px rgba(74,222,128,0.9)",
+  ].join(";");
+  document.documentElement.appendChild(scanline);
+}
+
+/** 隐藏扫码线（幂等） */
+export function hideScanline(): void {
+  scanline?.remove();
+  scanline = null;
 }
