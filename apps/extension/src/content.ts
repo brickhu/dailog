@@ -114,6 +114,9 @@ const removalCooldown = new Map<string, number>();
 const REMOVAL_COOLDOWN_MS = 800;
 /** 滚动容器（滚回方向判定用；起点探测） */
 let scrollContainer: HTMLElement | null = null;
+/** 底部锁定是否稳定（稳定前不读取——防止起点不在底部时中间窗口先入库，
+ *  随后底部窗口前插导致顺序错乱） */
+let lockSettled = false;
 let lastScrollTop = 0;
 /** 单元最近一次渲染的底线 Y（消失移除判定：滚出顶部被回收时轮询读不到 bottom<0） */
 const lastBottomByUnit = new Map<string, number>();
@@ -186,6 +189,7 @@ function initConversationFab(): void {
     scrollContainer = null;
     lastScrollTop = 0;
     lastBottomByUnit.clear();
+    lockSettled = false;
     monitorUrl = location.href;
     monitorReadNodes = readNodes;
     showCollectHint();
@@ -210,6 +214,7 @@ function initConversationFab(): void {
       // 末尾光有问没答的不算单元；保证计数从 1 起步）
       setTimeout(() => {
         if (!monitoring) return;
+        lockSettled = true;
         void (async () => {
           await tickMonitor();
           if (!monitoring || !monitorReadNodes) return;
@@ -244,6 +249,7 @@ function initConversationFab(): void {
    *  （进入视窗 = 追加；完全滚出视窗上方 = 移除；滚出下方 = 保留）→ 选区框 */
   async function tickMonitor(): Promise<void> {
     if (!monitoring || !monitorReadNodes || tickRunning) return;
+    if (!lockSettled) return; // 底部锁定稳定前不读取
     if (location.href !== monitorUrl) {
       // SPA 导航跳走：自动取消本次采集
       cancelMonitorCollect();
@@ -438,7 +444,7 @@ function initConversationFab(): void {
 }
 
 /** 构建标识（每次打包更新——FAB 默认文案，验证扩展新版本是否成功加载） */
-const BUILD_TAG = "20260808-13";
+const BUILD_TAG = "20260808-14";
 
 // AI 平台页：采集 FAB（studio 域不再注入 content script——待入库提醒已移除）。
 // 初始化包保护：真实页面异常时 Console 输出 [dailog] 错误（可诊断），不静默失败
