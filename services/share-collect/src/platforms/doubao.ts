@@ -1,14 +1,30 @@
 // doubao 分享：SSR data-fn-args 内嵌 message_snapshot（HTML 即数据源，
 // API 层与 DOM 层合一——直连页面 HTML 解析内嵌快照）。
+// 海外数据中心 IP 直连被拒（海外访问受限）→ Web Unlocker 兜底（配了时）。
 
 import { httpGet } from "../fetch";
+import { fetchViaBrightdata } from "../unlocker";
 import type { CollectedDialogue } from "../types";
 
 export async function collectDoubaoShare(url: string): Promise<CollectedDialogue | null> {
   const shareId = url.match(/doubao\.com\/thread\/([^/?#]+)/)?.[1];
   if (!shareId) return null;
-  const res = await httpGet(url);
-  return parseDoubaoShare(res.body, shareId, url);
+  // 直连（本机/国内环境可用；数据中心 IP 被拒则落 unlocker）
+  try {
+    const res = await httpGet(url);
+    const d = parseDoubaoShare(res.body, shareId, url);
+    if (d) return d;
+  } catch {
+    /* 落 unlocker */
+  }
+  if (process.env.BRIGHTDATA_TOKEN) {
+    const u = await fetchViaBrightdata(url);
+    if (u.status === 200) {
+      const d = parseDoubaoShare(u.body, shareId, url);
+      if (d) return d;
+    }
+  }
+  return null;
 }
 
 /** HTML 属性值实体解码（&quot; &amp; &#x27; 等） */
