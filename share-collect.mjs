@@ -4,11 +4,15 @@
 // 输出：JSON dialogue（platform/conversationId/title/messages）或错误
 
 import { createRequire } from "node:module";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { readFileSync } from "node:fs";
 const require = createRequire(import.meta.url);
 const { chromium, request } = require("playwright");
 
 const PROFILE = process.env.DAILOG_PROFILE ?? "./poc-profile";
 const PROXY = (process.env.ALL_PROXY ?? "socks5://127.0.0.1:1081").replace("socks5h://", "socks5://");
+const execFileP = promisify(execFile);
 
 // ============ 各平台解析（Tier 1：直连公开接口） ============
 
@@ -68,7 +72,123 @@ async function tryFetchShare(url, reqCtx) {
   if (url.includes("chat.deepseek.com/share/")) return tryDeepSeekShareFetch(url, reqCtx);
   if (url.includes("chatgpt.com/share/")) return tryChatgptShareFetch(url, reqCtx);
   if (url.includes("doubao.com/thread/")) return tryDoubaoShareFetch(url, reqCtx);
+  if (url.includes("share.gemini.google/")) return tryGeminiShareFetch(url);
   return null;
+}
+
+// ---------- gemini 分享：batchexecute RPC（公开无 cookie） ----------
+// share.gemini.google/{shareId} 301 → gemini.google.com/share/{convId}?skid=...，
+// 对话数据在 _/BardChatUi/data/batchexecute?rpcids=ujx1Bf（POST f.req 带 convId）
+// 响应（playwright request context 会 Header overflow、node fetch 不支持
+// socks5 代理）→ 用 curl 传输。响应为多块流式（)]}' + 长度\nJSON 重复），
+// 每块是 ["wrb.fr","ujx1Bf",PAYLOAD_STRING,...]，payload 解码后：
+//   容器元素 = [ [conv_id, req_id], parent, USER_MSG, ASSISTANT_MSG, ... ]；
+//   USER_MSG[0] 为文本数组；ASSISTANT_MSG[0] 内 chunk[1] 为文本数组；
+//   尾部 meta 元素 [true, "标题", ..., [1, convId, "模型"], true]。
+
+/** curl 封装：走 socks5 代理、跟随重定向；body 落临时文件，stdout 只留最终 URL */
+async function curl(url, { postData, timeout = 30000 } = {}) {
+  const tmp = `/tmp/dailog-curl-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  const args = ["-s", "-L", "--max-time", String(Math.floor(timeout / 1000))];
+  if (PROXY) args.push("-x", PROXY.replace("socks5://", "socks5h://"));
+  args.push("-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36");
+  if (postData) {
+    args.push("-H", "Content-Type: application/x-www-form-urlencoded;charset=UTF-8", "-X", "POST", "--data-binary", postData);
+  }
+  args.push("-o", tmp, "-w", "%{url_effective}", url);
+  const { stdout } = await execFileP("curl", args, { maxBuffer: 64 * 1024 });
+  const body = readFileSync(tmp, "utf8");
+  return { body, finalUrl: stdout.trim() };
+}
+
+/** gemini batchexecute 响应解析：)]}' + \n\n 后的内容兼容两种格式——
+ *  1) 直接整个 JSON（无长度行）；2) 长度分块（<长度>\n<JSON> 重复，容错去尾）。
+ *  找到 ujx1Bf 块 → 返回 payload */
+function parseGeminiBatch(text) {
+  const head = text.indexOf("\n\n");
+  if (head < 0) return null;
+  const rest = text.slice(head + 2);
+  // 格式 1：整个剩余就是 JSON
+  try {
+    const arr = JSON.parse(rest);
+    if (Array.isArray(arr) && arr[0]?.[1] === "ujx1Bf") return JSON.parse(arr[0][2]);
+  } catch { /* 落长度分块格式 */ }
+  // 格式 2：长度分块
+  let pos = 0;
+  while (pos < rest.length) {
+    const nl = rest.indexOf("\n", pos);
+    if (nl < 0) break;
+    const len = Number(rest.slice(pos, nl));
+    const start = nl + 1;
+    const chunk = rest.slice(start, start + len);
+    let arr = null;
+    for (let cut = 0; cut <= 4; cut++) {
+      try { arr = JSON.parse(chunk.slice(0, chunk.length - cut)); break; } catch { /* 长度前缀误差 → 去尾重试 */ }
+    }
+    if (Array.isArray(arr) && arr[0]?.[1] === "ujx1Bf") return JSON.parse(arr[0][2]);
+    pos = start + len;
+  }
+  return null;
+}
+
+/** gemini payload → dialogue（轮次结构 + 尾部标题） */
+function parseGeminiPayload(payload, convId, url) {
+  const inner = payload?.[0]?.[1] ?? payload?.[1] ?? payload;
+  if (!Array.isArray(inner)) return null;
+  const messages = [];
+  // 标题在 payload[0][2]：[true, "标题", null, ..., [1, convId, "模型"], true]
+  let title = "Gemini 分享对话";
+  const meta = payload?.[0]?.[2];
+  if (Array.isArray(meta) && meta[0] === true && typeof meta[1] === "string" && meta[1].length > 0) title = meta[1];
+  for (const el of inner) {
+    if (!Array.isArray(el) || el.length < 4) continue;
+    // user：el[2][0] 文本数组
+    const userText = Array.isArray(el[2]?.[0]) ? el[2][0].filter((t) => typeof t === "string").join("\n\n").trim() : "";
+    // assistant：el[3][0] 内 chunk[1] 文本数组
+    let asstText = "";
+    const chunks = el[3]?.[0];
+    if (Array.isArray(chunks)) {
+      for (const chunk of chunks) {
+        if (Array.isArray(chunk) && Array.isArray(chunk[1])) {
+          asstText += chunk[1].filter((t) => typeof t === "string").join("\n\n") + "\n\n";
+        }
+      }
+      asstText = asstText.trim();
+    }
+    if (userText) messages.push({ role: "user", content: userText });
+    if (asstText) messages.push({ role: "assistant", content: asstText });
+  }
+  if (!messages.some((m) => m.role === "assistant")) return null;
+  return { platform: "gemini", conversationId: convId, title, url, messages };
+}
+
+/** gemini 分享：Tier 1（curl：301 跟随拿 convId → batchexecute RPC） */
+async function tryGeminiShareFetch(url) {
+  const shareId = url.match(/share\.gemini\.google\/([^/?#]+)/)?.[1];
+  if (!shareId) return null;
+  const dbg = (msg) => { if (process.env.DAILOG_DEBUG === "1") console.error("[gemini]", msg); };
+  try {
+    dbg("shareId=" + shareId);
+    // 1) 跟随重定向拿 convId
+    const { body, finalUrl } = await curl(`https://share.gemini.google/${shareId}`);
+    dbg("finalUrl=" + finalUrl.slice(0, 100) + " body=" + body.length);
+    const convId = (finalUrl || body).match(/gemini\.google\.com\/share\/([0-9A-Za-z]+)/)?.[1];
+    dbg("convId=" + convId);
+    if (!convId) return null;
+    // 2) batchexecute RPC（最简参数已验证可行）
+    const postData = `f.req=${encodeURIComponent(JSON.stringify([[["ujx1Bf", `[null,"${convId}",[4]]`, null, "generic"]]]))}`;
+    const { body: batchText } = await curl(`https://gemini.google.com/_/BardChatUi/data/batchexecute?rpcids=ujx1Bf`, { postData });
+    dbg("batch=" + batchText.length + " 含ujx1Bf=" + batchText.includes("ujx1Bf") + " 头=" + JSON.stringify(batchText.slice(0, 16)));
+    const payload = parseGeminiBatch(batchText);
+    dbg("payload=" + (payload ? "ok" : "null"));
+    if (!payload) return null;
+    const d = parseGeminiPayload(payload, convId, url);
+    dbg("dialogue=" + (d ? d.messages.length + "条" : "null"));
+    return d;
+  } catch (e) {
+    dbg(e?.message ?? String(e));
+    return null;
+  }
 }
 
 // ---------- doubao 分享：SSR data-fn-args 内嵌 message_snapshot ----------
