@@ -48,13 +48,17 @@ describe("groupIntoUnits（问答单元：user 起头，assistant 归属前一�
   });
 });
 
-describe("isCompleteUnit（问答单元完整性：必须问+答齐全）", () => {
+describe("isCompleteUnit（问答单元完整性：问和答都必须存在，消息不允许孤立）", () => {
   it("有问有答 → 完整", () => {
     const unit = { id: "u", messages: [mk("u1", 0, "user"), mk("a1", 100, "assistant")] };
     expect(isCompleteUnit(unit)).toBe(true);
   });
   it("光有问没有答（末尾未回答的追问）→ 不完整，不算问答单元", () => {
     const unit = { id: "u", messages: [mk("u1", 0, "user")] };
+    expect(isCompleteUnit(unit)).toBe(false);
+  });
+  it("光有答没有问（窗口切分读到的 assistant 片段）→ 不完整，孤立消息不允许", () => {
+    const unit = { id: "u", messages: [mk("a5", 0, "assistant")] };
     expect(isCompleteUnit(unit)).toBe(false);
   });
   it("一个问多个答（工具调用等）→ 完整", () => {
