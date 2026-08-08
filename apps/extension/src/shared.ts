@@ -21,6 +21,8 @@ export interface CollectedDialogue {
   duplicatesRemoved?: number;
   /** 滚动采集未到底（对话过长超出步数上限）——可能未采全，提示用户 */
   incomplete?: boolean;
+  /** 问答单元数（一问一答成对数；导入页展示） */
+  unitCount?: number;
 }
 
 export const PLATFORMS: readonly Platform[] = [
