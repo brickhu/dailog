@@ -112,11 +112,31 @@ let rangeUnits: QaUnit[] = [];
 /** 单元移除冷却时间戳——视口边界闪烁（移除后立即重新可见）防误重加 */
 const removalCooldown = new Map<string, number>();
 const REMOVAL_COOLDOWN_MS = 800;
+/** 滚动容器（滚回方向判定用；起点探测） */
+let scrollContainer: HTMLElement | null = null;
+let lastScrollTop = 0;
+/** 单元最近一次渲染的底线 Y（消失移除判定：滚出顶部被回收时轮询读不到 bottom<0） */
+const lastBottomByUnit = new Map<string, number>();
 let monitorIv: ReturnType<typeof setInterval> | undefined;
 let monitorUrl = "";
 let monitorReadNodes: (() => Promise<MessageNode[]>) | undefined;
 let confirmMode = false;
 let pendingDialogue: CollectedDialogue | null = null;
+
+/** 最小化滚动容器探测（滚回方向判定用）：优先 data-virtuoso-scroller，其次
+ *  消息祖先可滚容器，兜底页面级滚动元素 */
+function findScrollContainer(root: ParentNode, from?: Element | null): HTMLElement | null {
+  const scroller = root.querySelector?.("[data-virtuoso-scroller]");
+  if (scroller instanceof HTMLElement) return scroller;
+  let el: Element | null = from ?? null;
+  while (el) {
+    const h = el as HTMLElement;
+    if (h.scrollHeight > h.clientHeight + 4) return h;
+    el = el.parentElement;
+  }
+  const se = root.ownerDocument?.scrollingElement;
+  return se instanceof HTMLElement && se.scrollHeight > se.clientHeight + 4 ? se : null;
+}
 
 // 模块级：FAB「已采集」状态刷新入口（initConversationFab 内赋值；
 // background 缓存变化广播时调用——立即恢复「采集对话」，无需等轮询）
@@ -163,6 +183,9 @@ function initConversationFab(): void {
     monitoring = true;
     rangeUnits = [];
     removalCooldown.clear();
+    scrollContainer = null;
+    lastScrollTop = 0;
+    lastBottomByUnit.clear();
     monitorUrl = location.href;
     monitorReadNodes = readNodes;
     showCollectHint();
@@ -233,8 +256,17 @@ function initConversationFab(): void {
       if (!monitoring) return; // await 期间被放弃/完成
       const viewportHeight = window.innerHeight;
       const units = groupIntoUnits(nodes);
-      let changed = false;
+      const viewportHeight = window.innerHeight;
       const now = Date.now();
+      // 滚动方向（滚回判定）：容器 scrollTop 增大 = 向下滚
+      if (!scrollContainer) scrollContainer = findScrollContainer(document, nodes[0]?.el);
+      const st = scrollContainer?.scrollTop ?? 0;
+      const scrolledDown = st > lastScrollTop + 2;
+      lastScrollTop = st;
+      // 记录本轮渲染单元的底线（消失移除判定用）
+      for (const unit of units) lastBottomByUnit.set(unit.id, unitRect(unit).bottom);
+      let changed = false;
+      const newUnits: QaUnit[] = [];
       for (const unit of units) {
         const { top, bottom } = unitRect(unit);
         const visible = bottom > 0 && top < viewportHeight;
@@ -248,9 +280,9 @@ function initConversationFab(): void {
             changed = true;
           }
         } else if (unit.messages[0]?.role === "user" && visible && isCompleteUnit(unit)) {
-          // 完整问答单元进入视窗 → 追加（冷却期内跳过——视口边界闪烁防误重加）
+          // 完整问答单元进入视窗 → 收集（冷却期内跳过——视口边界闪烁防误重加）
           if (now - (removalCooldown.get(unit.id) ?? 0) >= REMOVAL_COOLDOWN_MS) {
-            rangeUnits.push({ id: unit.id, messages: [...unit.messages] });
+            newUnits.push({ id: unit.id, messages: [...unit.messages] });
             changed = true;
           }
         } else if (unit.messages[0]?.role === "assistant") {
@@ -261,7 +293,25 @@ function initConversationFab(): void {
             mergeUnitMembers(rangeUnits[parentIdx], unit);
             if (bottom < 0) {
               rangeUnits.splice(parentIdx, 1);
-              removalCooldown.set(rangeUnits[parentIdx]?.id ?? key, now);
+              removalCooldown.set(key, now);
+              changed = true;
+            }
+          }
+        }
+      }
+      // 新单元前插（往上滚进来的单元一定比已选单元更早——对话顺序 顶→底）
+      if (newUnits.length > 0) rangeUnits.unshift(...newUnits);
+      // 消失移除（claude Virtuoso 滚出顶部瞬间回收元素，轮询读不到 bottom<0）：
+      // 数组内单元本轮未渲染 + 滚动方向向下 + 上次底线还在视口内 → 已滚出顶部
+      if (scrolledDown) {
+        for (const u of [...rangeUnits]) {
+          if (units.some((x) => x.id === u.id)) continue; // 本轮渲染中（上面已处理）
+          const lb = lastBottomByUnit.get(u.id) ?? viewportHeight + 1;
+          if (lb <= viewportHeight && now - (removalCooldown.get(u.id) ?? 0) >= 0) {
+            const i = rangeUnits.indexOf(u);
+            if (i >= 0) {
+              rangeUnits.splice(i, 1);
+              removalCooldown.set(u.id, now);
               changed = true;
             }
           }
@@ -389,7 +439,7 @@ function initConversationFab(): void {
 }
 
 /** 构建标识（每次打包更新——FAB 默认文案，验证扩展新版本是否成功加载） */
-const BUILD_TAG = "20260808-12";
+const BUILD_TAG = "20260808-13";
 
 // AI 平台页：采集 FAB（studio 域不再注入 content script——待入库提醒已移除）。
 // 初始化包保护：真实页面异常时 Console 输出 [dailog] 错误（可诊断），不静默失败
