@@ -95,7 +95,7 @@ export type GetRulesResult = { ok: true; rules: CollectRules } | { ok: false; er
 
 /** 缓存结果（cacheCollect）：成功返回 collectId 与确认入库页地址 */
 export type CacheCollectResult =
-  | { ok: true; collectId: string; appUrl: string }
+  | { ok: true; collectId: string; appUrl: string; messageCount: number }
   | { ok: false; error: string };
 
 /** 缓存条目摘要（列表展示用）；appBase = 条目所属确认入库页基址（按域隔离 dev/主网） */

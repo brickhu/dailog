@@ -102,26 +102,14 @@ async function collectPage(): Promise<CollectedDialogue | null> {
   return collectFromDocument({ root: document, url: location.href, getRules });
 }
 
-// 扫码采集状态（用户滚动驱动渲染，扩展只做观察——IntersectionObserver 以视窗
-// 为相交根：问答单元进入视窗（相交）= 追加；离开视窗上方（向下滚过）= 移除；
-// 离开视窗下方（向上滚过）= 保留。50vh 扫码线为选择前沿的视觉标记）：
+// 扫码采集状态（用户滚动驱动渲染，扩展只做观察——每轮读取以**新鲜 rect**
+// 判定：问答单元进入视窗 = 追加；完全滚出视窗上方（向下滚过）= 移除；滚出
+// 视窗下方（向上滚过）= 保留。单一轮询机制，无元素映射——
+// 虚拟列表回收复用元素不会污染判定（claude 4-5-4 横跳的根治））：
 // 采集态（monitoring）→ 提示条 + 扫码线 + FAB「完成 (N)」+ 放弃；完成 → 确认态（confirmMode）
 let monitoring = false;
 let rangeUnits: QaUnit[] = [];
-let zoneObserver: IntersectionObserver | undefined;
-/** 已观察的消息元素（虚拟列表回收后解除观察，防误触发） */
-const observedEls = new Set<Element>();
-/** 元素 → 所属单元 id（片段映射到数组内父单元） */
-const elToUnit = new Map<Element, string>();
-/** 元素 → 最近一轮读取分配的单元 id（新鲜度校验——虚拟列表回收复用元素时，
- *  旧映射会触发误事件，claude 计数 4-5-4 横跳的根源） */
-const elToReadUnit = new Map<Element, string>();
-/** 元素最近一次相交状态（离开处理只对之前相交过的元素生效） */
-const wasIntersecting = new Map<Element, boolean>();
-/** 最近一轮读取的单元快照（IO 回调完整性检查用） */
-const lastUnitsById = new Map<string, QaUnit>();
-/** 单元移除冷却时间戳——虚拟列表边界闪烁（移除后立即重新进入视口）会触发
- *  误重加（claude 计数 4-5-4 横跳）：冷却期内不重加 */
+/** 单元移除冷却时间戳——视口边界闪烁（移除后立即重新可见）防误重加 */
 const removalCooldown = new Map<string, number>();
 const REMOVAL_COOLDOWN_MS = 800;
 let monitorIv: ReturnType<typeof setInterval> | undefined;
@@ -158,6 +146,7 @@ function initConversationFab(): void {
       type: MSG_CACHE_COLLECT,
       dialogue,
     })) as CacheCollectResult;
+    console.info(`[dailog] cache send msgs=${dialogue.messages.length} recv=${res.ok ? res.messageCount : res.error}`);
     fabRef.showToast(
       res.ok ? "已采集 ✓ 请在打开的页面确认入库" : `采集失败：${res.error ?? "未知错误"}`,
       res.ok ? "success" : "error",
@@ -173,8 +162,7 @@ function initConversationFab(): void {
     }
     monitoring = true;
     rangeUnits = [];
-    disposeZoneObserver();
-    ensureZoneObserver();
+    removalCooldown.clear();
     monitorUrl = location.href;
     monitorReadNodes = readNodes;
     showCollectHint();
@@ -219,57 +207,6 @@ function initConversationFab(): void {
     monitorIv = setInterval(() => void tickMonitor(), 300);
   }
 
-  /** 创建 IntersectionObserver（视窗为相交根）：进入视窗 = 相交 = 追加；
-   *  离开视窗上方（向下滚过）= 移除；离开视窗下方（向上滚过）= 保留 */
-  function ensureZoneObserver(): void {
-    if (zoneObserver || typeof IntersectionObserver === "undefined") return;
-    zoneObserver = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        const unitId = elToUnit.get(entry.target);
-        if (!unitId) continue;
-        // 新鲜度校验：元素若已被虚拟列表回收复用（当前读取分配的单元 ≠ 映射），
-        // 事件属于新消息——跳过，防误追加/误移除
-        if (elToReadUnit.get(entry.target) !== unitId) continue;
-        const prev = wasIntersecting.get(entry.target) ?? false;
-        wasIntersecting.set(entry.target, entry.isIntersecting);
-        if (entry.isIntersecting) {
-          // 进入视窗（相交）→ 追加（完整问答单元；快照可能比数组单元更新）
-          if (
-            !rangeUnits.some((u) => u.id === unitId) &&
-            Date.now() - (removalCooldown.get(unitId) ?? 0) >= REMOVAL_COOLDOWN_MS
-          ) {
-            const unit = lastUnitsById.get(unitId) ?? rangeUnits.find((u) => u.id === unitId);
-            if (unit && isCompleteUnit(unit)) {
-              // 推入克隆（防与读取快照共享对象被后续操作改动）
-              rangeUnits.push({ id: unit.id, messages: [...unit.messages] });
-              fab.updateCollectCount(rangeUnits.length);
-            }
-          }
-        } else if (prev && entry.boundingClientRect.bottom <= 0) {
-          // 离开视窗上方（向下滚过）→ 移除（虚拟列表回收前 IO 必触发，不遗漏）
-          const idx = rangeUnits.findIndex((u) => u.id === unitId);
-          if (idx >= 0) {
-            rangeUnits.splice(idx, 1);
-            removalCooldown.set(unitId, Date.now()); // 记录移除时间，防闪烁重加
-            fab.updateCollectCount(rangeUnits.length);
-          }
-        }
-      }
-    });
-  }
-
-  /** 销毁观察器与全部映射（采集结束/取消/重开） */
-  function disposeZoneObserver(): void {
-    zoneObserver?.disconnect();
-    zoneObserver = undefined;
-    observedEls.clear();
-    elToUnit.clear();
-    elToReadUnit.clear();
-    wasIntersecting.clear();
-    lastUnitsById.clear();
-    removalCooldown.clear();
-  }
-
   let scrollDebounce: ReturnType<typeof setTimeout> | undefined;
   let tickRunning = false;
 
@@ -280,8 +217,8 @@ function initConversationFab(): void {
     scrollDebounce = setTimeout(() => void tickMonitor(), 150);
   }
 
-  /** 单轮协调：读当前渲染消息 → 分组问答单元 → 观察新元素（IO 驱动追加/移除）
-   *  → 刷新已选单元成员（el 新鲜）→ 兜底 ADD → 选区框渲染 */
+  /** 单轮协调：读当前渲染消息 → 分组问答单元 → 新鲜 rect 可见性判定
+   *  （进入视窗 = 追加；完全滚出视窗上方 = 移除；滚出下方 = 保留）→ 选区框 */
   async function tickMonitor(): Promise<void> {
     if (!monitoring || !monitorReadNodes || tickRunning) return;
     if (location.href !== monitorUrl) {
@@ -294,67 +231,49 @@ function initConversationFab(): void {
     try {
       const nodes = await monitorReadNodes();
       if (!monitoring) return; // await 期间被放弃/完成
+      const viewportHeight = window.innerHeight;
       const units = groupIntoUnits(nodes);
-      // 1) 单元快照（IO 回调完整性检查用）+ 元素观察/映射
-      lastUnitsById.clear();
-      for (const u of units) lastUnitsById.set(u.id, u);
-      const seen = new Set<Element>();
-      for (const unit of units) {
-        // 片段（assistant 开头）映射到数组内父单元，保证 IO 回调命中同一单元
-        const mapId =
-          unit.messages[0]?.role === "user"
-            ? unit.id
-            : (rangeUnits.find((u) => u.messages.some((m) => messageKey(m) === messageKey(unit.messages[0])))?.id ??
-              unit.id);
-        for (const m of unit.messages) {
-          if (!m.el) continue;
-          seen.add(m.el);
-          elToUnit.set(m.el, mapId);
-          elToReadUnit.set(m.el, mapId);
-          if (!observedEls.has(m.el) && zoneObserver) {
-            observedEls.add(m.el);
-            zoneObserver.observe(m.el);
-          }
-        }
-      }
-      // 2) 清理：不在当前渲染窗口的元素解除观察（虚拟列表回收的元素防误触发）
-      for (const el of [...observedEls]) {
-        if (!seen.has(el)) {
-          zoneObserver?.unobserve(el);
-          observedEls.delete(el);
-          elToUnit.delete(el);
-          elToReadUnit.delete(el);
-          wasIntersecting.delete(el);
-        }
-      }
-      // 3) 刷新已选单元成员（el 新鲜——选区框几何）+ 兜底 ADD：
-      //    读取有 300ms 延迟，旧 rect 会把刚被 IO 移除的单元误加回——冷却期内
-      //    跳过（7→6→7 弹跳修复）；冷却期外真实可见（用户重新滚回）则补加
       let changed = false;
+      const now = Date.now();
       for (const unit of units) {
+        const { top, bottom } = unitRect(unit);
+        const visible = bottom > 0 && top < viewportHeight;
         const idx = rangeUnits.findIndex((u) => u.id === unit.id);
         if (idx >= 0) {
+          // 已选单元：合并成员（el 新鲜）→ 完全滚出视窗上方（向下滚过）→ 移除
           mergeUnitMembers(rangeUnits[idx], unit);
-        } else if (unit.messages[0]?.role === "user" && isCompleteUnit(unit)) {
-          const { top, bottom } = unitRect(unit);
-          if (
-            bottom > 0 &&
-            top < window.innerHeight &&
-            Date.now() - (removalCooldown.get(unit.id) ?? 0) >= REMOVAL_COOLDOWN_MS
-          ) {
+          if (bottom < 0) {
+            rangeUnits.splice(idx, 1);
+            removalCooldown.set(unit.id, now);
+            changed = true;
+          }
+        } else if (unit.messages[0]?.role === "user" && visible && isCompleteUnit(unit)) {
+          // 完整问答单元进入视窗 → 追加（冷却期内跳过——视口边界闪烁防误重加）
+          if (now - (removalCooldown.get(unit.id) ?? 0) >= REMOVAL_COOLDOWN_MS) {
             rangeUnits.push({ id: unit.id, messages: [...unit.messages] });
             changed = true;
+          }
+        } else if (unit.messages[0]?.role === "assistant") {
+          // assistant 片段（窗口切分）：匹配数组内父单元——合并成员，滚出上方则移除
+          const key = messageKey(unit.messages[0]);
+          const parentIdx = rangeUnits.findIndex((u) => u.messages.some((m) => messageKey(m) === key));
+          if (parentIdx >= 0) {
+            mergeUnitMembers(rangeUnits[parentIdx], unit);
+            if (bottom < 0) {
+              rangeUnits.splice(parentIdx, 1);
+              removalCooldown.set(rangeUnits[parentIdx]?.id ?? key, now);
+              changed = true;
+            }
           }
         }
       }
       // 清理过期冷却（防 map 无限增长）
-      const now = Date.now();
       for (const [id, at] of removalCooldown) {
         if (now - at >= REMOVAL_COOLDOWN_MS) removalCooldown.delete(id);
       }
-      // 4) 选区框渲染（问答单元容器 outline）
+      // 选区框渲染（问答单元容器 outline）+ 计数
       renderUnitBoxes(rangeUnits);
-      if (changed) fab.updateCollectCount(rangeUnits.length);
+      if (changed) fab.updateCollectCount(rangeUnits.length); // 问答单元数
     } catch {
       // 单轮读取失败忽略，下一轮重试
     } finally {
@@ -366,7 +285,7 @@ function initConversationFab(): void {
   function cancelMonitorCollect(): void {
     stopMonitorLoop();
     monitoring = false;
-    disposeZoneObserver();
+    removalCooldown.clear();
     hideCollectHint();
     hideScanline();
     clearUnitBoxes();
@@ -390,7 +309,7 @@ function initConversationFab(): void {
   async function finishMonitorCollect(): Promise<void> {
     stopMonitorLoop();
     monitoring = false;
-    disposeZoneObserver();
+    removalCooldown.clear();
     hideCollectHint();
     hideScanline();
     clearUnitBoxes();
@@ -470,7 +389,7 @@ function initConversationFab(): void {
 }
 
 /** 构建标识（每次打包更新——FAB 默认文案，验证扩展新版本是否成功加载） */
-const BUILD_TAG = "20260808-11";
+const BUILD_TAG = "20260808-12";
 
 // AI 平台页：采集 FAB（studio 域不再注入 content script——待入库提醒已移除）。
 // 初始化包保护：真实页面异常时 Console 输出 [dailog] 错误（可诊断），不静默失败

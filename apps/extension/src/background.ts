@@ -119,7 +119,7 @@ export async function cacheCollect(dialogue: CollectedDialogue): Promise<CacheCo
   const appUrl = `${appBase}/import?collectId=${collectId}`;
   const tab = await chrome.tabs.create({ url: appUrl });
   if (tab.id) pendingTabs.set(tab.id, collectId);
-  return { ok: true, collectId, appUrl };
+  return { ok: true, collectId, appUrl, messageCount: dialogue.messages.length };
 }
 
 /** 读取缓存条目摘要（按 createdAt 倒序；appBase 过滤——不传按当前生效基址。
