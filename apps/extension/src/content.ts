@@ -444,7 +444,7 @@ try {
 }
 
 /** 构建标识（每次打包更新——左上角徽标，便于验证扩展新版本是否成功加载） */
-const BUILD_TAG = "dailog-20260808-6";
+const BUILD_TAG = "dailog-20260808-7";
 
 /** 页面左上角构建徽标（小号、半透明、不阻断交互；验证加载用） */
 function showBuildBadge(): void {
@@ -455,18 +455,18 @@ function showBuildBadge(): void {
     "top:6px",
     "left:6px",
     "z-index:2147483646",
-    "width:10vw", // 固定容器宽度（清晰可读）
-    "text-align:center",
+    "width:160px",
+    "height:40px",
+    "display:flex",
+    "align-items:center",
+    "justify-content:center",
     "box-sizing:border-box",
-    "padding:4px 0",
     "border-radius:6px",
     "background:rgba(220,38,38,0.92)",
     "color:#fff",
-    "font-size:16px",
-    "line-height:1.5",
+    "font-size:12px",
     "font-family:system-ui,-apple-system,sans-serif",
     "pointer-events:none",
-    "letter-spacing:0.3px",
   ].join(";");
   badge.textContent = BUILD_TAG;
   document.documentElement.appendChild(badge);
