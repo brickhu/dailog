@@ -39,13 +39,13 @@
     (this as XMLHttpRequest & { __dailogUrl?: string }).__dailogUrl = String(url);
     return ox.apply(this, [method, url]);
   };
-  XMLHttpRequest.prototype.send = function (this: XMLHttpRequest, ...args: unknown[]) {
+  XMLHttpRequest.prototype.send = function (this: XMLHttpRequest, ...args: Parameters<typeof os>) {
     this.addEventListener("load", () => {
       try {
         const j: unknown = JSON.parse(this.responseText);
         if (looksLike(j)) report((this as XMLHttpRequest & { __dailogUrl?: string }).__dailogUrl ?? "", j);
       } catch (e) { /* 非 JSON 跳过 */ }
     });
-    return os.apply(this, args as [BodyInit?]);
+    return os.apply(this, args);
   };
 })();
