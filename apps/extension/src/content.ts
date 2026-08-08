@@ -24,6 +24,7 @@ import { showCollectHint, hideCollectHint, showScanline, hideScanline } from "./
 import { renderUnitBoxes, clearUnitBoxes } from "./content/unit-boxes";
 import { groupIntoUnits, isCompleteUnit, unitRect, messageKey, mergeUnitMembers, type MessageNode, type QaUnit } from "./content/core";
 import { findOrgIdFromPage, fetchClaudeConversation } from "./content/claude-api";
+import { fetchChatgptConversation } from "./content/chatgpt-api";
 
 /** 平台消息读取：本地专有解析器优先（用户滚动驱动渲染，轮询读当前渲染出的消息）；
  *  本地为空（站点 DOM 改版）→ 远程规则选择器兜底；本地缺助手回复（claude 旧
@@ -179,17 +180,27 @@ function initConversationFab(): void {
     );
   }
 
-  /** 开始采集：claude 对话页优先走官方 API（免滚动秒级全量）——成功直接进确认态；
-   *  失败（未登录/接口变化/非 claude）回退 DOM 扫码采集 */
+  /** 开始采集：优先走平台官方 API（免滚动秒级全量）——成功直接进确认态；
+   *  失败（未登录/接口变化/未适配平台）回退 DOM 扫码采集 */
   async function startCollect(): Promise<void> {
-    if (location.hostname === "claude.ai") {
-      const apiDialogue = await tryClaudeApiCollect();
-      if (apiDialogue) {
-        enterConfirm(apiDialogue, apiDialogue.messages.filter((m) => m.role === "user").length);
-        return;
-      }
+    const apiDialogue = await tryApiCollect();
+    if (apiDialogue) {
+      enterConfirm(apiDialogue, apiDialogue.messages.filter((m) => m.role === "user").length);
+      return;
     }
     startMonitorCollect();
+  }
+
+  /** 平台 API 采集分发：按 hostname 走各平台官方对话详情接口 */
+  async function tryApiCollect(): Promise<CollectedDialogue | null> {
+    switch (location.hostname) {
+      case "claude.ai":
+        return tryClaudeApiCollect();
+      case "chatgpt.com":
+        return tryChatgptApiCollect();
+      default:
+        return null; // 未适配平台：回退 DOM
+    }
   }
 
   /** claude 官方 API 采集：当前对话 uuid + org id（资源时序）→ 详情接口 */
@@ -200,6 +211,15 @@ function initConversationFab(): void {
     if (!orgId) return null;
     const dialogue = await fetchClaudeConversation(orgId, m[1]);
     if (dialogue) console.info(`[dailog] claude-api collected msgs=${dialogue.messages.length} (${dialogue.title})`);
+    return dialogue;
+  }
+
+  /** chatgpt 官方 API 采集：URL /c/{id} → 详情接口（mapping 图遍历） */
+  async function tryChatgptApiCollect(): Promise<CollectedDialogue | null> {
+    const m = location.pathname.match(/\/c\/([0-9a-f-]+)/);
+    if (!m) return null;
+    const dialogue = await fetchChatgptConversation(m[1]);
+    if (dialogue) console.info(`[dailog] chatgpt-api collected msgs=${dialogue.messages.length} (${dialogue.title})`);
     return dialogue;
   }
 
@@ -509,7 +529,7 @@ function initConversationFab(): void {
 }
 
 /** 构建标识（每次打包更新——FAB 默认文案，验证扩展新版本是否成功加载） */
-const BUILD_TAG = "20260808-23";
+const BUILD_TAG = "20260808-24";
 
 // AI 平台页：采集 FAB（studio 域不再注入 content script——待入库提醒已移除）。
 // 初始化包保护：真实页面异常时 Console 输出 [dailog] 错误（可诊断），不静默失败
