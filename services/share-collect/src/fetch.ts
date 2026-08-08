@@ -81,7 +81,7 @@ export async function httpGetViaBrightdataProxy(targetUrl: string): Promise<Http
   const options: RequestOptions = {
     method: "GET",
     headers: { "user-agent": UA, accept: "application/json, text/html, */*" },
-    dispatcher: new ProxyAgent(proxyUrl),
+    ...{ dispatcher: new ProxyAgent(proxyUrl) },
     headersTimeout: 60000,
     bodyTimeout: 60000,
   };
