@@ -22,7 +22,7 @@ import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback, applyRuleMerge } from "./content/read-fallback";
 import { showCollectHint, hideCollectHint, showScanline, hideScanline } from "./content/collect-hint";
 import { highlightNodes, clearHighlight, unhighlightNodes } from "./content/highlight";
-import { groupIntoUnits, unitRect, unitVisibility, messageKey, type MessageNode, type QaUnit } from "./content/core";
+import { groupIntoUnits, isCompleteUnit, unitRect, unitVisibility, messageKey, type MessageNode, type QaUnit } from "./content/core";
 
 /** 平台消息读取：本地专有解析器优先（用户滚动驱动渲染，轮询读当前渲染出的消息）；
  *  本地为空（站点 DOM 改版）→ 远程规则选择器兜底；本地缺助手回复（claude 旧
@@ -175,6 +175,22 @@ function initConversationFab(): void {
           }
         }
       }
+      // 锁定稳定后：完整协调一次 + 默认选中最后一个完整问答单元（最新一轮问答；
+      // 末尾光有问没答的不算单元；保证计数从 1 起步）
+      setTimeout(() => {
+        if (!monitoring) return;
+        void (async () => {
+          await tickMonitor();
+          if (!monitoring || !monitorReadNodes) return;
+          const bottom = await monitorReadNodes();
+          if (!monitoring) return;
+          const lastComplete = groupIntoUnits(bottom).filter(isCompleteUnit).pop();
+          if (lastComplete && !rangeUnits.some((u) => u.id === lastComplete.id)) {
+            rangeUnits.push(lastComplete);
+            fab.updateCollectCount(rangeUnits.length);
+          }
+        })();
+      }, 200);
     });
     // 滚动事件驱动即时读取（用户滚动快于 300ms 轮询时，窗口间隙不丢消息）；
     // 滚动停止后补读一次（虚拟列表先渲染骨架后渲染内容，稳定后内容才完整）
@@ -221,8 +237,8 @@ function initConversationFab(): void {
             rangeUnits.splice(idx, 1);
             changed = true;
           }
-        } else if (unit.messages[0]?.role === "user" && vis === "visible") {
-          // 完整单元（user 开头）进入视窗 → 选中追加
+        } else if (unit.messages[0]?.role === "user" && vis === "visible" && isCompleteUnit(unit)) {
+          // 完整问答单元（有问有答）进入视窗 → 选中追加
           rangeUnits.push(unit);
           changed = true;
         } else if (unit.messages[0]?.role === "assistant") {
@@ -240,17 +256,12 @@ function initConversationFab(): void {
         rangeUnits.some((u) => u.messages.some((m) => messageKey(m) === messageKey(n)));
       highlightNodes(nodes.filter(inRange));
       unhighlightNodes(nodes.filter((n) => !inRange(n)));
-      if (changed) fab.updateCollectCount(totalMessages());
+      if (changed) fab.updateCollectCount(rangeUnits.length); // 问答单元数
     } catch {
       // 单轮读取失败忽略，下一轮重试
     } finally {
       tickRunning = false;
     }
-  }
-
-  /** 已选单元内的消息总数（FAB 计数与导入条数一致） */
-  function totalMessages(): number {
-    return rangeUnits.reduce((s, u) => s + u.messages.length, 0);
   }
 
   /** 放弃采集（放弃按钮 / SPA 跳走）：清理状态与 UI */
@@ -276,13 +287,14 @@ function initConversationFab(): void {
     document.removeEventListener("scroll", onUserScroll, { capture: true, passive: true } as EventListenerOptions);
   }
 
-  /** 完成采集：组装对话 → 进入确认态（FAB「确认导入 (N)」+ 放弃） */
+  /** 完成采集：组装对话 → 进入确认态（FAB「确认导入 (N 个问答)」+ 放弃） */
   async function finishMonitorCollect(): Promise<void> {
     stopMonitorLoop();
     monitoring = false;
     hideCollectHint();
     hideScanline();
     clearHighlight();
+    const unitCount = rangeUnits.length;
     const nodes = rangeUnits.flatMap((u) => u.messages);
     try {
       const dialogue = await buildManualDialogue({ root: document, url: location.href, getRules }, nodes);
@@ -293,13 +305,13 @@ function initConversationFab(): void {
       }
       confirmMode = true;
       pendingDialogue = dialogue;
-      fab.setConfirm(true, dialogue.messages.length, () => {
+      fab.setConfirm(true, unitCount, () => {
         confirmMode = false;
         pendingDialogue = null;
         fab.showToast("已取消采集", "success");
         void updateCollectedState();
       });
-      fab.showToast(`已采集 ${dialogue.messages.length} 条，点击「确认导入」入库`, "success");
+      fab.showToast(`已采集 ${unitCount} 个问答单元，点击「确认导入」入库`, "success");
     } catch (e) {
       fab.showToast(`采集失败：${e instanceof Error ? e.message : e}`, "error");
       void updateCollectedState();

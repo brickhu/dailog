@@ -74,6 +74,12 @@ export function groupIntoUnits(nodes: MessageNode[]): QaUnit[] {
   return units;
 }
 
+/** 问答单元完整性：必须同时有问有答——光有问没有答的不算问答单元
+ *  （末尾未回答的追问 / 流式生成中的最后一条不计入） */
+export function isCompleteUnit(unit: QaUnit): boolean {
+  return unit.messages.some((m) => m.role === "assistant");
+}
+
 /** 问答单元的当前视口几何（成员消息 rect 的并集；虚拟列表回收的元素 rect 归零，
  *  由仍渲染的成员决定——向下滚时单元重新渲染，几何保持新鲜） */
 export function unitRect(unit: QaUnit): { top: number; bottom: number } {

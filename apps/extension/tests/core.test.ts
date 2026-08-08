@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dedupeSort, groupIntoUnits, messageKey, unitRect, unitVisibility, type MessageNode } from "../src/content/core";
+import { dedupeSort, groupIntoUnits, isCompleteUnit, messageKey, unitRect, unitVisibility, type MessageNode } from "../src/content/core";
 
 const mk = (id: string, offsetTop: number, role: MessageNode["role"]): MessageNode =>
   ({ id, offsetTop, role, content: `${id}-content` });
@@ -45,6 +45,21 @@ describe("groupIntoUnits（问答单元：user 起头，assistant 归属前一�
     expect(units.length).toBe(2);
     expect(units[0].messages.map((n) => n.id)).toEqual(["a5"]);
     expect(units[1].messages.map((n) => n.id)).toEqual(["u6", "a6"]);
+  });
+});
+
+describe("isCompleteUnit（问答单元完整性：必须问+答齐全）", () => {
+  it("有问有答 → 完整", () => {
+    const unit = { id: "u", messages: [mk("u1", 0, "user"), mk("a1", 100, "assistant")] };
+    expect(isCompleteUnit(unit)).toBe(true);
+  });
+  it("光有问没有答（末尾未回答的追问）→ 不完整，不算问答单元", () => {
+    const unit = { id: "u", messages: [mk("u1", 0, "user")] };
+    expect(isCompleteUnit(unit)).toBe(false);
+  });
+  it("一个问多个答（工具调用等）→ 完整", () => {
+    const unit = { id: "u", messages: [mk("u1", 0, "user"), mk("a1", 100, "assistant"), mk("a2", 200, "assistant")] };
+    expect(isCompleteUnit(unit)).toBe(true);
   });
 });
 
