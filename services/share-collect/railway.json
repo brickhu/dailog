@@ -1,10 +1,11 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS"
+    "builder": "NIXPACKS",
+    "buildCommand": "corepack enable && pnpm install --filter @dailogues/share-collect"
   },
   "deploy": {
-    "startCommand": "pnpm start",
+    "startCommand": "npx tsx src/index.ts",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
   }
