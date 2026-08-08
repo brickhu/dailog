@@ -8,8 +8,9 @@
   win.__dailogSniff = true;
 
   const looksLike = (j: unknown): boolean =>
-    !!j && typeof j === "object" &&
-    ((j as { mapping?: unknown }).mapping && typeof (j as { mapping?: unknown }).mapping === "object" ||
+    !!j &&
+    typeof j === "object" &&
+    !!((j as { mapping?: unknown }).mapping && typeof (j as { mapping?: unknown }).mapping === "object" ||
       Array.isArray((j as { chat_messages?: unknown }).chat_messages) ||
       Array.isArray((j as { messages?: unknown }).messages));
 
@@ -34,7 +35,7 @@
   }
 
   const ox = XMLHttpRequest.prototype.open as (this: XMLHttpRequest, method: string, url: string | URL) => void;
-  const os = XMLHttpRequest.prototype.send;
+  const os = XMLHttpRequest.prototype.send as unknown as (...args: unknown[]) => void;
   XMLHttpRequest.prototype.open = function (this: XMLHttpRequest, method: string, url: string | URL) {
     (this as XMLHttpRequest & { __dailogUrl?: string }).__dailogUrl = String(url);
     return ox.call(this, method, url);
