@@ -74,16 +74,23 @@ export function groupIntoUnits(nodes: MessageNode[]): QaUnit[] {
   return units;
 }
 
-/** 扫码线选中判定：视窗纵向中线的固定扫描线，内容向上移动——
- *  单元底边扫过中线（底边 Y < 中线）即选中；超视口高的单元（底边永远无法
- *  越过中线）→ 顶边扫过中线即选中。向下滚动底边回到中线以下 = 取消 */
-export function isUnitSelected(unit: QaUnit, centerY: number, viewportHeight: number): boolean {
+/** 问答单元的当前视口几何（成员消息 rect 的并集；虚拟列表回收的元素 rect 归零，
+ *  由仍渲染的成员决定——向下滚时单元重新渲染，几何保持新鲜） */
+export function unitRect(unit: QaUnit): { top: number; bottom: number } {
   const tops = unit.messages.map((m) => m.el?.getBoundingClientRect().top ?? 0);
   const bottoms = unit.messages.map((m) => m.el?.getBoundingClientRect().bottom ?? 0);
-  const top = Math.min(...tops);
-  const bottom = Math.max(...bottoms);
-  const height = bottom - top;
-  return bottom < centerY || (height > viewportHeight && top < centerY);
+  return { top: Math.min(...tops), bottom: Math.max(...bottoms) };
+}
+
+/** 扫码采集的视窗可见性判定（方向修正：向上滚 = 内容在视窗中下移，消息进入
+ *  视窗即选中；完全滚出视窗上方 = 向下滚滚过 = 取消；滚出视窗下方 = 向上滚
+ *  滚过 = 保留——到顶时全部保留） */
+export type UnitVisibility = "visible" | "above" | "below";
+
+export function unitVisibility(top: number, bottom: number, viewportHeight: number): UnitVisibility {
+  if (bottom < 0) return "above"; // 完全滚出视窗上方（向下滚取消）
+  if (top >= viewportHeight) return "below"; // 完全滚出视窗下方（向上滚保留）
+  return "visible";
 }
 
 /** 渲染文本提取（= 用户全选该消息拿到的文本）：对元素建 Range 选区读

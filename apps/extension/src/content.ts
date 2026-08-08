@@ -22,7 +22,7 @@ import { isConversationPage } from "./content/conversation-page";
 import { applyRuleFallback, applyRuleMerge } from "./content/read-fallback";
 import { showCollectHint, hideCollectHint, showScanline, hideScanline } from "./content/collect-hint";
 import { highlightNodes, clearHighlight, unhighlightNodes } from "./content/highlight";
-import { groupIntoUnits, isUnitSelected, messageKey, type MessageNode, type QaUnit } from "./content/core";
+import { groupIntoUnits, unitRect, unitVisibility, messageKey, type MessageNode, type QaUnit } from "./content/core";
 
 /** 平台消息读取：本地专有解析器优先（用户滚动驱动渲染，轮询读当前渲染出的消息）；
  *  本地为空（站点 DOM 改版）→ 远程规则选择器兜底；本地缺助手回复（claude 旧
@@ -193,8 +193,8 @@ function initConversationFab(): void {
     scrollDebounce = setTimeout(() => void tickMonitor(), 150);
   }
 
-  /** 单轮协调：读当前渲染消息 → 分组问答单元 → 扫过中线的追加、回中线以下的
-   *  移除（数组天然文档序）→ 高亮同步（选中单元变绿，未选中取消）→ 计数 */
+  /** 单轮协调：读当前渲染消息 → 分组问答单元 → 视窗可见性判定（进入视窗 =
+   *  选中追加、完全滚出视窗上方 = 取消移除、滚出下方 = 保留）→ 高亮同步 */
   async function tickMonitor(): Promise<void> {
     if (!monitoring || !monitorReadNodes || tickRunning) return;
     if (location.href !== monitorUrl) {
@@ -207,30 +207,29 @@ function initConversationFab(): void {
     try {
       const nodes = await monitorReadNodes();
       if (!monitoring) return; // await 期间被放弃/完成
-      const centerY = window.innerHeight / 2;
       const viewportHeight = window.innerHeight;
       const units = groupIntoUnits(nodes);
       let changed = false;
       for (const unit of units) {
+        const { top, bottom } = unitRect(unit);
+        const vis = unitVisibility(top, bottom, viewportHeight);
         const idx = rangeUnits.findIndex((u) => u.id === unit.id);
         if (idx >= 0) {
-          // 已选单元：刷新几何（最新渲染成员）→ 底边回中线以下 → 移除（取消）
+          // 已选单元：刷新成员/几何 → 完全滚出视窗上方（向下滚滚过）→ 取消
           rangeUnits[idx].messages = unit.messages;
-          if (!isUnitSelected(rangeUnits[idx], centerY, viewportHeight)) {
+          if (vis === "above") {
             rangeUnits.splice(idx, 1);
             changed = true;
           }
-        } else if (unit.messages[0]?.role === "user") {
-          // 完整单元（user 开头）且已扫过中线 → 追加（文档序）
-          if (isUnitSelected(unit, centerY, viewportHeight)) {
-            rangeUnits.push(unit);
-            changed = true;
-          }
-        } else {
-          // assistant 片段（窗口切分）：匹配数组内所属单元刷新几何并判移除
+        } else if (unit.messages[0]?.role === "user" && vis === "visible") {
+          // 完整单元（user 开头）进入视窗 → 选中追加
+          rangeUnits.push(unit);
+          changed = true;
+        } else if (unit.messages[0]?.role === "assistant") {
+          // assistant 片段（窗口切分）：匹配数组内所属单元——滚出上方则取消父单元
           const key = messageKey(unit.messages[0]);
           const parent = rangeUnits.find((u) => u.messages.some((m) => messageKey(m) === key));
-          if (parent && !isUnitSelected({ ...parent, messages: unit.messages }, centerY, viewportHeight)) {
+          if (parent && vis === "above") {
             rangeUnits.splice(rangeUnits.indexOf(parent), 1);
             changed = true;
           }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dedupeSort, groupIntoUnits, isUnitSelected, messageKey, type MessageNode } from "../src/content/core";
+import { dedupeSort, groupIntoUnits, messageKey, unitRect, unitVisibility, type MessageNode } from "../src/content/core";
 
 const mk = (id: string, offsetTop: number, role: MessageNode["role"]): MessageNode =>
   ({ id, offsetTop, role, content: `${id}-content` });
@@ -48,7 +48,7 @@ describe("groupIntoUnits（问答单元：user 起头，assistant 归属前一�
   });
 });
 
-describe("isUnitSelected（扫码线判定：底边扫过中线即选中）", () => {
+describe("unitVisibility（视窗可见性判定：进入视窗选中 / 滚出上方取消 / 滚出下方保留）", () => {
   // core.test 为 node 环境（无 document）——用纯对象 mock 元素
   const elAt = (top: number, bottom: number): Element =>
     ({ getBoundingClientRect: () => ({ top, bottom, left: 0, right: 0, width: 0, height: bottom - top, x: 0, y: 0, toJSON: () => ({}) }) }) as unknown as Element;
@@ -57,20 +57,31 @@ describe("isUnitSelected（扫码线判定：底边扫过中线即选中）", ()
     messages: [{ id: "u", offsetTop: 0, role: "user", content: "q", el: elAt(top, bottom) }],
   });
 
-  it("底边在中线之上（已扫过）→ 选中", () => {
-    expect(isUnitSelected(unitOf(100, 300), 400, 800)).toBe(true);
+  it("任意部分进入视窗（可见）→ 选中", () => {
+    expect(unitVisibility(100, 500, 800)).toBe("visible"); // 完整可见
+    expect(unitVisibility(-100, 300, 800)).toBe("visible"); // 顶部裁切仍可见
+    expect(unitVisibility(600, 900, 800)).toBe("visible"); // 底部裁切仍可见
   });
-  it("底边在中线之下（未扫过）→ 未选中", () => {
-    expect(isUnitSelected(unitOf(300, 500), 400, 800)).toBe(false);
+  it("完全滚出视窗上方（向下滚滚过）→ 取消", () => {
+    expect(unitVisibility(-300, -100, 800)).toBe("above");
   });
-  it("向下滚回中线以下 → 取消（同一判定）", () => {
-    const u = unitOf(300, 500);
-    expect(isUnitSelected(u, 400, 800)).toBe(false);
+  it("完全滚出视窗下方（向上滚滚过）→ 保留", () => {
+    expect(unitVisibility(900, 1200, 800)).toBe("below");
   });
-  it("超视口高的单元：顶边扫过中线即选中（底边永远无法越过中线）", () => {
-    // 高 1000px > 视口 800px：底边 900 > 中线 400，但顶边 300 < 400 → 选中
-    expect(isUnitSelected(unitOf(300, 1300), 400, 800)).toBe(true);
-    // 顶边尚未扫过 → 未选中
-    expect(isUnitSelected(unitOf(500, 1500), 400, 800)).toBe(false);
+});
+
+describe("unitRect（问答单元几何：成员消息 rect 并集）", () => {
+  const elAt = (top: number, bottom: number): Element =>
+    ({ getBoundingClientRect: () => ({ top, bottom, left: 0, right: 0, width: 0, height: bottom - top, x: 0, y: 0, toJSON: () => ({}) }) }) as unknown as Element;
+
+  it("单元 = user + assistant 的并集（底边取 assistant）", () => {
+    const unit = {
+      id: "u",
+      messages: [
+        { id: "u", offsetTop: 0, role: "user" as const, content: "q", el: elAt(100, 200) },
+        { id: "a", offsetTop: 0, role: "assistant" as const, content: "a", el: elAt(200, 600) },
+      ],
+    };
+    expect(unitRect(unit)).toEqual({ top: 100, bottom: 600 });
   });
 });

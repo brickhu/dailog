@@ -24,7 +24,7 @@ export function showCollectHint(text?: string): void {
     "font-family:system-ui,-apple-system,sans-serif",
     "box-shadow:0 4px 16px rgba(15,23,42,0.3)",
   ].join(";");
-  hint.textContent = text ?? "已锁定到底部：向上滚动扫描，消息扫过中线即选中（变绿）；向下滚动取消；滚到顶部点「完成」";
+  hint.textContent = text ?? "已锁定到底部：向上滚动，消息进入视窗即选中（变绿）；向下滚动滚过取消；滚到顶部点「完成」";
   document.documentElement.appendChild(hint);
 }
 
