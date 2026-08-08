@@ -46,6 +46,22 @@ export function deepseekConversationId(url: string): string | null {
   return url.match(/\/a\/chat\/s\/([^/?#]+)/)?.[1] ?? url.match(/\/chat\/([^/?#]+)/)?.[1] ?? null;
 }
 
+/** deepseek 分享页数据解析（/api/v0/share/content 响应）：
+ *  data.biz_data.messages[] → role/content（thinking_content 不并入） */
+export function parseDeepSeekShare(
+  d: { data?: { biz_data?: { messages?: Array<{ role?: string; content?: string }> } } },
+  id: string,
+  url: string,
+): CollectedDialogue | null {
+  const msgs = d?.data?.biz_data?.messages ?? [];
+  const messages = msgs
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({ role: m.role === "user" ? ("user" as const) : ("assistant" as const), content: m.content ?? "" }))
+    .filter((m) => m.content);
+  if (messages.length === 0) return null;
+  return { platform: "deepseek", conversationId: id, title: "DeepSeek 分享对话", url, messages };
+}
+
 export function collectDeepSeek(root: ParentNode, url: string): CollectedDialogue | null {
   const conversationId = deepseekConversationId(url);
   if (!conversationId) return null;

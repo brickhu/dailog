@@ -7,12 +7,32 @@
   if (win.__dailogSniff) return;
   win.__dailogSniff = true;
 
-  const looksLike = (j: unknown): boolean =>
-    !!j &&
-    typeof j === "object" &&
-    !!((j as { mapping?: unknown }).mapping && typeof (j as { mapping?: unknown }).mapping === "object" ||
-      Array.isArray((j as { chat_messages?: unknown }).chat_messages) ||
-      Array.isArray((j as { messages?: unknown }).messages));
+  const looksLike = (j: unknown): boolean => {
+    if (!j || typeof j !== "object") return false;
+    // 顶层直匹配（chatgpt mapping / claude chat_messages）
+    if ((j as { mapping?: unknown }).mapping && typeof (j as { mapping?: unknown }).mapping === "object") return true;
+    if (Array.isArray((j as { chat_messages?: unknown }).chat_messages)) return true;
+    if (Array.isArray((j as { messages?: unknown }).messages)) return true;
+    // 深层按 key 名找消息数组（deepseek: data.biz_data.messages 等；深度 ≤3 防大响应卡顿）
+    const find = (o: unknown, depth: number): boolean => {
+      if (!o || typeof o !== "object" || depth > 3) return false;
+      for (const k of Object.keys(o as Record<string, unknown>)) {
+        const v = (o as Record<string, unknown>)[k];
+        if (
+          /message|msg|list|items/i.test(k) &&
+          Array.isArray(v) &&
+          v.length > 0 &&
+          typeof v[0] === "object" &&
+          (v[0] as { role?: unknown }).role != null
+        ) {
+          return true;
+        }
+        if (find(v, depth + 1)) return true;
+      }
+      return false;
+    };
+    return find(j, 0);
+  };
 
   const report = (url: string, data: unknown): void => {
     win.postMessage({ type: "dailog:conversation", url, data }, "*");

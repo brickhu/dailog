@@ -14,7 +14,7 @@ import {
   type GetRulesResult, type CollectRules, type Platform,
 } from "./shared";
 import { collectFromDocument, resolvePlatform, buildManualDialogue } from "./content/collector";
-import { parseDeepSeekPage } from "./content/deepseek";
+import { parseDeepSeekPage, parseDeepSeekShare } from "./content/deepseek";
 import { parseClaudePage } from "./content/claude";
 import { parseDoubaoPage } from "./content/doubao";
 import { createFab, type FabController } from "./content/ui";
@@ -156,7 +156,9 @@ function initConversationFab(): void {
   sharePageId =
     location.hostname === "claude.ai"
       ? location.pathname.match(/^\/share\/([0-9a-f-]{36})/)?.[1]
-      : undefined;
+      : location.hostname === "chat.deepseek.com"
+        ? location.pathname.match(/^\/share\/([A-Za-z0-9]+)/)?.[1]
+        : undefined;
   const fab: FabController = createFab({
     badge: BUILD_TAG,
     idleLabel: sharePageId ? "采集此对话" : undefined,
@@ -198,6 +200,14 @@ function initConversationFab(): void {
     const id = sharePageId;
     if (!id) return;
     let dialogue: CollectedDialogue | null = null;
+    if (location.hostname === "chat.deepseek.com") {
+      dialogue = await tryDeepSeekShareCollect();
+      if (dialogue) {
+        console.info(`[dailog] deepseek-share collected msgs=${dialogue.messages.length}`);
+        enterConfirm(dialogue, dialogue.messages.filter((m) => m.role === "user").length);
+        return;
+      }
+    }
     const captured = findCapturedConversation(id);
     if (captured) {
       dialogue = parseClaudeConversation(
@@ -228,6 +238,20 @@ function initConversationFab(): void {
       enterConfirm(dialogue, dialogue.messages.filter((m) => m.role === "user").length);
     } else {
       fab.showToast("未能获取分享对话数据，请刷新页面后重试", "error");
+    }
+  }
+
+  /** deepseek 分享页采集：直连公开接口 /api/v0/share/content（页面内可访问） */
+  async function tryDeepSeekShareCollect(): Promise<CollectedDialogue | null> {
+    const id = sharePageId;
+    if (!id) return null;
+    try {
+      const res = await fetch(`/api/v0/share/content?share_id=${id}`);
+      if (!res.ok) return null;
+      const d = (await res.json()) as Parameters<typeof parseDeepSeekShare>[0];
+      return parseDeepSeekShare(d, id, location.href);
+    } catch {
+      return null;
     }
   }
 
@@ -570,7 +594,9 @@ function initConversationFab(): void {
   // 采集/确认进行中不隐藏（「完成/确认导入」按钮必须可用）
   const applyVisibility = (url: string) => {
     if (!monitoring && !confirmMode) {
-      const shareMatch = location.hostname === "claude.ai" && /^\/share\/[0-9a-f-]{36}/.test(new URL(url).pathname);
+      const shareMatch =
+        (location.hostname === "claude.ai" && /^\/share\/[0-9a-f-]{36}/.test(new URL(url).pathname)) ||
+        (location.hostname === "chat.deepseek.com" && /^\/share\/[A-Za-z0-9]+/.test(new URL(url).pathname));
       fab.setVisible(shareMatch || isConversationPage(url, document));
     }
   };
@@ -591,7 +617,7 @@ function initConversationFab(): void {
 }
 
 /** 构建标识（每次打包更新——FAB 默认文案，验证扩展新版本是否成功加载） */
-const BUILD_TAG = "20260808-27";
+const BUILD_TAG = "20260808-28";
 
 // AI 平台页：采集 FAB（studio 域不再注入 content script——待入库提醒已移除）。
 // 初始化包保护：真实页面异常时 Console 输出 [dailog] 错误（可诊断），不静默失败
