@@ -256,7 +256,6 @@ function initConversationFab(): void {
       if (!monitoring) return; // await 期间被放弃/完成
       const viewportHeight = window.innerHeight;
       const units = groupIntoUnits(nodes);
-      const viewportHeight = window.innerHeight;
       const now = Date.now();
       // 滚动方向（滚回判定）：容器 scrollTop 增大 = 向下滚
       if (!scrollContainer) scrollContainer = findScrollContainer(document, nodes[0]?.el);
