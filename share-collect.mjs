@@ -67,8 +67,91 @@ async function tryFetchShare(url, reqCtx) {
   if (url.includes("claude.ai/share/")) return tryClaudeShareFetch(url, reqCtx);
   if (url.includes("chat.deepseek.com/share/")) return tryDeepSeekShareFetch(url, reqCtx);
   if (url.includes("chatgpt.com/share/")) return tryChatgptShareFetch(url, reqCtx);
-  // doubao 分享页解析器后续补充
+  if (url.includes("doubao.com/thread/")) return tryDoubaoShareFetch(url, reqCtx);
   return null;
+}
+
+// ---------- doubao 分享：SSR data-fn-args 内嵌 message_snapshot ----------
+// 分享页 HTML 的 <script data-fn-name="mergeLoaderData" data-fn-args="...">
+// 属性里内嵌完整分享数据（HTML 实体转义 + 多层 JSON 字符串转义）：
+//   message_snapshot.message_list[i].content_block[j].content.text_block.text
+// 为 markdown 原文（含 **、---、###）；user_type=1 用户 / 2 助手；
+// 标题在 share_info.share_name。纯 HTTP，无浏览器无接口调用。
+
+/** HTML 属性值实体解码（&quot; &amp; &#x27; 等） */
+function unescapeHtml(s) {
+  return s
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+/** doubao 分享解析（HTML → dialogue） */
+function parseDoubaoShare(html, id, url) {
+  const m = html.match(/data-fn-name="mergeLoaderData"[^>]*data-fn-args="((?:[^"\\]|\\.)*)"/);
+  if (!m) return null;
+  let args;
+  try {
+    args = JSON.parse(unescapeHtml(m[1]));
+  } catch {
+    return null;
+  }
+  // data-fn-args = [路由名, [loaderData...]]，message_snapshot 在深层字符串值里
+  // （多层转义）——深度遍历找含 message_snapshot 的字符串，循环 JSON.parse 解层
+  const stack = [args];
+  let snap = null;
+  while (stack.length && !snap) {
+    const v = stack.pop();
+    if (typeof v === "string") {
+      if (v.includes("message_snapshot")) {
+        let s = v;
+        for (let i = 0; i < 5; i++) {
+          try {
+            const p = JSON.parse(s);
+            if (p?.data?.message_snapshot?.message_list) { snap = p; break; }
+            s = p; // 还嵌套着，继续解一层
+          } catch { break; }
+        }
+      }
+      continue;
+    }
+    if (v && typeof v === "object") {
+      for (const k of Object.keys(v)) stack.push(v[k]);
+    }
+  }
+  const list = snap?.data?.message_snapshot?.message_list;
+  if (!Array.isArray(list) || list.length === 0) return null;
+  const messages = list
+    .map((msg) => ({
+      role: msg.user_type === 1 ? "user" : "assistant",
+      content: (msg.content_block ?? [])
+        .map((b) => b?.content?.text_block?.text ?? "")
+        .filter(Boolean)
+        .join("\n\n"),
+    }))
+    .filter((x) => x.content && (x.role === "user" || x.role === "assistant"));
+  if (!messages.some((x) => x.role === "assistant")) return null;
+  return {
+    platform: "doubao",
+    conversationId: id,
+    title: snap?.data?.share_info?.share_name ?? "豆包分享对话",
+    url,
+    messages,
+  };
+}
+
+/** doubao 分享：Tier 1 直连分享页 HTML（SSR 全量，无 CF 拦截） */
+async function tryDoubaoShareFetch(url, reqCtx) {
+  const shareId = url.match(/doubao\.com\/thread\/([^/?#]+)/)?.[1];
+  if (!shareId) return null;
+  const htmlRes = await reqCtx.get(url, {
+    headers: { "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36" },
+  });
+  if (!htmlRes.ok()) return null;
+  const html = await htmlRes.text();
+  return parseDoubaoShare(html, shareId, url);
 }
 
 /** deepseek 分享解析（/api/v0/share/content → data.biz_data.messages；role 大小写不敏感） */
