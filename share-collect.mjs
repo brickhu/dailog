@@ -73,7 +73,65 @@ async function tryFetchShare(url, reqCtx) {
   if (url.includes("chatgpt.com/share/")) return tryChatgptShareFetch(url, reqCtx);
   if (url.includes("doubao.com/thread/")) return tryDoubaoShareFetch(url, reqCtx);
   if (url.includes("share.gemini.google/")) return tryGeminiShareFetch(url);
+  if (url.includes("kimi.com/share/")) return tryKimiShareFetch(url, reqCtx);
   return null;
+}
+
+// ---------- kimi 分享：SSR HYDRATION_INIT_STATE 内嵌对话（React Query） ----------
+// 分享页 HTML 的 <script>window.HYDRATION_INIT_STATE={...}</script> 里是 React
+// Query 脱水状态：queries[] 中 queryKey ["share", shareId] 的 state.data 为
+// kimi.gateway.chat.v1.ChatShare——messages[].role（2=user / 3=assistant，
+// 其他系统 role 过滤）+ blocks[].content（case="text" 的 TextBlock.content，
+// case="think" 的思考块跳过）；标题在 chat.name。JS 字面量含 BigInt("...")
+// 与 undefined——清洗后 JSON.parse。
+
+/** kimi 分享解析（HTML → dialogue） */
+function parseKimiShare(html, id, url) {
+  const m = html.match(/window\.HYDRATION_INIT_STATE=(\{[\s\S]*?\})<\/script>/);
+  if (!m) return null;
+  let state;
+  try {
+    state = JSON.parse(
+      m[1]
+        .replace(/\bundefined\b/g, "null")
+        .replace(/BigInt\("(\d+)"\)/g, '"$1"'),
+    );
+  } catch {
+    return null;
+  }
+  const q = (state?.queries ?? []).find((x) => JSON.stringify(x?.queryKey).includes(`"share"`));
+  const d = q?.state?.data;
+  const msgs = Array.isArray(d?.messages) ? d.messages : [];
+  const messages = msgs
+    .map((msg) => ({
+      role: msg.role === 2 ? "user" : msg.role === 3 ? "assistant" : null,
+      content: (msg.blocks ?? [])
+        .filter((b) => b?.content?.case === "text")
+        .map((b) => b?.content?.value?.content ?? "")
+        .filter(Boolean)
+        .join("\n\n"),
+    }))
+    .filter((x) => x.role && x.content);
+  if (!messages.some((x) => x.role === "assistant")) return null;
+  return {
+    platform: "kimi",
+    conversationId: id,
+    title: typeof d?.chat?.name === "string" && d.chat.name ? d.chat.name : "Kimi 分享对话",
+    url,
+    messages,
+  };
+}
+
+/** kimi 分享：Tier 1 直连分享页 HTML（SSR 全量，无 CF 拦截） */
+async function tryKimiShareFetch(url, reqCtx) {
+  const shareId = url.match(/kimi\.com\/share\/([^/?#]+)/)?.[1];
+  if (!shareId) return null;
+  const htmlRes = await reqCtx.get(url, {
+    headers: { "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36" },
+  });
+  if (!htmlRes.ok()) return null;
+  const html = await htmlRes.text();
+  return parseKimiShare(html, shareId, url);
 }
 
 // ---------- gemini 分享：batchexecute RPC（公开无 cookie） ----------
