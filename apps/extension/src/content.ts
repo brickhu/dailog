@@ -23,6 +23,7 @@ import { applyRuleFallback, applyRuleMerge } from "./content/read-fallback";
 import { showCollectHint, hideCollectHint, showScanline, hideScanline } from "./content/collect-hint";
 import { renderUnitBoxes, clearUnitBoxes } from "./content/unit-boxes";
 import { groupIntoUnits, isCompleteUnit, unitRect, messageKey, mergeUnitMembers, type MessageNode, type QaUnit } from "./content/core";
+import { findOrgIdFromPage, fetchClaudeConversation } from "./content/claude-api";
 
 /** 平台消息读取：本地专有解析器优先（用户滚动驱动渲染，轮询读当前渲染出的消息）；
  *  本地为空（站点 DOM 改版）→ 远程规则选择器兜底；本地缺助手回复（claude 旧
@@ -161,7 +162,7 @@ function initConversationFab(): void {
         void confirmImport();
         return;
       }
-      startMonitorCollect();
+      void startCollect();
     },
   });
 
@@ -178,7 +179,31 @@ function initConversationFab(): void {
     );
   }
 
-  /** 开始扫码采集：滚动锁定到底部 → 提示条 + 扫码线 + FAB「完成 (N)」+ 轮询 */
+  /** 开始采集：claude 对话页优先走官方 API（免滚动秒级全量）——成功直接进确认态；
+   *  失败（未登录/接口变化/非 claude）回退 DOM 扫码采集 */
+  async function startCollect(): Promise<void> {
+    if (location.hostname === "claude.ai") {
+      const apiDialogue = await tryClaudeApiCollect();
+      if (apiDialogue) {
+        enterConfirm(apiDialogue, apiDialogue.messages.filter((m) => m.role === "user").length);
+        return;
+      }
+    }
+    startMonitorCollect();
+  }
+
+  /** claude 官方 API 采集：当前对话 uuid + org id（资源时序）→ 详情接口 */
+  async function tryClaudeApiCollect(): Promise<CollectedDialogue | null> {
+    const m = location.pathname.match(/\/chat\/([0-9a-f-]{36})/);
+    if (!m) return null;
+    const orgId = findOrgIdFromPage();
+    if (!orgId) return null;
+    const dialogue = await fetchClaudeConversation(orgId, m[1]);
+    if (dialogue) console.info(`[dailog] claude-api collected msgs=${dialogue.messages.length} (${dialogue.title})`);
+    return dialogue;
+  }
+
+  /** 开始扫码采集（DOM 兜底）：滚动锁定到底部 → 提示条 + 扫码线 + FAB「完成 (N)」+ 轮询 */
   function startMonitorCollect(): void {
     const readNodes = pageReadNodes();
     if (!readNodes) {
@@ -394,7 +419,21 @@ function initConversationFab(): void {
     document.removeEventListener("scroll", onUserScroll, { capture: true, passive: true } as EventListenerOptions);
   }
 
-  /** 完成采集：组装对话 → 进入确认态（FAB「确认导入 (N 个问答)」+ 放弃） */
+  /** 进入确认态（DOM 采集与 claude API 采集共用）：FAB「确认导入 (N)」+ 放弃 */
+  function enterConfirm(dialogue: CollectedDialogue, unitCount: number): void {
+    dialogue.unitCount = unitCount; // 问答单元数（导入页展示）
+    confirmMode = true;
+    pendingDialogue = dialogue;
+    fab.setConfirm(true, unitCount, () => {
+      confirmMode = false;
+      pendingDialogue = null;
+      fab.showToast("已取消采集", "success");
+      void updateCollectedState();
+    });
+    fab.showToast(`已采集 ${unitCount} 个问答单元，点击「确认导入」入库`, "success");
+  }
+
+  /** 完成采集（DOM 路径）：组装对话 → 进入确认态 */
   async function finishMonitorCollect(): Promise<void> {
     stopMonitorLoop();
     monitoring = false;
@@ -416,16 +455,7 @@ function initConversationFab(): void {
         void updateCollectedState();
         return;
       }
-      dialogue.unitCount = unitCount; // 问答单元数（导入页展示）
-      confirmMode = true;
-      pendingDialogue = dialogue;
-      fab.setConfirm(true, unitCount, () => {
-        confirmMode = false;
-        pendingDialogue = null;
-        fab.showToast("已取消采集", "success");
-        void updateCollectedState();
-      });
-      fab.showToast(`已采集 ${unitCount} 个问答单元，点击「确认导入」入库`, "success");
+      enterConfirm(dialogue, unitCount);
     } catch (e) {
       fab.showToast(`采集失败：${e instanceof Error ? e.message : e}`, "error");
       void updateCollectedState();
@@ -479,7 +509,7 @@ function initConversationFab(): void {
 }
 
 /** 构建标识（每次打包更新——FAB 默认文案，验证扩展新版本是否成功加载） */
-const BUILD_TAG = "20260808-22";
+const BUILD_TAG = "20260808-23";
 
 // AI 平台页：采集 FAB（studio 域不再注入 content script——待入库提醒已移除）。
 // 初始化包保护：真实页面异常时 Console 输出 [dailog] 错误（可诊断），不静默失败
