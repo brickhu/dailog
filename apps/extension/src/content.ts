@@ -444,7 +444,7 @@ try {
 }
 
 /** 构建标识（每次打包更新——左上角徽标，便于验证扩展新版本是否成功加载） */
-const BUILD_TAG = "dailog-20260808-5";
+const BUILD_TAG = "dailog-20260808-6";
 
 /** 页面左上角构建徽标（小号、半透明、不阻断交互；验证加载用） */
 function showBuildBadge(): void {
@@ -455,7 +455,10 @@ function showBuildBadge(): void {
     "top:6px",
     "left:6px",
     "z-index:2147483646",
-    "padding:2px 8px",
+    "width:10vw", // 固定容器宽度（清晰可读）
+    "text-align:center",
+    "box-sizing:border-box",
+    "padding:4px 0",
     "border-radius:6px",
     "background:rgba(220,38,38,0.92)",
     "color:#fff",
