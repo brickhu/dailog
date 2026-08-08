@@ -49,17 +49,24 @@ export function deepseekConversationId(url: string): string | null {
 /** deepseek 分享页数据解析（/api/v0/share/content 响应）：
  *  data.biz_data.messages[] → role/content（thinking_content 不并入） */
 export function parseDeepSeekShare(
-  d: { data?: { biz_data?: { messages?: Array<{ role?: string; content?: string }> } } },
+  d: { data?: { biz_data?: { title?: string; messages?: Array<{ role?: string; content?: string }> } } },
   id: string,
   url: string,
 ): CollectedDialogue | null {
   const msgs = d?.data?.biz_data?.messages ?? [];
   const messages = msgs
+    .map((m) => ({ role: (m.role ?? "").toLowerCase(), content: m.content ?? "" }))
     .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => ({ role: m.role === "user" ? ("user" as const) : ("assistant" as const), content: m.content ?? "" }))
-    .filter((m) => m.content);
+    .filter((m) => m.content)
+    .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
   if (messages.length === 0) return null;
-  return { platform: "deepseek", conversationId: id, title: "DeepSeek 分享对话", url, messages };
+  return {
+    platform: "deepseek",
+    conversationId: id,
+    title: d?.data?.biz_data?.title || "DeepSeek 分享对话",
+    url,
+    messages,
+  };
 }
 
 export function collectDeepSeek(root: ParentNode, url: string): CollectedDialogue | null {

@@ -65,8 +65,38 @@ function parseClaudeSnapshot(d, id, url) {
 /** Tier 1：按平台分发直连尝试；失败返回 null（request context 复用） */
 async function tryFetchShare(url, reqCtx) {
   if (url.includes("claude.ai/share/")) return tryClaudeShareFetch(url, reqCtx);
-  // chatgpt/deepseek/doubao 分享页解析器后续按同样模式补充
+  if (url.includes("chat.deepseek.com/share/")) return tryDeepSeekShareFetch(url, reqCtx);
+  // chatgpt/doubao 分享页解析器后续按同样模式补充
   return null;
+}
+
+/** deepseek 分享解析（/api/v0/share/content → data.biz_data.messages；role 大小写不敏感） */
+function parseDeepSeekShare(d, id, url) {
+  const msgs = d?.data?.biz_data?.messages ?? [];
+  const messages = msgs
+    .map((m) => ({ role: (m.role ?? "").toLowerCase(), content: m.content ?? "" }))
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .filter((m) => m.content);
+  if (messages.length === 0) return null;
+  return {
+    platform: "deepseek",
+    conversationId: id,
+    title: d?.data?.biz_data?.title ?? "DeepSeek 分享对话",
+    url,
+    messages,
+  };
+}
+
+/** deepseek 分享：Tier 1 直连公开接口（可能无 CF 强保护——直连直接可用） */
+async function tryDeepSeekShareFetch(url, reqCtx) {
+  const shareId = url.match(/chat\.deepseek\.com\/share\/([A-Za-z0-9]+)/)?.[1];
+  if (!shareId) return null;
+  const apiRes = await reqCtx.get(`https://chat.deepseek.com/api/v0/share/content?share_id=${shareId}`, {
+    headers: { "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36" },
+  });
+  if (!apiRes.ok()) return null;
+  const d = await apiRes.json();
+  return parseDeepSeekShare(d, shareId, url);
 }
 
 // ============ Tier 2：Playwright 兜底 ============
@@ -87,9 +117,13 @@ async function collectWithPlaywright(url) {
     let result = null;
     page.on("response", async (res) => {
       try {
-        if (res.url().includes("chat_snapshots")) {
-          const j = await res.json();
-          result = parseClaudeSnapshot(j, url.match(/share\/([0-9a-f-]{36})/)?.[1] ?? "?", url);
+        const u = res.url();
+        const j = await res.json();
+        if (u.includes("chat_snapshots")) {
+          result = parseClaudeSnapshot(j, u.match(/chat_snapshots\/([0-9a-f-]{36})/)?.[1] ?? "?", url);
+        } else if (u.includes("/share/content")) {
+          const id = u.match(/share_id=([A-Za-z0-9]+)/)?.[1] ?? "?";
+          result = parseDeepSeekShare(j, id, url);
         }
       } catch (e) { /* 非 JSON 跳过 */ }
     });

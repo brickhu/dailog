@@ -51,6 +51,15 @@ describe("parseDeepSeekShare（分享页 /api/v0/share/content 解析）", () =>
     expect(out?.messages[0].content).not.toContain("思考");
   });
 
+  it("role 大小写不敏感（API 返回 USER/ASSISTANT）且标题取自响应", () => {
+    const d = {
+      data: { biz_data: { title: "我的分享", messages: [{ role: "USER", content: "Q" }, { role: "ASSISTANT", content: "A" }] } },
+    };
+    const out = parseDeepSeekShare(d, "id", "url");
+    expect(out?.title).toBe("我的分享");
+    expect(out?.messages).toEqual([{ role: "user", content: "Q" }, { role: "assistant", content: "A" }]);
+  });
+
   it("无有效消息 / 结构缺失 → null", () => {
     expect(parseDeepSeekShare({}, "id", "url")).toBeNull();
     expect(parseDeepSeekShare({ data: { biz_data: { messages: [{ role: "system", content: "x" }] } } }, "id", "url")).toBeNull();
