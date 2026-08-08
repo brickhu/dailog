@@ -16,24 +16,17 @@ const execFileP = promisify(execFile);
 
 // ============ 各平台解析（Tier 1：直连公开接口） ============
 
-/** claude 分享：页面 HTML 里提取 org id + 直连 chat_snapshots 公开接口。
- *  返回 { platform, conversationId, title, messages } 或 null（被 CF 拦/未找到）。
+/** claude 分享：直连 chat_snapshots 公开接口（API 改版后无需 org id——
+ *  直接 GET /api/chat_snapshots/{shareId}，无 cookie 无登录）。
+ *  返回 { platform, conversationId, title, messages } 或 null（被 CF 拦）。
  *  用 Playwright request context（轻量 HTTP 客户端：支持 socks5 代理、
  *  TLS 指纹接近浏览器——不启动浏览器进程） */
 async function tryClaudeShareFetch(url, reqCtx) {
   const shareId = url.match(/claude\.ai\/share\/([0-9a-f-]{36})/)?.[1];
   if (!shareId) return null;
   const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
-  // 1) 拉页面 HTML（顺带暴露 org id 的 API 路径）
-  const htmlRes = await reqCtx.get(url, { headers: { "user-agent": UA } });
-  if (!htmlRes.ok()) return null; // 403 = CF 拦截 → Tier 2
-  const html = await htmlRes.text();
-  const orgMatch = html.match(/\/api\/organizations\/([0-9a-f-]{36})\/chat_snapshots\/[0-9a-f-]{36}/);
-  const orgId = orgMatch?.[1];
-  if (!orgId) return null;
-  // 2) 直连公开接口
   const apiRes = await reqCtx.get(
-    `https://claude.ai/api/organizations/${orgId}/chat_snapshots/${shareId}?rendering_mode=messages&render_all_tools=true`,
+    `https://claude.ai/api/chat_snapshots/${shareId}?rendering_mode=messages&render_all_tools=true`,
     { headers: { "user-agent": UA } },
   );
   if (!apiRes.ok()) return null;
@@ -41,7 +34,8 @@ async function tryClaudeShareFetch(url, reqCtx) {
   return parseClaudeSnapshot(d, shareId, url);
 }
 
-/** claude 快照解析（chat_messages: sender human/assistant + 附件正文并入） */
+/** claude 快照解析（chat_messages: sender human/assistant + 附件正文并入；
+ *  标题在 snapshot_name） */
 function parseClaudeSnapshot(d, id, url) {
   const msgs = Array.isArray(d?.chat_messages) ? d.chat_messages : [];
   const messages = msgs
@@ -60,7 +54,7 @@ function parseClaudeSnapshot(d, id, url) {
   return {
     platform: "claude",
     conversationId: id,
-    title: typeof d.name === "string" && d.name ? d.name : "Claude 分享对话",
+    title: typeof d.snapshot_name === "string" && d.snapshot_name ? d.snapshot_name : "Claude 分享对话",
     url,
     messages,
   };
