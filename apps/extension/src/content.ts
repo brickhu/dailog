@@ -113,6 +113,9 @@ let zoneObserver: IntersectionObserver | undefined;
 const observedEls = new Set<Element>();
 /** 元素 → 所属单元 id（片段映射到数组内父单元） */
 const elToUnit = new Map<Element, string>();
+/** 元素 → 最近一轮读取分配的单元 id（新鲜度校验——虚拟列表回收复用元素时，
+ *  旧映射会触发误事件，claude 计数 4-5-4 横跳的根源） */
+const elToReadUnit = new Map<Element, string>();
 /** 元素最近一次相交状态（离开处理只对之前相交过的元素生效） */
 const wasIntersecting = new Map<Element, boolean>();
 /** 最近一轮读取的单元快照（IO 回调完整性检查用） */
@@ -220,6 +223,9 @@ function initConversationFab(): void {
       for (const entry of entries) {
         const unitId = elToUnit.get(entry.target);
         if (!unitId) continue;
+        // 新鲜度校验：元素若已被虚拟列表回收复用（当前读取分配的单元 ≠ 映射），
+        // 事件属于新消息——跳过，防误追加/误移除
+        if (elToReadUnit.get(entry.target) !== unitId) continue;
         const prev = wasIntersecting.get(entry.target) ?? false;
         wasIntersecting.set(entry.target, entry.isIntersecting);
         if (entry.isIntersecting) {
@@ -227,7 +233,8 @@ function initConversationFab(): void {
           if (!rangeUnits.some((u) => u.id === unitId)) {
             const unit = lastUnitsById.get(unitId) ?? rangeUnits.find((u) => u.id === unitId);
             if (unit && isCompleteUnit(unit)) {
-              rangeUnits.push(unit);
+              // 推入克隆（防与读取快照共享对象被后续操作改动）
+              rangeUnits.push({ id: unit.id, messages: [...unit.messages] });
               fab.updateCollectCount(rangeUnits.length);
             }
           }
@@ -249,6 +256,7 @@ function initConversationFab(): void {
     zoneObserver = undefined;
     observedEls.clear();
     elToUnit.clear();
+    elToReadUnit.clear();
     wasIntersecting.clear();
     lastUnitsById.clear();
   }
@@ -293,6 +301,7 @@ function initConversationFab(): void {
           if (!m.el) continue;
           seen.add(m.el);
           elToUnit.set(m.el, mapId);
+          elToReadUnit.set(m.el, mapId);
           if (!observedEls.has(m.el) && zoneObserver) {
             observedEls.add(m.el);
             zoneObserver.observe(m.el);
@@ -305,6 +314,7 @@ function initConversationFab(): void {
           zoneObserver?.unobserve(el);
           observedEls.delete(el);
           elToUnit.delete(el);
+          elToReadUnit.delete(el);
           wasIntersecting.delete(el);
         }
       }
@@ -358,6 +368,11 @@ function initConversationFab(): void {
     clearUnitBoxes();
     const unitCount = rangeUnits.length;
     const nodes = rangeUnits.flatMap((u) => u.messages);
+    console.info(
+      `[dailog] finish units=${unitCount} msgs=${nodes.length} ` +
+        `emptyUnits=${rangeUnits.filter((u) => u.messages.length === 0).length} ` +
+        `firstUnitMsgs=${rangeUnits[0]?.messages.length} lastUnitMsgs=${rangeUnits[rangeUnits.length - 1]?.messages.length}`,
+    );
     try {
       const dialogue = await buildManualDialogue({ root: document, url: location.href, getRules }, nodes);
       if (!dialogue) {
