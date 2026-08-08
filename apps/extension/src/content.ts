@@ -444,7 +444,7 @@ try {
 }
 
 /** 构建标识（每次打包更新——左上角徽标，便于验证扩展新版本是否成功加载） */
-const BUILD_TAG = "dailog-20260808-3";
+const BUILD_TAG = "dailog-20260808-4";
 
 /** 页面左上角构建徽标（小号、半透明、不阻断交互；验证加载用） */
 function showBuildBadge(): void {
@@ -459,7 +459,7 @@ function showBuildBadge(): void {
     "border-radius:6px",
     "background:rgba(15,23,42,0.55)",
     "color:rgba(255,255,255,0.85)",
-    "font-size:10px",
+    "font-size:16px",
     "line-height:1.5",
     "font-family:system-ui,-apple-system,sans-serif",
     "pointer-events:none",
