@@ -1,8 +1,8 @@
 // claude 分享：API 优先（chat_snapshots 直连，改版后无需 orgId）
-// → 被 CF 拦时按代理池逐个重试（claude 最重要的平台，重试最完整）。
-// DOM 兜底：分享页是客户端渲染（41KB 壳无消息）——无 DOM 可提，靠代理。
+// → 通道重试：默认直连 → CF Worker 转发（配了 CF_WORKER_URL 时）→ 代理池。
+// DOM 兜底：分享页是客户端渲染（41KB 壳无消息）——无 DOM 可提，靠通道切换。
 
-import { httpGet, proxyForIndex, hasProxies } from "../fetch";
+import { httpGet, httpGetViaWorker, proxyForIndex, hasProxies } from "../fetch";
 import type { CollectedDialogue } from "../types";
 
 const API = (shareId: string) =>
@@ -12,18 +12,19 @@ export async function collectClaudeShare(url: string): Promise<CollectedDialogue
   const shareId = url.match(/claude\.ai\/share\/([0-9a-f-]{36})/)?.[1];
   if (!shareId) return null;
 
-  // 尝试顺序：默认通道（无代理环境=直连，有代理=第一个代理）→ 代理池其余通道。
-  // 失败（CF 拦截/超时/解析失败）都换下一个通道——本机需代理、服务器可能被 CF 拦，
-  // 统一重试到所有通道耗尽
-  const attempts: Array<{ proxy?: string }> = [{ proxy: undefined }];
+  // 通道顺序：默认（直连/首个代理）→ CF Worker 转发 → 代理池其余通道。
+  // 失败（CF 拦截/超时/解析失败）都换下一个通道——本机需代理、服务器被 CF 拦、
+  // Worker 放行 CF 域名，统一重试到所有通道耗尽
+  const attempts: Array<{ proxy?: string; viaWorker?: boolean }> = [{ proxy: undefined }];
+  if (process.env.CF_WORKER_URL) attempts.push({ viaWorker: true });
   if (hasProxies) {
     for (let i = 1; i < 3; i++) attempts.push({ proxy: proxyForIndex(i) });
   }
 
   let lastErr: unknown = null;
-  for (const { proxy } of attempts) {
+  for (const a of attempts) {
     try {
-      const res = await httpGet(API(shareId), { proxy });
+      const res = a.viaWorker ? await httpGetViaWorker(API(shareId)) : await httpGet(API(shareId), { proxy: a.proxy });
       const d = parseClaudeSnapshot(res.body, shareId, url);
       if (d) return d;
       lastErr = new Error("claude 响应解析失败"); // 挑战页/结构变化 → 换通道

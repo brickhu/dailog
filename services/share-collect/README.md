@@ -28,7 +28,8 @@ GET  /health
 | 变量 | 说明 |
 |---|---|
 | `PORT` | 监听端口（默认 8787；Railway 自动注入）|
-| `SOCKS_PROXY` | 可选。逗号分隔多代理 `socks5://a:1080,socks5://b:1080`。配了默认走第一个代理（本机调试/CF 拦截时），claude/gemini 被 CF 拦自动换通道重试；不配则全直连（Railway 美区）|
+| `SOCKS_PROXY` | 可选。逗号分隔多代理 `socks5://a:1080,socks5://b:1080`。配了默认走第一个代理（本机调试/CF 拦截时），claude/gemini 被 CF 拦自动换通道重试；不配则全直连|
+| `CF_WORKER_URL` | 可选。Cloudflare Worker 转发（见 worker-proxy.js），形如 `https://<worker>.workers.dev/?token=<TOKEN>`。claude 被 CF 拦时自动走 Worker 转发（出口=CF 网络通常放行）|
 
 ## Railway 部署
 

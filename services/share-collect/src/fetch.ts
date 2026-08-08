@@ -72,6 +72,15 @@ export async function httpGet(
   return runRequest(url, options, "GET");
 }
 
+/** 经 Cloudflare Worker 转发（出口 = CF 网络，访问 CF 保护的域名通常放行）。
+ *  CF_WORKER_URL 形如 https://<worker>.workers.dev/?token=<TOKEN> */
+export async function httpGetViaWorker(targetUrl: string): Promise<HttpResult> {
+  const workerUrl = process.env.CF_WORKER_URL;
+  if (!workerUrl) throw new Error("CF_WORKER_URL 未配置");
+  const sep = workerUrl.includes("?") ? "&" : "?";
+  return httpGet(`${workerUrl}${sep}url=${encodeURIComponent(targetUrl)}`);
+}
+
 /** POST form（batchexecute 等需要原始 form body 的接口）。proxy 缺省 = 默认通道 */
 export async function httpPostForm(
   url: string,
