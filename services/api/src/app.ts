@@ -4,6 +4,7 @@ import type { Env } from "./config/env";
 import { createAuthMiddleware, type AuthEnv, type AuthLike } from "./middleware/auth";
 import { createCorsMiddleware } from "./middleware/cors";
 import { importsRoutes } from "./routes/imports";
+import { shareRoutes } from "./routes/share";
 import { episodesRoutes } from "./routes/episodes";
 import { polishRoutes, type PolishDeps } from "./routes/polish";
 import { generateRoutes, type GenerateDeps } from "./routes/generate";
@@ -12,6 +13,7 @@ import { voiceRoutes, type VoiceDeps } from "./routes/voice";
 import { channelRoutes, type ChannelDeps } from "./routes/channel";
 import { favoritesRoutes, type FavoritesRepo } from "./routes/favorites";
 import { tokenRoutes } from "./routes/token";
+import { adminRoutes, type AdminDeps } from "./routes/admin";
 import type { Repos } from "./repo";
 
 export type { AuthLike };
@@ -25,6 +27,9 @@ export type AppDeps = {
   voice: VoiceDeps;
   channel: ChannelDeps; // 频道开通（授权码激活）
   favorites: FavoritesRepo; // 消费端互动（收藏/点赞）
+  admin: AdminDeps; // 管理端点（ADMIN_EMAILS 白名单判定）
+  /** share-collect 服务地址（测试注入用；缺省读 SHARE_COLLECT_URL env） */
+  shareCollectUrl?: () => string | null;
 };
 
 export function createApp(deps: AppDeps): Hono<AuthEnv> {
@@ -36,6 +41,11 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   app.use("*", createCorsMiddleware(appOrigins));
 
   app.get("/health", (c) => c.json({ ok: true }));
+
+  // 自定义 /api/auth/token（cookie 会话 → session token，供扩展注入）必须先于
+  // better-auth 全捕获注册：下面 /api/auth/* 通配会吞掉一切子路径（未知子路由返回空 404），
+  // 后注册的同路径路由永远轮不到。其余 /api/auth/* 仍全部交 better-auth 处理。
+  app.route("/", tokenRoutes(deps.auth));
 
   // better-auth 会话路由（注册/登录/登出/get-session）：挂在认证中间件之前，免鉴权
   app.on(["POST", "GET"], "/api/auth/*", (c) => deps.auth.handler(c.req.raw));
@@ -50,6 +60,7 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   });
 
   app.route("/api", importsRoutes(deps.repo.imports, deps.voice.storage));
+  app.route("/api", shareRoutes(() => deps.shareCollectUrl?.() ?? process.env.SHARE_COLLECT_URL ?? null));
   app.route("/api", episodesRoutes(deps.repo.episodes, (c) => (c as Context<AuthEnv>).get("userId"), deps.voice.storage));
   // polish/generate/job/voice 路由自带 /api 前缀（与各自 test.ts 直接对裸 app 请求 /api/... 一致），故挂载在根路径；
   // 上面的 /api/* 鉴权中间件依然覆盖
@@ -59,7 +70,7 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   app.route("/", voiceRoutes(deps.voice));
   app.route("/", channelRoutes(deps.channel));
   app.route("/", favoritesRoutes(deps.favorites));
-  app.route("/", tokenRoutes(deps.auth));
+  app.route("/", adminRoutes(deps.admin));
 
   app.notFound((c) => c.json({ error: "not_found" }, 404));
   app.onError((err, c) => {

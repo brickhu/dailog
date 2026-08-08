@@ -93,6 +93,17 @@ const styles = stylex.create({
     display: "flex",
     gap: dimensions.spacing3,
   },
+  input: {
+    width: "100%",
+    boxSizing: "border-box",
+    padding: `${dimensions.spacing2} ${dimensions.spacing3}`,
+    borderRadius: dimensions.radiusMd,
+    border: `1px solid ${colors.ink}`,
+    backgroundColor: colors.background,
+    color: colors.foreground,
+    fontSize: dimensions.fontSizeSm,
+    marginBottom: dimensions.spacing4,
+  },
   warn: {
     backgroundColor: "#fffbeb",
     color: "#92400e",
@@ -113,6 +124,7 @@ const styles = stylex.create({
 
 type State =
   | { kind: "loading" }
+  | { kind: "input" }
   | { kind: "error"; message: string }
   | { kind: "ready"; dialogue: CachedCollect };
 
@@ -124,8 +136,9 @@ export default function CollectPage() {
   const [state, setState] = createSignal<State>({ kind: "loading" });
   const [busy, setBusy] = createSignal(false);
   const [actionError, setActionError] = createSignal<string | null>(null);
+  const [shareUrl, setShareUrl] = createSignal("");
 
-  // 页面生命周期兜底：关窗/导航离开时自动清缓存（扩展侧 tab 关闭监听是主保险，
+  // 扩展模式：页面生命周期兜底，关窗/导航离开时自动清缓存（扩展侧 tab 关闭监听是主保险，
   // 此处双保险——极端情况下扩展 SW 未及时处理也能清掉）
   window.addEventListener("pagehide", () => {
     if (collectId) void deleteCollect(collectId);
@@ -133,7 +146,8 @@ export default function CollectPage() {
 
   onMount(async () => {
     if (!collectId) {
-      setState({ kind: "error", message: "缺少采集 ID——请从扩展的「采集对话」进入本页。" });
+      // 无 collectId = 分享链接模式：显示输入框，用户粘贴分享链接后采集
+      setState({ kind: "input" });
       return;
     }
     const dialogue = await getCollect(collectId);
@@ -146,6 +160,71 @@ export default function CollectPage() {
     }
     setState({ kind: "ready", dialogue });
   });
+
+  /** 分享链接采集：调 API 转发 → share-collect 服务 → 预览确认 */
+  const collectFromUrl = async () => {
+    const url = shareUrl().trim();
+    if (!url || busy()) return;
+    if (!/^https?:\/\//.test(url)) {
+      setActionError("请输入完整的分享链接（https://…）");
+      return;
+    }
+    setBusy(true);
+    setActionError(null);
+    setState({ kind: "loading" });
+    try {
+      const res = await api.request("/api/share/collect", {
+        method: "POST",
+        body: JSON.stringify({ url }),
+      });
+      const body = (await res.json().catch(() => null)) as
+        | {
+            platform?: string;
+            conversationId?: string;
+            title?: string;
+            url?: string;
+            messages?: CachedCollect["messages"];
+            error?: string;
+          }
+        | null;
+      if (res.ok && body?.messages?.length) {
+        setState({
+          kind: "ready",
+          dialogue: {
+            platform: body.platform ?? "plain",
+            conversationId: body.conversationId ?? url,
+            title: body.title ?? "分享对话",
+            url: body.url ?? url,
+            messages: body.messages,
+            unitCount: Math.floor(body.messages.length / 2),
+          },
+        });
+        return;
+      }
+      const err = body?.error ?? `采集失败（HTTP ${res.status}）`;
+      setState({
+        kind: "error",
+        message:
+          err === "platform_unreachable"
+            ? "该平台暂时不可达（可能被反爬拦截）。请稍后重试，或换一个平台的分享链接。"
+            : err === "parse_failed"
+              ? "无法解析该分享页（页面结构可能已变化）。请确认链接有效后重试。"
+              : err === "unsupported_platform"
+                ? "暂不支持该平台/链接格式。支持：Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 分享链接。"
+                : err === "share_collect_unreachable"
+                  ? "采集服务暂不可用，请稍后重试。"
+                  : err,
+      });
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        auth.expireSession();
+        return;
+      }
+      setState({ kind: "error", message: e instanceof Error ? e.message : "网络错误，请重试" });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   /** 确认入库：POST /api/imports（存 R2 + 建草稿）→ 清本地缓存 → 进编辑页（自动触发润色/质量检测） */
   const confirm = async () => {
@@ -185,15 +264,19 @@ export default function CollectPage() {
     }
   };
 
-  /** 取消：清本地缓存，直接关闭本标签页（不回 AI 对话页） */
+  /** 取消：扩展模式清本地缓存关标签；分享链接模式直接回工作台 */
   const cancel = async () => {
-    if (collectId) await deleteCollect(collectId);
-    // 扩展关标签（绕开 window.close 限制）；扩展未装时回退原生 close，被拦截则回列表页
-    const closed = await closeCurrentTab();
-    if (!closed) {
-      window.close();
-      setTimeout(() => navigate("/episodes"), 300);
+    if (collectId) {
+      await deleteCollect(collectId);
+      // 扩展关标签（绕开 window.close 限制）；扩展未装时回退原生 close，被拦截则回列表页
+      const closed = await closeCurrentTab();
+      if (!closed) {
+        window.close();
+        setTimeout(() => navigate("/episodes"), 300);
+      }
+      return;
     }
+    navigate("/episodes");
   };
 
   const ready = (): Extract<State, { kind: "ready" }> | null =>
@@ -206,50 +289,81 @@ export default function CollectPage() {
       <div {...stylex.props(styles.card)}>
         <Show
           when={state().kind !== "loading"}
-          fallback={<div {...stylex.props(styles.meta)}>读取采集缓存…</div>}
+          fallback={<div {...stylex.props(styles.meta)}>{collectId ? "读取采集缓存…" : "采集分享页…"}</div>}
         >
           <Show
-            when={ready()}
+            when={state().kind === "input"}
             fallback={
-              <>
-                <div {...stylex.props(styles.title)}>无法确认采集</div>
-                <div {...stylex.props(styles.meta)}>{errorMessage()}</div>
-                <Button block onClick={() => navigate("/episodes")}>回工作台</Button>
-              </>
+              <Show
+                when={ready()}
+                fallback={
+                  <>
+                    <div {...stylex.props(styles.title)}>无法确认采集</div>
+                    <div {...stylex.props(styles.meta)}>{errorMessage()}</div>
+                    <Button block onClick={() => navigate("/episodes")}>回工作台</Button>
+                  </>
+                }
+              >
+                <div {...stylex.props(styles.title)}>确认采集「{ready()!.dialogue.title || "未命名对话"}」</div>
+                <Show when={ready()!.dialogue.lowConfidence}>
+                  <div {...stylex.props(styles.warn)}>
+                    未能按对话结构解析（站点改版或规则未覆盖），已保存页面全文——可能包含导航等噪音。
+                    请确认内容后再入库，或取消后重试。
+                  </div>
+                </Show>
+                <div {...stylex.props(styles.meta)}>
+                  平台：{PLATFORM_LABEL[ready()!.dialogue.platform] ?? "其他"}
+                  {" "}· 共 {ready()!.dialogue.messages.length} 条消息
+                  {ready()!.dialogue.unitCount != null && (
+                    <> · {ready()!.dialogue.unitCount} 个问答单元</>
+                  )}
+                  <br />
+                  来源：<a {...stylex.props(styles.source)} href={ready()!.dialogue.url} target="_blank">
+                    {ready()!.dialogue.url}
+                  </a>
+                  <br />
+                  确认后将对话存入你的工作台并进入编辑（自动进行质量检测）。
+                </div>
+                <div {...stylex.props(styles.messages)}>
+                  <For each={ready()!.dialogue.messages}>
+                    {(m) => (
+                      <div {...stylex.props(styles.msg, m.role === "user" ? styles.msgUser : styles.msgAssistant)}>
+                        {m.content}
+                      </div>
+                    )}
+                  </For>
+                </div>
+                <div {...stylex.props(styles.actions)}>
+                  <Button block disabled={busy()} onClick={confirm}>{busy() ? "入库中…" : "确认入库"}</Button>
+                  <Button block appear="ghost" disabled={busy()} onClick={cancel}>取消</Button>
+                </div>
+                <Show when={actionError()}>
+                  <div {...stylex.props(styles.error)}>{actionError()}</div>
+                </Show>
+              </Show>
             }
           >
-            <div {...stylex.props(styles.title)}>确认采集「{ready()!.dialogue.title || "未命名对话"}」</div>
-            <Show when={ready()!.dialogue.lowConfidence}>
-              <div {...stylex.props(styles.warn)}>
-                未能按对话结构解析（站点改版或规则未覆盖），已保存页面全文——可能包含导航等噪音。
-                请确认内容后再入库，或取消后重试。
-              </div>
-            </Show>
+            {/* 分享链接模式：粘贴链接 → 采集 → 预览确认 */}
+            <div {...stylex.props(styles.title)}>从分享链接导入对话</div>
             <div {...stylex.props(styles.meta)}>
-              平台：{PLATFORM_LABEL[ready()!.dialogue.platform] ?? "其他"}
-              {" "}· 共 {ready()!.dialogue.messages.length} 条消息
-              {ready()!.dialogue.unitCount != null && (
-                <> · {ready()!.dialogue.unitCount} 个问答单元</>
-              )}
-              <br />
-              来源：<a {...stylex.props(styles.source)} href={ready()!.dialogue.url} target="_blank">
-                {ready()!.dialogue.url}
-              </a>
-              <br />
-              确认后将对话存入你的工作台并进入编辑（自动进行质量检测）。
+              粘贴 Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 的对话分享链接，
+              采集后确认入库。
             </div>
-            <div {...stylex.props(styles.messages)}>
-              <For each={ready()!.dialogue.messages}>
-                {(m) => (
-                  <div {...stylex.props(styles.msg, m.role === "user" ? styles.msgUser : styles.msgAssistant)}>
-                    {m.content}
-                  </div>
-                )}
-              </For>
-            </div>
+            <input
+              type="url"
+              placeholder="https://claude.ai/share/…"
+              value={shareUrl()}
+              onInput={(e) => setShareUrl((e.currentTarget as HTMLInputElement).value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void collectFromUrl();
+              }}
+              {...stylex.props(styles.input)}
+            />
             <div {...stylex.props(styles.actions)}>
-              <Button block disabled={busy()} onClick={confirm}>{busy() ? "入库中…" : "确认入库"}</Button>
-              <Button block appear="ghost" disabled={busy()} onClick={cancel}>取消</Button>
+              <Button block disabled={busy()} onClick={collectFromUrl}>
+                {busy() ? "采集中…" : "采集对话"}
+              </Button>
+              <Button block appear="ghost" disabled={busy()} onClick={cancel}>回工作台</Button>
             </div>
             <Show when={actionError()}>
               <div {...stylex.props(styles.error)}>{actionError()}</div>

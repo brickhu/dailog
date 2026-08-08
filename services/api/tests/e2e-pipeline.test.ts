@@ -188,6 +188,10 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       generate,
       job,
       voice,
+      admin: {
+        isAdmin: async () => false,
+        createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }),
+      },
     });
     const signUp = await app.request("/api/auth/sign-up/email", {
       method: "POST",

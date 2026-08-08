@@ -20,6 +20,7 @@ import type { JobDeps } from "./routes/job";
 import type { VoiceDeps } from "./routes/voice";
 import { createActivateChannel } from "./routes/channel";
 import { createFavoritesRepo } from "./routes/favorites";
+import { createAdminDeps } from "./routes/admin";
 
 const env = loadEnv();
 
@@ -157,6 +158,7 @@ const app = createApp({
   voice,
   channel: { activateChannel: createActivateChannel(db) },
   favorites: createFavoritesRepo(db),
+  admin: createAdminDeps(db, env.ADMIN_EMAILS),
 });
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => {

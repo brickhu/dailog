@@ -138,6 +138,7 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
       POLISH_MAX_VERSIONS: 5,
       RESEND_API_KEY: "",
       EMAIL_FROM: "dailog <no-reply@dailog.fm>",
+      ADMIN_EMAILS: "",
     };
 
     const auth = createAuth({ db: dbClient.db, secret: "test-secret", env: testEnv });
@@ -155,7 +156,12 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
       toggleFavorite: async () => ({ favorited: true }),
       toggleLike: async () => ({ liked: true }),
       listFavorites: async () => [],
-    },    });
+    },
+    admin: {
+      isAdmin: async () => false,
+      createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }),
+    },
+  });
   });
 
   afterAll(async () => {

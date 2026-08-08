@@ -74,6 +74,7 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
       POLISH_MAX_VERSIONS: 5,
       RESEND_API_KEY: "",
       EMAIL_FROM: "dailog <no-reply@dailog.fm>",
+      ADMIN_EMAILS: "",
     };
 
     const auth = createAuth({ db: dbClient.db, secret: "test-secret", env: testEnv });
@@ -153,6 +154,10 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
       voice: fakeVoice(),
       channel: { activateChannel: async () => ({ ok: true }) },
       favorites: createFavoritesRepo(dbClient.db),
+      admin: {
+        isAdmin: async () => false,
+        createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }),
+      },
     });
 
     // 注册真实用户拿 token

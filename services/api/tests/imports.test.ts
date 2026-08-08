@@ -55,16 +55,23 @@ describe("POST /api/imports", () => {
     expect(json.error).toBe("channel_not_activated");
   });
 
-  it("returns 409 when already imported", async () => {
+  it("returns merged result when already imported (原对话缺失 → 保守 appended 0)", async () => {
     const app = makeApp({
-      findImportBySource: async () => ({ id: "imp-0" }),
+      findImportBySource: async () => ({ id: "imp-0", episodeId: "ep-0" }),
     });
     const res = await app.request("/api/imports", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(dialogue),
     });
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({
+      importId: "imp-0",
+      episodeId: "ep-0",
+      merged: true,
+      appended: 0, // fake storage 无原对话 → 保守不追加
+    });
   });
 
   it("returns 409 when insert reports duplicate (race)", async () => {

@@ -32,6 +32,8 @@ const schema = z.object({
   R2_ACCESS_KEY: z.string().optional(),
   R2_SECRET_KEY: z.string().optional(),
   R2_BUCKET: z.string().optional(),
+  // 管理端点管理员白名单（逗号分隔邮箱；空 = 无管理员，/api/admin/* 一律 403）
+  ADMIN_EMAILS: z.string().default(""),
 });
 
 export type Env = z.infer<typeof schema>;

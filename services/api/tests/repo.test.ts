@@ -32,6 +32,7 @@ function makeEnv(): Env {
     POLISH_MAX_VERSIONS: 5,
       RESEND_API_KEY: "",
       EMAIL_FROM: "dailog <no-reply@dailog.fm>",
+      ADMIN_EMAILS: "",
   };
 }
 
@@ -439,6 +440,10 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       generate,
       job,
       voice,
+      admin: {
+        isAdmin: async () => false,
+        createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }),
+      },
     });
 
     it("POST /api/imports 201 then 409; episodes list/script/publish flow", async () => {

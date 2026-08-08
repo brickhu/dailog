@@ -39,3 +39,27 @@ export async function writeDialogue(
 export async function deleteDialogue(storage: AudioStorage, importId: string): Promise<void> {
   await storage.delete(dialogueKey(importId, "dialogue")).catch(() => {});
 }
+
+/**
+ * 同一来源重复采集合并：按 (role, content) 全等去重，追加新增消息（原对话在结尾续接）。
+ * 返回追加条数；0 = 内容完全一致（无需变更）。原始对话缺失时保守不写（返回 0）。
+ */
+export async function mergeDialogue(
+  storage: AudioStorage,
+  importId: string,
+  incoming: CollectedDialogue,
+): Promise<number> {
+  const existing = await readDialogue(storage, importId);
+  if (!existing) return 0;
+  const seen = new Set(existing.messages.map((m) => `${m.role}\u0000${m.content}`));
+  const added = incoming.messages.filter((m) => !seen.has(`${m.role}\u0000${m.content}`));
+  if (added.length === 0) return 0;
+  await writeDialogue(storage, importId, {
+    ...existing,
+    // 标题/URL 以最新采集为准（早期版本可能没采到标题）
+    title: incoming.title || existing.title,
+    url: incoming.url || existing.url,
+    messages: [...existing.messages, ...added],
+  });
+  return added.length;
+}

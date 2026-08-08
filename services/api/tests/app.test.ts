@@ -101,6 +101,7 @@ function fakeEnv(): Env {
     POLISH_MAX_VERSIONS: 5,
       RESEND_API_KEY: "",
       EMAIL_FROM: "dailog <no-reply@dailog.fm>",
+      ADMIN_EMAILS: "",
   };
 }
 
@@ -126,7 +127,12 @@ function makeApp(envOverride: Partial<Env> = {}) {
       toggleFavorite: async () => ({ favorited: true }),
       toggleLike: async () => ({ liked: true }),
       listFavorites: async () => [],
-    },  });
+    },
+    admin: {
+      isAdmin: async () => false,
+      createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }),
+    },
+  });
 }
 
 describe("CORS", () => {

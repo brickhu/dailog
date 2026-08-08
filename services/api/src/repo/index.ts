@@ -53,9 +53,11 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return rows[0]?.channelActivatedAt ?? null;
       },
       async findImportBySource(userId, platform, conversationId) {
+        // join episodes（import_id 外键）：409 时确认页可直接跳到已有草稿编辑
         const rows = await db
-          .select({ id: schema.imports.id })
+          .select({ id: schema.imports.id, episodeId: schema.episodes.id })
           .from(schema.imports)
+          .innerJoin(schema.episodes, eq(schema.episodes.importId, schema.imports.id))
           .where(and(
             eq(schema.imports.userId, userId),
             eq(schema.imports.platform, platform),

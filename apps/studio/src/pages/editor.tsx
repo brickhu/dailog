@@ -1,7 +1,8 @@
 import { createSignal, For, onMount, Show } from "solid-js";
-import { useNavigate, useSearchParams } from "@solidjs/router";
+import { useNavigate, useParams, useSearchParams } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "@dailogues/ui/theme.stylex";
+import { Button } from "@dailogues/ui";
+import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
 import ScriptEditor from "../components/script-editor";
 import GenerateProgress from "../components/generate-progress";
@@ -23,156 +24,150 @@ const STEPS = ["选对话", "润色编辑", "生成", "发布"];
 const styles = stylex.create({
   page: {
     minHeight: "100vh",
-    background: tokens.colorBg,
-    color: tokens.colorText,
+    backgroundColor: colors.background,
+    color: colors.foreground,
   },
   header: {
     display: "flex",
     alignItems: "center",
-    gap: tokens.space4,
-    padding: `${tokens.space3} ${tokens.space6}`,
-    borderBottom: `1px solid ${tokens.colorBorder}`,
+    gap: dimensions.spacing4,
+    padding: `${dimensions.spacing3} ${dimensions.spacing8}`,
+    borderBottom: `1px solid ${colors.ink}`,
   },
   back: {
-    background: "transparent",
+    backgroundColor: "transparent",
     border: "none",
-    color: tokens.colorTextMuted,
+    color: colors.neutral,
     cursor: "pointer",
-    fontSize: tokens.fontSizeMd,
+    fontSize: dimensions.fontSizeMd,
   },
   steps: {
     display: "flex",
-    gap: tokens.space2,
-    fontSize: tokens.fontSizeSm,
+    gap: dimensions.spacing2,
+    fontSize: dimensions.fontSizeSm,
   },
   step: {
-    color: tokens.colorTextMuted,
+    color: colors.neutral,
   },
   stepActive: {
-    color: tokens.colorPrimary,
-    fontWeight: tokens.fontWeightMedium,
+    color: colors.primary,
+    fontWeight: dimensions.fontWeightMedium,
   },
   content: {
     maxWidth: "720px",
     margin: "0 auto",
-    padding: tokens.space6,
+    padding: dimensions.spacing8,
   },
   pickTitle: {
-    fontSize: tokens.fontSizeXl,
-    fontWeight: tokens.fontWeightBold,
-    marginBottom: tokens.space2,
+    fontSize: dimensions.fontSize2xl,
+    fontWeight: dimensions.fontWeightBold,
+    marginBottom: dimensions.spacing2,
   },
   pickHint: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
-    marginBottom: tokens.space5,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    marginBottom: dimensions.spacing6,
   },
   card: {
-    padding: tokens.space4,
-    borderRadius: tokens.radiusMd,
-    background: tokens.colorSurface,
-    border: `1px solid ${tokens.colorBorder}`,
-    marginBottom: tokens.space3,
+    padding: dimensions.spacing4,
+    borderRadius: dimensions.radiusMd,
+    backgroundColor: colors.surface,
+    border: `1px solid ${colors.ink}`,
+    marginBottom: dimensions.spacing3,
     cursor: "pointer",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: tokens.space3,
+    gap: dimensions.spacing3,
   },
   cardMain: {
     minWidth: 0,
   },
   cardTitle: {
-    fontWeight: tokens.fontWeightMedium,
+    fontWeight: dimensions.fontWeightMedium,
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
   cardMeta: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
-    marginTop: tokens.space1,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    marginTop: dimensions.spacing1,
   },
   empty: {
-    padding: tokens.space7,
+    padding: dimensions.spacing12,
     textAlign: "center",
-    color: tokens.colorTextMuted,
-    border: `1px dashed ${tokens.colorBorder}`,
-    borderRadius: tokens.radiusMd,
+    color: colors.neutral,
+    border: `1px dashed ${colors.ink}`,
+    borderRadius: dimensions.radiusMd,
+  },
+  emptyAction: {
+    marginTop: dimensions.spacing4,
   },
   publishedBox: {
-    padding: tokens.space6,
-    borderRadius: tokens.radiusLg,
-    background: tokens.colorSurface,
-    border: `1px solid ${tokens.colorBorder}`,
+    padding: dimensions.spacing8,
+    borderRadius: dimensions.radiusXl,
+    backgroundColor: colors.surface,
+    border: `1px solid ${colors.ink}`,
     textAlign: "center",
   },
   publishedTitle: {
-    fontSize: tokens.fontSizeXl,
-    fontWeight: tokens.fontWeightBold,
-    color: tokens.colorSuccess,
-    marginBottom: tokens.space3,
+    fontSize: dimensions.fontSize2xl,
+    fontWeight: dimensions.fontWeightBold,
+    color: colors.success,
+    marginBottom: dimensions.spacing3,
   },
   publishedDesc: {
-    color: tokens.colorTextMuted,
+    color: colors.neutral,
     lineHeight: 1.7,
-    marginBottom: tokens.space4,
+    marginBottom: dimensions.spacing4,
   },
   field: {
-    marginBottom: tokens.space4,
+    marginBottom: dimensions.spacing4,
   },
   label: {
     display: "block",
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
-    marginBottom: tokens.space1,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    marginBottom: dimensions.spacing1,
   },
   input: {
     width: "100%",
     boxSizing: "border-box",
-    padding: `${tokens.space2} ${tokens.space3}`,
-    borderRadius: tokens.radiusMd,
-    border: `1px solid ${tokens.colorBorder}`,
-    background: tokens.colorBg,
-    color: tokens.colorText,
-    fontSize: tokens.fontSizeMd,
+    padding: `${dimensions.spacing2} ${dimensions.spacing3}`,
+    borderRadius: dimensions.radiusMd,
+    border: `1px solid ${colors.ink}`,
+    background: colors.background,
+    color: colors.foreground,
+    fontSize: dimensions.fontSizeMd,
     fontFamily: "inherit",
   },
   actions: {
     display: "flex",
     justifyContent: "flex-end",
-    gap: tokens.space2,
-    marginTop: tokens.space5,
-  },
-  button: {
-    padding: `${tokens.space2} ${tokens.space5}`,
-    borderRadius: tokens.radiusMd,
-    border: "none",
-    background: tokens.colorPrimary,
-    color: "#fff",
-    cursor: "pointer",
-    fontSize: tokens.fontSizeMd,
-  },
-  buttonGhost: {
-    background: tokens.colorSurface,
-    border: `1px solid ${tokens.colorBorder}`,
-    color: tokens.colorText,
+    gap: dimensions.spacing2,
+    marginTop: dimensions.spacing6,
   },
   buttonDisabled: {
     opacity: 0.5,
     cursor: "not-allowed",
   },
   error: {
-    color: tokens.colorDanger,
-    fontSize: tokens.fontSizeSm,
-    marginBottom: tokens.space3,
+    color: colors.danger,
+    fontSize: dimensions.fontSizeSm,
+    marginBottom: dimensions.spacing3,
   },
 });
 
 export default function NewEpisode() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const paramId = typeof params.id === "string" ? params.id : null;
+  const routeParams = useParams();
+  // 兼容两种入口：/episodes/new?id=<id>（向导）与 /episodes/<id>（确认页入库后直达编辑）
+  const paramId =
+    (typeof params.id === "string" && params.id) ||
+    (typeof routeParams.id === "string" && routeParams.id) ||
+    null;
   const [step, setStep] = createSignal<1 | 2 | 3 | 4>(paramId ? 2 : 1);
   const [episodeId, setEpisodeId] = createSignal<string | null>(paramId);
   const [episodes, setEpisodes] = createSignal<Episode[]>([]);
@@ -245,11 +240,15 @@ export default function NewEpisode() {
         <Show when={step() === 1}>
           <div {...stylex.props(styles.pickTitle)}>选择要制作的对话</div>
           <div {...stylex.props(styles.pickHint)}>
-            用浏览器扩展在 AI 对话页采集后，对话会出现在这里
+            用浏览器扩展在 AI 对话页采集，或粘贴分享链接导入
           </div>
           <Show when={episodes().length === 0}>
             <div {...stylex.props(styles.empty)}>
-              还没有导入的对话。打开 AI 对话页（DeepSeek / Claude / ChatGPT…），点击扩展采集。
+              还没有导入的对话。打开 AI 对话页（DeepSeek / Claude / ChatGPT…）点击扩展采集，
+              或粘贴对话分享链接导入。
+              <div {...stylex.props(styles.emptyAction)}>
+                <Button onClick={() => navigate("/import")}>从分享链接导入</Button>
+              </div>
             </div>
           </Show>
           <For each={episodes()}>
@@ -274,16 +273,8 @@ export default function NewEpisode() {
             onDone={(version) => setPolishedVersion(version)}
           />
           <div {...stylex.props(styles.actions)}>
-            <button {...stylex.props(styles.buttonGhost)} onClick={() => setStep(1)}>
-              上一步
-            </button>
-            <button
-              {...stylex.props(styles.button)}
-              disabled={!polishedVersion()}
-              onClick={() => setStep(3)}
-            >
-              下一步：生成音频
-            </button>
+            <Button appear="ghost" onClick={() => setStep(1)}>上一步</Button>
+            <Button disabled={!polishedVersion()} onClick={() => setStep(3)}>下一步：生成音频</Button>
           </div>
         </Show>
 
@@ -295,13 +286,9 @@ export default function NewEpisode() {
             onQuotaDenied={() => setStep(2)}
           />
           <div {...stylex.props(styles.actions)}>
-            <button {...stylex.props(styles.buttonGhost)} onClick={() => setStep(2)}>
-              {generated() ? "不满意，回去改" : "上一步"}
-            </button>
+            <Button appear="ghost" onClick={() => setStep(2)}>{generated() ? "不满意，回去改" : "上一步"}</Button>
             <Show when={generated()}>
-              <button {...stylex.props(styles.button)} onClick={() => setStep(4)}>
-                下一步：发布
-              </button>
+              <Button onClick={() => setStep(4)}>下一步：发布</Button>
             </Show>
           </div>
         </Show>
@@ -315,9 +302,7 @@ export default function NewEpisode() {
                 <div {...stylex.props(styles.publishedDesc)}>
                   播放页即将上线（内容站开发中）。发布满 3 期后，每发布一期可获得一个邀请码，邀请好友加入。
                 </div>
-                <button {...stylex.props(styles.button)} onClick={() => navigate("/episodes")}>
-                  返回工作台
-                </button>
+                <Button onClick={() => navigate("/episodes")}>返回工作台</Button>
               </div>
             }
           >
@@ -341,12 +326,8 @@ export default function NewEpisode() {
                 />
               </div>
               <div {...stylex.props(styles.actions)}>
-                <button {...stylex.props(styles.buttonGhost)} onClick={() => setStep(3)}>
-                  上一步
-                </button>
-                <button {...stylex.props(styles.button)} onClick={publish} disabled={publishBusy()}>
-                  {publishBusy() ? "发布中…" : "发布"}
-                </button>
+                <Button appear="ghost" onClick={() => setStep(3)}>上一步</Button>
+                <Button onClick={publish} disabled={publishBusy()}>{publishBusy() ? "发布中…" : "发布"}</Button>
               </div>
             </div>
           </Show>
