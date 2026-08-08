@@ -196,43 +196,56 @@ function initConversationFab(): void {
     showScanline();
     fab.setCollecting(0, { onAbandon: () => cancelMonitorCollect() });
     fab.showToast("已开始采集：向上滚动，问答单元进入视窗即选中", "success");
-    // 滚动锁定到底部（虚拟列表初始即底部；全文渲染页面滚到最新消息）
-    void readNodes().then((init) => {
-      const last = init[init.length - 1]?.el;
-      if (last) {
-        try {
-          last.scrollIntoView({ block: "end", behavior: "instant" as ScrollBehavior });
-        } catch {
-          try {
-            last.scrollIntoView();
-          } catch {
-            // 无 scrollIntoView 环境静默
-          }
-        }
-      }
-      // 锁定稳定后：完整协调一次 + 默认选中最后一个完整问答单元（最新一轮问答；
-      // 末尾光有问没答的不算单元；保证计数从 1 起步）
-      setTimeout(() => {
+    // 滚动锁定到底部（迭代收敛：反复把「当前最后一条消息」滚到视口底部，
+    // 直到位置稳定 = 对话真底部——虚拟列表中途起点也能到真底部；全文渲染页
+    // 一次到位）。稳定后才开始采集读取，保证顺序从底部窗口起
+    void lockToBottom().then(() => {
+      if (!monitoring) return;
+      lockSettled = true;
+      void tickMonitor();
+      // 默认选中最后一个完整问答单元（最新一轮问答；末尾光有问没答的不算单元；
+      // 保证计数从 1 起步）
+      void (async () => {
+        if (!monitoring || !monitorReadNodes) return;
+        const bottom = await monitorReadNodes();
         if (!monitoring) return;
-        lockSettled = true;
-        void (async () => {
-          await tickMonitor();
-          if (!monitoring || !monitorReadNodes) return;
-          const bottom = await monitorReadNodes();
-          if (!monitoring) return;
-          const lastComplete = groupIntoUnits(bottom).filter(isCompleteUnit).pop();
-          if (lastComplete && !rangeUnits.some((u) => u.id === lastComplete.id)) {
-            rangeUnits.push(lastComplete);
-            fab.updateCollectCount(rangeUnits.length);
-          }
-        })();
-      }, 200);
+        const lastComplete = groupIntoUnits(bottom).filter(isCompleteUnit).pop();
+        if (lastComplete && !rangeUnits.some((u) => u.id === lastComplete.id)) {
+          rangeUnits.push(lastComplete);
+          fab.updateCollectCount(rangeUnits.length);
+        }
+      })();
     });
     // 滚动事件驱动即时读取（用户滚动快于 300ms 轮询时，窗口间隙不丢消息）；
     // 滚动停止后补读一次（虚拟列表先渲染骨架后渲染内容，稳定后内容才完整）
     document.addEventListener("scroll", onUserScroll, { capture: true, passive: true });
     void tickMonitor();
     monitorIv = setInterval(() => void tickMonitor(), 300);
+  }
+
+/** 滚动锁定到底部：迭代 scrollIntoView 最后消息直到位置稳定（虚拟列表
+ *  中途起点收敛到真底部；全文渲染页一次到位） */
+  async function lockToBottom(): Promise<void> {
+    for (let i = 0; i < 6; i++) {
+      if (!monitoring || !monitorReadNodes) return;
+      const init = await monitorReadNodes();
+      if (!monitoring) return;
+      const last = init[init.length - 1]?.el;
+      if (!last) return;
+      const before = last.getBoundingClientRect().bottom;
+      try {
+        last.scrollIntoView({ block: "end", behavior: "instant" as ScrollBehavior });
+      } catch {
+        try {
+          last.scrollIntoView();
+        } catch {
+          return; // 无 scrollIntoView 环境
+        }
+      }
+      await new Promise((r) => setTimeout(r, 150));
+      if (!monitoring) return;
+      if (Math.abs(last.getBoundingClientRect().bottom - before) < 2) return; // 位置稳定 = 已到底
+    }
   }
 
   let scrollDebounce: ReturnType<typeof setTimeout> | undefined;
@@ -444,7 +457,7 @@ function initConversationFab(): void {
 }
 
 /** 构建标识（每次打包更新——FAB 默认文案，验证扩展新版本是否成功加载） */
-const BUILD_TAG = "20260808-14";
+const BUILD_TAG = "20260808-15";
 
 // AI 平台页：采集 FAB（studio 域不再注入 content script——待入库提醒已移除）。
 // 初始化包保护：真实页面异常时 Console 输出 [dailog] 错误（可诊断），不静默失败
