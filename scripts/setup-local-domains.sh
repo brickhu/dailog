@@ -108,7 +108,7 @@ case "${1:-}" in
     print_env
     ;;
   start)
-    caddy start --config "$CADDYFILE" 2>/dev/null || echo "[caddy] 已在运行"
+    caddy start --config "$CADDYFILE" --adapter caddyfile 2>/dev/null || echo "[caddy] 已在运行"
     echo "[caddy] 已启动"
     ;;
   stop)
