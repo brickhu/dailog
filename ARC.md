@@ -9,7 +9,7 @@
 |---|---|---|
 | 工作台 SPA（app.dailog.fm） | SolidJS + Solid Router + StyleX | Cloudflare Pages（静态，免费） |
 | 内容站 SSR（dailog.fm） | SolidStart（SSR）+ StyleX | Cloudflare Pages/Workers（免费） |
-| 分享采集服务（scraper.dailog.fm） | Node.js + TypeScript + Hono + undici（解析器 + 多通道重试） | **Railway**（独立 service；平台规则变化只更新此服务） |
+| 分享采集服务（importer.dailog.fm） | Node.js + TypeScript + Hono + undici（解析器 + 多通道重试） | **Railway**（独立 service；平台规则变化只更新此服务） |
 | 统一后端（api.dailog.fm） | Node.js + TypeScript + Hono + Drizzle ORM + fluent-ffmpeg | **Railway**（Git 集成自动部署，Docker，按用量约 $5–10/月） |
 | 数据库 | Railway Postgres（纯 Postgres 用法：Drizzle + postgres.js 直连） | Railway（与后端同平台，~$5–15/月） |
 | 认证 | **better-auth**（自托管：邮箱 + 密码 + 会话，跑在统一后端内） | $0 无外部依赖（邮件验证可后接 Resend 免费额度） |
@@ -29,7 +29,7 @@
          └─────────────────────────────┬──────────────────────────────────────┘
                                        │ POST /api/share/collect（转发，鉴权复用）
                                        ▼
-                          share-collect（scraper.dailog.fm，独立服务）
+                          importer（importer.dailog.fm，独立服务）
                                        ▼
                         ┌─────────────────────────────────────────┐
                         │            dailog.fm                 │
@@ -58,7 +58,7 @@ app.dailog.fm (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
                         └─────────────────────────────┘
 ```
 
-**数据流向**：用户粘贴分享链接 → share-collect 服务解析（scraper.dailog.fm）→ 工作台预览确认 → 统一后端落库；SPA 与 SSR 站读 Railway Postgres（内容站直连读库，只读查询；无 RLS，靠查询层约束）；统一后端是唯一写方；音频资产全部在 R2。
+**数据流向**：用户粘贴分享链接 → importer 服务解析（importer.dailog.fm）→ 工作台预览确认 → 统一后端落库；SPA 与 SSR 站读 Railway Postgres（内容站直连读库，只读查询；无 RLS，靠查询层约束）；统一后端是唯一写方；音频资产全部在 R2。
 
 ## 3. 统一后端（services/api）
 
@@ -79,7 +79,7 @@ app.dailog.fm (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 | `POST /api/auth/*` | — | **better-auth 会话路由**（注册/登录/登出/会话；注册含邀请码校验） |
 | `GET /api/me` | ✓ | 当前用户（认证中间件验证） |
 | `POST /api/imports` | ✓ | 接收结构化对话（扩展回传/分享链接采集确认）→ 落库（imports + draft episode 同事务），返回 `{ importId, episodeId }` |
-| `POST /api/share/collect` | ✓ | 分享链接采集转发：调 share-collect 独立服务（`SHARE_COLLECT_URL`）→ 透传 dialogue/错误 |
+| `POST /api/share/collect` | ✓ | 分享链接采集转发：调 importer 独立服务（`IMPORTER_URL`）→ 透传 dialogue/错误 |
 | `POST /api/episodes/:id/polish` | ✓ | SSE 流式润色：先质量审核（轻量 LLM 预检，不达标返回 422 + 原因）→ 语言检测 → 流式返回脚本段落 |
 | `POST /api/episodes/:id/generate` | ✓ | **脚本内容安全审核**（DeepSeek，拒绝 422 + 原因且不扣配额）→ 配额校验 → 建 job → 后台执行 |
 | `GET /api/episodes/:id/job` | ✓ | 轮询生成进度（阶段 + 百分比） |
@@ -123,9 +123,9 @@ queued → tts → merge → upload → done（failed 可重试）
 
 ### 3.5 采集与导入（分享链接采集服务）
 
-- **统一采集器（服务端 `share-collect`，`scraper.dailog.fm`）**：用户粘贴 AI 平台对话**分享链接** → 服务端按平台解析（公开接口 / SSR 内嵌数据 / RSC payload / batchexecute RPC）→ 结构化对话 → 经 `POST /api/share/collect`（API 转发，鉴权复用）→ 工作台预览确认 → `POST /api/imports` 入库
+- **统一采集器（服务端 `importer`，`importer.dailog.fm`）**：用户粘贴 AI 平台对话**分享链接** → 服务端按平台解析（公开接口 / SSR 内嵌数据 / RSC payload / batchexecute RPC）→ 结构化对话 → 经 `POST /api/share/collect`（API 转发，鉴权复用）→ 工作台预览确认 → `POST /api/imports` 入库
 - **元数据**：`{ platform, conversation_id, title, url, messages[] }`——标题取分享页元数据预填节目名；`(user_id, platform, conversation_id)` 唯一约束防重复导入；播放页展示来源信息
-- **平台通道（实测全通，`services/share-collect`）**：
+- **平台通道（实测全通，`services/importer`）**：
 
 | 平台 | 可行性 | 关键适配 |
 |---|---|---|
@@ -139,7 +139,7 @@ queued → tts → merge → upload → done（failed 可重试）
 
 - **通道重试链**：直连 → ScraperAPI（CF 挑战兜底，免费额度内）→ Web Unlocker → CF Worker → socks 代理池——数据中心 IP 直连 claude.ai 被 CF 拦（新加坡/美区实测 403），ScraperAPI 实测全通
 - **真实性 = 分享页公开数据**：分享链接为平台公开内容，无需登录态；采集服务无鉴权（内部服务，经 API 转发调用）
-- **采集服务定位 = 独立部署的解析器**：只做「采集 → 结构化对话」，编辑/生成/发布全部在 SPA 工作台完成；平台规则变化只更新 `services/share-collect` 重新部署，不影响主站
+- **采集服务定位 = 独立部署的解析器**：只做「采集 → 结构化对话」，编辑/生成/发布全部在 SPA 工作台完成；平台规则变化只更新 `services/importer` 重新部署，不影响主站
 - ~~浏览器扩展采集（Manifest V3 登录态 DOM 采集）~~：**已停用**——源码保留在 `apps/extension`（含各平台 DOM 解析器、滚动采集、主世界 hook），不再作为导入通道；`docs/spikes/chat-dom.md` 为历史勘察记录
 
 ## 4. 数据模型（Railway Postgres）
@@ -210,7 +210,7 @@ assets/guest-voice-zh.mp3 等                     ← 平台资产（嘉宾音�
 
 ## 8. 测试策略
 
-- **采集服务解析器（`services/share-collect`）**：每平台解析器纯函数单测（值表解码/多层转义/BigInt 清洗/双格式流式响应等，10 用例）
+- **采集服务解析器（`services/importer`）**：每平台解析器纯函数单测（值表解码/多层转义/BigInt 清洗/双格式流式响应等，10 用例）
 - **管线**：mock LLM / mock Fish Audio 集成测试；ffmpeg 拼接 golden 文件对比（时长/字节）
 - **规则单测**：配额判定、邀请码发放（>3 期规则）、订阅状态机
 - **API 契约**：Vitest + Hono app 直测

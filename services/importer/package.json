@@ -1,5 +1,5 @@
 {
-  "name": "@dailogues/share-collect",
+  "name": "@dailogues/importer",
   "private": true,
   "type": "module",
   "scripts": {

@@ -3,7 +3,7 @@ import { createApp, type AppDeps } from "../src/app";
 import type { Env } from "../src/config/env";
 import type { ScriptSegment } from "../src/routes/polish";
 
-// share 转发路由测试：mock 全局 fetch 模拟 share-collect 服务响应
+// share 转发路由测试：mock 全局 fetch 模拟 importer 服务响应
 
 function fakeRepo(): AppDeps["repo"] {
   return {
@@ -125,7 +125,7 @@ function makeApp(shareCollectUrl: string | null) {
   } as AppDeps);
 }
 
-describe("share 转发路由", () => {
+describe("importer 转发路由", () => {
   it("转发采集请求并透传 dialogue", async () => {
     const dialogue = {
       platform: "claude",
@@ -141,8 +141,8 @@ describe("share 转发路由", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     try {
-      const app = makeApp("https://share-collect.internal");
-      const res = await app.request("/api/share/collect", {
+      const app = makeApp("https://importer.internal");
+      const res = await app.request("/api/importer/collect", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ url: "https://claude.ai/share/abc" }),
@@ -151,16 +151,16 @@ describe("share 转发路由", () => {
       const body = (await res.json()) as typeof dialogue;
       expect(body.platform).toBe("claude");
       expect(body.messages).toHaveLength(2);
-      // 转发目标：share-collect /collect + 请求体透传
+      // 转发目标：importer /collect + 请求体透传
       const [url, init] = fetchMock.mock.calls[0];
-      expect(String(url)).toBe("https://share-collect.internal/collect");
+      expect(String(url)).toBe("https://importer.internal/collect");
       expect(JSON.parse((init as RequestInit).body as string)).toEqual({ url: "https://claude.ai/share/abc" });
     } finally {
       vi.unstubAllGlobals();
     }
   });
 
-  it("透传 share-collect 错误（platform_unreachable → 502）", async () => {
+  it("透传 importer 错误（platform_unreachable → 502）", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -170,8 +170,8 @@ describe("share 转发路由", () => {
       }),
     );
     try {
-      const app = makeApp("https://share-collect.internal");
-      const res = await app.request("/api/share/collect", {
+      const app = makeApp("https://importer.internal");
+      const res = await app.request("/api/importer/collect", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ url: "https://claude.ai/share/abc" }),
@@ -185,9 +185,9 @@ describe("share 转发路由", () => {
     }
   });
 
-  it("未配置 share-collect → 503", async () => {
+  it("未配置 importer → 503", async () => {
     const app = makeApp(null);
-    const res = await app.request("/api/share/collect", {
+    const res = await app.request("/api/importer/collect", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ url: "https://claude.ai/share/abc" }),
@@ -196,8 +196,8 @@ describe("share 转发路由", () => {
   });
 
   it("非法 URL → 400", async () => {
-    const app = makeApp("https://share-collect.internal");
-    const res = await app.request("/api/share/collect", {
+    const app = makeApp("https://importer.internal");
+    const res = await app.request("/api/importer/collect", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ url: "not-a-url" }),

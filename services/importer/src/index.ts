@@ -30,4 +30,4 @@ app.post("/collect", async (c) => {
 
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port });
-console.log(`[share-collect] listening on :${port} (SOCKS_PROXY=${process.env.SOCKS_PROXY ? "set" : "none"})`);
+console.log(`[importer] listening on :${port} (SOCKS_PROXY=${process.env.SOCKS_PROXY ? "set" : "none"})`);

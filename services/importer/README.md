@@ -1,4 +1,4 @@
-# @dailogues/share-collect
+# @dailogues/importer
 
 分享页采集独立服务：粘贴链接 → 全量对话（六大平台，API 优先 + DOM 兜底）。
 
@@ -33,16 +33,16 @@ GET  /health
 
 ## Railway 部署
 
-1. New Project → Deploy from GitHub repo → 选本服务目录（`services/share-collect`）——Nixpacks 自动识别 `start` 脚本
+1. New Project → Deploy from GitHub repo → 选本服务目录（`services/importer`）——Nixpacks 自动识别 `start` 脚本
 2. 无需额外配置；claude 被 CF 拦时加 `SOCKS_PROXY` 环境变量
 3. 部署后先测 claude 成功率（采样 100 次）：直连过 CF 就保持直连，不过就配代理
 
 ## 开发
 
 ```bash
-pnpm --filter @dailogues/share-collect dev
-pnpm --filter @dailogues/share-collect test   # 解析器单测（10 个）
-pnpm --filter @dailogues/share-collect typecheck
+pnpm --filter @dailogues/importer dev
+pnpm --filter @dailogues/importer test   # 解析器单测（10 个）
+pnpm --filter @dailogues/importer typecheck
 ```
 
 平台规则变化：只改 `src/platforms/<平台>.ts` 重新部署即可，不影响 API/Studio。

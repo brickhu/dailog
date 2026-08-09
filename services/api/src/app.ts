@@ -4,7 +4,7 @@ import type { Env } from "./config/env";
 import { createAuthMiddleware, type AuthEnv, type AuthLike } from "./middleware/auth";
 import { createCorsMiddleware } from "./middleware/cors";
 import { importsRoutes } from "./routes/imports";
-import { shareRoutes } from "./routes/share";
+import { importerRoutes } from "./routes/importer";
 import { episodesRoutes } from "./routes/episodes";
 import { polishRoutes, type PolishDeps } from "./routes/polish";
 import { generateRoutes, type GenerateDeps } from "./routes/generate";
@@ -28,7 +28,7 @@ export type AppDeps = {
   channel: ChannelDeps; // 频道开通（授权码激活）
   favorites: FavoritesRepo; // 消费端互动（收藏/点赞）
   admin: AdminDeps; // 管理端点（ADMIN_EMAILS 白名单判定）
-  /** share-collect 服务地址（测试注入用；缺省读 SHARE_COLLECT_URL env） */
+  /** importer 服务地址（测试注入用；缺省读 IMPORTER_URL env） */
   shareCollectUrl?: () => string | null;
 };
 
@@ -60,7 +60,7 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   });
 
   app.route("/api", importsRoutes(deps.repo.imports, deps.voice.storage));
-  app.route("/api", shareRoutes(() => deps.shareCollectUrl?.() ?? process.env.SHARE_COLLECT_URL ?? null));
+  app.route("/api", importerRoutes(() => deps.shareCollectUrl?.() ?? process.env.IMPORTER_URL ?? null));
   app.route("/api", episodesRoutes(deps.repo.episodes, (c) => (c as Context<AuthEnv>).get("userId"), deps.voice.storage));
   // polish/generate/job/voice 路由自带 /api 前缀（与各自 test.ts 直接对裸 app 请求 /api/... 一致），故挂载在根路径；
   // 上面的 /api/* 鉴权中间件依然覆盖

@@ -161,7 +161,7 @@ export default function CollectPage() {
     setState({ kind: "ready", dialogue });
   });
 
-  /** 分享链接采集：调 API 转发 → share-collect 服务 → 预览确认 */
+  /** 分享链接采集：调 API 转发 → importer 服务 → 预览确认 */
   const collectFromUrl = async () => {
     const url = shareUrl().trim();
     if (!url || busy()) return;
@@ -173,7 +173,7 @@ export default function CollectPage() {
     setActionError(null);
     setState({ kind: "loading" });
     try {
-      const res = await api.request("/api/share/collect", {
+      const res = await api.request("/api/importer/collect", {
         method: "POST",
         body: JSON.stringify({ url }),
       });
