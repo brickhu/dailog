@@ -34,6 +34,7 @@ function makeEnv(): Env {
       RESEND_API_KEY: "",
       EMAIL_FROM: "dailog <no-reply@dailog.fm>",
       ADMIN_EMAILS: "",
+      SITE_BASE_URL: "https://site.dailog.fm",
   };
 }
 
@@ -464,12 +465,9 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       createSnapshot: (row) => repo.snapshots.create(row),
       // ImportDeps 的 content row 不含 url（url 不变），repo.updateContent 的 SnapshotRow.url 为遗留字段
       updateSnapshotContent: (id, row) => repo.snapshots.updateContent(id, { url: "", ...row }),
-      updateSnapshotQuality: (id, quality) => repo.snapshots.updateQuality(id, quality),
       markSnapshotUnreachable: (id, error) => repo.snapshots.markUnreachable(id, error),
       markSnapshotParseFailed: (id, error) => repo.snapshots.markParseFailed(id, error),
       findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
-      qualityCheck: async () => ({ pass: true, language: "zh" }),
-      llm: { complete: async () => "", stream: async () => "" },
     };
     const polishesDeps: AppDeps["polishesDeps"] = {
       getChannelActivatedAt: (userId) => repo.episodes.getChannelActivatedAt(userId),
@@ -494,7 +492,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       llm: {
         complete: async () => "",
         stream: async (_msgs, onDelta) => {
-          const json = '[{"speaker":"host","text":"你好"},{"speaker":"guest","text":"你好！"}]';
+          const json = '{"language":"zh","segments":[{"speaker":"host","text":"你好"},{"speaker":"guest","text":"你好！"}]}';
           onDelta(json);
           return json;
         },

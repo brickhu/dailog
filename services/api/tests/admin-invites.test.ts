@@ -56,6 +56,10 @@ function fakeRepo(): AppDeps["repo"] {
       getVoiceSample: async () => null,
       saveVoiceSample: async () => {},
       getChannelActivatedAt: async () => null,
+      getProfile: async () => null,
+      updateUserNickname: async () => {},
+      updateChannel: async () => ({ ok: true } as const),
+      isUsernameTaken: async () => false,
     },
     jobs: {
       getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
@@ -77,12 +81,9 @@ function fakeImportDeps(): AppDeps["importDeps"] {
     getSnapshotByUrl: async () => null,
     createSnapshot: async () => ({ id: "snap-1" }),
     updateSnapshotContent: async () => {},
-    updateSnapshotQuality: async () => {},
     markSnapshotUnreachable: async () => {},
     markSnapshotParseFailed: async () => {},
     findPolishByUserSnapshot: async () => null,
-    qualityCheck: async () => ({ pass: true, language: "zh" }),
-    llm: { complete: async () => "", stream: async () => "" },
   };
 }
 function fakePolishesDeps(): AppDeps["polishesDeps"] {
@@ -171,6 +172,8 @@ function baseEnv(extra: Record<string, string> = {}) {
     RESEND_API_KEY: "",
     EMAIL_FROM: "dailog <no-reply@dailog.fm>",
     ADMIN_EMAILS: "",
+    SITE_BASE_URL: "https://site.dailog.fm",
+
     ...extra,
   };
 }

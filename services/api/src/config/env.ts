@@ -6,6 +6,11 @@ const schema = z.object({
   BETTER_AUTH_SECRET: z.string().default("dev-secret-change-me-0123456789abcdef"),
   /** better-auth 公开基址（回调/重定向用；本地 dev 默认，生产按环境设置 https://api.*） */
   BETTER_AUTH_URL: z.string().default("http://localhost:8787"),
+  /** 消费站基址（找回密码邮件链接指向 /reset-password 页；本地 sslip 裸域，生产 https://site.dailog.fm） */
+  SITE_BASE_URL: z.string().url().default("https://site.dailog.fm"),
+  /** GitHub OAuth（登录按钮未配置时前端隐藏）：GitHub App → Client ID/Secret；callback 需在 GitHub App 设置添加 */
+  GITHUB_CLIENT_ID: z.string().optional(),
+  GITHUB_CLIENT_SECRET: z.string().optional(),
   /** SSO 跨子域 cookie 域（生产 .dailog.fm；本地留空 = host-only cookie，localhost 跨端口天然共享） */
   BETTER_AUTH_COOKIE_DOMAIN: z.string().optional(),
   PORT: z.coerce.number().default(8787),

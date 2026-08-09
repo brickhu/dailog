@@ -27,45 +27,6 @@ const styles = stylex.create({
     fontSize: dimensions.fontSizeSm,
     marginBottom: dimensions.spacing6,
   },
-  tabs: {
-    display: "flex",
-    gap: dimensions.spacing2,
-    marginBottom: dimensions.spacing6,
-  },
-  tab: {
-    flex: 1,
-    padding: `${dimensions.spacing2} ${dimensions.spacing3}`,
-    borderRadius: dimensions.radiusMd,
-    border: `1px solid ${colors.ink}`,
-    backgroundColor: "transparent",
-    color: colors.neutral,
-    cursor: "pointer",
-    fontSize: dimensions.fontSizeMd,
-  },
-  tabActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-    color: colors.onPrimary,
-  },
-  nameField: {
-    marginBottom: dimensions.spacing4,
-  },
-  nameLabel: {
-    display: "block",
-    color: colors.neutral,
-    fontSize: dimensions.fontSizeSm,
-    marginBottom: dimensions.spacing1,
-  },
-  nameInput: {
-    width: "100%",
-    boxSizing: "border-box",
-    padding: `${dimensions.spacing2} ${dimensions.spacing3}`,
-    borderRadius: dimensions.radiusMd,
-    border: `1px solid ${colors.ink}`,
-    backgroundColor: colors.background,
-    color: colors.foreground,
-    fontSize: dimensions.fontSizeMd,
-  },
   error: {
     color: colors.danger,
     fontSize: dimensions.fontSizeSm,
@@ -76,6 +37,24 @@ const styles = stylex.create({
     fontSize: dimensions.fontSizeSm,
     marginTop: dimensions.spacing3,
     textAlign: "center",
+  },
+  forgotRow: {
+    marginTop: dimensions.spacing2,
+    textAlign: "center",
+  },
+  forgotLink: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+  },
+  githubRow: {
+    marginTop: dimensions.spacing4,
+  },
+  githubDivider: {
+    display: "block",
+    textAlign: "center",
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    marginBottom: dimensions.spacing2,
   },
   noticePanel: {
     textAlign: "center",
@@ -111,8 +90,8 @@ const styles = stylex.create({
 /** 统一登录/注册模式：老用户密码登录，新用户验证码注册（同一表单） */
 export type LoginMode = "signin" | "signup";
 
-/** 支持的登录方式（业务配置：未来扩展 github/wechat 时在此声明） */
-export type LoginMethod = "email";
+/** 支持的登录方式（业务配置：未来扩展 wechat 时在此声明） */
+export type LoginMethod = "email" | "github";
 
 export interface LoginFormConfig {
   /** 统一提交端点：老用户密码登录 / 新用户发验证码（POST { email, password, name? } → { token, user } | { needOtp: true }） */
@@ -121,6 +100,10 @@ export interface LoginFormConfig {
   otpCompleteEndpoint: string;
   /** 支持的登录方式（默认仅 email） */
   methods?: LoginMethod[];
+  /** 找回密码页地址（可选；未配置时不显示"忘记密码"链接）——site 传站内 /forgot-password，studio 传 site 绝对地址 */
+  forgotPasswordUrl?: string;
+  /** GitHub 登录：sign-in/social 端点（POST）+ 登录成功后的回跳地址（可选；未配置时不显示 GitHub 按钮） */
+  github?: { signInSocialEndpoint: string; callbackURL: string };
 }
 
 export interface LoginSuccess {
@@ -143,13 +126,40 @@ export interface LoginFormProps {
 export function LoginForm(props: LoginFormProps) {
   const [email, setEmail] = createSignal("");
   const [password, setPassword] = createSignal("");
-  const [name, setName] = createSignal("");
   const [error, setError] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
   // 注册 OTP：true = 已发码，等待输入验证码
   // 统一模式：老用户密码登录 / 新用户验证码注册
   const [otpStep, setOtpStep] = createSignal(false);
   const [otp, setOtp] = createSignal("");
+  const [githubBusy, setGithubBusy] = createSignal(false);
+
+  /** GitHub 登录：POST sign-in/social → { url } → 跳转授权页（登录后回 callbackURL） */
+  const signInGithub = async () => {
+    const gh = props.config.github;
+    if (!gh || githubBusy()) return;
+    setGithubBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(gh.signInSocialEndpoint, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(15_000),
+        body: JSON.stringify({ provider: "github", callbackURL: gh.callbackURL }),
+      });
+      const body = (await res.json().catch(() => null)) as { url?: string } | null;
+      if (res.ok && body?.url) {
+        window.location.href = body.url;
+        return;
+      }
+      setError("GitHub 登录启动失败，请稍后重试");
+    } catch {
+      setError("网络错误，请重试");
+    } finally {
+      setGithubBusy(false);
+    }
+  };
 
   const submit = async (e: SubmitEvent) => {
     e.preventDefault();
@@ -169,7 +179,7 @@ export function LoginForm(props: LoginFormProps) {
         body: JSON.stringify({
           email: email().trim(),
           password: password(),
-          name: name().trim() || email().trim().split("@")[0],
+          name: email().trim().split("@")[0],
         }),
       });
       if (!res.ok) {
@@ -216,7 +226,7 @@ export function LoginForm(props: LoginFormProps) {
           email: email().trim(),
           otp: otp().trim(),
           password: password(),
-          name: name().trim() || email().trim().split("@")[0],
+          name: email().trim().split("@")[0],
         }),
       });
       if (!res.ok) {
@@ -242,64 +252,50 @@ export function LoginForm(props: LoginFormProps) {
     <div {...stylex.props(styles.page)}>
       <Card>
         <div {...stylex.props(styles.brand)}>dailog</div>
-        <div {...stylex.props(styles.tagline)}>把你的 AI 对话，变成你的播客</div>
+        <div {...stylex.props(styles.tagline)}>把AI对话，变成你们的对谈播客</div>
         <div>
-          <div {...stylex.props(styles.tabs)}>
-            <span {...stylex.props(styles.tab, styles.tabActive)}>
-              登录 / 注册（新用户将收到邮箱验证码）
-            </span>
-          </div>
-              <Show
-                when={!otpStep()}
-                fallback={
-                  /* 注册 OTP 验证码输入（发码后） */
-                  <form onSubmit={verifyOtp}>
-                    <div {...stylex.props(styles.noticeText)}>
-                      验证码已发送至 <b>{email().trim()}</b>，请输入 6 位验证码完成注册。
-                    </div>
-                    <TextField
-                      label="验证码"
-                      type="text"
-                      value={otp()}
-                      onInput={setOtp}
-                      placeholder="6 位数字"
-                      autocomplete="one-time-code"
-                    />
-                    <Button type="submit" block disabled={busy()}>
-                      {busy() ? "验证中…" : "完成注册"}
-                    </Button>
-                    <Button
-                      block
-                      appear="ghost"
-                      disabled={busy()}
-                      onClick={() => setOtpStep(false)}
-                    >
-                      返回修改邮箱
-                    </Button>
-                    <Show when={error()}>
-                      <div {...stylex.props(styles.error)}>{error()}</div>
-                    </Show>
-                  </form>
-                }
-              >
-                <form onSubmit={submit}>
-                  <div {...stylex.props(styles.nameField)}>
-                    <label {...stylex.props(styles.nameLabel)}>昵称（可选）</label>
-                    <input
-                      {...stylex.props(styles.nameInput)}
-                      value={name()}
-                      onInput={(e) => setName(e.currentTarget.value)}
-                      autocomplete="nickname"
-                    />
-                  </div>
-                  <TextField
-                    label="邮箱"
-                    type="email"
-                    value={email()}
-                    onInput={setEmail}
-                    placeholder="you@example.com"
-                    autocomplete="email"
-                  />
+          <Show
+            when={!otpStep()}
+            fallback={
+              /* 注册 OTP 验证码输入（发码后） */
+              <form onSubmit={verifyOtp}>
+                <div {...stylex.props(styles.noticeText)}>
+                  验证码已发送至 <b>{email().trim()}</b>，请输入 6 位验证码完成注册。
+                </div>
+                <TextField
+                  label="验证码"
+                  type="text"
+                  value={otp()}
+                  onInput={setOtp}
+                  placeholder="6 位数字"
+                  autocomplete="one-time-code"
+                />
+                <Button type="submit" block disabled={busy()}>
+                  {busy() ? "验证中…" : "完成注册"}
+                </Button>
+                <Button
+                  block
+                  appear="ghost"
+                  disabled={busy()}
+                  onClick={() => setOtpStep(false)}
+                >
+                  返回修改邮箱
+                </Button>
+                <Show when={error()}>
+                  <div {...stylex.props(styles.error)}>{error()}</div>
+                </Show>
+              </form>
+            }
+          >
+            <form onSubmit={submit}>
+              <TextField
+                label="邮箱"
+                type="email"
+                value={email()}
+                onInput={setEmail}
+                placeholder="you@example.com"
+                autocomplete="email"
+              />
                   <TextField
                     label="密码"
                     type="password"
@@ -315,6 +311,19 @@ export function LoginForm(props: LoginFormProps) {
                     <div {...stylex.props(styles.error)}>{error()}</div>
                   </Show>
                   <div {...stylex.props(styles.hint)}>注册需邮箱验证码 · 邀请码用于开通频道</div>
+                  <Show when={props.config.github}>
+                    <div {...stylex.props(styles.githubRow)}>
+                      <span {...stylex.props(styles.githubDivider)}>或</span>
+                      <Button block appear="ghost" onClick={signInGithub} disabled={githubBusy()}>
+                        {githubBusy() ? "跳转 GitHub…" : "使用 GitHub 登录"}
+                      </Button>
+                    </div>
+                  </Show>
+                  <Show when={props.config.forgotPasswordUrl}>
+                    <div {...stylex.props(styles.forgotRow)}>
+                      <a href={props.config.forgotPasswordUrl} {...stylex.props(styles.forgotLink)}>忘记密码？</a>
+                    </div>
+                  </Show>
                 </form>
               </Show>
         </div>

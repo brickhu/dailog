@@ -33,7 +33,6 @@ interface Dialogue {
   title: string;
   url: string;
   messages: DialogueMessage[];
-  quality?: { pass: boolean; reason?: string; language?: string } | null;
   snapshotId?: string | null;
 }
 
@@ -124,16 +123,6 @@ const styles = stylex.create({
     color: colors.foreground,
     fontSize: dimensions.fontSizeSm,
     marginBottom: dimensions.spacing2,
-  },
-  warn: {
-    backgroundColor: "#fffbeb",
-    color: "#92400e",
-    border: `1px solid #fde68a`,
-    borderRadius: dimensions.radiusMd,
-    padding: dimensions.spacing3,
-    fontSize: dimensions.fontSizeSm,
-    lineHeight: "1.5",
-    marginBottom: dimensions.spacing4,
   },
   urlHint: {
     fontSize: dimensions.fontSizeSm,
@@ -228,7 +217,7 @@ export default function CollectPage() {
       });
       const body = (await res.json().catch(() => null)) as
         | {
-            // /api/import 响应：dialogue + quality + snapshotId（五层模型）
+            // /api/import 响应：dialogue + snapshotId（五层模型）
             dialogue?: {
               platform?: string;
               conversationId?: string;
@@ -236,7 +225,6 @@ export default function CollectPage() {
               url?: string;
               messages?: DialogueMessage[];
             };
-            quality?: { pass: boolean; reason?: string; language?: string } | null;
             snapshotId?: string;
             existing?: boolean;
             polishId?: string;
@@ -257,7 +245,6 @@ export default function CollectPage() {
             title: body.dialogue.title ?? "分享对话",
             url: body.dialogue.url ?? url,
             messages: body.dialogue.messages,
-            quality: body.quality ?? null,
             snapshotId: body.snapshotId ?? null,
           },
         });
@@ -271,7 +258,9 @@ export default function CollectPage() {
             ? "该平台暂时不可达（可能被反爬拦截）。请稍后重试，或换一个平台的分享链接。"
             : err === "parse_failed"
               ? "无法解析该分享页（页面结构可能已变化）。请确认链接有效后重试。"
-              : err === "share_unavailable"
+              : err === "too_short"
+                ? "该对话内容过短（少于 3 轮问答或不足 500 字），不适合制作播客单集。请换一个更完整的对话分享链接。"
+                : err === "share_unavailable"
                 ? "该分享链接已失效或被取消，请确认后重试。"
                 : err === "unsupported_platform"
                   ? "暂不支持该平台/链接格式。支持：Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 分享链接。"
@@ -354,12 +343,6 @@ export default function CollectPage() {
                 }
               >
                 <div {...stylex.props(styles.title)}>确认采集「{ready()!.dialogue.title || "未命名对话"}」</div>
-                <Show when={ready()!.dialogue.quality && !ready()!.dialogue.quality!.pass}>
-                  <div {...stylex.props(styles.warn)}>
-                    ⚠️ 质量检测未通过：{ready()!.dialogue.quality!.reason ?? "内容可能不适合制作节目"}。
-                    仍可继续导入。
-                  </div>
-                </Show>
                 <div {...stylex.props(styles.meta)}>
                   平台：{PLATFORM_LABEL[ready()!.dialogue.platform] ?? "其他"}
                   {" "}· 共 {ready()!.dialogue.messages.length} 条消息

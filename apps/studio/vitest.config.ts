@@ -16,5 +16,11 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/__tests__/**/*.test.ts"],
+    server: {
+      deps: {
+        // ui 包 banner 组件引 @iconify-icon/solid（.jsx 分发）——node 侧加载需走 vite 转换
+        inline: ["@iconify-icon/solid"],
+      },
+    },
   },
 });

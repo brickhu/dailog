@@ -30,6 +30,7 @@ export interface TextFieldProps {
   placeholder?: string;
   type?: string;
   autocomplete?: string;
+  maxLength?: number;
 }
 
 /** 带标签的输入框（两站共享）：label + 深色输入框 */
@@ -43,6 +44,7 @@ export function TextField(props: TextFieldProps) {
         value={props.value}
         placeholder={props.placeholder}
         autocomplete={props.autocomplete}
+        maxlength={props.maxLength}
         onInput={(e) => props.onInput(e.currentTarget.value)}
       />
     </div>

@@ -6,11 +6,13 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 const args = process.argv.slice(2);
-const code = args.find((a) => !a.startsWith("--"));
 const expiresIdx = args.indexOf("--expires");
 const expiresDays = expiresIdx !== -1 ? Number(args[expiresIdx + 1]) : undefined;
+// code = 第一个非 -- 开头的参数，且不能是 --expires 的值（防 `--expires 30` 把 30 当 code）
+const code = args.find((a, i) => !a.startsWith("--") && !(expiresIdx !== -1 && i === expiresIdx + 1));
 if (!code) {
-  console.error("用法: invites:create <code> [--expires <days>]");
+  console.error("用法: pnpm --filter @dailogues/api invites:create <code> [--expires <天数>]");
+  console.error("示例: pnpm --filter @dailogues/api invites:create my-code-1 --expires 30（缺省永不过期）");
   process.exit(1);
 }
 if (expiresDays !== undefined && Number.isNaN(expiresDays)) {

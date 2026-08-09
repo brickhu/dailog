@@ -12,6 +12,8 @@ export const env = {
   apiBaseUrl: required("VITE_API_BASE_URL", ""),
   /** 浏览器扩展 id（chrome://extensions 加载后可见）；留空则隐藏扩展连接卡 */
   extensionId: required("VITE_EXTENSION_ID", ""),
+  /** 消费站基址（账号管理/找回密码入口）；留空则隐藏外部链接 */
+  siteBaseUrl: required("VITE_SITE_BASE_URL", ""),
 };
 
 export const isDev = import.meta.env.DEV;

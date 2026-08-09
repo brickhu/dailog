@@ -5,7 +5,7 @@ import { createAuth } from "./auth/better-auth";
 import { createDb } from "./db/client";
 import { createRepo } from "./repo";
 import { createLlmClient } from "./llm/client";
-import { qualityCheckPrompt, safetyCheckPrompt, parseJsonLoose, type QualityResult } from "./llm/prompts";
+import { safetyCheckPrompt, parseJsonLoose } from "./llm/prompts";
 import { createJobQueue } from "./pipeline/queue";
 import { createPipelineRunner } from "./pipeline/runner";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
@@ -85,12 +85,9 @@ const importDeps: ImportDeps = {
   getSnapshotByUrl: (url) => repo.snapshots.getByUrl(url),
   createSnapshot: (row: any) => (repo.snapshots.create as any)(row) as Promise<{ id: string }>,
   updateSnapshotContent: (id: string, row: any) => (repo.snapshots.updateContent as any)(id, row),
-  updateSnapshotQuality: (id, quality) => repo.snapshots.updateQuality(id, quality),
   markSnapshotUnreachable: (id, error) => repo.snapshots.markUnreachable(id, error),
   markSnapshotParseFailed: (id, error) => repo.snapshots.markParseFailed(id, error),
   findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
-  qualityCheck: async (messages) => parseJsonLoose(await llm.complete(qualityCheckPrompt(messages))) as QualityResult,
-  llm,
 };
 
 const polishesDeps: PolishesDeps = {

@@ -52,18 +52,30 @@ export function transcriptsRoutes(deps: TranscriptsDeps) {
     const messages = await deps.getDialogueForPolish(body.polishId, userId).catch(() => null);
     if (!messages || messages.length === 0) return c.json({ error: "no_dialogue" }, 404);
 
-    // 语言随快照质量（导入时已识别）；未识别默认 zh
+    // 语言由 LLM 随润色识别（跟随原对话语言）；解析失败兜底默认 zh
     return streamSSE(c, async (stream) => {
       let full = "";
       try {
-        const result = await deps.llm.stream(polishPrompt(messages, "zh", instruction), (delta: string) => {
+        const result = await deps.llm.stream(polishPrompt(messages, instruction), (delta: string) => {
           full += delta;
           void stream.writeSSE({ event: "segment", data: delta });
         });
         full = result || full;
-        const parsed = parseJsonLoose(full) as ScriptSegment[];
-        if (!Array.isArray(parsed)) throw new Error("polish_output_invalid");
-        const saved = await deps.createTranscript(body.polishId as string, parsed, "zh");
+        // 新结构 { language, segments }；兼容旧版数组输出（缺 language → 默认 zh）
+        const parsed = parseJsonLoose(full) as { language?: unknown; segments?: unknown } | ScriptSegment[];
+        let segments: ScriptSegment[];
+        let language: string | null = "zh";
+        if (Array.isArray(parsed)) {
+          segments = parsed;
+        } else if (Array.isArray(parsed?.segments)) {
+          segments = parsed.segments;
+          if (typeof parsed.language === "string" && /^[a-zA-Z]{2,3}$/.test(parsed.language)) {
+            language = parsed.language.toLowerCase();
+          }
+        } else {
+          throw new Error("polish_output_invalid");
+        }
+        const saved = await deps.createTranscript(body.polishId as string, segments, language);
         await stream.writeSSE({ event: "done", data: JSON.stringify({ transcriptId: saved.id }) });
       } catch (e) {
         await stream.writeSSE({ event: "error", data: JSON.stringify({ error: String(e instanceof Error ? e.message : e) }) });

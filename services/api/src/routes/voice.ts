@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { AudioStorage } from "../storage";
 
 export interface VoiceSampleRow {
+  id?: string;          // 仅 GET 回读填充（前端 sampleId）
   userId: string;
   audioUrl: string;   // storage key
   referenceId: string | null;  // 已废弃（不再训练音色模型），保留列兼容
@@ -29,10 +30,26 @@ export function voiceRoutes(deps: VoiceDeps) {
     const row = await deps.getVoiceSample?.(userId);
     if (!row) return c.json({ error: "not_found" }, 404);
     return c.json({
+      id: row.id ?? null,
       status: row.status,
       referenceId: row.referenceId,
       duration: row.duration,
       createdAt: row.createdAt,
+    });
+  });
+
+  /** 采样音频流（设置页播放用）：读 storage key 返回 webm */
+  app.get("/api/me/voice-sample/audio", async (c) => {
+    const userId = c.get("userId") as string;
+    const row = await deps.getVoiceSample?.(userId);
+    if (!row) return c.json({ error: "not_found" }, 404);
+    const bytes = await deps.storage.get(row.audioUrl);
+    if (!bytes) return c.json({ error: "not_found" }, 404);
+    return new Response(bytes as unknown as BodyInit, {
+      headers: {
+        "Content-Type": "audio/webm",
+        "Cache-Control": "private, max-age=300",
+      },
     });
   });
 

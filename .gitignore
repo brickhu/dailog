@@ -22,3 +22,6 @@ services/api/data/
 
 # spike 生成产物
 scripts/spikes/out-*.mp3
+
+# 误放的项目内 Chrome 用户数据目录（本地浏览器配置，非项目产物）
+poc-profile/

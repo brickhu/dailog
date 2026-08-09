@@ -2,7 +2,7 @@ import { createSignal, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { Button } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
-import Recorder from "../components/recorder";
+import VoiceSampler from "../components/voice-sampler";
 import { useAuth } from "../lib/auth";
 import { uploadVoiceSample, HOST_READING_SCRIPT } from "../lib/voice";
 import { ApiError } from "../lib/api";
@@ -84,21 +84,6 @@ const styles = stylex.create({
     fontSize: dimensions.fontSizeSm,
     marginTop: dimensions.spacing3,
   },
-  readingScript: {
-    background: colors.background,
-    border: `1px solid ${colors.ink}`,
-    borderRadius: dimensions.radiusMd,
-    padding: `${dimensions.spacing3} ${dimensions.spacing4}`,
-    color: colors.foreground,
-    fontSize: dimensions.fontSizeMd,
-    lineHeight: 1.8,
-    marginBottom: dimensions.spacing4,
-  },
-  readingLabel: {
-    color: colors.primary,
-    fontWeight: dimensions.fontWeightMedium,
-    marginBottom: dimensions.spacing1,
-  },
 });
 
 export default function Onboarding() {
@@ -108,7 +93,6 @@ export default function Onboarding() {
   const [code, setCode] = createSignal("");
   const [error, setError] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
-  const [blob, setBlob] = createSignal<Blob | null>(null);
 
   const activateChannel = async (e: SubmitEvent) => {
     e.preventDefault();
@@ -132,9 +116,7 @@ export default function Onboarding() {
     }
   };
 
-  const submitVoice = async () => {
-    const b = blob();
-    if (!b) return;
+  const submitVoice = async (b: Blob) => {
     setBusy(true);
     setError(null);
     try {
@@ -172,15 +154,10 @@ export default function Onboarding() {
               <div {...stylex.props(styles.desc)}>
                 播客里"你"的声音将由这段录音克隆生成。找个安静环境，照着下面的文字读一遍（10–15 秒）。
               </div>
-              <div {...stylex.props(styles.readingScript)}>
-                <div {...stylex.props(styles.readingLabel)}>请朗读：</div>
-                {HOST_READING_SCRIPT}
-              </div>
-              <Recorder onReady={(b) => setBlob(b)} busy={busy()} />
+              <VoiceSampler sampleId={null} onSampleReady={submitVoice} busy={busy()} />
               <Show when={error()}>
                 <div {...stylex.props(styles.error)}>{error()}</div>
               </Show>
-              <Button block disabled={!blob() || busy()} onClick={submitVoice}>{busy() ? "训练音色中…" : "完成，进入工作台"}</Button>
               <div {...stylex.props(styles.tip)}>之后随时可以在设置页重录</div>
             </>
           }

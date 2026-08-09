@@ -33,7 +33,7 @@ import { createDb } from "../src/db/client";
 import * as schema from "../src/db/schema";
 import { createRepo } from "../src/repo";
 import { createLlmClient } from "../src/llm/client";
-import { parseJsonLoose, qualityCheckPrompt, safetyCheckPrompt, type QualityResult } from "../src/llm/prompts";
+import { parseJsonLoose, safetyCheckPrompt } from "../src/llm/prompts";
 import { createTtsClient } from "../src/tts/client";
 import { createStorage } from "../src/storage";
 import { createLocalAssetStore } from "../src/pipeline/assets";
@@ -137,13 +137,9 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       createSnapshot: (row) => repo.snapshots.create(row),
       // ImportDeps 的 content row 不含 url（url 不变），repo.updateContent 的 SnapshotRow.url 为遗留字段
       updateSnapshotContent: (id, row) => repo.snapshots.updateContent(id, { url: "", ...row }),
-      updateSnapshotQuality: (id, quality) => repo.snapshots.updateQuality(id, quality),
       markSnapshotUnreachable: (id, error) => repo.snapshots.markUnreachable(id, error),
       markSnapshotParseFailed: (id, error) => repo.snapshots.markParseFailed(id, error),
       findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
-      qualityCheck: async (messages) =>
-        parseJsonLoose(await llm.complete(qualityCheckPrompt(messages))) as QualityResult,
-      llm,
     };
 
     const polishesDeps: PolishesDeps = {
@@ -320,7 +316,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     const transcript = await repo.transcripts.getOwned(transcriptId!, USER_ID);
     expect(transcript).not.toBeNull();
     expect(transcript!.segments.length).toBeGreaterThan(0);
-    expect(transcript!.language).toBe("zh"); // 生成管线语言必填（transcripts 路由默认 zh）
+    expect(transcript!.language).toBe("zh"); // 语言由 LLM 识别（中文对话 → zh；生成管线语言必填）
 
     // 4. 生成：真实安全门 + 配额（free 首期 0 credit）→ 202 + episodeId/jobId
     const genRes = await app.request("/api/episodes/new", {

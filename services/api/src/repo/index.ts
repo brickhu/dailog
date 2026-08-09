@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { randomBytes } from "node:crypto";
 import * as schema from "../db/schema";
@@ -7,6 +7,16 @@ import type { VoiceSampleRow } from "../routes/voice";
 
 function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "23505";
+}
+
+/** slug 占用查询（排除用户自己）：updateChannel 与 isUsernameTaken 共用 */
+function usernameTaken(db: PostgresJsDatabase<typeof schema>, userId: string, username: string): Promise<boolean> {
+  return db
+    .select({ id: schema.profiles.id })
+    .from(schema.profiles)
+    .where(and(eq(schema.profiles.username, username), ne(schema.profiles.id, userId)))
+    .limit(1)
+    .then((rows) => rows.length > 0);
 }
 
 function randomSlug(): string {
@@ -129,6 +139,24 @@ export interface EpisodesRepo {
   getVoiceSample(userId: string): Promise<VoiceSampleRow | null>;
   saveVoiceSample(row: VoiceSampleRow): Promise<void>;
   getChannelActivatedAt(userId: string): Promise<Date | null>;
+  // ---- 账号/频道（/api/me/profile、/api/me/channel） ----
+  /** 账号 + 频道档案（hasGithub = account 表有 github 绑定）——昵称对外叫 nickname（列 user.name） */
+  getProfile(userId: string): Promise<{
+    email: string | null;
+    nickname: string | null;
+    emailVerified: boolean;
+    image: string | null;
+    hasGithub: boolean;
+    username: string | null;
+    displayName: string | null;
+    bio: string | null;
+    channelActivatedAt: Date | null;
+  } | null>;
+  updateUserNickname(userId: string, nickname: string): Promise<void>;
+  /** 频道设置（slug/频道名/简介）；返回冲突：username 被占用 */
+  updateChannel(userId: string, row: { username?: string; displayName?: string; bio?: string | null }): Promise<{ ok: true } | { error: "username_taken" }>;
+  /** slug 占用检测（排除自己；PATCH /api/me/channel 内部同样复用） */
+  isUsernameTaken(userId: string, username: string): Promise<boolean>;
 }
 
 export interface JobsRepo {
@@ -475,6 +503,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       async getVoiceSample(userId) {
         const rows = await db
           .select({
+            id: schema.voiceSamples.id,
             userId: schema.voiceSamples.userId,
             status: schema.voiceSamples.status,
             referenceId: schema.voiceSamples.referenceId,
@@ -509,6 +538,60 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             status: row.status,
           });
         });
+      },
+
+      // ---- 账号/频道（/api/me/profile、/api/me/channel） ----
+      async getProfile(userId) {
+        const [userRows, profileRows, accountRows] = await Promise.all([
+          db
+            .select({ email: schema.authUsers.email, name: schema.authUsers.name, emailVerified: schema.authUsers.emailVerified, image: schema.authUsers.image })
+            .from(schema.authUsers)
+            .where(eq(schema.authUsers.id, userId))
+            .limit(1),
+          db
+            .select({ username: schema.profiles.username, displayName: schema.profiles.displayName, bio: schema.profiles.bio, channelActivatedAt: schema.profiles.channelActivatedAt })
+            .from(schema.profiles)
+            .where(eq(schema.profiles.id, userId))
+            .limit(1),
+          db
+            .select({ id: schema.authAccounts.id })
+            .from(schema.authAccounts)
+            .where(and(eq(schema.authAccounts.userId, userId), eq(schema.authAccounts.providerId, "github")))
+            .limit(1),
+        ]);
+        const user = userRows[0];
+        const profile = profileRows[0];
+        if (!user || !profile) return null;
+        return {
+          email: user.email,
+          nickname: user.name, // 对外契约 nickname；DB 列 user.name 是 better-auth 标准字段
+          emailVerified: user.emailVerified,
+          image: user.image,
+          hasGithub: accountRows.length > 0,
+          username: profile.username,
+          displayName: profile.displayName,
+          bio: profile.bio,
+          channelActivatedAt: profile.channelActivatedAt,
+        };
+      },
+      async updateUserNickname(userId, nickname) {
+        await db.update(schema.authUsers).set({ name: nickname, updatedAt: new Date() }).where(eq(schema.authUsers.id, userId));
+      },
+      async updateChannel(userId, row) {
+        if (row.username !== undefined) {
+          if (await usernameTaken(db, userId, row.username)) return { error: "username_taken" };
+        }
+        await db.update(schema.profiles)
+          .set({
+            ...(row.username !== undefined ? { username: row.username } : {}),
+            ...(row.displayName !== undefined ? { displayName: row.displayName } : {}),
+            ...(row.bio !== undefined ? { bio: row.bio } : {}),
+          })
+          .where(eq(schema.profiles.id, userId));
+        return { ok: true };
+      },
+      async isUsernameTaken(userId, username) {
+        return usernameTaken(db, userId, username);
       },
     },
 

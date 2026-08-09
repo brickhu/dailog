@@ -1,38 +1,20 @@
 import type { LlmMessage } from "./client";
 
-export interface QualityResult { pass: boolean; reason?: string; language?: "zh" | "en"; }
-
-/** 质量门 prompt：输出 JSON { pass, reason?, language } */
-export function qualityCheckPrompt(messages: { role: string; content: string }[]): LlmMessage[] {
-  return [{
-    role: "system",
-    content: `你是 dailog 播客平台的内容质量审核员。审核一段用户与 AI 的对话是否适合制作成播客单集。
-拒绝标准（任一命中即拒绝）：
-1. 对话过短（少于 3 轮）
-2. 纯寒暄、无主题
-3. 信息量不足（无实质内容）
-4. 涉及违规内容（色情/违法/仇恨/诈骗等）
-另需识别对话语言（zh 或 en）。
-只输出 JSON：{"pass": true|false, "reason": "拒绝原因（仅 pass=false 时）", "language": "zh"|"en"}`,
-  }, {
-    role: "user",
-    content: `对话内容：\n${messages.map((m) => `${m.role}: ${m.content}`).join("\n")}`,
-  }];
-}
-
-/** 润色 prompt：输出 JSON 数组 [{speaker, text}]；instruction 为用户方向指示（重新润色时可选） */
-export function polishPrompt(messages: { role: string; content: string }[], language: string, instruction?: string | null): LlmMessage[] {
+/** 润色 prompt：输出 JSON { language, segments: [{speaker, text}] }；
+ *  语言由 LLM 自动识别（跟随原对话语言，默认生成该语言音轨的脚本）；
+ *  instruction 为用户方向指示（重新润色时可选） */
+export function polishPrompt(messages: { role: string; content: string }[], instruction?: string | null): LlmMessage[] {
   const direction = instruction
-    ? `5. 用户方向指示（优先遵循）：${instruction}\n`
+    ? `4. 用户方向指示（优先遵循）：${instruction}\n`
     : "";
   return [{
     role: "system",
     content: `你是播客制作人。把下面的用户与 AI 对话润色成二人对谈播客脚本（用户=主持人 host，AI=嘉宾 guest）。
 要求：
-1. 语言与对话保持一致（当前语言：${language}）
+1. 先识别对话主要语言（zh/en/ja/ko 等），脚本语言与对话保持一致
 2. 目标时长 5-10 分钟（约 1200-3000 字），压缩长段落、去除冗余
 3. 理顺口语化表达，保留原意与关键信息
-4. 输出 JSON 数组：[{"speaker": "host"|"guest", "text": "..."}]，不要输出其他内容
+4. 输出 JSON：{"language": "zh"|"en"|..., "segments": [{"speaker": "host"|"guest", "text": "..."}]}，不要输出其他内容
 ${direction}`,
   }, {
     role: "user",

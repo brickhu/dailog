@@ -24,6 +24,10 @@ export default function LoginPage() {
       config={{
         loginOrOtpEndpoint: `${env.apiBaseUrl}/api/auth/login-or-otp`,
         otpCompleteEndpoint: `${env.apiBaseUrl}/api/auth/otp-complete`,
+        forgotPasswordUrl: env.siteBaseUrl ? `${env.siteBaseUrl}/forgot-password` : undefined,
+        github: env.siteBaseUrl
+          ? { signInSocialEndpoint: `${env.apiBaseUrl}/api/auth/sign-in/social`, callbackURL: `${env.siteBaseUrl}/account` }
+          : undefined,
       }}
       onSuccess={onSuccess}
       // 锁定模式：成功后不跳转（URL 不变），由 auth.user 状态切换解锁

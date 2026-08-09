@@ -7,6 +7,7 @@ import { episodesRoutes, type EpisodesDeps } from "./routes/episodes";
 import { importRoutes, type ImportDeps } from "./routes/import";
 import { polishesRoutes, type PolishesDeps } from "./routes/polishes";
 import { transcriptsRoutes, type TranscriptsDeps } from "./routes/transcripts";
+import { profileRoutes } from "./routes/profile";
 import { importerRoutes } from "./routes/importer";
 import { authExtRoutes } from "./routes/auth-ext";
 import { jobRoutes, type JobDeps } from "./routes/job";
@@ -72,6 +73,7 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   app.route("/", importRoutes(deps.importDeps));
   app.route("/", polishesRoutes(deps.polishesDeps));
   app.route("/", transcriptsRoutes(deps.transcriptsDeps));
+  app.route("/", profileRoutes({ repo: deps.repo }));
   app.route("/api", importerRoutes(() => deps.shareCollectUrl?.() ?? process.env.IMPORTER_URL ?? null));
   app.route("/api", episodesRoutes(deps.episodesDeps, (c) => (c as Context<AuthEnv>).get("userId"), deps.voice.storage));
   // polish/generate/job/voice 路由自带 /api 前缀（与各自 test.ts 直接对裸 app 请求 /api/... 一致），故挂载在根路径；

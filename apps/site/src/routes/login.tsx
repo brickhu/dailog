@@ -24,6 +24,8 @@ export default function LoginPage() {
       config={{
         loginOrOtpEndpoint: "/api/auth/login-or-otp",
         otpCompleteEndpoint: "/api/auth/otp-complete",
+        forgotPasswordUrl: "/forgot-password",
+        github: { signInSocialEndpoint: "/api/auth/sign-in-social", callbackURL: `${env.siteBaseUrl}/account` },
       }}
       redirect={{ allowedOrigins: [env.siteBaseUrl, env.studioBaseUrl] }}
     />

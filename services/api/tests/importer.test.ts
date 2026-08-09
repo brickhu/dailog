@@ -43,6 +43,10 @@ function fakeRepo(): AppDeps["repo"] {
       getVoiceSample: async () => null,
       saveVoiceSample: async () => {},
       getChannelActivatedAt: async () => new Date(),
+      getProfile: async () => null,
+      updateUserNickname: async () => {},
+      updateChannel: async () => ({ ok: true } as const),
+      isUsernameTaken: async () => false,
     },
     jobs: {
       getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
@@ -64,12 +68,9 @@ function fakeImportDeps(): AppDeps["importDeps"] {
     getSnapshotByUrl: async () => null,
     createSnapshot: async (row) => ({ id: "snap-1" }),
     updateSnapshotContent: async () => {},
-    updateSnapshotQuality: async () => {},
     markSnapshotUnreachable: async () => {},
     markSnapshotParseFailed: async () => {},
     findPolishByUserSnapshot: async () => null,
-    qualityCheck: async () => ({ pass: true, language: "zh" }),
-    llm: { complete: async () => "", stream: async () => "" },
   };
 }
 function fakePolishesDeps(): AppDeps["polishesDeps"] {
@@ -108,6 +109,8 @@ function fakeEnv(): Env {
     RESEND_API_KEY: "",
     EMAIL_FROM: "dailog <no-reply@dailog.fm>",
     ADMIN_EMAILS: "",
+    SITE_BASE_URL: "https://site.dailog.fm",
+
   };
 }
 
@@ -284,5 +287,59 @@ describe("importer 转发路由", () => {
       body: JSON.stringify({ url: "not-a-url" }),
     });
     expect(res.status).toBe(400);
+  });
+});
+
+describe("/api/import 规则检查（内容门槛）", () => {
+  /** 已有快照（跳过 importer），直接走规则检查 */
+  const snapshotDeps = (messages: { role: string; content: string }[]) => ({
+    getSnapshotByUrl: async () => ({
+      id: "snap-1",
+      platform: "claude",
+      sourceTitle: "测试对话",
+      sourceConversationId: null,
+      parsedDialogue: messages,
+      status: "ok" as const,
+      retryAfter: null,
+      lastError: null,
+    }),
+    findPolishByUserSnapshot: async () => null,
+  });
+  const postImport = (app: ReturnType<typeof makeApp>) =>
+    app.request("/api/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: "https://claude.ai/share/abc" }),
+    });
+
+  it("少于 3 轮问答 → 422 too_short", async () => {
+    const app = makeApp("https://importer.internal", snapshotDeps([
+      { role: "user", content: "你好" },
+      { role: "assistant", content: "你好！有什么可以帮你？" },
+    ]));
+    const res = await postImport(app);
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as { error: string }).error).toBe("too_short");
+  });
+
+  it("总字数 < 500 即使轮数够 → 422 too_short", async () => {
+    const messages: { role: string; content: string }[] = [];
+    for (let i = 0; i < 3; i++) messages.push({ role: "user", content: "好的" }, { role: "assistant", content: "嗯嗯" });
+    const app = makeApp("https://importer.internal", snapshotDeps(messages));
+    const res = await postImport(app);
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as { error: string }).error).toBe("too_short");
+  });
+
+  it("3 轮以上且 ≥ 500 字 → 200，响应不含 quality", async () => {
+    const long = "这段对话讨论了某个值得做成播客的主题。".repeat(20); // 约 400 字/条
+    const messages: { role: string; content: string }[] = [];
+    for (let i = 0; i < 3; i++) messages.push({ role: "user", content: long }, { role: "assistant", content: long });
+    const app = makeApp("https://importer.internal", snapshotDeps(messages));
+    const res = await postImport(app);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { dialogue: { messages: unknown[] }; quality?: unknown };
+    expect(body.dialogue.messages).toHaveLength(6);
+    expect(body.quality).toBeUndefined(); // LLM 质量检测已移除
   });
 });

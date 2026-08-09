@@ -41,6 +41,10 @@ function fakeRepo(): AppDeps["repo"] {
       getVoiceSample: async () => null,
       saveVoiceSample: async () => {},
       getChannelActivatedAt: async () => new Date(),
+      getProfile: async () => null,
+      updateUserNickname: async () => {},
+      updateChannel: async () => ({ ok: true } as const),
+      isUsernameTaken: async () => false,
     },
     jobs: {
       getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
@@ -78,12 +82,9 @@ function fakeImportDeps(): AppDeps["importDeps"] {
     getSnapshotByUrl: async () => null,
     createSnapshot: async (row) => ({ id: "snap-1", platform: row.platform, sourceTitle: row.sourceTitle, sourceConversationId: row.sourceConversationId, parsedDialogue: row.parsedDialogue, quality: null, status: "ok", retryAfter: null, lastError: null }),
     updateSnapshotContent: async () => {},
-    updateSnapshotQuality: async () => {},
     markSnapshotUnreachable: async () => {},
     markSnapshotParseFailed: async () => {},
     findPolishByUserSnapshot: async () => null,
-    qualityCheck: async () => ({ pass: true, language: "zh" }),
-    llm: { complete: async () => "", stream: async () => "" },
   };
 }
 function fakePolishesDeps(): AppDeps["polishesDeps"] {
@@ -146,6 +147,8 @@ function fakeEnv(): Env {
       RESEND_API_KEY: "",
       EMAIL_FROM: "dailog <no-reply@dailog.fm>",
       ADMIN_EMAILS: "",
+    SITE_BASE_URL: "https://site.dailog.fm",
+
   };
 }
 

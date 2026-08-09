@@ -2,13 +2,10 @@
 //  ① snapshots 查 URL（分享内容固定 → 快照全局唯一）——未命中调 importer
 //     （成功/失败都写快照；platform_unreachable 标注 10 分钟可重试）
 //  ② polishes 查 user × snapshot——已存在返回 existing（前端跳编辑页）
-//  ③ 质量分析（LLM，结果写快照）→ 返回 { dialogue, quality }
+//  ③ 规则检查（非 LLM）：轮数 < 3 或总字数 < 500 → 422 too_short（内容门槛）
 // 预览确认后由 POST /api/polishes/new 创建容器。
 
 import { Hono } from "hono";
-import type { LlmClient } from "../llm/client";
-import { qualityCheckPrompt, parseJsonLoose } from "../llm/prompts";
-import type { QualityResult } from "../db/schema";
 
 export interface ImportDeps {
   getSnapshotByUrl(url: string): Promise<{
@@ -17,19 +14,15 @@ export interface ImportDeps {
     sourceTitle: string | null;
     sourceConversationId: string | null;
     parsedDialogue: unknown;
-    quality: QualityResult | null;
     status: "ok" | "unreachable" | "parse_failed";
     retryAfter: Date | null;
     lastError: string | null;
   } | null>;
   createSnapshot(row: { url: string; platform: string; sourceTitle: string | null; sourceConversationId: string | null; parsedDialogue: unknown }): Promise<{ id: string }>;
   updateSnapshotContent(id: string, row: { platform: string; sourceTitle: string | null; sourceConversationId: string | null; parsedDialogue: unknown }): Promise<void>;
-  updateSnapshotQuality(id: string, quality: QualityResult): Promise<void>;
   markSnapshotUnreachable(id: string, error: string): Promise<void>;
   markSnapshotParseFailed(id: string, error: string): Promise<void>;
   findPolishByUserSnapshot(userId: string, snapshotId: string): Promise<{ id: string; title: string | null } | null>;
-  qualityCheck(messages: { role: string; content: string }[]): Promise<QualityResult>;
-  llm: LlmClient;
 }
 
 interface Dialogue {
@@ -116,15 +109,16 @@ export function importRoutes(deps: ImportDeps) {
       return c.json({ existing: true, polishId: existing.id, title: existing.title ?? snapshot.sourceTitle });
     }
 
-    // ③ 质量分析（LLM，结果写快照——内容固定只分析一次）
-    let quality = snapshot.quality;
-    if (!quality && snapshot.parsedDialogue) {
-      const messages = (snapshot.parsedDialogue as { role: string; content: string }[]).map((m) => ({ role: m.role, content: m.content }));
-      try {
-        quality = await deps.qualityCheck(messages);
-        await deps.updateSnapshotQuality(snapshot.id, quality);
-      } catch {
-        quality = null; // 质量分析失败不阻塞导入
+    // ③ 规则检查（非 LLM，零成本）：内容门槛——少于 3 轮问答或总字数 < 500 拒绝
+    if (snapshot.parsedDialogue) {
+      const messages = snapshot.parsedDialogue as { role: string; content: string }[];
+      const userTurns = messages.filter((m) => m.role === "user").length;
+      const totalChars = messages.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0);
+      if (userTurns < 3 || totalChars < 500) {
+        return c.json(
+          { error: "too_short", detail: { message: `该对话内容过短（${userTurns} 轮问答 / 约 ${totalChars} 字），不适合制作播客单集` } },
+          422,
+        );
       }
     }
 
@@ -136,13 +130,9 @@ export function importRoutes(deps: ImportDeps) {
         url,
         messages: snapshot.parsedDialogue ?? [],
       },
-      quality,
       snapshotId: snapshot.id,
     });
   });
 
   return app;
 }
-
-export type { QualityResult };
-export { qualityCheckPrompt, parseJsonLoose };

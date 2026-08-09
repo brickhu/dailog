@@ -3,6 +3,7 @@ import { useLocation, useNavigate, type RouteSectionProps } from "@solidjs/route
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useAuth } from "../lib/auth";
+import { env } from "../lib/env";
 
 // 两列布局：左导航（节目/设置）+ 右侧内容区（子路由经 props.children 渲染）
 const NAV = [
@@ -80,6 +81,12 @@ const styles = stylex.create({
     textAlign: "left",
     padding: 0,
   },
+  accountLink: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    textDecoration: "none",
+    ":hover": { color: colors.foreground },
+  },
   main: {
     flex: 1,
     minWidth: 0,
@@ -149,6 +156,11 @@ export default function AppLayout(props: RouteSectionProps) {
         </nav>
         <div {...stylex.props(styles.footer)}>
           <span {...stylex.props(styles.email)}>{auth.user?.email}</span>
+          <Show when={env.siteBaseUrl}>
+            <a href={`${env.siteBaseUrl}/account`} target="_blank" rel="noopener" {...stylex.props(styles.accountLink)}>
+              账号管理
+            </a>
+          </Show>
           <button {...stylex.props(styles.signOut)} onClick={() => auth.signOut()}>
             退出登录
           </button>

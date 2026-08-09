@@ -21,6 +21,7 @@ export interface ApiClient {
   get<T>(path: string): Promise<T>;
   post<T>(path: string, body?: unknown): Promise<T>;
   put<T>(path: string, body?: unknown): Promise<T>;
+  patch<T>(path: string, body?: unknown): Promise<T>;
   /** 原生请求（音频流、SSE 用）：仍带 Bearer，不解析 JSON。
    *  SSE/长任务传 timeoutMs: 0 或自带 signal 跳过默认超时 */
   request(path: string, init?: RequestInit & { timeoutMs?: number }): Promise<Response>;
@@ -80,6 +81,8 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
       json<T>(path, { method: "POST", body: body === undefined ? undefined : serializeBody(body) }),
     put: <T>(path: string, body?: unknown) =>
       json<T>(path, { method: "PUT", body: body === undefined ? undefined : serializeBody(body) }),
+    patch: <T>(path: string, body?: unknown) =>
+      json<T>(path, { method: "PATCH", body: body === undefined ? undefined : serializeBody(body) }),
     request,
   };
 }

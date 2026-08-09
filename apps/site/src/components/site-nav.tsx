@@ -31,6 +31,12 @@ const styles = stylex.create({
     color: colors.neutral,
     fontSize: dimensions.fontSizeSm,
   },
+  accountLink: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    textDecoration: "none",
+    ":hover": { color: colors.foreground },
+  },
   signOut: {
     backgroundColor: "transparent",
     border: `1px solid ${colors.ink}`,
@@ -73,6 +79,7 @@ export function SiteNav() {
         {(u) => (
           <div {...stylex.props(styles.userBox)}>
             <span {...stylex.props(styles.email)}>{u().email}</span>
+            <a href="/account" {...stylex.props(styles.accountLink)}>账号</a>
             <button {...stylex.props(styles.signOut)} onClick={signOut}>
               登出
             </button>

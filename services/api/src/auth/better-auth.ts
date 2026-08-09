@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { bearer } from "better-auth/plugins";
+import { bearer, emailOTP } from "better-auth/plugins";
+import { github } from "better-auth/social-providers";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "../db/schema";
 import { randomBytes } from "node:crypto";
@@ -27,6 +28,16 @@ export interface CreateAuthOptions {
  * - bearer：Bearer token 会话（SPA/扩展用 Authorization 头；扩展注入协议不变）
  */
 export function createAuth(opts: CreateAuthOptions) {
+  // GitHub OAuth：注册在 socialProviders 配置项（非 plugins 数组）——better-auth 按 key
+  // 用内置工厂实例化，value 为配置对象；enabled=false 时端点不生效（登录页按钮同步隐藏）
+  const socialProviders = {
+    github: {
+      clientId: opts.env.GITHUB_CLIENT_ID ?? "",
+      clientSecret: opts.env.GITHUB_CLIENT_SECRET ?? "",
+      enabled: Boolean(opts.env.GITHUB_CLIENT_ID),
+    },
+  };
+
   return betterAuth({
     baseURL: opts.baseURL,
     trustedOrigins: opts.trustedOrigins,
@@ -48,20 +59,55 @@ export function createAuth(opts: CreateAuthOptions) {
     // 登录保持邮箱+密码。OTP 由 auth-ext 自定义流程实现（生成/存储 verification 表/校验），
     // 不依赖 emailOTP 插件的存储行为（默认内存存储——重启丢失、多实例失效）。
     // 发送走 Resend；RESEND_API_KEY 未配置时静默跳过（本地 dev）
-    plugins: [bearer()],
+    plugins: [
+      bearer(),
+      // 找回密码（1.6.25 官方密码重置端点挂在 emailOTP 插件下，码式而非链接式）：
+      //   POST /api/auth/forget-password/email-otp {email} → 发 6 位重置码
+      //   POST /api/auth/email-otp/reset-password {email, otp, password} → 码校验后改密
+      // 与注册体验一致（6 位码）；OTP 存 verification 表（storeOTP 默认 plain 可查）
+      emailOTP({
+        otpLength: 6,
+        expiresIn: 600,
+        sendVerificationOTP: async ({ email, otp, type }) => {
+          if (!opts.env.RESEND_API_KEY) {
+            console.log(`[email-otp] ${type} → ${email}：验证码 ${otp}`);
+            return;
+          }
+          const subject = type === "forget-password" ? "重置你的 dailog 密码" : "你的 dailog 验证码";
+          await sendEmail(opts.env, {
+            to: email,
+            subject,
+            html: `<p>你的验证码是：</p>
+                   <p style="font-size:24px;font-weight:bold;letter-spacing:4px">${otp}</p>
+                   <p>10 分钟内有效。</p>`,
+          });
+        },
+      }),
+    ],
+    socialProviders,
     advanced: opts.cookieDomain
       ? { crossSubDomainCookies: { enabled: true, domain: opts.cookieDomain } }
       : {},
     databaseHooks: {
       user: {
         create: {
+          before: async (user) => {
+            // GitHub 邮箱未公开时 email 为 null（user.email notNull 约束）——补占位邮箱
+            // （仅唯一标识，该账号只能 GitHub 登录，不能邮箱登录/找回密码）
+            if (!user.email) {
+              user.email = `gh-${randomBytes(6).toString("hex")}@local.invalid`;
+            }
+            return { data: user };
+          },
           after: async (user) => {
             // 创建业务档案（quota/voice 等业务数据挂 profiles）
             const email = user.email ?? "";
             await opts.db.insert(schema.profiles).values({
               id: user.id,
-              username: `u_${randomBytes(4).toString("hex")}`,
-              displayName: email.split("@")[0] || "用户",
+              // 默认频道 slug：纯随机 hex（8 位；用户可在设置页改成自己的频道地址）
+              username: randomBytes(4).toString("hex"),
+              // GitHub 用户优先用 GitHub 昵称；邮箱用户取邮箱前缀
+              displayName: user.name || email.split("@")[0] || "用户",
             });
           },
         },
