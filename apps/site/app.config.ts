@@ -20,5 +20,9 @@ export default defineConfig({
       // 共享设计包是 TS 源码分发（不预编译）：Nitro 必须打包它，不能 externalize
       noExternal: ["@dailogues/ui"],
     },
+    server: {
+      // 本地域名绑定（SSO 测试）：允许 *.dailog.local 访问 dev server
+      allowedHosts: [".dailog.local"],
+    },
   },
 });

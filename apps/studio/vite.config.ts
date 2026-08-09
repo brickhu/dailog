@@ -16,6 +16,8 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
+    // 本地域名绑定（SSO 测试）：允许 *.dailog.local 访问 dev server
+    allowedHosts: [".dailog.local"],
     // 本地开发直连后端（api 侧 APP_ORIGINS 白名单 + CORS 双保险）
     proxy: { "/api": "http://localhost:8787" },
   },
