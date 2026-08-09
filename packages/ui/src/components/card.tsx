@@ -1,15 +1,15 @@
 import * as stylex from "@stylexjs/stylex";
 import { type JSX } from "solid-js";
-import { tokens } from "../theme.stylex";
+import { colors, dimensions } from "../theme.stylex";
 
 const styles = stylex.create({
   card: {
     width: "100%",
     boxSizing: "border-box",
-    padding: tokens.space6,
-    borderRadius: tokens.radiusLg,
-    background: tokens.colorSurface,
-    border: `1px solid ${tokens.colorBorder}`,
+    padding: dimensions.spacing8,
+    borderRadius: dimensions.radiusXl,
+    backgroundColor: colors.surface,
+    border: `1px solid ${colors.ink}`,
   },
 });
 

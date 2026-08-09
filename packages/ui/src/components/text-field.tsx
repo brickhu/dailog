@@ -1,25 +1,25 @@
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "../theme.stylex";
+import { colors, dimensions } from "../theme.stylex";
 
 const styles = stylex.create({
   field: {
-    marginBottom: tokens.space4,
+    marginBottom: dimensions.spacing4,
   },
   label: {
     display: "block",
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
-    marginBottom: tokens.space1,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    marginBottom: dimensions.spacing1,
   },
   input: {
     width: "100%",
     boxSizing: "border-box",
-    padding: `${tokens.space2} ${tokens.space3}`,
-    borderRadius: tokens.radiusMd,
-    border: `1px solid ${tokens.colorBorder}`,
-    background: tokens.colorBg,
-    color: tokens.colorText,
-    fontSize: tokens.fontSizeMd,
+    padding: `${dimensions.spacing2} ${dimensions.spacing3}`,
+    borderRadius: dimensions.radiusMd,
+    border: `1px solid ${colors.ink}`,
+    backgroundColor: colors.background,
+    color: colors.foreground,
+    fontSize: dimensions.fontSizeMd,
   },
 });
 

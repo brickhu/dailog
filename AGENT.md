@@ -1,7 +1,7 @@
 # AGENT — 项目总览
 
 > 本项目所有文档的入口与汇总。任何 Agent / 协作者先读本文件。
-> 最后更新：2026-08-09（M1-M4 已完成；**采集已切换为分享链接服务**（importer.dailog.fm，六平台全通）——扩展采集停用、源码保留在 apps/extension；M4 门控 E2E 待 DEEPSEEK_API_KEY 实跑）
+> 最后更新：2026-08-09（M1-M4 已完成；**采集已切换为分享链接服务**（importer.dailog.fm，六平台全通）——扩展采集停用、源码保留在 apps/extension；M4 门控 E2E 待 DEEPSEEK_API_KEY 实跑；**新增市场与收款策略定稿** docs/market-payments.md——国际优先 GTM + MVP 零主体收款 + 实体升级触发）
 
 ## 项目一句话
 
@@ -14,6 +14,7 @@
 | [PRD.md](./PRD.md) | 产品设计与功能：流程、MVP 功能清单、页面、边界 | ✅ 已确认 |
 | [ARC.md](./ARC.md) | 技术架构：栈、拓扑、API、管线、数据模型、成本、测试 | ✅ 已确认 |
 | [MRD.md](./MRD.md) | 产品定位、市场策略、商业模式、竞争优势、风险 | 🟡 初稿待审（市场部分为起草） |
+| [docs/market-payments.md](./docs/market-payments.md) | 市场与收款策略：国际优先 GTM、MVP 零主体收款矩阵（Paddle + 爱发电/面包多）、境外主体选择（爱沙尼亚 e-Residency vs HK）、实体升级触发条件 | ✅ 调研定稿（2026-08-09） |
 | [docs/pitch-narrative.md](./docs/pitch-narrative.md) | 融资叙事：一句话定位、三幕讲稿（楔子→形态→平台）、质疑反击话术、90 天消费端验证 | 🟡 v2（2026-08-04） |
 | [docs/pitch-deck.md](./docs/pitch-deck.md) | Pitch Deck 大纲：10 页结构 + 每页内容/台词/视觉 + Demo 脚本 + Q&A 预判 | 🟡 v2（2026-08-04，形态命名入 P4/P10） |
 
