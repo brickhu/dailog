@@ -56,7 +56,12 @@ export function importRoutes(deps: ImportDeps) {
         signal: AbortSignal.timeout(90000),
       });
       const data = (await res.json().catch(() => null)) as Dialogue & { error?: string; detail?: unknown };
-      if (!res.ok || !data?.messages?.length) return { ok: false, error: data?.error ?? `采集失败（HTTP ${res.status}）`, detail: data?.detail };
+      if (!res.ok) return { ok: false, error: data?.error ?? `采集失败（HTTP ${res.status}）`, detail: data?.detail };
+      // 内容有效性：消息数 > 0 且至少一条有实质内容——importer 可能"伪成功"
+      // （解析器对平台结构变化返回空 content 的消息数组），空内容视为解码失败
+      const messages = data?.messages ?? [];
+      const hasContent = messages.length > 0 && messages.some((m) => typeof m.content === "string" && m.content.trim().length > 0);
+      if (!hasContent) return { ok: false, error: "parse_failed", detail: { message: "采集结果为空（平台结构可能已变化）" } };
       return { ok: true, dialogue: data };
     } catch {
       return { ok: false, error: "share_collect_unreachable" };
@@ -84,15 +89,15 @@ export function importRoutes(deps: ImportDeps) {
     } else {
       const result = await callImporter(url);
       if (!result.ok) {
-        // 失败也写快照（避免反复调 importer；unreachable 10 分钟可重试）
-        const created = await deps.createSnapshot({ url, platform: "plain", sourceTitle: null, sourceConversationId: null, parsedDialogue: null });
-        if (result.error === "platform_unreachable") {
+        // 触达失败（网络/CF）→ 写快照（10 分钟 TTL，避免反复打 importer）；
+        // 解码失败（parse_failed/内容为空）→ 不写库——通常是 importer 解析器
+        // 问题（平台结构变化），修复后重试才有意义，写库会永久污染缓存
+        if (result.error === "platform_unreachable" || result.error === "share_collect_unreachable") {
+          const created = await deps.createSnapshot({ url, platform: "plain", sourceTitle: null, sourceConversationId: null, parsedDialogue: null });
           await deps.markSnapshotUnreachable(created.id, String((result.detail as { message?: string } | undefined)?.message ?? result.error));
-        } else {
-          await deps.markSnapshotParseFailed(created.id, result.error);
+          return c.json({ error: result.error }, 502);
         }
-        const status = result.error === "platform_unreachable" || result.error === "share_collect_unreachable" ? 502 : 422;
-        return c.json({ error: result.error }, status);
+        return c.json({ error: result.error }, 422);
       }
       const created = await deps.createSnapshot({
         url,

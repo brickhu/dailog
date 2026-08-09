@@ -118,11 +118,12 @@ function fakeAuth(): AppDeps["auth"] {
   };
 }
 
-function makeApp(shareCollectUrl: string | null) {
+function makeApp(shareCollectUrl: string | null, importOverrides: Partial<AppDeps["importDeps"]> = {}) {
   return createApp({
     env: fakeEnv(),
     auth: fakeAuth(),
     repo: fakeRepo(),
+    importDeps: { ...fakeImportDeps(), ...importOverrides },
     job: { getOwnedEpisode: async () => null, getLatestJob: async () => null },
     voice: {
       saveVoiceSample: async () => {},
@@ -142,7 +143,6 @@ function makeApp(shareCollectUrl: string | null) {
       createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }),
     },
     shareCollectUrl: () => shareCollectUrl,
-    importDeps: fakeImportDeps(),
     polishesDeps: fakePolishesDeps(),
     transcriptsDeps: fakeTranscriptsDeps(),
     episodesDeps: fakeEpisodesDeps(),
@@ -232,6 +232,46 @@ describe("importer 转发路由", () => {
       const [url] = fetchMock.mock.calls[0];
       expect(String(url)).toBe("https://importer.internal/platforms");
     } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("importer 返回空内容（伪成功）→ parse_failed 且不写快照", async () => {
+    const prev = process.env.IMPORTER_URL;
+    process.env.IMPORTER_URL = "https://importer.internal";
+    let createCalled = false;
+    const app = makeApp(null, {
+      createSnapshot: async () => { createCalled = true; return { id: "snap-x" }; },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          platform: "claude",
+          conversationId: "c1",
+          title: "t",
+          url: "https://claude.ai/share/abc",
+          messages: [
+            { role: "user", content: "" },
+            { role: "assistant", content: "" },
+          ],
+        }),
+      }),
+    );
+    try {
+      const res = await app.request("/api/import", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "https://claude.ai/share/6cc0f373-72c5-4afd-a223-98471688e736" }),
+      });
+      expect(res.status).toBe(422);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toBe("parse_failed");
+      expect(createCalled).toBe(false); // 解码失败不写快照
+    } finally {
+      if (prev === undefined) delete process.env.IMPORTER_URL; else process.env.IMPORTER_URL = prev;
       vi.unstubAllGlobals();
     }
   });
