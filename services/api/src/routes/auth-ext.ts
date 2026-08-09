@@ -20,8 +20,8 @@ export interface AuthExtDeps {
   db: PostgresJsDatabase<typeof schema>;
   auth: {
     api: {
-      signInEmail(args: { body: { email: string; password: string }; asResponse?: false }): Promise<{ token: string; user: unknown }>;
-      signUpEmail(args: { body: { email: string; password: string; name: string }; asResponse?: false }): Promise<{ token: string; user: unknown }>;
+      signInEmail(args: { body: { email: string; password: string }; asResponse?: true }): Promise<Response>;
+      signUpEmail(args: { body: { email: string; password: string; name: string }; asResponse?: true }): Promise<Response>;
     };
   };
 }
@@ -55,8 +55,9 @@ export function authExtRoutes(deps: AuthExtDeps) {
       .limit(1);
     if (existing.length > 0) {
       try {
-        const result = await deps.auth.api.signInEmail({ body: { email, password: body.password }, asResponse: false });
-        return c.json(result);
+        // asResponse: true——响应带 set-cookie（cookie 会话 → site/studio 跨子域 SSO）
+        const result = await deps.auth.api.signInEmail({ body: { email, password: body.password }, asResponse: true });
+        return new Response(result.body, { status: result.status, headers: result.headers });
       } catch {
         return c.json({ error: "invalid_credentials" }, 401);
       }
@@ -109,7 +110,7 @@ export function authExtRoutes(deps: AuthExtDeps) {
     // 一次性：无论后续成败删除验证码
     await deps.db.delete(schema.verifications).where(eq(schema.verifications.id, row.id)).catch(() => null);
 
-    // 创建用户（带密码）+ 自动登录
+    // 创建用户（带密码）+ 自动登录（透传 set-cookie——cookie 会话 SSO）
     try {
       await deps.auth.api.signUpEmail({
         body: {
@@ -117,10 +118,10 @@ export function authExtRoutes(deps: AuthExtDeps) {
           password: body.password,
           name: typeof body.name === "string" && body.name.trim() ? body.name.trim().slice(0, 50) : email.split("@")[0],
         },
-        asResponse: false,
+        asResponse: true,
       }).catch(() => null); // 竞态：可能已存在（不阻塞登录）
-      const result = await deps.auth.api.signInEmail({ body: { email, password: body.password }, asResponse: false });
-      return c.json(result);
+      const result = await deps.auth.api.signInEmail({ body: { email, password: body.password }, asResponse: true });
+      return new Response(result.body, { status: result.status, headers: result.headers });
     } catch {
       return c.json({ error: "signup_failed" }, 502);
     }
