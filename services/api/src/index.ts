@@ -11,12 +11,13 @@ import { createPipelineRunner } from "./pipeline/runner";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import { createTtsClient } from "./tts/client";
 import { createStorage } from "./storage";
-import { readDialogue } from "./dialogue-store";
 import { createProxyFetch } from "./net/proxy";
 import { recoverQueuedJobs } from "./pipeline/bootstrap";
-import type { PolishDeps } from "./routes/polish";
-import type { GenerateDeps } from "./routes/generate";
 import type { JobDeps } from "./routes/job";
+import type { ImportDeps } from "./routes/import";
+import type { PolishesDeps } from "./routes/polishes";
+import type { TranscriptsDeps } from "./routes/transcripts";
+import type { EpisodesDeps } from "./routes/episodes";
 import type { VoiceDeps } from "./routes/voice";
 import { createActivateChannel } from "./routes/channel";
 import { createFavoritesRepo } from "./routes/favorites";
@@ -58,7 +59,7 @@ const queue = createJobQueue(createPipelineRunner({
   repo: {
     getEpisodeUserId: repo.episodes.getEpisodeUserId,
     getEpisodeLanguage: repo.episodes.getEpisodeLanguage,
-    getLatestScript: repo.episodes.getLatestScript,
+    getEpisodeScript: repo.episodes.getEpisodeScript,
     getVoiceSample: repo.episodes.getVoiceSample,
     // 嘉宾固定音色 id（逐段降级路径用；2D 主路径用 guest-voice.mp3 资产）
     getGuestModelId: async () => env.FISH_GUEST_REFERENCE_ID ?? null,
@@ -80,54 +81,43 @@ void recoverQueuedJobs(repo.jobs, (job) => queue.enqueue(job, () => {}).then(() 
   console.log(`[queue] boot recovery: re-enqueued ${n} uncompleted job(s)`);
 });
 
-const polish: PolishDeps = {
-  // 质量门 + 语言检测：一次非流式补全，输出 JSON { pass, reason?, language }
-  getDialogueMessages: async (episodeId, userId) => {
-    // 对话内容在 R2（imports/{id}.dialogue.json）：repo 只给 importId，这里经 storage 读
-    const imp = await repo.episodes.getImportedDialogue(episodeId, userId);
-    if (!imp) return null;
-    const dialogue = await readDialogue(storage, imp.importId);
-    return dialogue?.messages ?? null;
-  },
+const importDeps: ImportDeps = {
+  getSnapshotByUrl: (url) => repo.snapshots.getByUrl(url),
+  createSnapshot: (row: any) => (repo.snapshots.create as any)(row) as Promise<{ id: string }>,
+  updateSnapshotContent: (id: string, row: any) => (repo.snapshots.updateContent as any)(id, row),
+  updateSnapshotQuality: (id, quality) => repo.snapshots.updateQuality(id, quality),
+  markSnapshotUnreachable: (id, error) => repo.snapshots.markUnreachable(id, error),
+  markSnapshotParseFailed: (id, error) => repo.snapshots.markParseFailed(id, error),
+  findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
   qualityCheck: async (messages) => parseJsonLoose(await llm.complete(qualityCheckPrompt(messages))) as QualityResult,
-  savePolished: async (episodeId, language, segments) => {
-    const latest = await repo.episodes.getLatestScript(episodeId);
-    await repo.episodes.setEpisodeLanguage(episodeId, language);
-    // 对话级润色计数（仅计 LLM 润色保存；PUT script 手动保存不走此路径）
-    await repo.episodes.incrementPolishCount(episodeId);
-    return repo.episodes.saveScript(episodeId, (latest?.version ?? 0) + 1, segments);
+  llm,
+};
+
+const polishesDeps: PolishesDeps = {
+  getChannelActivatedAt: (userId) => repo.episodes.getChannelActivatedAt(userId),
+  findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
+  createPolish: (row) => repo.polishes.create(row),
+  getPolishDetail: (id, userId) => repo.polishes.getPolishDetail(id, userId),
+};
+
+const transcriptsDeps: TranscriptsDeps = {
+  // polish → snapshot.parsedDialogue（对话内容在 DB，快照 JSONB）
+  getDialogueForPolish: async (polishId, userId) => {
+    const polish = await repo.polishes.getOwned(polishId, userId);
+    if (!polish) return null;
+    const snapshot = await repo.snapshots.getById(polish.snapshotId);
+    if (!snapshot?.parsedDialogue) return null;
+    return (snapshot.parsedDialogue as { role: string; content: string }[]).map((m) => ({ role: m.role, content: m.content }));
   },
-  // 对话级润色上限（PRD §4.7）：free = POLISH_MAX_VERSIONS（默认 5 版），pro 不限
-  getPolishCount: (episodeId) => repo.episodes.getPolishCount(episodeId),
+  getTranscriptCount: async (polishId) => (await repo.transcripts.listByPolish(polishId)).length,
   getPolishLimit: async (userId) => {
     const quota = await repo.jobs.getQuotaInfo(userId);
     return quota.plan === "pro" ? null : env.POLISH_MAX_VERSIONS;
   },
+  createTranscript: (polishId, segments, language) => repo.transcripts.create(polishId, segments, language),
+  getOwnedTranscript: (id, userId) => repo.transcripts.getOwned(id, userId),
+  updateTranscriptSegments: (id, segments) => repo.transcripts.updateSegments(id, segments),
   llm,
-};
-
-const generate: GenerateDeps = {
-  getOwnedEpisode: (episodeId, userId) => repo.jobs.getOwnedEpisode(episodeId, userId),
-  getLatestScript: (episodeId) => repo.episodes.getLatestScript(episodeId),
-  getChannelActive: async (userId) => (await repo.episodes.getChannelActivatedAt(userId)) !== null,
-  // 安全门（PRD §4.4）：编辑后脚本一次非流式补全，输出 JSON { pass, reason? }
-  safetyCheck: async (segments) => parseJsonLoose(await llm.complete(safetyCheckPrompt(segments))) as { pass: boolean; reason?: string },
-  getQuota: (userId) => repo.jobs.getQuotaInfo(userId),
-  consumeQuota: (userId, credit) => repo.jobs.consumeQuota(userId, credit),
-  createJob: (episodeId) => repo.jobs.createJob(episodeId),
-  // 进程内队列：异步消费（runner 全链：tts → merge → upload）
-  enqueueJob: async (job) => {
-    // fire-and-forget：202 立即返回，状态由 GET /job 轮询（队列 promise 在任务完成时才 resolve）
-    void queue.enqueue({ id: job.id, episodeId: job.episodeId }, (p) => {
-      console.log(`[queue] job ${job.id} progress ${p}%`);
-    }).then((result) => {
-      if (result.status === "failed") {
-        // 重试耗尽：失败状态落库，防止重启恢复时重跑（此前一直停在 queued）
-        void repo.jobs.markJobFailed(job.id, result.error ?? "unknown").catch((e) =>
-          console.error(`[queue] markJobFailed ${job.id} failed`, e));
-      }
-    }).catch((e) => console.error(`[queue] job ${job.id} failed`, e));
-  },
 };
 
 const job: JobDeps = {
@@ -141,6 +131,35 @@ const voice: VoiceDeps = {
   storage,
 };
 
+const episodesDeps: EpisodesDeps = {
+  listByUser: (userId) => repo.episodes.listByUser(userId),
+  getOwned: (id, userId) => repo.episodes.getOwned(id, userId),
+  getEpisodeAudio: (id, userId) => repo.episodes.getEpisodeAudio(id, userId),
+  getOwnedTranscript: (id, userId) => repo.transcripts.getOwned(id, userId),
+  createEpisode: (row) => repo.episodes.create(row),
+  safetyCheck: async (segments) => parseJsonLoose(await llm.complete(safetyCheckPrompt(segments))) as { pass: boolean; reason?: string },
+  getChannelActive: async (userId) => (await repo.episodes.getChannelActivatedAt(userId)) !== null,
+  getQuota: (userId) => repo.jobs.getQuotaInfo(userId),
+  consumeQuota: (userId, credit) => repo.jobs.consumeQuota(userId, credit),
+  createJob: (episodeId) => repo.jobs.createJob(episodeId),
+  enqueueJob: async (job) => {
+    void queue.enqueue({ id: job.id, episodeId: job.episodeId }, (p) => {
+      console.log(`[queue] job ${job.id} progress ${p}%`);
+    }).then((result) => {
+      if (result.status === "failed") {
+        void repo.jobs.markJobFailed(job.id, result.error ?? "unknown").catch((e) =>
+          console.error(`[queue] markJobFailed ${job.id} failed`, e));
+      }
+    }).catch((e) => console.error(`[queue] job ${job.id} failed`, e));
+  },
+  setPublished: (id) => repo.episodes.setPublished(id),
+  getChannelActivatedAt: (userId) => repo.episodes.getChannelActivatedAt(userId),
+  getHostModelId: (userId) => repo.episodes.getHostModelId(userId),
+  getVoiceSampleKey: (userId) => repo.episodes.getVoiceSampleKey(userId),
+  getVoiceSample: (userId) => repo.episodes.getVoiceSample(userId),
+  saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row),
+};
+
 const app = createApp({
   env,
   auth: createAuth({
@@ -152,8 +171,10 @@ const app = createApp({
     cookieDomain: env.BETTER_AUTH_COOKIE_DOMAIN,
   }),
   repo,
-  polish,
-  generate,
+  importDeps,
+  polishesDeps,
+  transcriptsDeps,
+  episodesDeps,
   job,
   voice,
   channel: { activateChannel: createActivateChannel(db) },

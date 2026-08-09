@@ -1,25 +1,22 @@
-import { createEffect } from "solid-js";
-import { useNavigate } from "@solidjs/router";
-import { LoginForm, getLoginRedirect, type LoginSuccess } from "@dailogues/auth-ui";
+import { LoginForm, type LoginSuccess } from "@dailogues/auth-ui";
 import { env } from "../lib/env";
 import { useAuth } from "../lib/auth";
 import { persistToken } from "../lib/auth-api";
-import { injectExtensionToken } from "../lib/ext-inject";
 
-// studio 备用登录页（app.dailog.fm/login 兜底）：业务配置声明——认证端点（API 直连）+ 成功事件
-// （持久化 token + 扩展注入）。页面与流程由共享 LoginForm 提供。
+// 登录锁定视图（AppShell 第一层守卫原地渲染；非独立路由——URL 保持不变，
+// 登录成功后 auth 状态同步，锁定自动解锁回到原始路径）。
 export default function LoginPage() {
   const auth = useAuth();
-  const navigate = useNavigate();
-  // 已登录访问登录页 → 统一回跳（共享逻辑，与登录成功后一致）：
-  // 来源路径（?redirect= 白名单内）或根路径（"/" 由路由重定向进工作台）
-  createEffect(() => {
-    if (!auth.loading && auth.user) navigate(getLoginRedirect({ fallback: "/" }));
-  });
-
   const onSuccess = (r: LoginSuccess) => {
     if (r.token) persistToken(r.token);
-    void injectExtensionToken();
+    // LoginForm 已调 sign-in API：这里落 auth 状态 → 第一层解锁（URL 不变）
+    // （LoginSuccess.user 字段可空，映射到 AuthUser 全量字段）
+    auth.applySession(
+      r.user
+        ? { id: r.user.id, email: r.user.email, name: r.user.name ?? "", emailVerified: Boolean(r.user.emailVerified) }
+        : null,
+      r.token ?? null,
+    );
   };
 
   return (
@@ -34,6 +31,8 @@ export default function LoginPage() {
         },
       }}
       onSuccess={onSuccess}
+      // 锁定模式：成功后不跳转（URL 不变），由 auth.user 状态切换解锁
+      redirect={{ enabled: false }}
     />
   );
 }

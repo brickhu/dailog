@@ -3,11 +3,11 @@ import type { Context } from "hono";
 import type { Env } from "./config/env";
 import { createAuthMiddleware, type AuthEnv, type AuthLike } from "./middleware/auth";
 import { createCorsMiddleware } from "./middleware/cors";
-import { importsRoutes } from "./routes/imports";
+import { episodesRoutes, type EpisodesDeps } from "./routes/episodes";
+import { importRoutes, type ImportDeps } from "./routes/import";
+import { polishesRoutes, type PolishesDeps } from "./routes/polishes";
+import { transcriptsRoutes, type TranscriptsDeps } from "./routes/transcripts";
 import { importerRoutes } from "./routes/importer";
-import { episodesRoutes } from "./routes/episodes";
-import { polishRoutes, type PolishDeps } from "./routes/polish";
-import { generateRoutes, type GenerateDeps } from "./routes/generate";
 import { jobRoutes, type JobDeps } from "./routes/job";
 import { voiceRoutes, type VoiceDeps } from "./routes/voice";
 import { channelRoutes, type ChannelDeps } from "./routes/channel";
@@ -21,8 +21,10 @@ export type AppDeps = {
   env: Env;
   auth: AuthLike; // better-auth 实例（/api/auth/* 处理器 + 认证中间件）
   repo: Repos;
-  polish: PolishDeps;
-  generate: GenerateDeps;
+  importDeps: ImportDeps;
+  polishesDeps: PolishesDeps;
+  transcriptsDeps: TranscriptsDeps;
+  episodesDeps: EpisodesDeps;
   job: JobDeps;
   voice: VoiceDeps;
   channel: ChannelDeps; // 频道开通（授权码激活）
@@ -59,13 +61,13 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
     return c.json({ userId, channelActive: activated !== null, hasVoiceSample: sample !== null });
   });
 
-  app.route("/api", importsRoutes(deps.repo.imports, deps.voice.storage));
+  app.route("/api", importRoutes(deps.importDeps));
+  app.route("/api", polishesRoutes(deps.polishesDeps));
+  app.route("/api", transcriptsRoutes(deps.transcriptsDeps));
   app.route("/api", importerRoutes(() => deps.shareCollectUrl?.() ?? process.env.IMPORTER_URL ?? null));
-  app.route("/api", episodesRoutes(deps.repo.episodes, (c) => (c as Context<AuthEnv>).get("userId"), deps.voice.storage));
+  app.route("/api", episodesRoutes(deps.episodesDeps, (c) => (c as Context<AuthEnv>).get("userId"), deps.voice.storage));
   // polish/generate/job/voice 路由自带 /api 前缀（与各自 test.ts 直接对裸 app 请求 /api/... 一致），故挂载在根路径；
   // 上面的 /api/* 鉴权中间件依然覆盖
-  app.route("/", polishRoutes(deps.polish));
-  app.route("/", generateRoutes(deps.generate));
   app.route("/", jobRoutes(deps.job, (c) => (c as unknown as { get: (k: string) => string }).get("userId")));
   app.route("/", voiceRoutes(deps.voice));
   app.route("/", channelRoutes(deps.channel));

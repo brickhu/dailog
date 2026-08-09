@@ -9,20 +9,9 @@ export interface Episode {
   id: string;
   title: string | null;
   status: "draft" | "generating" | "published" | "failed";
-  platform: string | null;
+  
   createdAt: string;
 }
-
-const PLATFORM_LABEL: Record<string, string> = {
-  deepseek: "DeepSeek",
-  claude: "Claude",
-  chatgpt: "ChatGPT",
-  gemini: "Gemini",
-  kimi: "Kimi",
-  doubao: "豆包",
-  tongyi: "通义",
-  plain: "其他",
-};
 
 const STATUS_LABEL: Record<Episode["status"], { text: string; color: string }> = {
   draft: { text: "草稿", color: "#8b95a7" },
@@ -177,7 +166,6 @@ export default function Dashboard() {
                 <div {...stylex.props(styles.cardMain)}>
                   <div {...stylex.props(styles.epTitle)}>{ep.title || "未命名对话"}</div>
                   <div {...stylex.props(styles.epMeta)}>
-                    {PLATFORM_LABEL[ep.platform ?? ""] ?? ep.platform ?? "导入"} ·{" "}
                     {new Date(ep.createdAt).toLocaleDateString("zh-CN")}
                   </div>
                 </div>

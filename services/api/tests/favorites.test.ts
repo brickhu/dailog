@@ -9,29 +9,119 @@ import { createActivateChannel } from "../src/routes/channel";
 import { createFavoritesRepo } from "../src/routes/favorites";
 
 // 消费端互动全链路（真实本地 PG）：注册 → 收藏/点赞 toggle → 列表
+let testPolishId = "";
+let testTranscriptId = "";
+
 const hasDb = Boolean(process.env.DATABASE_URL);
 
-function fakePolish(): AppDeps["polish"] {
+
+
+function fakeImportDeps(): AppDeps["importDeps"] {
   return {
-    getDialogueMessages: async () => [],
+    getSnapshotByUrl: async () => null,
+    createSnapshot: async (row) => ({ id: "snap-1", platform: row.platform, sourceTitle: row.sourceTitle, sourceConversationId: row.sourceConversationId, parsedDialogue: row.parsedDialogue, quality: null, status: "ok", retryAfter: null, lastError: null }),
+    updateSnapshotContent: async () => {},
+    updateSnapshotQuality: async () => {},
+    markSnapshotUnreachable: async () => {},
+    markSnapshotParseFailed: async () => {},
+    findPolishByUserSnapshot: async () => null,
     qualityCheck: async () => ({ pass: true, language: "zh" }),
-    savePolished: async (_e, _l, segments) => ({ version: 1, segments }),
-    getPolishCount: async () => 0,
-    getPolishLimit: async () => 5,
     llm: { complete: async () => "", stream: async () => "" },
   };
 }
-
-function fakeGenerate(): AppDeps["generate"] {
+function fakePolishesDeps(): AppDeps["polishesDeps"] {
   return {
-    getOwnedEpisode: async () => ({ id: "ep-1" }),
-    getLatestScript: async () => null,
+    getChannelActivatedAt: async () => new Date(),
+    findPolishByUserSnapshot: async () => null,
+    createPolish: async () => ({ id: "polish-1" }),
+    getPolishDetail: async () => null,
+  };
+}
+function fakeTranscriptsDeps(): AppDeps["transcriptsDeps"] {
+  return {
+    getDialogueForPolish: async () => null,
+    getTranscriptCount: async () => 0,
+    getPolishLimit: async () => 5,
+    createTranscript: async () => ({ id: "transcript-1" }),
+    getOwnedTranscript: async () => null,
+    updateTranscriptSegments: async () => {},
+    llm: { complete: async () => "", stream: async () => "" },
+  };
+}
+function fakeEpisodesDeps(): AppDeps["episodesDeps"] {
+  return {
+    listByUser: async () => [],
+    getOwned: async () => null,
+    getEpisodeAudio: async () => null,
+    getOwnedTranscript: async () => null,
+    createEpisode: async () => ({ id: "ep-1" }),
     safetyCheck: async () => ({ pass: true }),
     getChannelActive: async () => true,
     getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
     consumeQuota: async () => {},
-    createJob: async (episodeId) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
+    createJob: async (episodeId: string) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
     enqueueJob: async () => {},
+    setPublished: async () => {},
+    getChannelActivatedAt: async () => new Date(),
+    getHostModelId: async () => null,
+    getVoiceSampleKey: async () => null,
+    getVoiceSample: async () => null,
+    saveVoiceSample: async () => {},
+  };
+}
+
+function fakeRepo(): AppDeps["repo"] {
+  return {
+    snapshots: {
+      getByUrl: async () => null,
+      getById: async () => null,
+      create: async () => ({ id: "snap-1" }),
+      updateContent: async () => {},
+      updateQuality: async () => {},
+      markUnreachable: async () => {},
+      markParseFailed: async () => {},
+    },
+    polishes: {
+      findByUserSnapshot: async () => null,
+      create: async () => ({ id: "polish-1" }),
+      getOwned: async () => null,
+      getPolishDetail: async () => null,
+      listByUser: async () => [],
+    },
+    transcripts: {
+      create: async () => ({ id: "transcript-1" }),
+      listByPolish: async () => [],
+      getOwned: async () => null,
+      updateSegments: async () => {},
+    },
+    episodes: {
+      create: async () => ({ id: "ep-1" }),
+      listByUser: async () => [],
+      getOwned: async () => null,
+      getEpisodeAudio: async () => null,
+      getEpisodeScript: async () => null,
+      getPublishedDialogue: async () => null,
+      setPublished: async () => {},
+      getEpisodeUserId: async () => null,
+      getEpisodeLanguage: async () => null,
+      getHostModelId: async () => null,
+      getVoiceSampleKey: async () => null,
+      getVoiceSample: async () => null,
+      saveVoiceSample: async () => {},
+      getChannelActivatedAt: async () => new Date(),
+    },
+    jobs: {
+      getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
+      consumeQuota: async () => {},
+      createJob: async () => ({ id: "job-1", episodeId: "ep-1", status: "queued", progress: 0 }),
+      getLatestJob: async () => null,
+      getOwnedEpisode: async () => null,
+      listRecoverableJobs: async () => [],
+      markJobProgress: async () => {},
+      markJobDone: async () => {},
+      updateEpisodeAudio: async () => {},
+      markJobFailed: async () => {},
+    },
   };
 }
 
@@ -95,10 +185,17 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
     await dbClient.db.insert(schema.profiles).values({
       id: userId, username: `fav-${randomUUID().slice(0, 6)}`, displayName: "Fav",
     });
+    const snap = await dbClient.db.insert(schema.snapshots).values({ url: `https://example.com/share/${randomUUID()}`, platform: "claude", parsedDialogue: [] }).returning({ id: schema.snapshots.id });
+    const polish = await dbClient.db.insert(schema.polishes).values({ userId, snapshotId: snap[0].id }).returning({ id: schema.polishes.id });
+    const transcript = await dbClient.db.insert(schema.transcripts).values({ polishId: polish[0].id, segments: [] }).returning({ id: schema.transcripts.id });
+    testPolishId = polish[0].id;
+    testTranscriptId = transcript[0].id;
     const ep = await dbClient.db
       .insert(schema.episodes)
       .values({
         userId,
+        transcriptId: transcript[0].id,
+        polishId: polish[0].id,
         slug: `fav-ep-${randomUUID().slice(0, 8)}`,
         title: "收藏测试节目",
         audioUrl: "audio/episodes/x.mp3",
@@ -113,43 +210,11 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
     app = createApp({
       env: testEnv,
       auth,
-      repo: {
-        imports: { getChannelActivatedAt: async () => new Date(), findImportBySource: async () => null, insertImport: async () => ({ id: "i" }), insertEpisode: async () => ({ id: "e" }), createImport: async () => ({ importId: "i", episodeId: "e" }) },
-        episodes: {
-          listEpisodes: async () => [],
-          getEpisode: async () => null,
-          getEpisodeAudio: async () => null,
-          saveScript: async (e, v, s) => ({ episodeId: e, version: v, segments: s }),
-          getLatestScript: async () => null,
-          getImportedDialogue: async () => null,
-          getPublishedDialogue: async () => null,
-          setPublished: async () => {},
-          setEpisodeLanguage: async () => {},
-          getEpisodeUserId: async () => null,
-          getEpisodeLanguage: async () => null,
-          getHostModelId: async () => null,
-          getVoiceSampleKey: async () => null,
-          saveVoiceSample: async () => {},
-          getVoiceSample: async () => null,
-          getChannelActivatedAt: async () => new Date(),
-          getPolishCount: async () => 0,
-          incrementPolishCount: async () => {},
-        },
-        jobs: {
-          getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
-          consumeQuota: async () => {},
-          createJob: async (episodeId) => ({ id: "j", episodeId, status: "queued", progress: 0 }),
-          getLatestJob: async () => null,
-          getOwnedEpisode: async () => ({ id: "ep-1" }),
-          listRecoverableJobs: async () => [],
-          markJobProgress: async () => {},
-          markJobDone: async () => {},
-          updateEpisodeAudio: async () => {},
-          markJobFailed: async () => {},
-        },
-      },
-      polish: fakePolish(),
-      generate: fakeGenerate(),
+      repo: fakeRepo(),
+      importDeps: fakeImportDeps(),
+      polishesDeps: fakePolishesDeps(),
+      transcriptsDeps: fakeTranscriptsDeps(),
+      episodesDeps: fakeEpisodesDeps(),
       job: fakeJob(),
       voice: fakeVoice(),
       channel: { activateChannel: async () => ({ ok: true }) },
@@ -205,7 +270,7 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
   it("draft episode not interactable (404)", async () => {
     const draft = await dbClient.db
       .insert(schema.episodes)
-      .values({ userId, slug: `fav-draft-${randomUUID().slice(0, 8)}`, title: "draft", status: "draft" })
+      .values({ userId, transcriptId: testTranscriptId, polishId: testPolishId, slug: `fav-draft-${randomUUID().slice(0, 8)}`, title: "draft", status: "generating" })
       .returning({ id: schema.episodes.id });
     const res = await app.request(`/api/episodes/${draft[0].id}/favorite`, {
       method: "POST",

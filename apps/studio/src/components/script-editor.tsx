@@ -1,6 +1,7 @@
 import { createSignal, For, onMount, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "@dailogues/ui/theme.stylex";
+import { Button } from "@dailogues/ui";
+import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
 import { ApiError } from "../lib/api";
 import { consumeSse } from "../lib/sse";
@@ -8,13 +9,18 @@ import { tryParseSegments } from "../lib/parseJsonLoose";
 import { applyScriptOp, totalCharCount, type ScriptSegment } from "../lib/scriptOps";
 
 export interface ScriptEditorProps {
-  episodeId: string;
-  /** 无已有脚本时自动触发润色 */
-  onDone?: (version: number) => void;
+  polishId: string;
+  /** 编辑已有 transcript（null = 未生成，显示生成入口） */
+  transcriptId?: string | null;
+  /** 已有 transcript 的脚本（transcriptId 存在时直接进入编辑态） */
+  initialSegments?: ScriptSegment[];
+  /** 润色完成回调（新建 transcript 时带 transcriptId） */
+  onDone?: (transcriptId: string) => void;
 }
 
 type EditorState =
   | { kind: "loading" }
+  | { kind: "empty" }
   | { kind: "editing"; segments: ScriptSegment[]; version: number | null }
   | { kind: "polishing"; segments: ScriptSegment[]; raw: string }
   | { kind: "error"; message: string };
@@ -37,20 +43,13 @@ export default function ScriptEditor(props: ScriptEditorProps) {
   };
 
   const loadOrPolish = async () => {
-    setState({ kind: "loading" });
-    try {
-      const existing = await api.get<{ version: number; segments: ScriptSegment[] } | null>(
-        `/api/episodes/${props.episodeId}/script`,
-      );
-      if (existing && Array.isArray(existing.segments)) {
-        setState({ kind: "editing", segments: existing.segments, version: existing.version });
-        setSavedSegments(existing.segments);
-        return;
-      }
-      await startPolish();
-    } catch (e) {
-      setState({ kind: "error", message: e instanceof Error ? e.message : "加载失败" });
+    if (props.transcriptId && Array.isArray(props.initialSegments)) {
+      setState({ kind: "editing", segments: props.initialSegments, version: null });
+      setSavedSegments(props.initialSegments);
+      return;
     }
+    // 无 transcript：等待用户点击「生成脚本」（SSE 润色）
+    setState({ kind: "empty" });
   };
 
   /** 重新润色入口：未保存改动先确认（覆盖保护）→ 展开方向输入 */
@@ -68,9 +67,11 @@ export default function ScriptEditor(props: ScriptEditorProps) {
     setDirectionOpen(false);
     let raw = "";
     try {
-      const res = await api.request(`/api/episodes/${props.episodeId}/polish`, {
+      const res = await api.request(`/api/transcripts/new`, {
         method: "POST",
-        body: instruction ? JSON.stringify({ instruction }) : undefined,
+        body: JSON.stringify({ polishId: props.polishId, ...(instruction ? { instruction } : {}) }),
+        // SSE 长连接（润色流式输出可能 1-3 分钟）：跳过默认 30s 超时
+        timeoutMs: 0,
       });
       await consumeSse(res, {
         onEvent: (ev) => {
@@ -85,11 +86,11 @@ export default function ScriptEditor(props: ScriptEditorProps) {
           }
         },
         onDone: async (data) => {
-          const { version } = JSON.parse(data) as { version?: number };
+          const { transcriptId } = JSON.parse(data) as { transcriptId?: string };
           const final = normalize(tryParseSegments(raw) ?? []);
-          setState({ kind: "editing", segments: final, version: version ?? null });
+          setState({ kind: "editing", segments: final, version: null });
           setSavedSegments(final);
-          props.onDone?.(version ?? 0);
+          props.onDone?.(transcriptId ?? "");
         },
         onError: (data) => {
           const parsed = JSON.parse(data) as { error?: string };
@@ -114,10 +115,15 @@ export default function ScriptEditor(props: ScriptEditorProps) {
     if (s.kind !== "editing") return;
     setSaving(true);
     try {
-      const saved = await api.put<{ version: number }>(`/api/episodes/${props.episodeId}/script`, {
-        segments: s.segments,
+      if (!props.transcriptId) {
+        setToast("请先生成脚本再保存");
+        return;
+      }
+      await api.request(`/api/transcripts/${props.transcriptId}`, {
+        method: "PUT",
+        body: JSON.stringify({ segments: s.segments }),
       });
-      setState({ ...s, version: saved.version });
+      setState({ ...s, version: null });
       setSavedSegments(s.segments);
       setToast("草稿已保存");
       setTimeout(() => setToast(null), 2000);
@@ -163,9 +169,7 @@ export default function ScriptEditor(props: ScriptEditorProps) {
       <Show when={failed()}>
         <div {...stylex.props(styles.errorBox)}>
           <div {...stylex.props(styles.errorText)}>{failed()!.message}</div>
-          <button {...stylex.props(styles.button)} onClick={loadOrPolish}>
-            重试
-          </button>
+          <Button onClick={loadOrPolish}>重试</Button>
         </div>
       </Show>
 
@@ -177,12 +181,8 @@ export default function ScriptEditor(props: ScriptEditorProps) {
               {Math.round(totalCharCount(editing()!.segments) / 240)} 分钟）
             </span>
             <div>
-              <button {...stylex.props(styles.button, styles.buttonGhost)} onClick={saveDraft} disabled={saving()}>
-                {saving() ? "保存中…" : "保存草稿"}
-              </button>
-              <button {...stylex.props(styles.button, styles.buttonGhost)} onClick={requestRepolish}>
-                重新润色
-              </button>
+              <Button appear="ghost" onClick={saveDraft} disabled={saving()}>{saving() ? "保存中…" : "保存草稿"}</Button>
+              <Button appear="ghost" onClick={requestRepolish}>重新润色</Button>
             </div>
           </div>
           <Show when={directionOpen()}>
@@ -197,12 +197,8 @@ export default function ScriptEditor(props: ScriptEditorProps) {
                   if (e.key === "Escape") setDirectionOpen(false);
                 }}
               />
-              <button {...stylex.props(styles.button)} onClick={() => startPolish(direction().trim() || null)}>
-                开始润色
-              </button>
-              <button {...stylex.props(styles.button, styles.buttonGhost)} onClick={() => setDirectionOpen(false)}>
-                取消
-              </button>
+              <Button onClick={() => startPolish(direction().trim() || null)}>开始润色</Button>
+              <Button appear="ghost" onClick={() => setDirectionOpen(false)}>取消</Button>
             </div>
           </Show>
           <For each={editing()!.segments}>
@@ -215,8 +211,9 @@ export default function ScriptEditor(props: ScriptEditorProps) {
               />
             )}
           </For>
-          <button
-            {...stylex.props(styles.button, styles.addButton)}
+          <Button
+            appear="ghost"
+            style={{ "margin-top": dimensions.spacing3 }}
             onClick={() =>
               update({
                 type: "insert",
@@ -226,7 +223,7 @@ export default function ScriptEditor(props: ScriptEditorProps) {
             }
           >
             + 添加段落
-          </button>
+          </Button>
           <Show when={toast()}>
             <div {...stylex.props(styles.toast)}>{toast()}</div>
           </Show>
@@ -307,145 +304,127 @@ function SegmentRow(props: {
 
 const styles = stylex.create({
   status: {
-    color: tokens.colorTextMuted,
-    padding: tokens.space4,
+    color: colors.neutral,
+    padding: dimensions.spacing4,
     textAlign: "center",
   },
   errorBox: {
-    padding: tokens.space4,
-    borderRadius: tokens.radiusMd,
-    border: `1px solid ${tokens.colorDanger}`,
-    background: tokens.colorSurface,
+    padding: dimensions.spacing4,
+    borderRadius: dimensions.radiusMd,
+    border: `1px solid ${colors.danger}`,
+    background: colors.surface,
     textAlign: "center",
   },
   errorText: {
-    color: tokens.colorDanger,
-    marginBottom: tokens.space3,
+    color: colors.danger,
+    marginBottom: dimensions.spacing3,
   },
   toolbar: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: tokens.space3,
+    marginBottom: dimensions.spacing3,
     flexWrap: "wrap",
-    gap: tokens.space2,
+    gap: dimensions.spacing2,
   },
   count: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
-  },
-  button: {
-    padding: `${tokens.space1} ${tokens.space3}`,
-    borderRadius: tokens.radiusMd,
-    border: "none",
-    background: tokens.colorPrimary,
-    color: "#fff",
-    cursor: "pointer",
-    fontSize: tokens.fontSizeSm,
-    marginLeft: tokens.space2,
-  },
-  buttonGhost: {
-    background: tokens.colorSurface,
-    border: `1px solid ${tokens.colorBorder}`,
-    color: tokens.colorText,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
   },
   directionBox: {
     display: "flex",
-    gap: tokens.space2,
+    gap: dimensions.spacing2,
     alignItems: "center",
-    marginBottom: tokens.space3,
-    padding: tokens.space2,
-    borderRadius: tokens.radiusMd,
-    background: tokens.colorBg,
-    border: `1px solid ${tokens.colorBorder}`,
+    marginBottom: dimensions.spacing3,
+    padding: dimensions.spacing2,
+    borderRadius: dimensions.radiusMd,
+    background: colors.background,
+    border: `1px solid ${colors.ink}`,
   },
   directionInput: {
     flex: 1,
-    padding: `${tokens.space1} ${tokens.space3}`,
-    borderRadius: tokens.radiusSm,
-    border: `1px solid ${tokens.colorBorder}`,
-    background: tokens.colorSurface,
-    color: tokens.colorText,
-    fontSize: tokens.fontSizeSm,
-  },
-  addButton: {
-    marginTop: tokens.space3,
+    padding: `${dimensions.spacing1} ${dimensions.spacing3}`,
+    borderRadius: dimensions.radiusSm,
+    border: `1px solid ${colors.ink}`,
+    backgroundColor: colors.surface,
+    color: colors.foreground,
+    fontSize: dimensions.fontSizeSm,
   },
   row: {
-    padding: tokens.space3,
-    borderRadius: tokens.radiusMd,
-    border: `1px solid ${tokens.colorBorder}`,
-    marginBottom: tokens.space2,
+    padding: dimensions.spacing3,
+    borderRadius: dimensions.radiusMd,
+    border: `1px solid ${colors.ink}`,
+    marginBottom: dimensions.spacing2,
   },
   rowHost: {
     background: "rgba(91, 140, 255, 0.06)",
-    borderLeft: `3px solid ${tokens.colorPrimary}`,
+    borderLeft: `3px solid ${colors.primary}`,
   },
   rowGuest: {
-    background: "rgba(159, 122, 234, 0.06)",
+    backgroundColor: "rgba(159, 122, 234, 0.06)",
     borderLeft: `3px solid #9f7aea`,
   },
   rowHeader: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: tokens.space2,
+    marginBottom: dimensions.spacing2,
   },
   speakerTag: {
-    padding: `2px ${tokens.space2}`,
-    borderRadius: tokens.radiusFull,
+    padding: `2px ${dimensions.spacing2}`,
+    borderRadius: dimensions.radiusFull,
     fontSize: "12px",
     border: "none",
     cursor: "pointer",
   },
   tagHost: {
-    background: "rgba(91, 140, 255, 0.2)",
-    color: tokens.colorPrimary,
+    backgroundColor: "rgba(91, 140, 255, 0.2)",
+    color: colors.primary,
   },
   tagGuest: {
-    background: "rgba(159, 122, 234, 0.2)",
+    backgroundColor: "rgba(159, 122, 234, 0.2)",
     color: "#b794f4",
   },
   rowActions: {
     display: "flex",
-    gap: tokens.space1,
+    gap: dimensions.spacing1,
   },
   iconButton: {
-    background: tokens.colorSurface,
-    border: `1px solid ${tokens.colorBorder}`,
-    color: tokens.colorTextMuted,
-    borderRadius: tokens.radiusSm,
+    backgroundColor: colors.surface,
+    border: `1px solid ${colors.ink}`,
+    color: colors.neutral,
+    borderRadius: dimensions.radiusSm,
     cursor: "pointer",
-    padding: `2px ${tokens.space2}`,
+    padding: `2px ${dimensions.spacing2}`,
   },
   iconDanger: {
-    color: tokens.colorDanger,
+    color: colors.danger,
   },
   textarea: {
     width: "100%",
     boxSizing: "border-box",
-    background: "transparent",
+    backgroundColor: "transparent",
     border: "none",
-    color: tokens.colorText,
-    fontSize: tokens.fontSizeMd,
+    color: colors.foreground,
+    fontSize: dimensions.fontSizeMd,
     lineHeight: 1.6,
     resize: "vertical",
     fontFamily: "inherit",
   },
   previewText: {
-    color: tokens.colorText,
-    fontSize: tokens.fontSizeMd,
+    color: colors.foreground,
+    fontSize: dimensions.fontSizeMd,
     lineHeight: 1.6,
   },
   toast: {
     position: "fixed",
-    bottom: tokens.space6,
+    bottom: dimensions.spacing8,
     left: "50%",
     transform: "translateX(-50%)",
-    padding: `${tokens.space2} ${tokens.space4}`,
-    borderRadius: tokens.radiusMd,
-    background: tokens.colorSuccess,
-    color: "#fff",
-    fontSize: tokens.fontSizeSm,
+    padding: `${dimensions.spacing2} ${dimensions.spacing4}`,
+    borderRadius: dimensions.radiusMd,
+    background: colors.success,
+    color: colors.onSuccess,
+    fontSize: dimensions.fontSizeSm,
   },
 });

@@ -1,6 +1,7 @@
 import { createSignal, onCleanup, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "@dailogues/ui/theme.stylex";
+import { Button } from "@dailogues/ui";
+import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
 import { ApiError } from "../lib/api";
 
@@ -104,9 +105,7 @@ export default function GenerateProgress(props: GenerateProgressProps) {
           <div {...stylex.props(styles.hint)}>
             将用你的克隆声音（主持人）和平台固定声音（AI 嘉宾）合成并拼接片头片尾。大约需要 1-3 分钟。
           </div>
-          <button {...stylex.props(styles.button)} onClick={trigger}>
-            开始生成
-          </button>
+          <Button onClick={trigger}>开始生成</Button>
         </div>
       </Show>
 
@@ -131,9 +130,7 @@ export default function GenerateProgress(props: GenerateProgressProps) {
       <Show when={error()}>
         <div {...stylex.props(styles.errorBox)}>
           <div {...stylex.props(styles.errorText)}>{error()}</div>
-          <button {...stylex.props(styles.button)} onClick={trigger}>
-            重试
-          </button>
+          <Button onClick={trigger}>重试</Button>
         </div>
       </Show>
 
@@ -142,9 +139,7 @@ export default function GenerateProgress(props: GenerateProgressProps) {
           <div {...stylex.props(styles.errorText)}>
             免费额度已用完。购买积分或订阅 Pro 后可继续生成（支付功能即将上线）。
           </div>
-          <button {...stylex.props(styles.buttonGhost)} onClick={() => props.onQuotaDenied?.()}>
-            返回修改脚本
-          </button>
+          <Button appear="ghost" onClick={() => props.onQuotaDenied?.()}>返回修改脚本</Button>
         </div>
       </Show>
 
@@ -160,61 +155,44 @@ export default function GenerateProgress(props: GenerateProgressProps) {
 
 const styles = stylex.create({
   box: {
-    padding: tokens.space5,
-    borderRadius: tokens.radiusMd,
-    background: tokens.colorSurface,
-    border: `1px solid ${tokens.colorBorder}`,
-    marginBottom: tokens.space3,
+    padding: dimensions.spacing6,
+    borderRadius: dimensions.radiusMd,
+    background: colors.surface,
+    border: `1px solid ${colors.ink}`,
+    marginBottom: dimensions.spacing3,
   },
   title: {
-    fontWeight: tokens.fontWeightBold,
-    marginBottom: tokens.space2,
+    fontWeight: dimensions.fontWeightBold,
+    marginBottom: dimensions.spacing2,
   },
   hint: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
-    marginBottom: tokens.space3,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    marginBottom: dimensions.spacing3,
     lineHeight: 1.6,
-  },
-  button: {
-    padding: `${tokens.space2} ${tokens.space5}`,
-    borderRadius: tokens.radiusMd,
-    border: "none",
-    background: tokens.colorPrimary,
-    color: "#fff",
-    cursor: "pointer",
-    fontSize: tokens.fontSizeMd,
-  },
-  buttonGhost: {
-    background: tokens.colorSurface,
-    border: `1px solid ${tokens.colorBorder}`,
-    color: tokens.colorText,
-    padding: `${tokens.space2} ${tokens.space5}`,
-    borderRadius: tokens.radiusMd,
-    cursor: "pointer",
   },
   bar: {
     height: "8px",
-    borderRadius: tokens.radiusFull,
-    background: tokens.colorBg,
+    borderRadius: dimensions.radiusFull,
+    backgroundColor: colors.background,
     overflow: "hidden",
   },
   barInner: {
     height: "100%",
-    background: tokens.colorPrimary,
+    backgroundColor: colors.primary,
     transition: "width 0.5s ease",
   },
   errorBox: {
-    padding: tokens.space4,
-    borderRadius: tokens.radiusMd,
-    border: `1px solid ${tokens.colorDanger}`,
-    background: tokens.colorSurface,
-    marginBottom: tokens.space3,
+    padding: dimensions.spacing4,
+    borderRadius: dimensions.radiusMd,
+    border: `1px solid ${colors.danger}`,
+    background: colors.surface,
+    marginBottom: dimensions.spacing3,
   },
   errorText: {
-    color: tokens.colorDanger,
-    fontSize: tokens.fontSizeMd,
-    marginBottom: tokens.space3,
+    color: colors.danger,
+    fontSize: dimensions.fontSizeMd,
+    marginBottom: dimensions.spacing3,
     lineHeight: 1.6,
   },
   audio: {

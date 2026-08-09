@@ -65,3 +65,50 @@ describe("createApiClient", () => {
     expect((err as ApiError).code).toBe("unauthorized");
   });
 });
+
+describe("超时保护（fetch 挂起不再静默卡死）", () => {
+  const client = createApiClient({ baseUrl: "http://localhost:8787", getToken: () => TOKEN });
+
+  it("挂起的请求在默认 30s 后抛 request_timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      // 永不 resolve 的 fetch：监听 signal，abort 时 reject（模拟浏览器行为）
+      const spy = mockFetchOnce((_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          );
+        }),
+      );
+      const p = client.get("/api/episodes");
+      const assertion = expect(p).rejects.toMatchObject({ status: 408, code: "request_timeout" });
+      await vi.advanceTimersByTimeAsync(30_000);
+      await assertion;
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("timeoutMs: 0 跳过默认超时（SSE 长连接）", async () => {
+    vi.useFakeTimers();
+    try {
+      let aborted = false;
+      const spy = mockFetchOnce((_url, init) => {
+        init?.signal?.addEventListener("abort", () => { aborted = true; });
+        return new Promise<Response>((_resolve, reject) => {
+          // 不 resolve；用 timer 之外的方式终结：直接返回挂起，测试结束前手动结束
+          setTimeout(() => reject(new Error("done")), 100);
+        });
+      });
+      // 30s 内不超时：请求自己以 error 结束（模拟 SSE 正常结束由调用方控制）
+      const p = client.request("/api/episodes/x/polish", { timeoutMs: 0 });
+      await vi.advanceTimersByTimeAsync(35_000);
+      await expect(p).rejects.toThrow("done");
+      expect(aborted).toBe(false); // 未被超时中止
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

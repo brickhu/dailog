@@ -1,7 +1,6 @@
 import { createContext, createSignal, onMount, useContext, type JSX } from "solid-js";
 import { authApi, loadToken, clearToken, type AuthUser } from "./auth-api";
 import { env } from "./env";
-import { injectExtensionToken } from "./ext-inject";
 import { api, setTokenGetter } from "./client";
 
 // 认证上下文（M5：better-auth bearer 模式——token 内存 signal + localStorage 持久化）
@@ -22,6 +21,12 @@ export interface AuthState {
   activateChannel(inviteCode: string): Promise<{ error: string | null; code?: string | null }>;
   /** 录音上传成功后调用：同步 hasVoiceSample（守卫放行进入工作台） */
   markVoiceSampleUploaded(): void;
+  /** 会话失效（401）本地清理：清内存 user + localStorage token →
+   *  第一层锁定（登录界面）自动出现，URL 不变，重新登录后回到原路径 */
+  expireSession(): void;
+  /** 登录成功后同步会话状态（锁定视图用：LoginForm 内部已调 sign-in API，
+   *  这里只落状态触发第一层解锁；persist/inject 由调用方负责） */
+  applySession(user: AuthUser | null, token: string | null): void;
   signOut(): Promise<void>;
 }
 
@@ -57,6 +62,8 @@ export function AuthProvider(props: { children: JSX.Element }) {
     // onMount 中断导致 auth.loading 永久 true（守卫卡"加载中"）。
     const loggedUser = await fetch(`${env.apiBaseUrl}/api/auth/get-session`, {
       credentials: "include",
+      // 恢复会话不无限等待：10s 超时后按未登录处理（否则 fetch 挂起 → 永久"加载中"）
+      signal: AbortSignal.timeout(10_000),
     })
       .then((r) => (r.ok ? (r.json() as Promise<{ user: AuthUser } | null>) : Promise.resolve(null)))
       .catch(() => null);
@@ -64,8 +71,6 @@ export function AuthProvider(props: { children: JSX.Element }) {
     if (user) {
       setUser(user);
       setLoading(false);
-      // 自动注入扩展 token（页面加载即续上）
-      void injectExtensionToken();
       void refreshChannel();
       return;
     }
@@ -97,7 +102,6 @@ export function AuthProvider(props: { children: JSX.Element }) {
         const { token, user: u } = await authApi.signIn({ email, password });
         setAccessToken(token);
         setUser(u);
-        void injectExtensionToken();
         void refreshChannel();
         return { error: null };
       } catch (e) {
@@ -109,7 +113,6 @@ export function AuthProvider(props: { children: JSX.Element }) {
         const { token, user: u } = await authApi.signUp({ email, password, name });
         setAccessToken(token);
         setUser(u);
-        void injectExtensionToken();
         void refreshChannel();
         return { error: null };
       } catch (e) {
@@ -148,6 +151,19 @@ export function AuthProvider(props: { children: JSX.Element }) {
       setUser(null);
       setChannelActive(null);
       setHasVoiceSample(null);
+    },
+    expireSession() {
+      // 会话已失效（服务端 401）：不再调登出 API（必然失败），仅本地清理触发锁定
+      setAccessToken(null);
+      setUser(null);
+      setChannelActive(null);
+      setHasVoiceSample(null);
+      clearToken();
+    },
+    applySession(user, token) {
+      if (user) setUser(user);
+      setAccessToken(token);
+      void refreshChannel();
     },
   };
 

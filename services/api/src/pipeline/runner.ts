@@ -8,7 +8,8 @@ export interface RunnerDeps {
   repo: {
     getEpisodeUserId(episodeId: string): Promise<string | null>;
     getEpisodeLanguage(episodeId: string): Promise<string | null>;
-    getLatestScript(episodeId: string): Promise<{ version: number; segments: { speaker: "host" | "guest"; text: string }[] } | null>;
+    /** 生成来源脚本：经 episodes.transcript_id → transcripts.segments */
+    getEpisodeScript(episodeId: string): Promise<{ segments: { speaker: "host" | "guest"; text: string }[] } | null>;
     getGuestModelId(): Promise<string | null>;
     /** 读最新录音样本整行（audioUrl + transcript）；无记录返回 null */
     getVoiceSample(userId: string): Promise<{ audioUrl: string; transcript: string | null } | null>;
@@ -36,7 +37,7 @@ export function createPipelineRunner(deps: RunnerDeps): JobHandler {
     if (!userId) throw new Error("episode not found");
     const language = await deps.repo.getEpisodeLanguage(job.episodeId);
     if (!language) throw new Error("episode language not found");
-    const script = await deps.repo.getLatestScript(job.episodeId);
+    const script = await deps.repo.getEpisodeScript(job.episodeId);
     if (!script || script.segments.length === 0) throw new Error("script not found");
 
     // 2. 加载音色：主持人录音样本（整行：audioUrl + 转录文本）+ 嘉宾参考音频（资产，references 2D 主路径用）

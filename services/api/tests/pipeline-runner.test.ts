@@ -17,7 +17,7 @@ function makeDeps(overrides: Partial<RunnerDeps> = {}): RunnerDeps {
   const repo = {
     getEpisodeUserId: vi.fn(async () => "user-1"),
     getEpisodeLanguage: vi.fn(async () => "zh"),
-    getLatestScript: vi.fn(async () => ({ version: 1, segments: SEGMENTS })),
+    getEpisodeScript: vi.fn(async () => ({ version: 1, segments: SEGMENTS })),
     getGuestModelId: vi.fn(async () => null),
     getVoiceSample: vi.fn(async () => null),
     markJobProgress: vi.fn(async (_jobId: string, _status: string, _progress: number) => {}),
@@ -94,7 +94,7 @@ describe("createPipelineRunner (full chain: tts → merge → upload → done)",
     await expect(createPipelineRunner(noEpisode)(JOB, vi.fn(async () => {}))).rejects.toThrow("episode not found");
 
     const noScript = makeDeps();
-    vi.mocked(noScript.repo.getLatestScript).mockResolvedValue(null);
+    vi.mocked(noScript.repo.getEpisodeScript).mockResolvedValue(null);
     await expect(createPipelineRunner(noScript)(JOB, vi.fn(async () => {}))).rejects.toThrow("script not found");
   });
 });

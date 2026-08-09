@@ -1,37 +1,47 @@
 import { describe, expect, it, vi } from "vitest";
 import { createApp, type AppDeps } from "../src/app";
 import type { Env } from "../src/config/env";
-import type { ScriptSegment } from "../src/routes/polish";
 
 // share 转发路由测试：mock 全局 fetch 模拟 importer 服务响应
 
 function fakeRepo(): AppDeps["repo"] {
   return {
-    imports: {
-      getChannelActivatedAt: async () => new Date(),
-      findImportBySource: async () => null,
-      insertImport: async () => ({ id: "imp-1" }),
-      insertEpisode: async () => ({ id: "ep-1" }),
-      createImport: async () => ({ importId: "imp-1", episodeId: "ep-1" }),
+    snapshots: {
+      getByUrl: async () => null,
+      getById: async () => null,
+      create: async () => ({ id: "snap-1" }),
+      updateContent: async () => {},
+      updateQuality: async () => {},
+      markUnreachable: async () => {},
+      markParseFailed: async () => {},
+    },
+    polishes: {
+      findByUserSnapshot: async () => null,
+      create: async () => ({ id: "polish-1" }),
+      getOwned: async () => null,
+      getPolishDetail: async () => null,
+      listByUser: async () => [],
+    },
+    transcripts: {
+      create: async () => ({ id: "transcript-1" }),
+      listByPolish: async () => [],
+      getOwned: async () => null,
+      updateSegments: async () => {},
     },
     episodes: {
-      listEpisodes: async () => [],
-      getEpisode: async () => null,
-      saveScript: async (episodeId: string, version: number, segments: ScriptSegment[]) => ({ episodeId, version, segments }),
-      getLatestScript: async () => null,
-      getImportedDialogue: async () => null,
+      create: async () => ({ id: "ep-1" }),
+      listByUser: async () => [],
+      getOwned: async () => null,
+      getEpisodeAudio: async () => null,
+      getEpisodeScript: async () => null,
       getPublishedDialogue: async () => null,
       setPublished: async () => {},
-      setEpisodeLanguage: async () => {},
       getEpisodeUserId: async () => null,
       getEpisodeLanguage: async () => null,
       getHostModelId: async () => null,
       getVoiceSampleKey: async () => null,
-      getPolishCount: async () => 0,
-      incrementPolishCount: async () => {},
-      saveVoiceSample: async () => {},
       getVoiceSample: async () => null,
-      getEpisodeAudio: async () => null,
+      saveVoiceSample: async () => {},
       getChannelActivatedAt: async () => new Date(),
     },
     jobs: {
@@ -46,6 +56,37 @@ function fakeRepo(): AppDeps["repo"] {
       updateEpisodeAudio: async () => {},
       markJobFailed: async () => {},
     },
+  };
+}
+
+function fakeImportDeps(): AppDeps["importDeps"] {
+  return {
+    getSnapshotByUrl: async () => null,
+    createSnapshot: async (row) => ({ id: "snap-1" }),
+    updateSnapshotContent: async () => {},
+    updateSnapshotQuality: async () => {},
+    markSnapshotUnreachable: async () => {},
+    markSnapshotParseFailed: async () => {},
+    findPolishByUserSnapshot: async () => null,
+    qualityCheck: async () => ({ pass: true, language: "zh" }),
+    llm: { complete: async () => "", stream: async () => "" },
+  };
+}
+function fakePolishesDeps(): AppDeps["polishesDeps"] {
+  return { getChannelActivatedAt: async () => new Date(), findPolishByUserSnapshot: async () => null, createPolish: async () => ({ id: "polish-1" }), getPolishDetail: async () => null };
+}
+function fakeTranscriptsDeps(): AppDeps["transcriptsDeps"] {
+  return { getDialogueForPolish: async () => null, getTranscriptCount: async () => 0, getPolishLimit: async () => 5, createTranscript: async () => ({ id: "transcript-1" }), getOwnedTranscript: async () => null, updateTranscriptSegments: async () => {}, llm: { complete: async () => "", stream: async () => "" } };
+}
+function fakeEpisodesDeps(): AppDeps["episodesDeps"] {
+  return {
+    listByUser: async () => [], getOwned: async () => null, getEpisodeAudio: async () => null,
+    getOwnedTranscript: async () => null, createEpisode: async () => ({ id: "ep-1" }),
+    safetyCheck: async () => ({ pass: true }), getChannelActive: async () => true,
+    getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }), consumeQuota: async () => {},
+    createJob: async (episodeId: string) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }), enqueueJob: async () => {},
+    setPublished: async () => {}, getChannelActivatedAt: async () => new Date(),
+    getHostModelId: async () => null, getVoiceSampleKey: async () => null, getVoiceSample: async () => null, saveVoiceSample: async () => {},
   };
 }
 
@@ -82,33 +123,13 @@ function makeApp(shareCollectUrl: string | null) {
     env: fakeEnv(),
     auth: fakeAuth(),
     repo: fakeRepo(),
-    polish: {
-      getDialogueMessages: async () => [],
-      qualityCheck: async () => ({ pass: true, language: "zh" }),
-      savePolished: async (_episodeId: string, _language: string, segments: unknown[]) => ({ version: 1, segments }),
-      getPolishCount: async () => 0,
-      getPolishLimit: async () => 5,
-      llm: { complete: async () => "", stream: async () => "" },
-    },
-    generate: {
-      getOwnedEpisode: async () => ({ id: "ep-1" }),
-      getLatestScript: async () => null,
-      safetyCheck: async () => ({ pass: true }),
-      getChannelActive: async () => true,
-      getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
-      consumeQuota: async () => {},
-      createJob: async (episodeId: string) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
-      enqueueJob: async () => {},
-    },
     job: { getOwnedEpisode: async () => null, getLatestJob: async () => null },
     voice: {
       saveVoiceSample: async () => {},
       storage: { put: async () => {}, get: async () => new Uint8Array(), delete: async () => {} },
     },
     channel: {
-      getChannel: async () => null,
       activateChannel: async () => ({ ok: true }),
-      regenerateInvite: async () => ({ code: "INVITE-1" }),
     },
     favorites: {
       getPublishableEpisode: async () => null,
@@ -116,13 +137,16 @@ function makeApp(shareCollectUrl: string | null) {
       toggleLike: async () => ({ liked: true }),
       listFavorites: async () => [],
     },
-    token: { create: async () => ({ token: "tok-1" }), list: async () => [], revoke: async () => {} },
     admin: {
       isAdmin: async () => false,
       createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }),
     },
     shareCollectUrl: () => shareCollectUrl,
-  } as AppDeps);
+    importDeps: fakeImportDeps(),
+    polishesDeps: fakePolishesDeps(),
+    transcriptsDeps: fakeTranscriptsDeps(),
+    episodesDeps: fakeEpisodesDeps(),
+  });
 }
 
 describe("importer 转发路由", () => {

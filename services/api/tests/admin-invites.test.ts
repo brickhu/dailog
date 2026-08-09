@@ -19,31 +19,42 @@ function fakeAuth(session: { user: { id: string } } | null = { user: { id: "user
 
 function fakeRepo(): AppDeps["repo"] {
   return {
-    imports: {
-      getChannelActivatedAt: async () => null,
-      findImportBySource: async () => null,
-      insertImport: async () => ({ id: "imp-1" }),
-      insertEpisode: async () => ({ id: "ep-1" }),
-      createImport: async () => ({ importId: "imp-1", episodeId: "ep-1" }),
+    snapshots: {
+      getByUrl: async () => null,
+      getById: async () => null,
+      create: async () => ({ id: "snap-1" }),
+      updateContent: async () => {},
+      updateQuality: async () => {},
+      markUnreachable: async () => {},
+      markParseFailed: async () => {},
+    },
+    polishes: {
+      findByUserSnapshot: async () => null,
+      create: async () => ({ id: "polish-1" }),
+      getOwned: async () => null,
+      getPolishDetail: async () => null,
+      listByUser: async () => [],
+    },
+    transcripts: {
+      create: async () => ({ id: "transcript-1" }),
+      listByPolish: async () => [],
+      getOwned: async () => null,
+      updateSegments: async () => {},
     },
     episodes: {
-      listEpisodes: async () => [],
-      getEpisode: async () => null,
+      create: async () => ({ id: "ep-1" }),
+      listByUser: async () => [],
+      getOwned: async () => null,
       getEpisodeAudio: async () => null,
-      saveScript: async (episodeId, version, segments) => ({ episodeId, version, segments }),
-      getLatestScript: async () => ({ version: 1, segments: [{ speaker: "host", text: "hi" }] }),
-      getImportedDialogue: async () => null,
+      getEpisodeScript: async () => null,
       getPublishedDialogue: async () => null,
-      getPolishCount: async () => 0,
-      incrementPolishCount: async () => {},
       setPublished: async () => {},
-      setEpisodeLanguage: async () => {},
       getEpisodeUserId: async () => null,
       getEpisodeLanguage: async () => null,
       getHostModelId: async () => null,
       getVoiceSampleKey: async () => null,
-      saveVoiceSample: async () => {},
       getVoiceSample: async () => null,
+      saveVoiceSample: async () => {},
       getChannelActivatedAt: async () => null,
     },
     jobs: {
@@ -61,27 +72,57 @@ function fakeRepo(): AppDeps["repo"] {
   };
 }
 
-function fakePolish(): AppDeps["polish"] {
+function fakeImportDeps(): AppDeps["importDeps"] {
   return {
-    getDialogueMessages: async () => [],
+    getSnapshotByUrl: async () => null,
+    createSnapshot: async () => ({ id: "snap-1" }),
+    updateSnapshotContent: async () => {},
+    updateSnapshotQuality: async () => {},
+    markSnapshotUnreachable: async () => {},
+    markSnapshotParseFailed: async () => {},
+    findPolishByUserSnapshot: async () => null,
     qualityCheck: async () => ({ pass: true, language: "zh" }),
-    savePolished: async (_e, _l, segments) => ({ version: 1, segments }),
-    getPolishCount: async () => 0,
-    getPolishLimit: async () => 5,
     llm: { complete: async () => "", stream: async () => "" },
   };
 }
-
-function fakeGenerate(): AppDeps["generate"] {
+function fakePolishesDeps(): AppDeps["polishesDeps"] {
   return {
-    getOwnedEpisode: async () => ({ id: "ep-1" }),
-    getLatestScript: async () => ({ version: 1, segments: [{ speaker: "host", text: "hi" }] }),
+    getChannelActivatedAt: async () => new Date(),
+    findPolishByUserSnapshot: async () => null,
+    createPolish: async () => ({ id: "polish-1" }),
+    getPolishDetail: async () => null,
+  };
+}
+function fakeTranscriptsDeps(): AppDeps["transcriptsDeps"] {
+  return {
+    getDialogueForPolish: async () => null,
+    getTranscriptCount: async () => 0,
+    getPolishLimit: async () => 5,
+    createTranscript: async () => ({ id: "transcript-1" }),
+    getOwnedTranscript: async () => null,
+    updateTranscriptSegments: async () => {},
+    llm: { complete: async () => "", stream: async () => "" },
+  };
+}
+function fakeEpisodesDeps(): AppDeps["episodesDeps"] {
+  return {
+    listByUser: async () => [],
+    getOwned: async () => null,
+    getEpisodeAudio: async () => null,
+    getOwnedTranscript: async () => null,
+    createEpisode: async () => ({ id: "ep-1" }),
     safetyCheck: async () => ({ pass: true }),
     getChannelActive: async () => true,
     getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
     consumeQuota: async () => {},
-    createJob: async (episodeId) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
+    createJob: async (episodeId: string) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
     enqueueJob: async () => {},
+    setPublished: async () => {},
+    getChannelActivatedAt: async () => new Date(),
+    getHostModelId: async () => null,
+    getVoiceSampleKey: async () => null,
+    getVoiceSample: async () => null,
+    saveVoiceSample: async () => {},
   };
 }
 
@@ -135,7 +176,17 @@ function baseEnv(extra: Record<string, string> = {}) {
 
 function makeApp(admin: AppDeps["admin"], auth: AppDeps["auth"]) {
   const env = baseEnv();
-  return createApp({ env, auth, repo: fakeRepo(), polish: fakePolish(), generate: fakeGenerate(), job: fakeJob(), voice: fakeVoice(), channel: { activateChannel: async () => ({ ok: true }) }, favorites: { getPublishableEpisode: async () => null, toggleFavorite: async () => ({ favorited: true }), toggleLike: async () => ({ liked: true }), listFavorites: async () => [] }, admin });
+  return createApp({
+    env, auth, repo: fakeRepo(),
+    importDeps: fakeImportDeps(),
+    polishesDeps: fakePolishesDeps(),
+    transcriptsDeps: fakeTranscriptsDeps(),
+    episodesDeps: fakeEpisodesDeps(),
+    job: fakeJob(), voice: fakeVoice(),
+    channel: { activateChannel: async () => ({ ok: true }) },
+    favorites: { getPublishableEpisode: async () => null, toggleFavorite: async () => ({ favorited: true }), toggleLike: async () => ({ liked: true }), listFavorites: async () => [] },
+    admin,
+  });
 }
 
 describe("admin invite endpoints (fake deps)", () => {
@@ -211,8 +262,10 @@ describe.skipIf(!hasDb)("admin invite endpoints (real local PG)", () => {
       env: testEnv as never,
       auth,
       repo: fakeRepo(),
-      polish: fakePolish(),
-      generate: fakeGenerate(),
+      importDeps: fakeImportDeps(),
+      polishesDeps: fakePolishesDeps(),
+      transcriptsDeps: fakeTranscriptsDeps(),
+      episodesDeps: fakeEpisodesDeps(),
       job: fakeJob(),
       voice: fakeVoice(),
       channel: { activateChannel: async () => ({ ok: true }) },

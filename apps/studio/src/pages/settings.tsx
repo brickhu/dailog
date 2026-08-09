@@ -1,6 +1,7 @@
 import { createSignal, onMount, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "@dailogues/ui/theme.stylex";
+import { Button } from "@dailogues/ui";
+import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import Recorder from "../components/recorder";
 import { api } from "../lib/client";
 import { ApiError } from "../lib/api";
@@ -9,65 +10,55 @@ import { uploadVoiceSample, HOST_READING_SCRIPT } from "../lib/voice";
 const styles = stylex.create({
   page: {
     minHeight: "100vh",
-    background: tokens.colorBg,
-    color: tokens.colorText,
+    backgroundColor: colors.background,
+    color: colors.foreground,
   },
   content: {
     maxWidth: "720px",
     margin: "0 auto",
-    padding: tokens.space6,
+    padding: dimensions.spacing8,
   },
   title: {
-    fontSize: tokens.fontSizeXl,
-    fontWeight: tokens.fontWeightBold,
-    marginBottom: tokens.space5,
+    fontSize: dimensions.fontSize2xl,
+    fontWeight: dimensions.fontWeightBold,
+    marginBottom: dimensions.spacing6,
   },
   card: {
-    padding: tokens.space5,
-    borderRadius: tokens.radiusMd,
-    background: tokens.colorSurface,
-    border: `1px solid ${tokens.colorBorder}`,
-    marginBottom: tokens.space4,
+    padding: dimensions.spacing6,
+    borderRadius: dimensions.radiusMd,
+    backgroundColor: colors.surface,
+    border: `1px solid ${colors.ink}`,
+    marginBottom: dimensions.spacing4,
   },
   cardTitle: {
-    fontWeight: tokens.fontWeightBold,
-    marginBottom: tokens.space2,
+    fontWeight: dimensions.fontWeightBold,
+    marginBottom: dimensions.spacing2,
   },
   cardDesc: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
-    marginBottom: tokens.space3,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    marginBottom: dimensions.spacing3,
     lineHeight: 1.6,
   },
   status: {
-    fontSize: tokens.fontSizeSm,
-    color: tokens.colorTextMuted,
-    marginTop: tokens.space2,
+    fontSize: dimensions.fontSizeSm,
+    color: colors.neutral,
+    marginTop: dimensions.spacing2,
   },
   statusOk: {
-    color: tokens.colorSuccess,
+    color: colors.success,
   },
   statusFail: {
-    color: tokens.colorDanger,
+    color: colors.danger,
   },
   placeholder: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
-  },
-  button: {
-    padding: `${tokens.space2} ${tokens.space4}`,
-    borderRadius: tokens.radiusMd,
-    border: "none",
-    background: tokens.colorPrimary,
-    color: "#fff",
-    cursor: "pointer",
-    fontSize: tokens.fontSizeMd,
-    marginTop: tokens.space3,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
   },
   error: {
-    color: tokens.colorDanger,
-    fontSize: tokens.fontSizeSm,
-    marginTop: tokens.space2,
+    color: colors.danger,
+    fontSize: dimensions.fontSizeSm,
+    marginTop: dimensions.spacing2,
   },
 });
 
@@ -124,9 +115,7 @@ export default function Settings() {
           <Show when={error()}>
             <div {...stylex.props(styles.error)}>{error()}</div>
           </Show>
-          <button {...stylex.props(styles.button)} onClick={submit} disabled={!blob() || busy()}>
-            {busy() ? "上传训练中…" : "保存新声音"}
-          </button>
+          <Button block style={{ "margin-top": dimensions.spacing3 }} onClick={submit} disabled={!blob() || busy()}>{busy() ? "上传训练中…" : "保存新声音"}</Button>
         </div>
 
         <div {...stylex.props(styles.card)}>

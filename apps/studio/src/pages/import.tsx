@@ -33,6 +33,8 @@ interface Dialogue {
   title: string;
   url: string;
   messages: DialogueMessage[];
+  quality?: { pass: boolean; reason?: string; language?: string } | null;
+  snapshotId?: string | null;
 }
 
 /** importer 下发的平台校验规则（单一来源，前端本地预检） */
@@ -123,6 +125,16 @@ const styles = stylex.create({
     fontSize: dimensions.fontSizeSm,
     marginBottom: dimensions.spacing2,
   },
+  warn: {
+    backgroundColor: "#fffbeb",
+    color: "#92400e",
+    border: `1px solid #fde68a`,
+    borderRadius: dimensions.radiusMd,
+    padding: dimensions.spacing3,
+    fontSize: dimensions.fontSizeSm,
+    lineHeight: "1.5",
+    marginBottom: dimensions.spacing4,
+  },
   urlHint: {
     fontSize: dimensions.fontSizeSm,
     marginBottom: dimensions.spacing4,
@@ -210,7 +222,7 @@ export default function CollectPage() {
     setActionError(null);
     setState({ kind: "loading" });
     try {
-      const res = await api.request("/api/importer/collect", {
+      const res = await api.request("/api/import", {
         method: "POST",
         body: JSON.stringify({ url }),
       });
@@ -221,9 +233,18 @@ export default function CollectPage() {
             title?: string;
             url?: string;
             messages?: DialogueMessage[];
+            quality?: { pass: boolean; reason?: string; language?: string } | null;
+            snapshotId?: string;
+            existing?: boolean;
+            polishId?: string;
             error?: string;
           }
         | null;
+      // 已有容器：直接跳编辑页（继续创作）
+      if (res.ok && body?.existing && body.polishId) {
+        navigate(`/polish/${body.polishId}`);
+        return;
+      }
       if (res.ok && body?.messages?.length) {
         setState({
           kind: "ready",
@@ -233,6 +254,8 @@ export default function CollectPage() {
             title: body.title ?? "分享对话",
             url: body.url ?? url,
             messages: body.messages,
+            quality: body.quality ?? null,
+            snapshotId: body.snapshotId ?? null,
           },
         });
         return;
@@ -271,15 +294,18 @@ export default function CollectPage() {
     setBusy(true);
     setActionError(null);
     try {
-      const res = await api.request("/api/imports", { method: "POST", body: JSON.stringify(s.dialogue) });
-      const body = (await res.json().catch(() => null)) as { episodeId?: string; error?: string } | null;
-      if (res.ok && body?.episodeId) {
-        navigate(`/episodes/${body.episodeId}`);
+      // 创建创作容器（user × snapshot 唯一）；已存在 → 跳已有编辑页
+      const res = await api.request("/api/polishes/new", {
+        method: "POST",
+        body: JSON.stringify({ snapshotId: s.dialogue.snapshotId, title: s.dialogue.title }),
+      });
+      const body = (await res.json().catch(() => null)) as { polishId?: string; error?: string } | null;
+      if (res.ok && body?.polishId) {
+        navigate(`/polish/${body.polishId}`);
         return;
       }
-      if (res.status === 409) {
-        // 已采集过：直接跳已有草稿（无 episodeId 的并发竞态路径回列表）
-        navigate(body?.episodeId ? `/episodes/${body.episodeId}` : "/episodes");
+      if (res.status === 409 && body?.polishId) {
+        navigate(`/polish/${body.polishId}`);
         return;
       }
       if (res.status === 403) {
@@ -325,6 +351,12 @@ export default function CollectPage() {
                 }
               >
                 <div {...stylex.props(styles.title)}>确认采集「{ready()!.dialogue.title || "未命名对话"}」</div>
+                <Show when={ready()!.dialogue.quality && !ready()!.dialogue.quality!.pass}>
+                  <div {...stylex.props(styles.warn)}>
+                    ⚠️ 质量检测未通过：{ready()!.dialogue.quality!.reason ?? "内容可能不适合制作节目"}。
+                    仍可继续导入。
+                  </div>
+                </Show>
                 <div {...stylex.props(styles.meta)}>
                   平台：{PLATFORM_LABEL[ready()!.dialogue.platform] ?? "其他"}
                   {" "}· 共 {ready()!.dialogue.messages.length} 条消息
@@ -333,7 +365,7 @@ export default function CollectPage() {
                     {ready()!.dialogue.url}
                   </a>
                   <br />
-                  确认后将对话存入你的工作台并进入编辑（自动进行质量检测）。
+                  确认后创建你的创作容器并进入编辑（可多次润色生成脚本）。
                 </div>
                 <div {...stylex.props(styles.messages)}>
                   <For each={ready()!.dialogue.messages}>
@@ -345,7 +377,7 @@ export default function CollectPage() {
                   </For>
                 </div>
                 <div {...stylex.props(styles.actions)}>
-                  <Button block disabled={busy()} onClick={confirm}>{busy() ? "入库中…" : "确认入库"}</Button>
+                  <Button block disabled={busy()} onClick={confirm}>{busy() ? "创建中…" : "确认创建"}</Button>
                   <Button block appear="ghost" disabled={busy()} onClick={() => navigate("/episodes")}>取消</Button>
                 </div>
                 <Show when={actionError()}>

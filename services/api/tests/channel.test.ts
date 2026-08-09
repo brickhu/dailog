@@ -6,40 +6,104 @@ import { createAuth } from "../src/auth/better-auth";
 import { createDb } from "../src/db/client";
 import * as schema from "../src/db/schema";
 import { createActivateChannel } from "../src/routes/channel";
-import { generateRoutes } from "../src/routes/generate";
 import { episodesRoutes } from "../src/routes/episodes";
 
 // 频道开通（授权码）全链路：注册 → 未开通 403 → 开通 → 可生成/发布
 const hasDb = Boolean(process.env.DATABASE_URL);
 
+function fakeImportDeps(): AppDeps["importDeps"] {
+  return {
+    getSnapshotByUrl: async () => null,
+    createSnapshot: async (row) => ({ id: "snap-1", platform: row.platform, sourceTitle: row.sourceTitle, sourceConversationId: row.sourceConversationId, parsedDialogue: row.parsedDialogue, quality: null, status: "ok", retryAfter: null, lastError: null }),
+    updateSnapshotContent: async () => {},
+    updateSnapshotQuality: async () => {},
+    markSnapshotUnreachable: async () => {},
+    markSnapshotParseFailed: async () => {},
+    findPolishByUserSnapshot: async () => null,
+    qualityCheck: async () => ({ pass: true, language: "zh" }),
+    llm: { complete: async () => "", stream: async () => "" },
+  };
+}
+function fakePolishesDeps(): AppDeps["polishesDeps"] {
+  return {
+    getChannelActivatedAt: async () => new Date(),
+    findPolishByUserSnapshot: async () => null,
+    createPolish: async () => ({ id: "polish-1" }),
+    getPolishDetail: async () => null,
+  };
+}
+function fakeTranscriptsDeps(): AppDeps["transcriptsDeps"] {
+  return {
+    getDialogueForPolish: async () => null,
+    getTranscriptCount: async () => 0,
+    getPolishLimit: async () => 5,
+    createTranscript: async () => ({ id: "transcript-1" }),
+    getOwnedTranscript: async () => null,
+    updateTranscriptSegments: async () => {},
+    llm: { complete: async () => "", stream: async () => "" },
+  };
+}
+function fakeEpisodesDeps(): AppDeps["episodesDeps"] {
+  return {
+    listByUser: async () => [],
+    getOwned: async () => null,
+    getEpisodeAudio: async () => null,
+    getOwnedTranscript: async () => null,
+    createEpisode: async () => ({ id: "ep-1" }),
+    safetyCheck: async () => ({ pass: true }),
+    getChannelActive: async () => true,
+    getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
+    consumeQuota: async () => {},
+    createJob: async (episodeId: string) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
+    enqueueJob: async () => {},
+    setPublished: async () => {},
+    getChannelActivatedAt: async () => new Date(),
+    getHostModelId: async () => null,
+    getVoiceSampleKey: async () => null,
+    getVoiceSample: async () => null,
+    saveVoiceSample: async () => {},
+  };
+}
+
 function fakeRepo(): AppDeps["repo"] {
   return {
-    imports: {
-      getChannelActivatedAt: async () => new Date(),
-      findImportBySource: async () => null,
-      insertImport: async () => ({ id: "imp-1" }),
-      insertEpisode: async () => ({ id: "ep-1" }),
-      createImport: async () => ({ importId: "imp-1", episodeId: "ep-1" }),
+    snapshots: {
+      getByUrl: async () => null,
+      getById: async () => null,
+      create: async () => ({ id: "snap-1" }),
+      updateContent: async () => {},
+      updateQuality: async () => {},
+      markUnreachable: async () => {},
+      markParseFailed: async () => {},
+    },
+    polishes: {
+      findByUserSnapshot: async () => null,
+      create: async () => ({ id: "polish-1" }),
+      getOwned: async () => null,
+      getPolishDetail: async () => null,
+      listByUser: async () => [],
+    },
+    transcripts: {
+      create: async () => ({ id: "transcript-1" }),
+      listByPolish: async () => [],
+      getOwned: async () => null,
+      updateSegments: async () => {},
     },
     episodes: {
-      listEpisodes: async () => [],
-      getEpisode: async () => null,
+      create: async () => ({ id: "ep-1" }),
+      listByUser: async () => [],
+      getOwned: async () => null,
       getEpisodeAudio: async () => null,
-      saveScript: async (episodeId, version, segments) => ({ episodeId, version, segments }),
-      getLatestScript: async () => ({ version: 1, segments: [{ speaker: "host", text: "hi" }] }),
-      getImportedDialogue: async () => null,
+      getEpisodeScript: async () => null,
       getPublishedDialogue: async () => null,
-      getPolishCount: async () => 0,
-      incrementPolishCount: async () => {},
       setPublished: async () => {},
-      setEpisodeLanguage: async () => {},
       getEpisodeUserId: async () => null,
       getEpisodeLanguage: async () => null,
       getHostModelId: async () => null,
       getVoiceSampleKey: async () => null,
-      saveVoiceSample: async () => {},
       getVoiceSample: async () => null,
-      getChannelActivatedAt: async (userId) => channelState.get(userId) ?? null,
+      saveVoiceSample: async () => {},
+      getChannelActivatedAt: async () => new Date(),
     },
     jobs: {
       getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
@@ -56,29 +120,7 @@ function fakeRepo(): AppDeps["repo"] {
   };
 }
 
-function fakePolish(): AppDeps["polish"] {
-  return {
-    getDialogueMessages: async () => [],
-    qualityCheck: async () => ({ pass: true, language: "zh" }),
-    savePolished: async (_e, _l, segments) => ({ version: 1, segments }),
-    getPolishCount: async () => 0,
-    getPolishLimit: async () => 5,
-    llm: { complete: async () => "", stream: async () => "" },
-  };
-}
 
-function fakeGenerate(active: boolean): AppDeps["generate"] {
-  return {
-    getOwnedEpisode: async () => ({ id: "ep-1" }),
-    getLatestScript: async () => ({ version: 1, segments: [{ speaker: "host", text: "hi" }] }),
-    safetyCheck: async () => ({ pass: true }),
-    getChannelActive: async () => active,
-    getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
-    consumeQuota: async () => {},
-    createJob: async (episodeId) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
-    enqueueJob: async () => {},
-  };
-}
 
 function fakeJob(): AppDeps["job"] {
   return {
@@ -148,8 +190,10 @@ describe.skipIf(!hasDb)("channel activation (授权码开通频道, real local P
       env: testEnv,
       auth,
       repo: fakeRepo(),
-      polish: fakePolish(),
-      generate: fakeGenerate(true),
+    importDeps: fakeImportDeps(),
+    polishesDeps: fakePolishesDeps(),
+    transcriptsDeps: fakeTranscriptsDeps(),
+    episodesDeps: fakeEpisodesDeps(),
       job: fakeJob(),
       voice: fakeVoice(),
       channel: { activateChannel: createActivateChannel(dbClient.db) },
@@ -239,21 +283,25 @@ describe.skipIf(!hasDb)("channel activation (授权码开通频道, real local P
 });
 
 describe("channel gates (generate/publish 403 when not active)", () => {
-  it("generate returns 403 channel_not_active when channel inactive", async () => {
-    const app = generateRoutes(fakeGenerate(false));
-    const res = await app.request("/api/episodes/ep-1/generate", { method: "POST" });
+  it("episodes/new returns 403 channel_not_active when channel inactive", async () => {
+    const deps = fakeEpisodesDeps();
+    deps.getOwnedTranscript = async () => ({ id: "t-1", polishId: "p-1", segments: [{ speaker: "host", text: "h" }] });
+    deps.getChannelActive = async () => false;
+    const app = episodesRoutes(deps, () => "u-1");
+    const res = await app.request("/episodes/new", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ transcriptId: "t-1" }),
+    });
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ error: "channel_not_active" });
   });
 
   it("publish returns 403 channel_not_active when channel inactive", async () => {
-    const repo = fakeRepo();
-    const inactive: AppDeps["repo"]["episodes"] = {
-      ...repo.episodes,
-      getEpisode: async () => ({ id: "ep-1", userId: "u-1", title: "t", status: "draft" }),
-      getChannelActivatedAt: async () => null,
-    };
-    const app = episodesRoutes(inactive, () => "u-1");
+    const deps = fakeEpisodesDeps();
+    deps.getOwned = async () => ({ id: "ep-1", transcriptId: "t-1", polishId: "p-1", title: "t", status: "generating" });
+    deps.getChannelActivatedAt = async () => null;
+    const app = episodesRoutes(deps, () => "u-1");
     const res = await app.request("/episodes/ep-1/publish", { method: "POST" });
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ error: "channel_not_active" });

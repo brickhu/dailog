@@ -1,6 +1,7 @@
 import { createSignal, onCleanup, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "@dailogues/ui/theme.stylex";
+import { Button } from "@dailogues/ui";
+import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 
 // ---------------------------------------------------------------------------
 // 录音状态机（纯函数，可单测）
@@ -162,17 +163,13 @@ export default function Recorder(props: RecorderProps) {
       </div>
       <div {...stylex.props(styles.controls)}>
         <Show when={phase() !== "recording"}>
-          <button {...stylex.props(styles.button)} onClick={start} disabled={props.busy}>
-            {phase() === "recorded" ? "重录" : "开始录音"}
-          </button>
+          <Button onClick={start} disabled={props.busy}>{phase() === "recorded" ? "重录" : "开始录音"}</Button>
         </Show>
         <Show when={phase() === "recording"}>
-          <button {...stylex.props(styles.button)} onClick={stop}>停止</button>
+          <Button onClick={stop}>停止</Button>
         </Show>
         <Show when={phase() === "recorded"}>
-          <button {...stylex.props(styles.button, styles.buttonGhost)} onClick={discard} disabled={props.busy}>
-            丢弃
-          </button>
+          <Button appear="ghost" onClick={discard} disabled={props.busy}>丢弃</Button>
           <audio controls src={previewUrl() ?? undefined} {...stylex.props(styles.audio)} />
         </Show>
       </div>
@@ -185,50 +182,36 @@ export default function Recorder(props: RecorderProps) {
 
 const styles = stylex.create({
   box: {
-    padding: tokens.space4,
-    borderRadius: tokens.radiusMd,
-    border: `1px solid ${tokens.colorBorder}`,
-    background: tokens.colorBg,
+    padding: dimensions.spacing4,
+    borderRadius: dimensions.radiusMd,
+    border: `1px solid ${colors.ink}`,
+    backgroundColor: colors.background,
   },
   waveform: {
     width: "100%",
     height: "64px",
     display: "block",
-    background: tokens.colorSurface,
-    borderRadius: tokens.radiusSm,
-    marginBottom: tokens.space2,
+    backgroundColor: colors.surface,
+    borderRadius: dimensions.radiusSm,
+    marginBottom: dimensions.spacing2,
   },
   timer: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
-    marginBottom: tokens.space3,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    marginBottom: dimensions.spacing3,
   },
   controls: {
     display: "flex",
     alignItems: "center",
-    gap: tokens.space2,
+    gap: dimensions.spacing2,
     flexWrap: "wrap",
-  },
-  button: {
-    padding: `${tokens.space2} ${tokens.space4}`,
-    borderRadius: tokens.radiusMd,
-    border: "none",
-    background: tokens.colorPrimary,
-    color: "#fff",
-    cursor: "pointer",
-    fontSize: tokens.fontSizeMd,
-  },
-  buttonGhost: {
-    background: "transparent",
-    border: `1px solid ${tokens.colorBorder}`,
-    color: tokens.colorTextMuted,
   },
   audio: {
     height: "40px",
   },
   error: {
-    color: tokens.colorDanger,
-    fontSize: tokens.fontSizeSm,
-    marginTop: tokens.space2,
+    color: colors.danger,
+    fontSize: dimensions.fontSizeSm,
+    marginTop: dimensions.spacing2,
   },
 });

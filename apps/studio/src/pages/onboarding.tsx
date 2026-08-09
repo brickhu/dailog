@@ -1,124 +1,108 @@
 import { createSignal, Show } from "solid-js";
-import { useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "@dailogues/ui/theme.stylex";
+import { Button } from "@dailogues/ui";
+import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import Recorder from "../components/recorder";
 import { useAuth } from "../lib/auth";
 import { uploadVoiceSample, HOST_READING_SCRIPT } from "../lib/voice";
 import { ApiError } from "../lib/api";
 
-// /app/onboarding：两步流程——① 授权码开通频道 ② 录声音样本（都完成 → /app/episodes）
+// onboarding 锁定视图（AppShell 第二层守卫原地渲染；非独立路由——URL 不变，
+// 两步完成后 channel 状态解锁自动回到原始路径）。
 const styles = stylex.create({
   page: {
     minHeight: "100vh",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: tokens.colorBg,
-    color: tokens.colorText,
-    padding: tokens.space4,
+    backgroundColor: colors.background,
+    color: colors.foreground,
+    padding: dimensions.spacing4,
   },
   card: {
     width: "100%",
     maxWidth: "560px",
-    padding: tokens.space6,
-    borderRadius: tokens.radiusLg,
-    background: tokens.colorSurface,
-    border: `1px solid ${tokens.colorBorder}`,
+    padding: dimensions.spacing8,
+    borderRadius: dimensions.radiusXl,
+    backgroundColor: colors.surface,
+    border: `1px solid ${colors.ink}`,
   },
   steps: {
     display: "flex",
-    gap: tokens.space2,
-    marginBottom: tokens.space5,
-    fontSize: tokens.fontSizeSm,
+    gap: dimensions.spacing2,
+    marginBottom: dimensions.spacing6,
+    fontSize: dimensions.fontSizeSm,
   },
   step: {
-    color: tokens.colorTextMuted,
-    padding: `${tokens.space1} ${tokens.space3}`,
-    borderRadius: tokens.radiusFull,
-    border: `1px solid ${tokens.colorBorder}`,
+    color: colors.neutral,
+    padding: `${dimensions.spacing1} ${dimensions.spacing3}`,
+    borderRadius: dimensions.radiusFull,
+    border: `1px solid ${colors.ink}`,
   },
   stepActive: {
-    color: tokens.colorPrimary,
-    borderColor: tokens.colorPrimary,
+    color: colors.primary,
+    borderColor: colors.primary,
   },
   stepDone: {
-    color: tokens.colorSuccess,
-    borderColor: tokens.colorSuccess,
+    color: colors.success,
+    borderColor: colors.success,
   },
   title: {
-    fontSize: tokens.fontSizeXl,
-    fontWeight: tokens.fontWeightBold,
-    marginBottom: tokens.space2,
+    fontSize: dimensions.fontSize2xl,
+    fontWeight: dimensions.fontWeightBold,
+    marginBottom: dimensions.spacing2,
   },
   desc: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeMd,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeMd,
     lineHeight: 1.7,
-    marginBottom: tokens.space4,
+    marginBottom: dimensions.spacing4,
   },
   label: {
     display: "block",
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
-    marginBottom: tokens.space1,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    marginBottom: dimensions.spacing1,
   },
   input: {
     width: "100%",
     boxSizing: "border-box",
-    padding: `${tokens.space2} ${tokens.space3}`,
-    borderRadius: tokens.radiusMd,
-    border: `1px solid ${tokens.colorBorder}`,
-    background: tokens.colorBg,
-    color: tokens.colorText,
-    fontSize: tokens.fontSizeMd,
-  },
-  button: {
-    width: "100%",
-    padding: `${tokens.space2} ${tokens.space3}`,
-    borderRadius: tokens.radiusMd,
-    border: "none",
-    background: tokens.colorPrimary,
-    color: "#fff",
-    fontSize: tokens.fontSizeMd,
-    fontWeight: tokens.fontWeightMedium,
-    cursor: "pointer",
-    marginTop: tokens.space3,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-    cursor: "not-allowed",
+    padding: `${dimensions.spacing2} ${dimensions.spacing3}`,
+    borderRadius: dimensions.radiusMd,
+    border: `1px solid ${colors.ink}`,
+    background: colors.background,
+    color: colors.foreground,
+    fontSize: dimensions.fontSizeMd,
   },
   error: {
-    color: tokens.colorDanger,
-    fontSize: tokens.fontSizeSm,
-    marginTop: tokens.space2,
+    color: colors.danger,
+    fontSize: dimensions.fontSizeSm,
+    marginTop: dimensions.spacing2,
   },
   tip: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
-    marginTop: tokens.space3,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    marginTop: dimensions.spacing3,
   },
   readingScript: {
-    background: tokens.colorBg,
-    border: `1px solid ${tokens.colorBorder}`,
-    borderRadius: tokens.radiusMd,
-    padding: `${tokens.space3} ${tokens.space4}`,
-    color: tokens.colorText,
-    fontSize: tokens.fontSizeMd,
+    background: colors.background,
+    border: `1px solid ${colors.ink}`,
+    borderRadius: dimensions.radiusMd,
+    padding: `${dimensions.spacing3} ${dimensions.spacing4}`,
+    color: colors.foreground,
+    fontSize: dimensions.fontSizeMd,
     lineHeight: 1.8,
-    marginBottom: tokens.space4,
+    marginBottom: dimensions.spacing4,
   },
   readingLabel: {
-    color: tokens.colorPrimary,
-    fontWeight: tokens.fontWeightMedium,
-    marginBottom: tokens.space1,
+    color: colors.primary,
+    fontWeight: dimensions.fontWeightMedium,
+    marginBottom: dimensions.spacing1,
   },
 });
 
 export default function Onboarding() {
   const auth = useAuth();
-  const navigate = useNavigate();
   // 已开通用户访问 = 重录入口（守卫放行），直接进录音步；未开通从授权码步开始
   const [step, setStep] = createSignal<1 | 2>(auth.channelActive() ? 2 : 1);
   const [code, setCode] = createSignal("");
@@ -156,12 +140,12 @@ export default function Onboarding() {
     try {
       // 样本 + 固定朗读文案（转录文本）一起上传：零样本克隆质量依赖转录准确性
       await uploadVoiceSample(b, HOST_READING_SCRIPT);
-      // 样本保存成功即完成 onboarding（样本直传模式，无训练环节）：同步守卫状态后进工作台
+      // 样本保存成功即完成 onboarding（样本直传模式，无训练环节）：
+      // hasVoiceSample 解锁 → 守卫自动放行回原始路径（URL 不变，无需导航）
       auth.markVoiceSampleUploaded();
-      navigate("/episodes");
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
-        setError("登录状态已失效，请重新登录后再试");
+        auth.expireSession(); // 会话失效：清本地状态 → 登录锁定自动出现
       } else {
         setError(e instanceof Error ? e.message : "上传失败，请重试");
       }
@@ -196,13 +180,7 @@ export default function Onboarding() {
               <Show when={error()}>
                 <div {...stylex.props(styles.error)}>{error()}</div>
               </Show>
-              <button
-                {...stylex.props(styles.button, (!blob() || busy()) && styles.buttonDisabled)}
-                onClick={submitVoice}
-                disabled={!blob() || busy()}
-              >
-                {busy() ? "训练音色中…" : "完成，进入工作台"}
-              </button>
+              <Button block disabled={!blob() || busy()} onClick={submitVoice}>{busy() ? "训练音色中…" : "完成，进入工作台"}</Button>
               <div {...stylex.props(styles.tip)}>之后随时可以在设置页重录</div>
             </>
           }
@@ -224,9 +202,7 @@ export default function Onboarding() {
             <Show when={error()}>
               <div {...stylex.props(styles.error)}>{error()}</div>
             </Show>
-            <button type="submit" {...stylex.props(styles.button)} disabled={busy()}>
-              {busy() ? "开通中…" : "开通频道"}
-            </button>
+            <Button block type="submit" disabled={busy()}>{busy() ? "开通中…" : "开通频道"}</Button>
           </form>
         </Show>
       </div>

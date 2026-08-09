@@ -9,34 +9,99 @@ import * as schema from "../src/db/schema";
 // 认证全链路测试：真实 better-auth + 本地 PG（门控；无 DATABASE_URL 时跳过）
 const hasDb = Boolean(process.env.DATABASE_URL);
 
+function fakeImportDeps(): AppDeps["importDeps"] {
+  return {
+    getSnapshotByUrl: async () => null,
+    createSnapshot: async (row) => ({ id: "snap-1", platform: row.platform, sourceTitle: row.sourceTitle, sourceConversationId: row.sourceConversationId, parsedDialogue: row.parsedDialogue, quality: null, status: "ok", retryAfter: null, lastError: null }),
+    updateSnapshotContent: async () => {},
+    updateSnapshotQuality: async () => {},
+    markSnapshotUnreachable: async () => {},
+    markSnapshotParseFailed: async () => {},
+    findPolishByUserSnapshot: async () => null,
+    qualityCheck: async () => ({ pass: true, language: "zh" }),
+    llm: { complete: async () => "", stream: async () => "" },
+  };
+}
+function fakePolishesDeps(): AppDeps["polishesDeps"] {
+  return {
+    getChannelActivatedAt: async () => new Date(),
+    findPolishByUserSnapshot: async () => null,
+    createPolish: async () => ({ id: "polish-1" }),
+    getPolishDetail: async () => null,
+  };
+}
+function fakeTranscriptsDeps(): AppDeps["transcriptsDeps"] {
+  return {
+    getDialogueForPolish: async () => null,
+    getTranscriptCount: async () => 0,
+    getPolishLimit: async () => 5,
+    createTranscript: async () => ({ id: "transcript-1" }),
+    getOwnedTranscript: async () => null,
+    updateTranscriptSegments: async () => {},
+    llm: { complete: async () => "", stream: async () => "" },
+  };
+}
+function fakeEpisodesDeps(): AppDeps["episodesDeps"] {
+  return {
+    listByUser: async () => [],
+    getOwned: async () => null,
+    getEpisodeAudio: async () => null,
+    getOwnedTranscript: async () => null,
+    createEpisode: async () => ({ id: "ep-1" }),
+    safetyCheck: async () => ({ pass: true }),
+    getChannelActive: async () => true,
+    getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
+    consumeQuota: async () => {},
+    createJob: async (episodeId: string) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
+    enqueueJob: async () => {},
+    setPublished: async () => {},
+    getChannelActivatedAt: async () => new Date(),
+    getHostModelId: async () => null,
+    getVoiceSampleKey: async () => null,
+    getVoiceSample: async () => null,
+    saveVoiceSample: async () => {},
+  };
+}
+
 function fakeRepo(): AppDeps["repo"] {
   return {
-    imports: {
-      getChannelActivatedAt: async () => new Date(),
-      findImportBySource: async () => null,
-      insertImport: async () => ({ id: "imp-1" }),
-      insertEpisode: async () => ({ id: "ep-1" }),
-      createImport: async () => ({ importId: "imp-1", episodeId: "ep-1" }),
+    snapshots: {
+      getByUrl: async () => null,
+      getById: async () => null,
+      create: async () => ({ id: "snap-1" }),
+      updateContent: async () => {},
+      updateQuality: async () => {},
+      markUnreachable: async () => {},
+      markParseFailed: async () => {},
+    },
+    polishes: {
+      findByUserSnapshot: async () => null,
+      create: async () => ({ id: "polish-1" }),
+      getOwned: async () => null,
+      getPolishDetail: async () => null,
+      listByUser: async () => [],
+    },
+    transcripts: {
+      create: async () => ({ id: "transcript-1" }),
+      listByPolish: async () => [],
+      getOwned: async () => null,
+      updateSegments: async () => {},
     },
     episodes: {
-      listEpisodes: async () => [],
-      getEpisode: async () => null,
-      saveScript: async (episodeId, version, segments) => ({ episodeId, version, segments }),
-      getLatestScript: async () => null,
-      getImportedDialogue: async () => null,
+      create: async () => ({ id: "ep-1" }),
+      listByUser: async () => [],
+      getOwned: async () => null,
+      getEpisodeAudio: async () => null,
+      getEpisodeScript: async () => null,
       getPublishedDialogue: async () => null,
       setPublished: async () => {},
-      setEpisodeLanguage: async () => {},
       getEpisodeUserId: async () => null,
       getEpisodeLanguage: async () => null,
       getHostModelId: async () => null,
       getVoiceSampleKey: async () => null,
-      getPolishCount: async () => 0,
-      incrementPolishCount: async () => {},
-      saveVoiceSample: async () => {},
       getVoiceSample: async () => null,
-      getEpisodeAudio: async () => null,
-      getChannelActivatedAt: async () => null,
+      saveVoiceSample: async () => {},
+      getChannelActivatedAt: async () => new Date(),
     },
     jobs: {
       getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
@@ -53,29 +118,7 @@ function fakeRepo(): AppDeps["repo"] {
   };
 }
 
-function fakePolish(): AppDeps["polish"] {
-  return {
-    getDialogueMessages: async () => [],
-    qualityCheck: async () => ({ pass: true, language: "zh" }),
-    savePolished: async (_episodeId, _language, segments) => ({ version: 1, segments }),
-    getPolishCount: async () => 0,
-    getPolishLimit: async () => 5,
-    llm: { complete: async () => "", stream: async () => "" },
-  };
-}
 
-function fakeGenerate(): AppDeps["generate"] {
-  return {
-    getOwnedEpisode: async () => ({ id: "ep-1" }),
-    getLatestScript: async () => null,
-    safetyCheck: async () => ({ pass: true }),
-    getChannelActive: async () => true,
-    getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
-    consumeQuota: async () => {},
-    createJob: async (episodeId) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
-    enqueueJob: async () => {},
-  };
-}
 
 function fakeJob(): AppDeps["job"] {
   return {
@@ -146,8 +189,10 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
       env: testEnv,
       auth,
       repo: fakeRepo(),
-      polish: fakePolish(),
-      generate: fakeGenerate(),
+    importDeps: fakeImportDeps(),
+    polishesDeps: fakePolishesDeps(),
+    transcriptsDeps: fakeTranscriptsDeps(),
+    episodesDeps: fakeEpisodesDeps(),
       job: fakeJob(),
       voice: fakeVoice(),
     channel: { activateChannel: async () => ({ ok: true }) },

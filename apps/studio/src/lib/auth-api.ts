@@ -23,11 +23,24 @@ export interface SignInInput {
   password: string;
 }
 
+/** 认证请求超时（fetch 挂起不 reject 会静默卡死——统一超时抛错） */
+const AUTH_TIMEOUT_MS = 15_000;
+
 async function request(path: string, init: RequestInit = {}): Promise<Response> {
   // credentials: "include"：登录/登出响应 Set-Cookie 需被浏览器接受（SSO cookie 会话），
   // 否则 cookie 会话永远不会建立，只能靠 localStorage token 兜底
-  const res = await fetch(`${env.apiBaseUrl}${path}`, { ...init, credentials: "include" });
-  return res;
+  let timedOut = false;
+  const controller = new AbortController();
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, AUTH_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${env.apiBaseUrl}${path}`, { ...init, credentials: "include", signal: controller.signal });
+    clearTimeout(timer);
+    return res;
+  } catch (e) {
+    clearTimeout(timer);
+    if (timedOut) throw new Error("请求超时，请检查网络后重试");
+    throw e;
+  }
 }
 
 /** 非 2xx → 抛 better-auth/Hono 错误消息（message（better-auth）或 error（业务路由）） */

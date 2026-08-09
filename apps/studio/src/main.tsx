@@ -29,8 +29,7 @@ const styles = stylex.create({
 //   /                  导入页（默认页：粘贴分享链接 → 采集 → 确认入库）
 //   /import            导入页（/ 的别名路由）
 //   /episodes          节目管理
-//   /episodes/new      新增节目（四步向导）
-//   /episodes/:id      续编辑草稿
+//   /polish/:id        创作容器编辑页（润色脚本 → 生成节目 → 发布）
 //   /settings          设置
 render(
   () => (
@@ -42,8 +41,7 @@ render(
               <Route path="/" component={CollectPage} />
               <Route path="/import" component={CollectPage} />
               <Route path="/episodes" component={EpisodesPage} />
-              <Route path="/episodes/new" component={EditorPage} />
-              <Route path="/episodes/:id" component={EditorPage} />
+              <Route path="/polish/:id" component={EditorPage} />
               <Route path="/settings" component={SettingsPage} />
             </Route>
             <Route path="/example" component={ExamplePage} />
