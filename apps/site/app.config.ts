@@ -22,7 +22,7 @@ export default defineConfig({
     },
     server: {
       // 本地域名绑定（SSO 测试）：允许 *.dailog.local 访问 dev server
-      allowedHosts: [".dailog.local"],
+      allowedHosts: [".dailog.local", ".127.0.0.1.sslip.io"],
     },
   },
 });

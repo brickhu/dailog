@@ -1,9 +1,10 @@
 #!/bin/bash
-# 本地域名绑定（SSO 完整链路验证）——dailog.local 方案：
-# hosts 把 *.dailog.local 指到 127.0.0.1 + mkcert 本地 CA 签 HTTPS 证书
-# + Caddy 反代到本地端口。.local 是保留 TLD（不与任何真实域名冲突）；
-# PSL 中 "local" 是后缀 → dailog.local 是可注册域 → Domain=.dailog.local
-# cookie 合法（localhost 不行——localhost 本身是 PSL 条目，拒绝设 cookie）。
+# 本地域名绑定（SSO 完整链路验证）——sslip.io 方案：
+# *.127.0.0.1.sslip.io 公网通配 DNS 自动解析到 127.0.0.1（无需 hosts，
+# 浏览器全兼容——.local 会被 Chrome 当 mDNS 绕过 hosts）。
+# mkcert 本地 CA 签 HTTPS 证书 + Caddy 反代到本地端口。
+# PSL 中 127.0.0.1.sslip.io 是可注册域 → Domain=.127.0.0.1.sslip.io
+# cookie 合法（localhost 本身是 PSL 条目，拒绝设 cookie）。
 #
 # 用法：
 #   ./scripts/setup-local-domains.sh install   # 首次安装（mkcert + Caddyfile）
@@ -13,7 +14,7 @@
 
 set -euo pipefail
 
-BASE="dailog.local"
+BASE="127.0.0.1.sslip.io"
 CERT_DIR="$HOME/.dailog-local"
 CADDYFILE="$HOME/dailog-local-Caddyfile"
 
@@ -25,17 +26,6 @@ install_tools() {
   if ! command -v caddy >/dev/null; then
     echo "[setup] 安装 caddy…"
     brew install caddy >/dev/null
-  fi
-}
-
-setup_hosts() {
-  local LINE="127.0.0.1 dailog.local app.dailog.local api.dailog.local site.dailog.local"
-  if grep -q "dailog.local" /etc/hosts; then
-    echo "[setup] hosts 已配置"
-  else
-    echo "[setup] 修改 /etc/hosts（需要 sudo，输入密码）："
-    sudo sh -c "echo '$LINE' >> /etc/hosts"
-    echo "[setup] hosts 已添加：$LINE"
   fi
 }
 
@@ -102,7 +92,6 @@ print_env() {
 case "${1:-}" in
   install)
     install_tools
-    setup_hosts
     setup_certs
     write_caddyfile
     print_env
