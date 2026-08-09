@@ -154,7 +154,7 @@ export default function Dashboard() {
         <div {...stylex.props(styles.hero)}>
           <div {...stylex.props(styles.title)}>我的节目</div>
           <div {...stylex.props(styles.heroActions)}>
-            <Button appear="ghost" onClick={() => navigate("/import")}>从分享链接导入</Button>
+            <Button appear="ghost" onClick={() => navigate("/")}>从分享链接导入</Button>
             <Button onClick={() => navigate("/episodes/new")}>开始新节目</Button>
           </div>
         </div>

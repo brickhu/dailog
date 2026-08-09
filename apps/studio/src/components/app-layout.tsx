@@ -1,11 +1,12 @@
 import { createSignal, For, Show } from "solid-js";
 import { useLocation, useNavigate, type RouteSectionProps } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "@dailogues/ui/theme.stylex";
+import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useAuth } from "../lib/auth";
 
 // 两列布局：左导航（节目/设置）+ 右侧内容区（子路由经 props.children 渲染）
 const NAV = [
+  { path: "/", label: "导入" },
   { path: "/episodes", label: "节目" },
   { path: "/settings", label: "设置" },
 ];
@@ -14,14 +15,11 @@ const styles = stylex.create({
   shell: {
     display: "flex",
     minHeight: "100vh",
-    background: tokens.colorBg,
-    color: tokens.colorText,
   },
   sidebar: {
     width: "220px",
     flexShrink: 0,
-    borderRight: `1px solid ${tokens.colorBorder}`,
-    background: tokens.colorSurface,
+    borderRight: `1px solid ${colors.ink}`,
     display: "flex",
     flexDirection: "column",
     position: "sticky",
@@ -29,45 +27,45 @@ const styles = stylex.create({
     height: "100vh",
   },
   brand: {
-    padding: `${tokens.space4} ${tokens.space4}`,
-    fontSize: tokens.fontSizeLg,
-    fontWeight: tokens.fontWeightBold,
-    color: tokens.colorPrimary,
+    padding: `${dimensions.spacing4} ${dimensions.spacing4}`,
+    fontSize: dimensions.fontSizeLg,
+    fontWeight: dimensions.fontWeightBold,
+    color: colors.primary,
     cursor: "pointer",
   },
   nav: {
     flex: 1,
-    padding: `${tokens.space2} ${tokens.space3}`,
+    padding: `${dimensions.spacing2} ${dimensions.spacing3}`,
     display: "flex",
     flexDirection: "column",
-    gap: tokens.space1,
+    gap: dimensions.spacing1,
   },
   link: {
     display: "block",
     width: "100%",
     textAlign: "left",
-    padding: `${tokens.space2} ${tokens.space3}`,
-    borderRadius: tokens.radiusMd,
+    padding: `${dimensions.spacing2} ${dimensions.spacing3}`,
+    borderRadius: dimensions.radiusMd,
     border: "none",
-    background: "transparent",
-    color: tokens.colorTextMuted,
+    backgroundColor: "transparent",
+    color: colors.neutral,
     cursor: "pointer",
-    fontSize: tokens.fontSizeMd,
+    fontSize: dimensions.fontSizeMd,
   },
   linkActive: {
-    background: "rgba(91, 140, 255, 0.12)",
-    color: tokens.colorPrimary,
+    backgroundColor: "rgba(91, 140, 255, 0.12)",
+    color: colors.primary,
   },
   footer: {
-    padding: tokens.space3,
-    borderTop: `1px solid ${tokens.colorBorder}`,
+    padding: dimensions.spacing3,
+    borderTop: `1px solid ${colors.ink}`,
     display: "flex",
     flexDirection: "column",
-    gap: tokens.space2,
+    gap: dimensions.spacing2,
   },
   email: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
@@ -75,9 +73,9 @@ const styles = stylex.create({
   signOut: {
     background: "transparent",
     border: "none",
-    color: tokens.colorTextMuted,
+    color: colors.neutral,
     cursor: "pointer",
-    fontSize: tokens.fontSizeSm,
+    fontSize: dimensions.fontSizeSm,
     textAlign: "left",
     padding: 0,
   },
@@ -88,30 +86,30 @@ const styles = stylex.create({
   verifyBanner: {
     display: "flex",
     alignItems: "center",
-    gap: tokens.space3,
-    padding: `${tokens.space2} ${tokens.space4}`,
-    background: "rgba(240, 173, 78, 0.12)",
+    gap: dimensions.spacing3,
+    padding: `${dimensions.spacing2} ${dimensions.spacing4}`,
+    backgroundColor: "rgba(240, 173, 78, 0.12)",
     borderBottom: `1px solid rgba(240, 173, 78, 0.35)`,
-    fontSize: tokens.fontSizeSm,
-    color: tokens.colorText,
+    fontSize: dimensions.fontSizeSm,
+    color: colors.foreground,
   },
   verifyText: {
     flex: 1,
   },
   resendBtn: {
     background: "transparent",
-    border: `1px solid ${tokens.colorBorder}`,
-    borderRadius: tokens.radiusMd,
-    padding: `${tokens.space1} ${tokens.space3}`,
-    color: tokens.colorText,
+    border: `1px solid ${colors.ink}`,
+    borderRadius: dimensions.radiusMd,
+    padding: `${dimensions.spacing1} ${dimensions.spacing3}`,
+    color: colors.foreground,
     cursor: "pointer",
-    fontSize: tokens.fontSizeSm,
+    fontSize: dimensions.fontSizeSm,
   },
   resendMsg: {
-    color: tokens.colorDanger,
+    color: colors.danger,
   },
   resendMsgOk: {
-    color: tokens.colorPrimary,
+    color: colors.primary,
   },
 });
 
@@ -133,14 +131,14 @@ export default function AppLayout(props: RouteSectionProps) {
   return (
     <div {...stylex.props(styles.shell)}>
       <aside {...stylex.props(styles.sidebar)}>
-        <div {...stylex.props(styles.brand)} onClick={() => navigate("/episodes")}>
+        <div {...stylex.props(styles.brand)} onClick={() => navigate("/")}>
           dailog
         </div>
         <nav {...stylex.props(styles.nav)}>
           <For each={NAV}>
             {(item) => (
               <button
-                {...stylex.props(styles.link, location.pathname.startsWith(item.path) && styles.linkActive)}
+                {...stylex.props(styles.link, (item.path === "/" ? location.pathname === "/" || location.pathname === "/import" : location.pathname.startsWith(item.path)) && styles.linkActive)}
                 onClick={() => navigate(item.path)}
               >
                 {item.label}

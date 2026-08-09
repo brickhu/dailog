@@ -1,44 +1,57 @@
-import { Navigate, Route, Router } from "@solidjs/router";
+import { Route, Router } from "@solidjs/router";
 import { render } from "solid-js/web";
 import { AuthProvider } from "./lib/auth";
-import { RequireAuth } from "./lib/guards";
+import { AppShell } from "./lib/guards";
 import AppLayout from "./components/app-layout";
-import LoginPage from "./pages/login";
 import EpisodesPage from "./pages/episodes";
 import EditorPage from "./pages/editor";
-import OnboardingPage from "./pages/onboarding";
 import SettingsPage from "./pages/settings";
+import CollectPage from "./pages/import";
 import NotFound from "./pages/not-found";
+import {Examples as ExamplePage} from "@dailogues/ui";
+import * as stylex from "@stylexjs/stylex";
+import { colors } from "@dailogues/ui/theme.stylex";
+import "./main.css";
+const styles = stylex.create({
+  body: {
+    minWidth: "320px",
+    minHeight: "100vh",
+    // 注意：StyleX 不支持简写属性（background），编译期会静默丢弃——必须用 backgroundColor
+    backgroundColor: colors.background,
+    color: colors.foreground,
+    
+  }
+})
 
-// SPA studio（app.dailog.fm）路由——无前缀，与主站完全区分：
-// /login SPA 本地兜底登录（计划 6 主站统一登录页上线后由守卫改跳 dailog.fm/login）
-// 其余页面在 RequireAuth（登录 + 频道守卫）下：
-//   /onboarding      频道初始化 + 录音（独立全屏，不套工作台导航）
-//   工作台（AppLayout 两列布局）：
-//   /episodes          节目管理（默认页）
+// SPA studio（app.dailog.fm）路由——无前缀，与主站完全区分。
+// 两层 Context 守卫（AppShell）锁定式渲染：未登录 → 登录界面；onboarding 未完成 → onboarding 界面。
+// URL（含 query）全程不变，解锁后回到原路径——因此无 /login、/onboarding 路由。
+//   /                  导入页（默认页：粘贴分享链接 → 采集 → 确认入库）
+//   /import            导入页（/ 的别名路由）
+//   /episodes          节目管理
 //   /episodes/new      新增节目（四步向导）
 //   /episodes/:id      续编辑草稿
 //   /settings          设置
 render(
   () => (
-    <AuthProvider>
-      <Router>
-        <Route path="/login" component={LoginPage} />
-        <Route path="/" component={RequireAuth}>
-          {/* onboarding 独立全屏（无导航框架），与 /login 同级视觉；仍需登录 + 频道守卫 */}
-          <Route path="/onboarding" component={OnboardingPage} />
-          <Route path="/" component={AppLayout}>
-            <Route path="/" component={() => <Navigate href="/episodes" />} />
-            <Route path="/episodes" component={EpisodesPage} />
-            <Route path="/episodes/new" component={EditorPage} />
-            <Route path="/episodes/:id" component={EditorPage} />
-            <Route path="/settings" component={SettingsPage} />
+    <div {...stylex.props(styles.body)}>
+      <AuthProvider>
+        <Router>
+          <Route path="/" component={AppShell}>
+            <Route path="/" component={AppLayout}>
+              <Route path="/" component={CollectPage} />
+              <Route path="/import" component={CollectPage} />
+              <Route path="/episodes" component={EpisodesPage} />
+              <Route path="/episodes/new" component={EditorPage} />
+              <Route path="/episodes/:id" component={EditorPage} />
+              <Route path="/settings" component={SettingsPage} />
+            </Route>
+            <Route path="/example" component={ExamplePage} />
             <Route path="*" component={NotFound} />
           </Route>
-        </Route>
-        <Route path="*" component={NotFound} />
-      </Router>
-    </AuthProvider>
+        </Router>
+      </AuthProvider>
+    </div>
   ),
   document.getElementById("root")!,
 );

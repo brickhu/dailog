@@ -1,16 +1,15 @@
 import { createSignal, For, onMount, Show } from "solid-js";
-import { useNavigate, useSearchParams } from "@solidjs/router";
+import { useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { Button } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
 import { ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { getCollect, deleteCollect, closeCurrentTab, type CachedCollect } from "../lib/ext-bridge";
 
-// /import?collectId=<id>：扩展采集确认入库页——展示本地缓存，用户确认才入库（存 R2 + 建草稿）
+// /import（根路径 = 导入页）：粘贴 AI 对话分享链接 → 采集预览 → 确认入库（存 R2 + 建草稿）。
 // 是否登录/开通频道由 app 的 auth provider 负责（未登录 → 登录锁定；入库 403 → 频道引导提示）
-// 取消 → 删除本地缓存回来源页；入库 → 跳编辑页（ScriptEditor 自动触发润色/质量检测）
+// 取消 → 回节目列表；入库 → 跳编辑页（ScriptEditor 自动触发润色/质量检测）
 
 const PLATFORM_LABEL: Record<string, string> = {
   deepseek: "DeepSeek",
@@ -22,6 +21,26 @@ const PLATFORM_LABEL: Record<string, string> = {
   tongyi: "通义",
   plain: "其他",
 };
+
+interface DialogueMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface Dialogue {
+  platform: string;
+  conversationId: string;
+  title: string;
+  url: string;
+  messages: DialogueMessage[];
+}
+
+/** importer 下发的平台校验规则（单一来源，前端本地预检） */
+interface PlatformRule {
+  id: string;
+  label: string;
+  sharePattern: string;
+}
 
 const styles = stylex.create({
   page: {
@@ -115,16 +134,6 @@ const styles = stylex.create({
   urlHintBad: {
     color: colors.danger,
   },
-  warn: {
-    backgroundColor: "#fffbeb",
-    color: "#92400e",
-    border: `1px solid #fde68a`,
-    borderRadius: dimensions.radiusMd,
-    padding: dimensions.spacing3,
-    fontSize: dimensions.fontSizeSm,
-    lineHeight: "1.5",
-    marginBottom: dimensions.spacing4,
-  },
   error: {
     color: colors.danger,
     fontSize: dimensions.fontSizeSm,
@@ -137,26 +146,21 @@ type State =
   | { kind: "loading" }
   | { kind: "input" }
   | { kind: "error"; message: string }
-  | { kind: "ready"; dialogue: CachedCollect };
-
-/** importer 下发的平台校验规则（单一来源，前端本地预检） */
-interface PlatformRule {
-  id: string;
-  label: string;
-  sharePattern: string;
-}
+  | { kind: "ready"; dialogue: Dialogue };
 
 export default function CollectPage() {
   const auth = useAuth();
   const navigate = useNavigate();
-  const [params] = useSearchParams();
-  const collectId = typeof params.collectId === "string" ? params.collectId : null;
-  const [state, setState] = createSignal<State>({ kind: "loading" });
+  const [state, setState] = createSignal<State>({ kind: "input" });
   const [busy, setBusy] = createSignal(false);
   const [actionError, setActionError] = createSignal<string | null>(null);
   const [shareUrl, setShareUrl] = createSignal("");
   const [rules, setRules] = createSignal<PlatformRule[] | null>(null);
   const [urlHint, setUrlHint] = createSignal<{ ok: boolean; label?: string; message?: string } | null>(null);
+
+  onMount(async () => {
+    void loadRules();
+  });
 
   /** 拉取 importer 校验规则（失败不阻塞——采集时服务端仍会校验） */
   const loadRules = async () => {
@@ -192,30 +196,6 @@ export default function CollectPage() {
     setActionError(null);
   };
 
-  // 扩展模式：页面生命周期兜底，关窗/导航离开时自动清缓存（扩展侧 tab 关闭监听是主保险，
-  // 此处双保险——极端情况下扩展 SW 未及时处理也能清掉）
-  window.addEventListener("pagehide", () => {
-    if (collectId) void deleteCollect(collectId);
-  });
-
-  onMount(async () => {
-    void loadRules();
-    if (!collectId) {
-      // 无 collectId = 分享链接模式：显示输入框，用户粘贴分享链接后采集
-      setState({ kind: "input" });
-      return;
-    }
-    const dialogue = await getCollect(collectId);
-    if (!dialogue) {
-      setState({
-        kind: "error",
-        message: "未找到本地采集缓存（可能已过期，或当前浏览器未安装扩展）。请回到对话页重新采集。",
-      });
-      return;
-    }
-    setState({ kind: "ready", dialogue });
-  });
-
   /** 分享链接采集：本地预检 → 调 API 转发 → importer 服务 → 预览确认 */
   const collectFromUrl = async () => {
     const url = shareUrl().trim();
@@ -240,7 +220,7 @@ export default function CollectPage() {
             conversationId?: string;
             title?: string;
             url?: string;
-            messages?: CachedCollect["messages"];
+            messages?: DialogueMessage[];
             error?: string;
           }
         | null;
@@ -253,7 +233,6 @@ export default function CollectPage() {
             title: body.title ?? "分享对话",
             url: body.url ?? url,
             messages: body.messages,
-            unitCount: Math.floor(body.messages.length / 2),
           },
         });
         return;
@@ -266,12 +245,12 @@ export default function CollectPage() {
             ? "该平台暂时不可达（可能被反爬拦截）。请稍后重试，或换一个平台的分享链接。"
             : err === "parse_failed"
               ? "无法解析该分享页（页面结构可能已变化）。请确认链接有效后重试。"
-              : err === "unsupported_platform"
-                ? "暂不支持该平台/链接格式。支持：Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 分享链接。"
-                : err === "share_collect_unreachable"
-                  ? "采集服务暂不可用，请稍后重试。"
-                  : err === "share_unavailable"
-                    ? "该分享链接已失效或被取消，请确认后重试。"
+              : err === "share_unavailable"
+                ? "该分享链接已失效或被取消，请确认后重试。"
+                : err === "unsupported_platform"
+                  ? "暂不支持该平台/链接格式。支持：Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 分享链接。"
+                  : err === "share_collect_unreachable"
+                    ? "采集服务暂不可用，请稍后重试。"
                     : err,
       });
     } catch (e) {
@@ -285,7 +264,7 @@ export default function CollectPage() {
     }
   };
 
-  /** 确认入库：POST /api/imports（存 R2 + 建草稿）→ 清本地缓存 → 进编辑页（自动触发润色/质量检测） */
+  /** 确认入库：POST /api/imports（存 R2 + 建草稿）→ 进编辑页（自动触发润色/质量检测） */
   const confirm = async () => {
     const s = state();
     if (s.kind !== "ready" || busy()) return;
@@ -295,13 +274,11 @@ export default function CollectPage() {
       const res = await api.request("/api/imports", { method: "POST", body: JSON.stringify(s.dialogue) });
       const body = (await res.json().catch(() => null)) as { episodeId?: string; error?: string } | null;
       if (res.ok && body?.episodeId) {
-        if (collectId) void deleteCollect(collectId);
         navigate(`/episodes/${body.episodeId}`);
         return;
       }
       if (res.status === 409) {
-        // 已采集过：清本地缓存，直接跳已有草稿（无 episodeId 的并发竞态路径回列表）
-        if (collectId) void deleteCollect(collectId);
+        // 已采集过：直接跳已有草稿（无 episodeId 的并发竞态路径回列表）
         navigate(body?.episodeId ? `/episodes/${body.episodeId}` : "/episodes");
         return;
       }
@@ -311,8 +288,7 @@ export default function CollectPage() {
         setActionError(body?.error ?? `入库失败（HTTP ${res.status}），请重试`);
       }
     } catch (e) {
-      // 会话失效（页面停留期间过期/被登出）：清本地状态 → 登录锁定自动出现（URL 不变，
-      // 本地缓存未删——重新登录后回到同一 collectId 可继续确认）
+      // 会话失效（页面停留期间过期/被登出）：清本地状态 → 登录锁定自动出现
       if (e instanceof ApiError && e.status === 401) {
         auth.expireSession();
         return;
@@ -321,21 +297,6 @@ export default function CollectPage() {
     } finally {
       setBusy(false);
     }
-  };
-
-  /** 取消：扩展模式清本地缓存关标签；分享链接模式直接回工作台 */
-  const cancel = async () => {
-    if (collectId) {
-      await deleteCollect(collectId);
-      // 扩展关标签（绕开 window.close 限制）；扩展未装时回退原生 close，被拦截则回列表页
-      const closed = await closeCurrentTab();
-      if (!closed) {
-        window.close();
-        setTimeout(() => navigate("/episodes"), 300);
-      }
-      return;
-    }
-    navigate("/episodes");
   };
 
   const ready = (): Extract<State, { kind: "ready" }> | null =>
@@ -348,7 +309,7 @@ export default function CollectPage() {
       <div {...stylex.props(styles.card)}>
         <Show
           when={state().kind !== "loading"}
-          fallback={<div {...stylex.props(styles.meta)}>{collectId ? "读取采集缓存…" : "采集分享页…"}</div>}
+          fallback={<div {...stylex.props(styles.meta)}>采集分享页…</div>}
         >
           <Show
             when={state().kind === "input"}
@@ -364,18 +325,9 @@ export default function CollectPage() {
                 }
               >
                 <div {...stylex.props(styles.title)}>确认采集「{ready()!.dialogue.title || "未命名对话"}」</div>
-                <Show when={ready()!.dialogue.lowConfidence}>
-                  <div {...stylex.props(styles.warn)}>
-                    未能按对话结构解析（站点改版或规则未覆盖），已保存页面全文——可能包含导航等噪音。
-                    请确认内容后再入库，或取消后重试。
-                  </div>
-                </Show>
                 <div {...stylex.props(styles.meta)}>
                   平台：{PLATFORM_LABEL[ready()!.dialogue.platform] ?? "其他"}
                   {" "}· 共 {ready()!.dialogue.messages.length} 条消息
-                  {ready()!.dialogue.unitCount != null && (
-                    <> · {ready()!.dialogue.unitCount} 个问答单元</>
-                  )}
                   <br />
                   来源：<a {...stylex.props(styles.source)} href={ready()!.dialogue.url} target="_blank">
                     {ready()!.dialogue.url}
@@ -394,7 +346,7 @@ export default function CollectPage() {
                 </div>
                 <div {...stylex.props(styles.actions)}>
                   <Button block disabled={busy()} onClick={confirm}>{busy() ? "入库中…" : "确认入库"}</Button>
-                  <Button block appear="ghost" disabled={busy()} onClick={cancel}>取消</Button>
+                  <Button block appear="ghost" disabled={busy()} onClick={() => navigate("/episodes")}>取消</Button>
                 </div>
                 <Show when={actionError()}>
                   <div {...stylex.props(styles.error)}>{actionError()}</div>
@@ -438,7 +390,7 @@ export default function CollectPage() {
               >
                 {busy() ? "采集中…" : "采集对话"}
               </Button>
-              <Button block appear="ghost" disabled={busy()} onClick={cancel}>回工作台</Button>
+              <Button block appear="ghost" disabled={busy()} onClick={() => navigate("/episodes")}>我的节目</Button>
             </div>
             <Show when={actionError()}>
               <div {...stylex.props(styles.error)}>{actionError()}</div>

@@ -246,7 +246,7 @@ export default function NewEpisode() {
             <div {...stylex.props(styles.empty)}>
               还没有导入的对话。粘贴 Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 的对话分享链接即可导入。
               <div {...stylex.props(styles.emptyAction)}>
-                <Button onClick={() => navigate("/import")}>从分享链接导入</Button>
+                <Button onClick={() => navigate("/")}>从分享链接导入</Button>
               </div>
             </div>
           </Show>
