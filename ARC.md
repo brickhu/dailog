@@ -79,11 +79,11 @@ app.dailog.fm (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 | `POST /api/auth/*` | — | **better-auth 会话路由**（注册/登录/登出/会话；注册含邀请码校验） |
 | `GET /api/me` | ✓ | 当前用户（认证中间件验证） |
 | `POST /api/import` | ✓ | **分享链接导入**：① 查 `snapshots`（URL 唯一）——未命中调 importer（成功/失败都写快照；`platform_unreachable` 10 分钟可重试）② 查 `polishes`（user × snapshot）——已存在返回 `{ existing: true, polishId }`（前端跳编辑页）③ 未创建则质量分析（LLM，结果写快照）→ 返回 `{ dialogue, quality }` 供预览确认 |
-| `POST /api/polishes` | ✓ | **确认创建容器**：提交快照 → 创建 `polishes`（user × snapshot 唯一）→ 返回 `{ polishId }` |
-| `POST /api/polishes/:id/generate` | ✓ | SSE 流式润色：基于快照对话生成一条 transcript → 流式返回脚本段落 |
-| `POST /api/polishes/:id/episode` | ✓ | **脚本内容安全审核**（DeepSeek，拒绝 422 + 原因且不扣配额）→ 配额校验 → 建 job → 后台执行（由选定的 transcript 生成 episode） |
-| `GET /api/polishes/:id/job` | ✓ | 轮询生成进度（阶段 + 百分比） |
-| `POST /api/polishes/:id/publish` | ✓ | 发布（`is_public=true`）→ 触发邀请码发放 |
+| `POST /api/polishes/new` | ✓ | **确认创建容器**：提交快照 → 创建 `polishes`（user × snapshot 唯一）→ 返回 `{ polishId }` |
+| `POST /api/transcripts/new` | ✓ | SSE 流式润色：基于快照对话生成一条或多条 transcript（请求体含 polishId）→ 流式返回脚本段落 |
+| `POST /api/episodes/new` | ✓ | **生成节目**：请求体含 transcriptId → 脚本内容安全审核（DeepSeek，拒绝 422 + 原因且不扣配额）→ 配额校验 → 建 job → 后台执行（meta：标题/描述/封面等随请求） |
+| `GET /api/episodes/:id/job` | ✓ | 轮询生成进度（阶段 + 百分比） |
+| `POST /api/episodes/:id/publish` | ✓ | 发布（`is_public=true`）→ 触发邀请码发放 |
 | `GET /api/importer/platforms` | ✓ | 转发 importer 校验规则（前端预检用，规则单一来源） |
 | `POST /api/episodes/:id/polish` | ✓ | SSE 流式润色：先质量审核（轻量 LLM 预检，不达标返回 422 + 原因）→ 语言检测 → 流式返回脚本段落 |
 | `POST /api/episodes/:id/generate` | ✓ | **脚本内容安全审核**（DeepSeek，拒绝 422 + 原因且不扣配额）→ 配额校验 → 建 job → 后台执行 |
