@@ -28,6 +28,21 @@ export interface AuthExtDeps {
 
 const OTP_TTL_MS = 10 * 60 * 1000; // 10 分钟
 
+// 认证接口 IP 限流（内存，单实例够用——防注册接口刷邮件通道）。
+// better-auth 的 rateLimit 只作用于其自身端点，auth-ext 是自定义路由需自己限。
+const rateMap = new Map<string, number[]>(); // ip → 最近请求时间戳
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX = 5; // 60 秒最多 5 次认证请求
+
+function checkRate(ip: string): boolean {
+  const now = Date.now();
+  const list = (rateMap.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
+  if (list.length >= RATE_MAX) return false;
+  list.push(now);
+  rateMap.set(ip, list);
+  return true;
+}
+
 /** 生成 6 位数字验证码 */
 function generateOtp(): string {
   return String(randomInt(0, 1000000)).padStart(6, "0");
@@ -38,6 +53,8 @@ export function authExtRoutes(deps: AuthExtDeps) {
 
   /** 统一提交：老用户密码登录 / 新用户发验证码 */
   app.post("/api/auth/login-or-otp", async (c) => {
+    const ip = (c.req.header("x-forwarded-for") ?? "local").split(",")[0].trim();
+    if (!checkRate(ip)) return c.json({ error: "rate_limited" }, 429);
     const body = (await c.req.json().catch(() => null)) as
       | { email?: unknown; password?: unknown }
       | null;
@@ -63,8 +80,16 @@ export function authExtRoutes(deps: AuthExtDeps) {
       }
     }
 
-    // 新用户：生成验证码 → 清旧码（防累积）→ 存库 → 发邮件。
-    // 用户不输入验证码 = 安全无事发生（不建用户不登录；码 10 分钟过期失效）
+    // 新用户：发验证码（防邮件通道被刷——见下）
+    // ① 复用未过期码：60 秒内同一邮箱已有有效码 → 直接返回不发信（防刷邮件 + 防重复收信）
+    const existingOtp = await deps.db
+      .select({ id: schema.verifications.id, expiresAt: schema.verifications.expiresAt })
+      .from(schema.verifications)
+      .where(and(eq(schema.verifications.identifier, `otp:${email}`), gt(schema.verifications.expiresAt, new Date())))
+      .limit(1);
+    if (existingOtp.length > 0 && existingOtp[0].expiresAt.getTime() - Date.now() > 60_000) {
+      return c.json({ needOtp: true }); // 60 秒内已发过：复用，不重发
+    }
     const otp = generateOtp();
     const expiresAt = new Date(Date.now() + OTP_TTL_MS);
     try {
@@ -90,6 +115,8 @@ export function authExtRoutes(deps: AuthExtDeps) {
 
   /** OTP 完成注册：校验验证码 → 创建用户（带密码）→ 自动登录 */
   app.post("/api/auth/otp-complete", async (c) => {
+    const ip = (c.req.header("x-forwarded-for") ?? "local").split(",")[0].trim();
+    if (!checkRate(ip)) return c.json({ error: "rate_limited" }, 429);
     const body = (await c.req.json().catch(() => null)) as
       | { email?: unknown; otp?: unknown; password?: unknown; name?: unknown }
       | null;

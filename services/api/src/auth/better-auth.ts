@@ -42,6 +42,8 @@ export function createAuth(opts: CreateAuthOptions) {
     }),
     secret: opts.secret,
     emailAndPassword: { enabled: true, minPasswordLength: 8 },
+    // 全局限流（IP 维度）：防注册接口刷邮件通道（60 秒窗口最多 5 次认证请求）
+    rateLimit: { enabled: true, window: 60, max: 5 },
     // 注册邮箱验证：OTP 验证码（6 位，10 分钟有效）——注册必须输码才能完成；
     // 登录保持邮箱+密码。OTP 由 auth-ext 自定义流程实现（生成/存储 verification 表/校验），
     // 不依赖 emailOTP 插件的存储行为（默认内存存储——重启丢失、多实例失效）。
