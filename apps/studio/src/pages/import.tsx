@@ -228,11 +228,14 @@ export default function CollectPage() {
       });
       const body = (await res.json().catch(() => null)) as
         | {
-            platform?: string;
-            conversationId?: string;
-            title?: string;
-            url?: string;
-            messages?: DialogueMessage[];
+            // /api/import 响应：dialogue + quality + snapshotId（五层模型）
+            dialogue?: {
+              platform?: string;
+              conversationId?: string;
+              title?: string;
+              url?: string;
+              messages?: DialogueMessage[];
+            };
             quality?: { pass: boolean; reason?: string; language?: string } | null;
             snapshotId?: string;
             existing?: boolean;
@@ -245,15 +248,15 @@ export default function CollectPage() {
         navigate(`/polish/${body.polishId}`);
         return;
       }
-      if (res.ok && body?.messages?.length) {
+      if (res.ok && body?.dialogue?.messages?.length) {
         setState({
           kind: "ready",
           dialogue: {
-            platform: body.platform ?? "plain",
-            conversationId: body.conversationId ?? url,
-            title: body.title ?? "分享对话",
-            url: body.url ?? url,
-            messages: body.messages,
+            platform: body.dialogue.platform ?? "plain",
+            conversationId: body.dialogue.conversationId ?? url,
+            title: body.dialogue.title ?? "分享对话",
+            url: body.dialogue.url ?? url,
+            messages: body.dialogue.messages,
             quality: body.quality ?? null,
             snapshotId: body.snapshotId ?? null,
           },
