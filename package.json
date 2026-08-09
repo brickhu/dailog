@@ -12,6 +12,7 @@
     "dev:studio": "pnpm --filter @dailogues/studio dev",
     "dev": "pnpm --parallel --stream --filter @dailogues/api --filter @dailogues/studio --filter @dailogues/importer dev",
     "invite": "pnpm --filter @dailogues/api invites:create",
-    "dev:importer": "pnpm --filter @dailogues/importer dev"
+    "dev:importer": "pnpm --filter @dailogues/importer dev",
+    "otp": "bash scripts/otp.sh"
   }
 }
