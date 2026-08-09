@@ -78,12 +78,12 @@ app.dailog.fm (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 | `GET /health` | — | 健康检查（Railway healthcheckPath） |
 | `POST /api/auth/*` | — | **better-auth 会话路由**（注册/登录/登出/会话；注册含邀请码校验） |
 | `GET /api/me` | ✓ | 当前用户（认证中间件验证） |
-| `POST /api/import` | ✓ | **分享链接导入**：① 查 `snapshots`（URL 唯一）——未命中调 importer（成功/失败都写快照；`platform_unreachable` 10 分钟可重试）② 查 `conversations`（user × snapshot）——已存在返回 `{ existing: true, conversationId }`（前端跳编辑页）③ 未创建则质量分析（LLM，结果写快照）→ 返回 `{ dialogue, quality }` 供预览确认 |
-| `POST /api/conversations` | ✓ | **确认创建对话容器**：提交快照 → 创建 `conversations`（user × snapshot 唯一）→ 返回 `{ conversationId }` |
-| `POST /api/conversations/:id/polish` | ✓ | SSE 流式润色：基于快照对话生成润色脚本（`polishes`，可多个版本）→ 流式返回脚本段落 |
-| `POST /api/conversations/:id/generate` | ✓ | **脚本内容安全审核**（DeepSeek，拒绝 422 + 原因且不扣配额）→ 配额校验 → 建 job → 后台执行（生成 episode） |
-| `GET /api/conversations/:id/job` | ✓ | 轮询生成进度（阶段 + 百分比） |
-| `POST /api/conversations/:id/publish` | ✓ | 发布（`is_public=true`）→ 触发邀请码发放 |
+| `POST /api/import` | ✓ | **分享链接导入**：① 查 `snapshots`（URL 唯一）——未命中调 importer（成功/失败都写快照；`platform_unreachable` 10 分钟可重试）② 查 `polishes`（user × snapshot）——已存在返回 `{ existing: true, polishId }`（前端跳编辑页）③ 未创建则质量分析（LLM，结果写快照）→ 返回 `{ dialogue, quality }` 供预览确认 |
+| `POST /api/polishes` | ✓ | **确认创建容器**：提交快照 → 创建 `polishes`（user × snapshot 唯一）→ 返回 `{ polishId }` |
+| `POST /api/polishes/:id/polish` | ✓ | SSE 流式润色：基于快照对话生成脚本新版本 → 流式返回脚本段落 |
+| `POST /api/polishes/:id/generate` | ✓ | **脚本内容安全审核**（DeepSeek，拒绝 422 + 原因且不扣配额）→ 配额校验 → 建 job → 后台执行（生成 episode） |
+| `GET /api/polishes/:id/job` | ✓ | 轮询生成进度（阶段 + 百分比） |
+| `POST /api/polishes/:id/publish` | ✓ | 发布（`is_public=true`）→ 触发邀请码发放 |
 | `GET /api/importer/platforms` | ✓ | 转发 importer 校验规则（前端预检用，规则单一来源） |
 | `POST /api/episodes/:id/polish` | ✓ | SSE 流式润色：先质量审核（轻量 LLM 预检，不达标返回 422 + 原因）→ 语言检测 → 流式返回脚本段落 |
 | `POST /api/episodes/:id/generate` | ✓ | **脚本内容安全审核**（DeepSeek，拒绝 422 + 原因且不扣配额）→ 配额校验 → 建 job → 后台执行 |
@@ -136,15 +136,15 @@ queued → tts → merge → upload → done（failed 可重试）
 ```
 ① snapshots 查 URL（分享链接内容固定 → 快照资源全局唯一）：
    未命中 → 调 importer（成功/失败都写快照；platform_unreachable 标注 10 分钟可重试）
-② conversations 查 user × snapshot：
-   已存在 → 返回 { existing: true, conversationId } → 前端直接跳编辑页
+② polishes 查 user × snapshot：
+   已存在 → 返回 { existing: true, polishId } → 前端直接跳编辑页
    不存在 → 质量分析（DeepSeek，结果写 snapshot）→ 返回 { dialogue, quality }
-③ 前端预览确认 → POST /api/conversations 创建容器 → 跳编辑页
+③ 前端预览确认 → POST /api/polishes 创建容器 → 跳编辑页
 ```
 
 **质量分析归属 API**：importer 不调 LLM。基于快照内容分析（对话过短 <3 轮 / 寒暄 / 信息量不足 / 违规 → 拒绝 + 原因；语言识别 zh/en），结果随快照存库——内容固定 → 分析一次全局复用，生成环节不再重复检测（原 polish 流程的 qualityCheck 移除）。
 
-**用户 × 快照唯一**：同一用户对同一分享链接只有一个 conversation（重复粘贴 → 跳转编辑页，语义是「继续创作」而非重复导入）；不同用户可用同一快照各自创建容器（快照是公开资源，不做限制）。
+**用户 × 快照唯一**：同一用户对同一分享链接只有一个 polish（重复粘贴 → 跳转编辑页，语义是「继续创作」而非重复导入）；不同用户可用同一快照各自创建容器（快照是公开资源，不做限制）。
 
 **平台通道（`services/importer`，实测全通）**：
 | 平台 | 通道 |
@@ -160,14 +160,13 @@ queued → tts → merge → upload → done（failed 可重试）
 
 ## 4. 数据模型（Railway Postgres）
 
-**五层分层**：快照（资源，无用户）→ 对话容器（用户创作区）→ 润色脚本 → 节目 → 音轨。
+**分层**：快照（资源，无用户）→ polish（用户创作容器 + 润色脚本）→ 节目 → 音轨。
 
 | 表 | 关键字段 | 说明 |
 |---|---|---|
 | `snapshots` | `url`(唯一), `platform`, `source_title`, `source_conversation_id`, `parsed_dialogue`(JSONB), `quality`(JSONB: `{pass, reason?, language?}`), `status`(ok/unreachable), `last_error`, `created_at`, `updated_at` | **分享快照**：对分享 URL 的内容提取（全局资源，与用户无耦合；URL 唯一）。分享页是原对话的快照——内容固定、永久有效；关闭后重开 = 新 URL。`status=unreachable` 时 10 分钟内不重试 importer |
-| `conversations` | `id`, `user_id`, `snapshot_id`, `title`, `status`(editing/generating/published/failed), `created_at`, `updated_at` | **对话容器**：用户 × 快照的创作工作区（**唯一约束 `(user_id, snapshot_id)`**——同一用户对同一分享链接只有一个容器，重复粘贴跳转已有容器）。质量门/语言随快照（内容固定 → 质量固定） |
-| `polishes` | `id`, `conversation_id`, `version`, `segments`(JSONB: `[{speaker: host\|guest, text}]`), `language`, `created_at` | **润色脚本**：conversation 可生成多个版本（多次润色） |
-| `episodes` | `id`, `user_id`, `polish_id`, `conversation_id`, `slug`, `title`, `description`, `cover_url`, `audio_url`, `duration_seconds`, `status`(generating/published/failed), `is_public`, `created_at`, `published_at` | **节目**：由一条润色脚本生成（`polish_id` 关联）。**无 draft 状态**（创作态归 conversations；`status=generating` 表示生成中） |
+| `polishes` | `id`, `user_id`, `snapshot_id`, `title`, `version`, `segments`(JSONB: `[{speaker: host\|guest, text}]`), `language`, `status`(editing/generating/published/failed), `created_at`, `updated_at` | **创作容器 + 润色脚本**：用户 × 快照的创作工作区（**唯一约束 `(user_id, snapshot_id)`**——同一用户对同一分享链接只有一个 polish，重复粘贴跳转已有；每次润色生成一个新版本行，最新版为当前编辑态）。质量门/语言随快照（内容固定 → 质量固定） |
+| `episodes` | `id`, `user_id`, `polish_id`, `slug`, `title`, `description`, `cover_url`, `audio_url`, `duration_seconds`, `status`(generating/published/failed), `is_public`, `created_at`, `published_at` | **节目**：由一条润色脚本生成（`polish_id` 关联）。**无 draft 状态**（创作态归 polishes；`status=generating` 表示生成中） |
 | `tracks` | `episode_id`, `language`(zh/en/ja), `audio_url`, `duration_seconds`, `created_at` | **音轨**（预留）：一期节目可生成多语言音轨 |
 | `profiles` | `id`(=auth.users), `username`(唯一), `display_name`, `bio`, `plan`(free/pro), `credit_balance`, `created_at` | 用户 |
 | `voice_samples` | `user_id`, `audio_url`(R2), `duration`, `status`, `created_at` | 录音样本（可重录覆盖） |
@@ -175,7 +174,7 @@ queued → tts → merge → upload → done（failed 可重试）
 | `generation_jobs` | `episode_id`(或 conversation_id), `status`(queued/tts/merge/upload/done/failed), `progress`, `error`, `attempts` | 生成任务 |
 | `payments` / `subscriptions` | （沿用） | 计费 |
 
-**废弃表**：`imports`（由 snapshots + conversations 替代）、`scripts`（由 polishes 替代）；`episodes.status=draft` 移除（创作态归 conversations）。
+**废弃表**：`imports`（由 snapshots + polishes 替代）、`scripts`（并入 polishes 版本行）、`conversations`（不存在该概念——容器直接叫 polish）；`episodes.status=draft` 移除（创作态归 polishes）。
 **迁移策略**：**清空重建**（内测期数据量小，不做存量迁移；`imports`/`scripts` 表删除，`episodes` 重建去掉 draft/quality 字段——质量归 snapshots）。
 
 **R2 存储路径**：
@@ -197,7 +196,7 @@ assets/guest-voice-zh.mp3 等                 ← 平台资产
 **路由规划**：
 ```
 /                     导入页（粘贴分享链接 → 采集预览 → 确认创建容器）
-/polish/:conversationId   编辑页（conversation → 生成润色脚本 polishes → 生成节目）
+/polish/:id           编辑页（polish → 润色生成脚本版本 → 生成节目）
 /episodes             节目列表
 /settings             设置
 ```
