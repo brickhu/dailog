@@ -14,6 +14,7 @@
     "invite": "pnpm --filter @dailogues/api invites:create",
     "dev:importer": "pnpm --filter @dailogues/importer dev",
     "otp": "bash scripts/otp.sh",
-    "dev:db": "bash scripts/dev-db.sh"
+    "dev:db": "bash scripts/dev-db.sh",
+    "dev:status": "bash scripts/dev-status.sh"
   }
 }
