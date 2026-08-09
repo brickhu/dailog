@@ -476,6 +476,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
       createPolish: (row) => repo.polishes.create(row),
       getPolishDetail: (id, userId) => repo.polishes.getPolishDetail(id, userId),
+      listByUser: async () => [],
     };
     const transcriptsDeps: AppDeps["transcriptsDeps"] = {
       getDialogueForPolish: async (polishId, userId) => {

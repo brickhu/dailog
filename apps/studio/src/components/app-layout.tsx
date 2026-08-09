@@ -7,6 +7,7 @@ import { useAuth } from "../lib/auth";
 // 两列布局：左导航（节目/设置）+ 右侧内容区（子路由经 props.children 渲染）
 const NAV = [
   { path: "/", label: "导入" },
+  { path: "/polishes", label: "脚本" },
   { path: "/episodes", label: "节目" },
   { path: "/settings", label: "设置" },
 ];

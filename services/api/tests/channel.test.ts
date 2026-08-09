@@ -30,6 +30,7 @@ function fakePolishesDeps(): AppDeps["polishesDeps"] {
     findPolishByUserSnapshot: async () => null,
     createPolish: async () => ({ id: "polish-1" }),
     getPolishDetail: async () => null,
+      listByUser: async () => [],
   };
 }
 function fakeTranscriptsDeps(): AppDeps["transcriptsDeps"] {

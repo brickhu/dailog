@@ -8,6 +8,16 @@ export interface PolishesDeps {
   getChannelActivatedAt(userId: string): Promise<Date | null>;
   findPolishByUserSnapshot(userId: string, snapshotId: string): Promise<{ id: string; title: string | null } | null>;
   createPolish(row: { userId: string; snapshotId: string; title: string | null }): Promise<{ id: string }>;
+  /** 列表（工作台"脚本"页） */
+  listByUser(userId: string): Promise<{
+    id: string;
+    title: string | null;
+    status: string;
+    snapshotTitle: string | null;
+    episodeId: string | null;
+    episodeStatus: string | null;
+    createdAt: Date;
+  }[]>;
   /** 编辑页详情：polish + 快照 meta（标题/质量）+ transcripts 列表 */
   getPolishDetail(id: string, userId: string): Promise<{
     id: string;
@@ -40,6 +50,13 @@ export function polishesRoutes(deps: PolishesDeps) {
     const created = await deps.createPolish({ userId, snapshotId: body.snapshotId, title });
     if (!created.id) return c.json({ existing: true, polishId: "" }, 409); // 并发竞态
     return c.json({ polishId: created.id });
+  });
+
+  /** polish 列表（工作台"脚本"页）：标题 + 快照 + 最新节目状态 */
+  app.get("/api/polishes", async (c) => {
+    const userId = c.get("userId") as string;
+    const list = await deps.listByUser(userId);
+    return c.json(list);
   });
 
   /** 编辑页详情：polish + 快照 meta + transcripts 列表 */

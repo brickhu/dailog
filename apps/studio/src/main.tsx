@@ -5,6 +5,7 @@ import { AppShell } from "./lib/guards";
 import AppLayout from "./components/app-layout";
 import EpisodesPage from "./pages/episodes";
 import EditorPage from "./pages/editor";
+import PolishesPage from "./pages/polishes";
 import SettingsPage from "./pages/settings";
 import CollectPage from "./pages/import";
 import NotFound from "./pages/not-found";
@@ -42,6 +43,7 @@ render(
               <Route path="/import" component={CollectPage} />
               <Route path="/episodes" component={EpisodesPage} />
               <Route path="/polish/:id" component={EditorPage} />
+              <Route path="/polishes" component={PolishesPage} />
               <Route path="/settings" component={SettingsPage} />
             </Route>
             <Route path="/example" component={ExamplePage} />

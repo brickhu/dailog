@@ -98,6 +98,7 @@ const polishesDeps: PolishesDeps = {
   findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
   createPolish: (row) => repo.polishes.create(row),
   getPolishDetail: (id, userId) => repo.polishes.getPolishDetail(id, userId),
+  listByUser: (userId) => repo.polishes.listByUser(userId),
 };
 
 const transcriptsDeps: TranscriptsDeps = {
