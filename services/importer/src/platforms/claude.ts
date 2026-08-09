@@ -66,13 +66,20 @@ export function parseClaudeSnapshot(json: string, id: string, url: string): Coll
   const messages = msgs
     .filter((m) => m.sender === "human" || m.sender === "assistant")
     .map((m) => {
+      // API 结构迁移：text 移到 content[] blocks（type="text" 的 .text；tool_use/tool_result 跳过）
+      const blocks = Array.isArray(m.content)
+        ? (m.content as any[])
+            .filter((b: any) => b?.type === "text" && typeof b.text === "string")
+            .map((b: any) => b.text)
+            .join("\n\n")
+        : "";
       const attach = (m.attachments ?? [])
         .filter((a: any) => a.extracted_content)
         .map((a: any) => a.extracted_content)
         .join("\n\n");
       return {
         role: m.sender === "human" ? ("user" as const) : ("assistant" as const),
-        content: [m.text ?? "", attach].filter(Boolean).join("\n\n"),
+        content: [m.text ?? "", blocks, attach].filter(Boolean).join("\n\n"),
       };
     });
   if (messages.length === 0) return null;

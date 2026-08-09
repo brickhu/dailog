@@ -7,17 +7,17 @@ DROP TABLE IF EXISTS "likes";
 --> statement-breakpoint
 DROP TABLE IF EXISTS "favorites";
 --> statement-breakpoint
+DROP TABLE IF EXISTS "scripts";
+--> statement-breakpoint
 DROP TABLE IF EXISTS "episodes";
+--> statement-breakpoint
+DROP TABLE IF EXISTS "imports";
 --> statement-breakpoint
 DROP TABLE IF EXISTS "transcripts";
 --> statement-breakpoint
 DROP TABLE IF EXISTS "polishes";
 --> statement-breakpoint
 DROP TABLE IF EXISTS "snapshots";
---> statement-breakpoint
-DROP TABLE IF EXISTS "imports";
---> statement-breakpoint
-DROP TABLE IF EXISTS "scripts";
 --> statement-breakpoint
 CREATE TABLE "snapshots" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

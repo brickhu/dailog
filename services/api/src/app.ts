@@ -61,10 +61,11 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
     return c.json({ userId, channelActive: activated !== null, hasVoiceSample: sample !== null });
   });
 
-  app.route("/api", importRoutes(deps.importDeps));
-  app.route("/api", polishesRoutes(deps.polishesDeps));
-  app.route("/api", transcriptsRoutes(deps.transcriptsDeps));
-  app.route("/api", importerRoutes(() => deps.shareCollectUrl?.() ?? process.env.IMPORTER_URL ?? null));
+  // import/polishes/transcripts/importer 路由内部自带 /api 前缀（与 polish/generate 旧约定一致）
+  app.route("/", importRoutes(deps.importDeps));
+  app.route("/", polishesRoutes(deps.polishesDeps));
+  app.route("/", transcriptsRoutes(deps.transcriptsDeps));
+  app.route("/", importerRoutes(() => deps.shareCollectUrl?.() ?? process.env.IMPORTER_URL ?? null));
   app.route("/api", episodesRoutes(deps.episodesDeps, (c) => (c as Context<AuthEnv>).get("userId"), deps.voice.storage));
   // polish/generate/job/voice 路由自带 /api 前缀（与各自 test.ts 直接对裸 app 请求 /api/... 一致），故挂载在根路径；
   // 上面的 /api/* 鉴权中间件依然覆盖
