@@ -255,7 +255,7 @@ assets/guest-voice-zh.mp3 等                 ← 平台资产
 |---|---|
 | 多说话人混合模式受限（实测：一次调用不能混用「主持人内联零样本 + 嘉宾固定 `reference_id`」） | 设计定型：**按段 fallback**（host 段 msgpack 内联零样本 + guest 段固定音色逐段合成），ffmpeg 拼接（管线本就有）；需单次混排时先建主持人音色模型（`POST /model`，fast 5–8s，免费）走全 `reference_id` 数组 |
 | Fish 免费/付费模型差异（spike 全程在 `s2.1-pro-free` 完成，0 额度账号无法直接观察扣费） | 计费口径 $15/百万 UTF-8 字节已由官方定价页确认；上线前用付费账号以 `GET /wallet/self/api-credit` 差值核对账单；克隆一致性默认波动 ~12%，长节目可调低 temperature |
-| 平台 DOM 选择器基于公开逆向资料（`docs/spikes/chat-dom.md`，未登录态实测） | 各平台 content script 开发时逐一实测修正（每平台适配器交付即验证）；虚拟列表平台（ChatGPT/DeepSeek/Gemini/豆包）必须实现滚动采集循环 |
+| 平台分享页数据结构变化 | 采集服务解析器每平台一文件（`services/importer/src/platforms/`），改版时定点修复重新部署（实测案例：claude content[] blocks 结构迁移、chatgpt RSC） |
 | Cloudflare/Turnstile 风控 | 数据中心 IP 直连 claude.ai 被 CF 拦（新加坡/美区/Workers 三路实测 403）；采集服务多通道重试兜底（ScraperAPI 实测全通，免费额度内） |
 | 平台分享页改版 | 采集服务解析器需随平台数据结构变化维护（每平台一文件）；改版时只更新采集服务，主站不受影响 |
 | ~~扩展商店审核~~ | ~~Chrome/Edge 上架~~：扩展已停用，无商店流程 |

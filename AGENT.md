@@ -83,7 +83,7 @@ dailog/
 - 后端 LLM：**DeepSeek**（OpenAI 兼容，`deepseek-chat` 默认，配置化可切换）
 - 润色：LLM SSE 流式；**打磨前质量审核前置** + **生成前内容安全审核**（编辑后脚本提交生成时，DeepSeek 安全审核通过才合成，拒绝不扣配额）；语言跟随对话内容（与界面语言无关）；单期目标 5–10 分钟
 - 计费：Stripe Checkout/Portal/Webhook；**按脚本字数计费**（LLM/TTS 成本随字数线性，对齐成本结构）；**脚本硬上限 5000 字**；润色免费（获客）+ 对话级润色上限（每对话 ≤5 版，pro 不限）；免费首期 0 扣费；Pro 订阅无限
-- 导入：**分享链接采集服务**（用户粘贴平台分享链接 → `importer` 解析（Claude/ChatGPT/DeepSeek/Gemini/Kimi/豆包，公开接口/SSR/RSC/batchexecute 通道）→ 工作台预览确认入库）；被 CF 拦时通道重试（ScraperAPI 兜底）；**扩展采集已停用**（源码保留 `apps/extension`，历史实现见 `docs/spikes/chat-dom.md`）
+- 导入：**分享链接采集服务**（用户粘贴平台分享链接 → `importer` 解析（Claude/ChatGPT/DeepSeek/Gemini/Kimi/豆包，公开接口/SSR/RSC/batchexecute 通道）→ 工作台预览确认入库）；被 CF 拦时通道重试（ScraperAPI 兜底）；**扩展采集已停用**（源码保留 `apps/extension`）
 - 邀请码：管理员 CLI + 用户奖励（>3 期后每发布一期 +1）；**注册开放，授权码开通频道**
 - 成本策略：除 LLM/TTS/Stripe 外：CF/R2 免费 + better-auth $0；Railway（API+DB）约 $10–25/月
 

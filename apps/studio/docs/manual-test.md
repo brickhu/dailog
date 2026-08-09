@@ -1,91 +1,66 @@
-# 工作台 SPA 本地手测清单（计划 5 验收 + M5 认证迁移）
+# 工作台 SPA 本地手测清单（五层模型：快照 → 容器 → 脚本 → 节目 → 音轨）
 
-> **M5（2026-08-03）**：认证已切换 better-auth（自托管，bearer token 模式）。**注册开放**，邀请码（授权码）用于开通频道（管理员 CLI 生成），不再依赖 Supabase。
+> **2026-08**：采集统一走分享链接服务（importer.dailog.fm）——粘贴分享链接 → 快照缓存 → 质量分析 → 创建创作容器 → 润色生成脚本 → 生成节目 → 发布。扩展采集已停用（源码保留）。
 
 ## 前置
 
 ```bash
-# 一键启动（api 8787 + studio 5173 并行，api 自动加载 .env.local）
+# 一键启动三端（importer 8798 + api 8787 + studio 5173 并行）
 pnpm dev
 
-# 或分开启动
-pnpm dev:api       # 只起 api（8787）
-pnpm dev:studio    # 只起 studio（5173）
+# 本地数据库（docker）：首次需迁移
+docker run -d --name dailog-pg -e POSTGRES_USER=dailogues -e POSTGRES_PASSWORD=dailogues -e POSTGRES_DB=dailogues -p 5432:5432 postgres:16-alpine
+cd services/api && pnpm db:migrate
 
-# 生成授权码（注册后开通频道用；admin user 自动创建）
+# 生成授权码（注册后开通频道用）
 pnpm invite my-test-code
-pnpm invite my-expiring-code --expires 30
 ```
 
-`apps/studio/.env.local`：
-
-```
-VITE_API_BASE_URL=          # 空 = 同源走 vite 代理（推荐）
-VITE_EXTENSION_ID=<dev 扩展 id>   # 留空则隐藏扩展连接卡
-```
+`services/api/.env.local`：`IMPORTER_URL=http://localhost:8798`（本地 importer）
+`services/importer/.env.local`：`PORT=8798`、`IMPORTER_TOKEN`、`SCRAPERAPI_KEY`
 
 浏览器打开 http://localhost:5173。
 
 ## 验收路径
 
-### 1. /login（统一登录入口，注册开放）
-- [ ] 未登录访问 `/app/*` 自动跳 `/login`
-- [ ] 注册：密码 <8 位被拦截
-- [ ] 注册成功（无需邀请码）→ 跳 `/app/onboarding`（注册即登录态）
-- [ ] 刷新页面会话保持（localStorage token + get-session 恢复）
-- [ ] 登录成功后自动跳转（已开通频道 → onboarding/voice 或 dashboard）
-- [ ] 错误密码显示服务端错误文案
-- [ ] 退出登录 → 回 /login；再访问受保护页被重定向
+### 1. 登录/注册（注册开放）
+- [ ] 未登录访问自动跳登录
+- [ ] 注册成功（无需邀请码）→ 开通频道（授权码）→ 录音
 
-### 1.5 /app/onboarding（两步：授权码开通频道 + 录声音）
-- [ ] 错误码 → "授权码无效或已被使用"
-- [ ] 正确码 → "频道已开通 ✓" → 下一步进录音
-- [ ] "稍后开通"（未实现，可暂不开通直接访问 /app/episodes）→ 黄色开通横幅
-- [ ] 未开通时：新节目向导生成步骤被 403 挡住（引导开通）
+### 2. 导入（首页 /，粘贴分享链接）
+- [ ] 输入非法链接 → 红色提示"不是有效的分享页链接"，采集按钮禁用（前端预检，规则来自 importer /platforms）
+- [ ] 输入合法链接（如 `https://claude.ai/share/<uuid>`）→ 绿色"✓ 检测到 Claude 分享链接"
+- [ ] 点击采集 → 预览：标题/平台/消息数/消息全文
+- [ ] 质量检测显示：通过（含语言）或 ⚠️ 未通过 + 原因（仍可继续）
+- [ ] 确认创建 → 跳转 `/polish/:id` 编辑页
+- [ ] **重复粘贴同一链接** → 直接跳已有 `/polish/:id`（不重复采集——快照缓存 + existing 跳转）
+- [ ] 失效链接（不存在的分享 id）→ "该分享链接已失效或被取消"
 
-### 1.6 声音录音（onboarding 第二步 / 设置页重录）
-- [ ] 浏览器弹出麦克风授权；拒绝时显示错误
-- [ ] 录音：波形动起来；计时走；30s 自动停止
-- [ ] <8s 录音显示"至少 8 秒"；≥8s 可提交
-- [ ] 试听/重录/丢弃正常
-- [ ] 提交后"训练音色中…"；成功 → dashboard
-- [ ] （依赖 Fish 额度）502 时显示降级提示但可继续
+### 3. /polish/:id 编辑页（创作容器）
+- [ ] 标题/来源链接显示；质量未通过时顶部黄色提示
+- [ ] 无脚本时显示"还没有脚本"空态
+- [ ] 点击「生成新脚本」→ SSE 润色流式浮现（段落逐条出现）→ 完成出现在脚本列表
+- [ ] 再次生成 → 第二条 transcript（列表多条，可切换选择）
+- [ ] 脚本编辑：切换发言者/上移下移/删除/改文本 → 保存
+- [ ] 润色上限：free 5 条 → 429 提示
+- [ ] 选定脚本 → 「用当前脚本生成节目」→ 进度条阶段流转（排队→合成→拼接→上传）
+- [ ] 生成完成 → 试听 → 标题输入 → 发布 → "节目已发布 ✓"
+- [ ] 工作台 `/episodes` 列表显示已发布节目
 
-### 3. 扩展采集 → /app/episodes
-- [ ] chrome://extensions 加载 apps/extension（dev 模式），记下扩展 id
-- [ ] dashboard 点"连接扩展" → 显示"扩展已连接 ✓"（token 注入 = better-auth session token）
-- [ ] 打开 DeepSeek/Claude 对话页 → 点扩展采集 → 提示成功
-- [ ] 回到 dashboard（刷新）→ 出现新草稿（平台徽标正确）
-- [ ] 空列表时显示引导文案；"开始新节目"进入向导
-
-### 4. /app/episodes/new 向导
-- [ ] ① 列表显示已采集对话（标题/平台/日期）→ 选择进入 ②
-- [ ] ② 无脚本：自动触发润色，SSE 段落逐渐浮现 → 完成
-- [ ] ② 有脚本：直接进入编辑态（版本号正确）
-- [ ] ② 编辑：切换发言者（你/AI）、上移/下移/删除/添加段落、改文本
-- [ ] ② 保存草稿 → toast"草稿已保存"；刷新后内容还在
-- [ ] ② 低质量对话：422 reason 展示 + 可返回 ①
-- [ ] ③ 点击"开始生成" → 进度条阶段流转（排队→合成→拼接→上传）
-- [ ] ③ 完成后试听播放（真实音频）
-- [ ] ③ 403（额度用完）→ 购买引导文案
-- [ ] ④ 标题预填、可改描述 → 发布 → 成功态
-- [ ] 刷新 dashboard → 该节目显示"已发布"
-
-### 5. /app/settings
+### 4. /app/settings
 - [ ] 当前样本状态展示；重录 → 保存新声音生效
-- [ ] 邀请码/订阅占位文案显示
-- [ ] 退出登录 → 回 /login
 - [ ] 404 页：随便输个路径
 
 ## 已知依赖
 
 - 录音需要麦克风权限（localhost 可）；若 headless 环境跳过录音，可先用 POST /api/me/voice-sample 直传替代验证
 - Fish 音色训练与生成需要 API 额度；未充值时验证到"训练失败提示"与"生成失败重试"即可
-- 扩展注入的是 better-auth session token（非 JWT）——协议与 M5 前一致（Authorization: Bearer）
+- 采集依赖 ScraperAPI 额度（claude/doubao 等被 CF/海外限制平台）；免费 1000 次/月
+- importer 解码失败（内容为空）**不写快照**——平台结构变化时每次重试，修复后自动恢复
 
 ---
 
-## 计划 6 补充：消费站 + SSO 验证链（apps/site）
+## 消费站 + SSO 验证链（apps/site）
 
 ### 前置
 ```bash
@@ -94,10 +69,8 @@ cd apps/site && pnpm dev  # 消费站（3000，.env.local 已配 DATABASE_URL）
 ```
 
 ### 验证链
-- [ ] `localhost:3000` 首页显示 fixture/已发布节目（最新列表）
+- [ ] `localhost:3000` 首页显示已发布节目（最新列表）
 - [ ] `localhost:3000/@fixture-channel` 频道页（简介 + 列表 + RSS 链接）
 - [ ] `localhost:3000/episode/:id` 单集页（播放器 + 点赞/收藏按钮）
-- [ ] `localhost:3000/@fixture-channel/feed.xml` RSS（itunes:duration + enclosure）
-- [ ] **SSO**：`localhost:3000/login` 登录 → 跳回 → **`localhost:5173` 刷新即已登录**（无需二次登录，跨端口 cookie）
+- [ ] **SSO**：`localhost:3000/login` 登录 → 跳回 → `localhost:5173` 刷新即已登录
 - [ ] 单集页收藏 → `localhost:3000/me` 可见；未登录点收藏 → 跳 `/login?redirect=...`
-- [ ] 扩展：studio 登录后自动注入（无需点"连接扩展"）；采集 401 → 自动打开登录页
