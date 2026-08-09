@@ -63,14 +63,17 @@ export function authExtRoutes(deps: AuthExtDeps) {
       }
     }
 
-    // 新用户：生成验证码 → 存库 → 发邮件
+    // 新用户：生成验证码 → 清旧码（防累积）→ 存库 → 发邮件。
+    // 用户不输入验证码 = 安全无事发生（不建用户不登录；码 10 分钟过期失效）
     const otp = generateOtp();
     const expiresAt = new Date(Date.now() + OTP_TTL_MS);
     try {
-      await deps.db
-        .insert(schema.verifications)
-        .values({ id: `otp-${email}-${Date.now()}`, identifier: `otp:${email}`, value: otp, expiresAt })
-        .onConflictDoNothing();
+      await deps.db.transaction(async (tx) => {
+        // 同邮箱旧码（含过期的）先清——表不累积，且保证只有最新码有效
+        await tx.delete(schema.verifications).where(eq(schema.verifications.identifier, `otp:${email}`));
+        await tx.insert(schema.verifications)
+          .values({ id: `otp-${email}-${Date.now()}`, identifier: `otp:${email}`, value: otp, expiresAt });
+      });
     } catch {
       return c.json({ error: "otp_send_failed" }, 502);
     }
