@@ -203,6 +203,9 @@ export default function Onboarding() {
               <div {...stylex.props(styles.error)}>{error()}</div>
             </Show>
             <Button block type="submit" disabled={busy()}>{busy() ? "开通中…" : "开通频道"}</Button>
+            <Button block appear="ghost" disabled={busy()} onClick={() => auth.signOut()}>
+              退出登录
+            </Button>
           </form>
         </Show>
       </div>
