@@ -22,13 +22,8 @@ export default function LoginPage() {
   return (
     <LoginForm
       config={{
-        signInEndpoint: `${env.apiBaseUrl}/api/auth/sign-in/email`,
-        signUpEndpoint: `${env.apiBaseUrl}/api/auth/sign-up/email`,
-        verification: {
-          resendEndpoint: `${env.apiBaseUrl}/api/auth/send-verification-email`,
-          // 验证链接点击后跳回当前站点
-          callbackURL: window.location.origin,
-        },
+        loginOrOtpEndpoint: `${env.apiBaseUrl}/api/auth/login-or-otp`,
+        otpCompleteEndpoint: `${env.apiBaseUrl}/api/auth/otp-complete`,
       }}
       onSuccess={onSuccess}
       // 锁定模式：成功后不跳转（URL 不变），由 auth.user 状态切换解锁

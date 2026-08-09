@@ -6,69 +6,69 @@ import { getEpisode } from "../../lib/db";
 import { SiteNav } from "../../components/site-nav";
 import { env } from "../../lib/env";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "@dailogues/ui/theme.stylex";
+import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 
 // 单集页：/episode/:id（播放器 + 元信息；点赞/收藏按钮 Task 4）
 const styles = stylex.create({
   page: {
     minHeight: "100vh",
-    background: tokens.colorBg,
-    color: tokens.colorText,
+    backgroundColor: colors.background,
+    color: colors.foreground,
     fontFamily: "system-ui, -apple-system, sans-serif",
   },
   content: {
     maxWidth: "720px",
     margin: "0 auto",
-    padding: tokens.space6,
+    padding: dimensions.spacing8,
   },
   back: {
     display: "inline-block",
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
     textDecoration: "none",
-    marginBottom: tokens.space5,
+    marginBottom: dimensions.spacing6,
   },
   title: {
-    fontSize: tokens.fontSizeXl,
-    fontWeight: tokens.fontWeightBold,
-    marginBottom: tokens.space2,
+    fontSize: dimensions.fontSize2xl,
+    fontWeight: dimensions.fontWeightBold,
+    marginBottom: dimensions.spacing2,
   },
   meta: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
-    marginBottom: tokens.space5,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    marginBottom: dimensions.spacing6,
   },
   player: {
     width: "100%",
-    marginBottom: tokens.space5,
+    marginBottom: dimensions.spacing6,
   },
   desc: {
-    color: tokens.colorTextMuted,
+    color: colors.neutral,
     lineHeight: 1.8,
     whiteSpace: "pre-wrap",
   },
   notFound: {
-    color: tokens.colorTextMuted,
+    color: colors.neutral,
     textAlign: "center",
-    padding: tokens.space7,
+    padding: dimensions.spacing12,
   },
   actions: {
     display: "flex",
-    gap: tokens.space3,
-    marginBottom: tokens.space5,
+    gap: dimensions.spacing3,
+    marginBottom: dimensions.spacing6,
   },
   actionBtn: {
-    padding: `${tokens.space1} ${tokens.space4}`,
-    borderRadius: tokens.radiusFull,
-    border: `1px solid ${tokens.colorBorder}`,
-    background: tokens.colorSurface,
-    color: tokens.colorTextMuted,
+    padding: `${dimensions.spacing1} ${dimensions.spacing4}`,
+    borderRadius: dimensions.radiusFull,
+    border: `1px solid ${colors.ink}`,
+    backgroundColor: colors.surface,
+    color: colors.neutral,
     cursor: "pointer",
-    fontSize: tokens.fontSizeSm,
+    fontSize: dimensions.fontSizeSm,
   },
   actionActive: {
-    borderColor: tokens.colorPrimary,
-    color: tokens.colorPrimary,
+    borderColor: colors.primary,
+    color: colors.primary,
   },
 });
 

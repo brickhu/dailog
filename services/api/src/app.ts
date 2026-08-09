@@ -8,6 +8,7 @@ import { importRoutes, type ImportDeps } from "./routes/import";
 import { polishesRoutes, type PolishesDeps } from "./routes/polishes";
 import { transcriptsRoutes, type TranscriptsDeps } from "./routes/transcripts";
 import { importerRoutes } from "./routes/importer";
+import { authExtRoutes } from "./routes/auth-ext";
 import { jobRoutes, type JobDeps } from "./routes/job";
 import { voiceRoutes, type VoiceDeps } from "./routes/voice";
 import { channelRoutes, type ChannelDeps } from "./routes/channel";
@@ -32,6 +33,8 @@ export type AppDeps = {
   admin: AdminDeps; // 管理端点（ADMIN_EMAILS 白名单判定）
   /** importer 服务地址（测试注入用；缺省读 IMPORTER_URL env） */
   shareCollectUrl?: () => string | null;
+  /** auth-ext 统一登录/注册端点依赖（缺省由 app 内 db + auth 组装） */
+  authExt?: { env: unknown; db: unknown; auth: unknown };
 };
 
 export function createApp(deps: AppDeps): Hono<AuthEnv> {
@@ -48,6 +51,10 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   // better-auth 全捕获注册：下面 /api/auth/* 通配会吞掉一切子路径（未知子路由返回空 404），
   // 后注册的同路径路由永远轮不到。其余 /api/auth/* 仍全部交 better-auth 处理。
   app.route("/", tokenRoutes(deps.auth));
+
+  // 统一登录/注册（老用户密码登录 / 新用户验证码注册）——必须先于 better-auth
+  // 的 /api/auth/* 全捕获注册（Hono 先注册先匹配，否则被吞返回 404）
+  app.route("/", authExtRoutes(deps.authExt as never));
 
   // better-auth 会话路由（注册/登录/登出/get-session）：挂在认证中间件之前，免鉴权
   app.on(["POST", "GET"], "/api/auth/*", (c) => deps.auth.handler(c.req.raw));

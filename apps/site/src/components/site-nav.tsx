@@ -1,45 +1,45 @@
 import { Show, createSignal, onMount } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "@dailogues/ui/theme.stylex";
+import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 
 const styles = stylex.create({
   header: {
-    padding: `${tokens.space4} ${tokens.space6}`,
-    borderBottom: `1px solid ${tokens.colorBorder}`,
+    padding: `${dimensions.spacing4} ${dimensions.spacing8}`,
+    borderBottom: `1px solid ${colors.ink}`,
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
   },
   brand: {
     fontSize: "18px",
-    fontWeight: tokens.fontWeightBold,
-    color: tokens.colorPrimary,
+    fontWeight: dimensions.fontWeightBold,
+    color: colors.primary,
     textDecoration: "none",
   },
   login: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
     textDecoration: "none",
-    ":hover": { color: tokens.colorText },
+    ":hover": { color: colors.foreground },
   },
   userBox: {
     display: "flex",
     alignItems: "center",
-    gap: tokens.space3,
+    gap: dimensions.spacing3,
   },
   email: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
   },
   signOut: {
-    background: "transparent",
-    border: `1px solid ${tokens.colorBorder}`,
-    color: tokens.colorTextMuted,
-    borderRadius: tokens.radiusSm,
-    padding: `${tokens.space1} ${tokens.space2}`,
-    fontSize: tokens.fontSizeSm,
+    backgroundColor: "transparent",
+    border: `1px solid ${colors.ink}`,
+    color: colors.neutral,
+    borderRadius: dimensions.radiusSm,
+    padding: `${dimensions.spacing1} ${dimensions.spacing2}`,
+    fontSize: dimensions.fontSizeSm,
     cursor: "pointer",
-    ":hover": { color: tokens.colorText, borderColor: tokens.colorTextMuted },
+    ":hover": { color: colors.foreground, borderColor: colors.neutral },
   },
 });
 

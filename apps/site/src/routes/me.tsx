@@ -2,7 +2,7 @@ import { createAsync } from "@solidjs/router";
 import { createEffect, createSignal, For, onMount, Show } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "@dailogues/ui/theme.stylex";
+import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 
 // 消费端个人页：dailog.fm/me（收藏列表；登录态经 cookie 判定，未登录跳统一登录）
 interface FavoriteRow {
@@ -17,42 +17,42 @@ interface FavoriteRow {
 const styles = stylex.create({
   page: {
     minHeight: "100vh",
-    background: tokens.colorBg,
-    color: tokens.colorText,
+    backgroundColor: colors.background,
+    color: colors.foreground,
     fontFamily: "system-ui, -apple-system, sans-serif",
   },
   content: {
     maxWidth: "720px",
     margin: "0 auto",
-    padding: tokens.space6,
+    padding: dimensions.spacing8,
   },
   title: {
-    fontSize: tokens.fontSizeXl,
-    fontWeight: tokens.fontWeightBold,
-    marginBottom: tokens.space5,
+    fontSize: dimensions.fontSize2xl,
+    fontWeight: dimensions.fontWeightBold,
+    marginBottom: dimensions.spacing6,
   },
   card: {
     display: "block",
-    padding: tokens.space4,
-    borderRadius: tokens.radiusMd,
-    background: tokens.colorSurface,
-    border: `1px solid ${tokens.colorBorder}`,
-    marginBottom: tokens.space3,
+    padding: dimensions.spacing4,
+    borderRadius: dimensions.radiusMd,
+    backgroundColor: colors.surface,
+    border: `1px solid ${colors.ink}`,
+    marginBottom: dimensions.spacing3,
     textDecoration: "none",
     color: "inherit",
   },
   epTitle: {
-    fontWeight: tokens.fontWeightMedium,
-    marginBottom: tokens.space1,
+    fontWeight: dimensions.fontWeightMedium,
+    marginBottom: dimensions.spacing1,
   },
   meta: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
   },
   empty: {
-    color: tokens.colorTextMuted,
+    color: colors.neutral,
     textAlign: "center",
-    padding: tokens.space7,
+    padding: dimensions.spacing12,
   },
 });
 

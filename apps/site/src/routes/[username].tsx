@@ -4,72 +4,72 @@ import { useParams } from "@solidjs/router";
 import { getChannel, type EpisodeSummary } from "../lib/db";
 import { SiteNav } from "../components/site-nav";
 import * as stylex from "@stylexjs/stylex";
-import { tokens } from "@dailogues/ui/theme.stylex";
+import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 
 // 频道页：/@username（简介 + 节目列表 + RSS 订阅入口）
 const styles = stylex.create({
   page: {
     minHeight: "100vh",
-    background: tokens.colorBg,
-    color: tokens.colorText,
+    backgroundColor: colors.background,
+    color: colors.foreground,
     fontFamily: "system-ui, -apple-system, sans-serif",
   },
   content: {
     maxWidth: "720px",
     margin: "0 auto",
-    padding: tokens.space6,
+    padding: dimensions.spacing8,
   },
   header: {
-    padding: `${tokens.space6} ${tokens.space4}`,
-    borderBottom: `1px solid ${tokens.colorBorder}`,
-    marginBottom: tokens.space5,
+    padding: `${dimensions.spacing8} ${dimensions.spacing4}`,
+    borderBottom: `1px solid ${colors.ink}`,
+    marginBottom: dimensions.spacing6,
   },
   name: {
-    fontSize: tokens.fontSizeXl,
-    fontWeight: tokens.fontWeightBold,
-    marginBottom: tokens.space2,
+    fontSize: dimensions.fontSize2xl,
+    fontWeight: dimensions.fontWeightBold,
+    marginBottom: dimensions.spacing2,
   },
   bio: {
-    color: tokens.colorTextMuted,
+    color: colors.neutral,
     lineHeight: 1.7,
-    marginBottom: tokens.space3,
+    marginBottom: dimensions.spacing3,
   },
   meta: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
   },
   rss: {
     display: "inline-block",
-    marginTop: tokens.space3,
-    padding: `${tokens.space1} ${tokens.space3}`,
-    borderRadius: tokens.radiusFull,
-    border: `1px solid ${tokens.colorBorder}`,
-    color: tokens.colorWarning,
-    fontSize: tokens.fontSizeSm,
+    marginTop: dimensions.spacing3,
+    padding: `${dimensions.spacing1} ${dimensions.spacing3}`,
+    borderRadius: dimensions.radiusFull,
+    border: `1px solid ${colors.ink}`,
+    color: colors.warning,
+    fontSize: dimensions.fontSizeSm,
     textDecoration: "none",
   },
   card: {
     display: "block",
-    padding: tokens.space4,
-    borderRadius: tokens.radiusMd,
-    background: tokens.colorSurface,
-    border: `1px solid ${tokens.colorBorder}`,
-    marginBottom: tokens.space3,
+    padding: dimensions.spacing4,
+    borderRadius: dimensions.radiusMd,
+    backgroundColor: colors.surface,
+    border: `1px solid ${colors.ink}`,
+    marginBottom: dimensions.spacing3,
     textDecoration: "none",
     color: "inherit",
   },
   epTitle: {
-    fontWeight: tokens.fontWeightMedium,
-    marginBottom: tokens.space1,
+    fontWeight: dimensions.fontWeightMedium,
+    marginBottom: dimensions.spacing1,
   },
   meta2: {
-    color: tokens.colorTextMuted,
-    fontSize: tokens.fontSizeSm,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
   },
   notFound: {
-    color: tokens.colorTextMuted,
+    color: colors.neutral,
     textAlign: "center",
-    padding: tokens.space7,
+    padding: dimensions.spacing12,
   },
 });
 

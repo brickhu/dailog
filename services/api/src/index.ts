@@ -160,16 +160,18 @@ const episodesDeps: EpisodesDeps = {
   saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row),
 };
 
-const app = createApp({
-  env,
-  auth: createAuth({
+const auth = createAuth({
     db,
     env,
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
     trustedOrigins: env.APP_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean),
     cookieDomain: env.BETTER_AUTH_COOKIE_DOMAIN,
-  }),
+  });
+const app = createApp({
+  env,
+  auth,
+  authExt: { env, db, auth },
   repo,
   importDeps,
   polishesDeps,

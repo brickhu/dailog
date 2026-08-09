@@ -2,6 +2,7 @@ import { Router } from "@solidjs/router";
 import { FileRoutes } from "@solidjs/start/router";
 import { Suspense } from "solid-js";
 import { MetaProvider } from "@solidjs/meta";
+import "./app.css";
 
 // 消费端应用根：文件路由（src/routes/* 自动生成路由）
 export default function App() {

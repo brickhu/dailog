@@ -37,26 +37,15 @@ export function createAuth(opts: CreateAuthOptions) {
         user: schema.authUsers,
         session: schema.authSessions,
         account: schema.authAccounts,
+        verification: schema.verifications,
       },
     }),
     secret: opts.secret,
     emailAndPassword: { enabled: true, minPasswordLength: 8 },
-    // 邮箱验证（注册即验证）：验证链接 → 自动登录 → callbackURL 回跳。
-    // 发送走 Resend（免费 3000 封/月）；RESEND_API_KEY 未配置时静默跳过（本地 dev）
-    emailVerification: {
-      // 注册即发送验证邮件（1.6.x 无默认值，必须显式声明，否则注册不发信）
-      sendOnSignUp: true,
-      sendVerificationEmail: async ({ user, url }) => {
-        await sendEmail(opts.env, {
-          to: user.email,
-          subject: "验证你的 dailog 邮箱",
-          html: `<p>欢迎来到 dailog！点击下方链接验证你的邮箱：</p>
-                 <p><a href="${url}">${url}</a></p>
-                 <p style="color:#8b95a7;font-size:12px">如果链接无法点击，请复制到浏览器地址栏打开。链接 1 小时内有效。</p>`,
-        });
-      },
-      autoSignInAfterVerification: true,
-    },
+    // 注册邮箱验证：OTP 验证码（6 位，10 分钟有效）——注册必须输码才能完成；
+    // 登录保持邮箱+密码。OTP 由 auth-ext 自定义流程实现（生成/存储 verification 表/校验），
+    // 不依赖 emailOTP 插件的存储行为（默认内存存储——重启丢失、多实例失效）。
+    // 发送走 Resend；RESEND_API_KEY 未配置时静默跳过（本地 dev）
     plugins: [bearer()],
     advanced: opts.cookieDomain
       ? { crossSubDomainCookies: { enabled: true, domain: opts.cookieDomain } }
