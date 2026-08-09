@@ -16,7 +16,7 @@ GET  /health
 
 | 平台 | 主通道 | 兜底 |
 |---|---|---|
-| claude | `chat_snapshots` API（改版后免 orgId）| 代理池换通道重试（客户端渲染无 DOM）|
+| claude | `chat_snapshots` API（改版后免 orgId；文本在 `content[]` blocks——2026-08 结构迁移）| 代理池换通道重试（客户端渲染无 DOM）|
 | deepseek | `share/content` API | 页面 HTML |
 | chatgpt | RSC payload 解码（全量）| 静态 HTML `data-message-author-role` |
 | doubao | SSR `data-fn-args` 快照 | （HTML 即数据源）|

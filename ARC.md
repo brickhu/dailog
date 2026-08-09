@@ -78,17 +78,17 @@ app.dailog.fm (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 | `GET /health` | — | 健康检查（Railway healthcheckPath） |
 | `POST /api/auth/*` | — | **better-auth 会话路由**（注册/登录/登出/会话；注册含邀请码校验） |
 | `GET /api/me` | ✓ | 当前用户（认证中间件验证） |
-| `POST /api/import` | ✓ | **分享链接导入**：① 查 `snapshots`（URL 唯一）——未命中调 importer（成功/失败都写快照；`platform_unreachable` 10 分钟可重试）② 查 `polishes`（user × snapshot）——已存在返回 `{ existing: true, polishId }`（前端跳编辑页）③ 未创建则质量分析（LLM，结果写快照）→ 返回 `{ dialogue, quality }` 供预览确认 |
-| `POST /api/polishes/new` | ✓ | **确认创建容器**：提交快照 → 创建 `polishes`（user × snapshot 唯一）→ 返回 `{ polishId }` |
-| `POST /api/transcripts/new` | ✓ | SSE 流式润色：基于快照对话生成一条或多条 transcript（请求体含 polishId）→ 流式返回脚本段落 |
-| `POST /api/episodes/new` | ✓ | **生成节目**：请求体含 transcriptId → 脚本内容安全审核（DeepSeek，拒绝 422 + 原因且不扣配额）→ 配额校验 → 建 job → 后台执行（meta：标题/描述/封面等随请求） |
+| `POST /api/import` | ✓ | **分享链接导入**：① 查 `snapshots`（URL 唯一）——未命中调 importer；**快照写入分层**：`platform_unreachable` 写快照（10 分钟 TTL 重试）；`parse_failed`/内容为空**不写库**（importer 解析器问题，修复后重试才有意义——写库会永久污染缓存）② 查 `polishes`（user × snapshot）——已存在返回 `{ existing: true, polishId }`（前端跳编辑页）③ 未创建则质量分析（LLM，结果写快照）→ 返回 `{ dialogue, quality }` 供预览确认 |
+| `POST /api/polishes/new` | ✓ | **确认创建容器**：提交快照 → 创建 `polishes`（user × snapshot 唯一；频道未开通 403）→ 返回 `{ polishId }` |
+| `GET /api/polishes/:id` | ✓ | 编辑页详情：polish + 快照 meta（标题/质量）+ transcripts 列表 |
+| `POST /api/transcripts/new` | ✓ | SSE 流式润色：基于快照对话生成一条 transcript（请求体含 polishId；润色上限 free 5 条）→ 流式返回脚本段落，done 事件带 `transcriptId` |
+| `PUT /api/transcripts/:id` | ✓ | 编辑保存 transcript 脚本（归属校验） |
+| `POST /api/episodes/new` | ✓ | **生成节目**：请求体含 transcriptId → 脚本内容安全审核（DeepSeek，拒绝 422 + 原因且不扣配额）→ 频道/配额校验 → 建 job → 后台执行 |
 | `GET /api/episodes/:id/job` | ✓ | 轮询生成进度（阶段 + 百分比） |
 | `POST /api/episodes/:id/publish` | ✓ | 发布（`is_public=true`）→ 触发邀请码发放 |
 | `GET /api/importer/platforms` | ✓ | 转发 importer 校验规则（前端预检用，规则单一来源） |
-| `POST /api/episodes/:id/polish` | ✓ | SSE 流式润色：先质量审核（轻量 LLM 预检，不达标返回 422 + 原因）→ 语言检测 → 流式返回脚本段落 |
-| `POST /api/episodes/:id/generate` | ✓ | **脚本内容安全审核**（DeepSeek，拒绝 422 + 原因且不扣配额）→ 配额校验 → 建 job → 后台执行 |
-| `GET /api/episodes/:id/job` | ✓ | 轮询生成进度（阶段 + 百分比） |
-| `POST /api/episodes/:id/publish` | ✓ | 发布（`is_public=true`）→ 触发邀请码发放 |
+
+**路由挂载约定**：import/polishes/transcripts 路由内部自带 `/api` 前缀（挂根 `app.route("/", ...)`）；importer 路由无前缀（挂 `app.route("/api", ...)`）。
 | `POST /api/me/voice-sample` | ✓ | 上传/重录录音样本（R2 + 基础质量校验） |
 | ~~`GET /api/public/episodes/:id/dialogue`~~ | 预留 | 节目页"查看原文"（未来）：对话全文 + 来源元数据。内容站 SSR 直连读库（`repo.episodes.getPublishedDialogue`，仅 `is_public=true`、草稿不可见）；如需 HTTP 公开端点再按此形态暴露（无鉴权） |
 | `POST /api/billing/checkout` | ✓ | 创建 Stripe Checkout 会话 |
@@ -135,11 +135,15 @@ queued → tts → merge → upload → done（failed 可重试）
 **导入流程（POST /api/import）**：
 ```
 ① snapshots 查 URL（分享链接内容固定 → 快照资源全局唯一）：
-   未命中 → 调 importer（成功/失败都写快照；platform_unreachable 标注 10 分钟可重试）
+   未命中 → 调 importer；**快照写入分层**：
+     · platform_unreachable（网络/CF）→ 写快照（status=unreachable，10 分钟可重试）
+     · parse_failed / 内容为空（伪成功——importer 解析器对平台结构变化
+       返回空 content 的消息数组）→ **不写库**，直接 422；修复后自动重试恢复
 ② polishes 查 user × snapshot：
    已存在 → 返回 { existing: true, polishId } → 前端直接跳编辑页
    不存在 → 质量分析（DeepSeek，结果写 snapshot）→ 返回 { dialogue, quality }
-③ 前端预览确认 → POST /api/polishes 创建容器 → 跳编辑页（/polish/:id——generate 润色生成 transcript → 选一条 episode 生成节目）
+③ 前端预览确认 → POST /api/polishes/new 创建容器 → 跳编辑页（/polish/:id——
+   transcripts/new 润色生成脚本 → 选一条 episodes/new 生成节目 → 发布）
 ```
 
 **质量分析归属 API**：importer 不调 LLM。基于快照内容分析（对话过短 <3 轮 / 寒暄 / 信息量不足 / 违规 → 拒绝 + 原因；语言识别 zh/en），结果随快照存库——内容固定 → 分析一次全局复用，生成环节不再重复检测（原 polish 流程的 qualityCheck 移除）。
@@ -149,7 +153,7 @@ queued → tts → merge → upload → done（failed 可重试）
 **平台通道（`services/importer`，实测全通）**：
 | 平台 | 通道 |
 |---|---|
-| claude | chat_snapshots API（CF 拦时 ScraperAPI）|
+| claude | chat_snapshots API（CF 拦时 ScraperAPI）；文本在 `content[]` blocks（type=text 的 .text，tool_use/tool_result 跳过——2026-08 结构迁移）|
 | chatgpt | RSC payload 解码（ScraperAPI 兜底）|
 | gemini | batchexecute RPC（直连）|
 | doubao | SSR 快照（ScraperAPI + 香港出口）|
