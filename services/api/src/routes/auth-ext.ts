@@ -150,6 +150,9 @@ export function authExtRoutes(deps: AuthExtDeps) {
         },
         asResponse: true,
       }).catch(() => null); // 竞态：可能已存在（不阻塞登录）
+      // 验证码通过 = 邮箱已验证：标记 email_verified（否则 AppLayout 一直显示
+      // "邮箱尚未验证"横幅——signUpEmail 默认 emailVerified=false）
+      await deps.db.update(schema.authUsers).set({ emailVerified: true }).where(eq(schema.authUsers.email, email)).catch(() => null);
       const result = await deps.auth.api.signInEmail({ body: { email, password: body.password }, asResponse: true });
       return new Response(result.body, { status: result.status, headers: result.headers });
     } catch {
