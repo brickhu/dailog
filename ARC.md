@@ -171,7 +171,7 @@ queued → tts → merge → upload → done（failed 可重试）
 | `profiles` | `id`(=auth.users), `username`(唯一), `display_name`, `bio`, `plan`(free/pro), `credit_balance`, `created_at` | 用户 |
 | `voice_samples` | `user_id`, `audio_url`(R2), `duration`, `status`, `created_at` | 录音样本（可重录覆盖） |
 | `invite_codes` | `code`(唯一), `created_by`, `used_by`, `used_at`, `expires_at`, `source` | 邀请码 |
-| `generation_jobs` | `episode_id`(或 conversation_id), `status`(queued/tts/merge/upload/done/failed), `progress`, `error`, `attempts` | 生成任务 |
+| `generation_jobs` | `episode_id`(或 polish_id), `status`(queued/tts/merge/upload/done/failed), `progress`, `error`, `attempts` | 生成任务 |
 | `payments` / `subscriptions` | （沿用） | 计费 |
 
 **废弃表**：`imports`（由 snapshots + polishes 替代）、`scripts`（并入 polishes 版本行）、`conversations`（不存在该概念——容器直接叫 polish）；`episodes.status=draft` 移除（创作态归 polishes）。
@@ -180,7 +180,7 @@ queued → tts → merge → upload → done（failed 可重试）
 **R2 存储路径**：
 ```
 snapshots/{snapshot_id}.dialogue.json        ← 快照内容（URL 维度；meta 存库，内容在 R2）
-polishes/{conversation_id}/{version}.json    ← 润色脚本备份（可选；segments 主存库 jsonb）
+polishes/{polish_id}/{version}.json       ← 润色脚本备份（可选；segments 主存库 jsonb）
 episodes/{user_id}/{episode_id}.mp3          ← 生成产物（不可变）
 tracks/{episode_id}/{language}.mp3           ← 音轨（预留）
 covers/{user_id}/{episode_id}.jpg            ← 封面图（预留）
