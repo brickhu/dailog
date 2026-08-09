@@ -45,6 +45,13 @@
 
 ### 4.3 导入（分享链接采集服务）
 
+**概念模型（五层）**：
+- **快照（snapshot）**：分享 URL 的内容提取——全局资源（与用户无关，URL 唯一；内容固定永久有效）
+- **对话容器（conversation）**：用户 × 快照 的创作工作区（唯一约束——重复粘贴跳转编辑页，语义=继续创作）
+- **润色脚本（polish）**：conversation 生成的脚本（可多个版本）
+- **节目（episode）**：由润色脚本生成
+- **音轨（track）**：节目的多语言音频（预留）
+
 - **唯一导入通道：分享链接**——用户粘贴 AI 平台对话的**分享链接**（无需登录态、无需安装任何东西），服务端采集后在工作台预览确认
 - **服务端采集服务（`importer.dailog.fm`）**：按平台解析分享页数据（公开接口 / SSR 内嵌数据 / RSC payload），无需用户登录、无需浏览器；平台规则变化只更新采集服务，不影响主站
 - **平台（按采集通道）**：Claude（chat_snapshots 公开接口，CF 拦截时走 ScraperAPI）、DeepSeek（share/content API）、ChatGPT（RSC payload 解码）、Gemini（batchexecute RPC）、Kimi（SSR HYDRATION_INIT_STATE）、豆包（SSR 快照，海外出口用香港代理）

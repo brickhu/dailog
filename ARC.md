@@ -78,8 +78,13 @@ app.dailog.fm (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 | `GET /health` | — | 健康检查（Railway healthcheckPath） |
 | `POST /api/auth/*` | — | **better-auth 会话路由**（注册/登录/登出/会话；注册含邀请码校验） |
 | `GET /api/me` | ✓ | 当前用户（认证中间件验证） |
-| `POST /api/imports` | ✓ | 接收结构化对话（扩展回传/分享链接采集确认）→ 落库（imports + draft episode 同事务），返回 `{ importId, episodeId }` |
-| `POST /api/share/collect` | ✓ | 分享链接采集转发：调 importer 独立服务（`IMPORTER_URL`）→ 透传 dialogue/错误 |
+| `POST /api/import` | ✓ | **分享链接导入**：① 查 `snapshots`（URL 唯一）——未命中调 importer（成功/失败都写快照；`platform_unreachable` 10 分钟可重试）② 查 `conversations`（user × snapshot）——已存在返回 `{ existing: true, conversationId }`（前端跳编辑页）③ 未创建则质量分析（LLM，结果写快照）→ 返回 `{ dialogue, quality }` 供预览确认 |
+| `POST /api/conversations` | ✓ | **确认创建对话容器**：提交快照 → 创建 `conversations`（user × snapshot 唯一）→ 返回 `{ conversationId }` |
+| `POST /api/conversations/:id/polish` | ✓ | SSE 流式润色：基于快照对话生成润色脚本（`polishes`，可多个版本）→ 流式返回脚本段落 |
+| `POST /api/conversations/:id/generate` | ✓ | **脚本内容安全审核**（DeepSeek，拒绝 422 + 原因且不扣配额）→ 配额校验 → 建 job → 后台执行（生成 episode） |
+| `GET /api/conversations/:id/job` | ✓ | 轮询生成进度（阶段 + 百分比） |
+| `POST /api/conversations/:id/publish` | ✓ | 发布（`is_public=true`）→ 触发邀请码发放 |
+| `GET /api/importer/platforms` | ✓ | 转发 importer 校验规则（前端预检用，规则单一来源） |
 | `POST /api/episodes/:id/polish` | ✓ | SSE 流式润色：先质量审核（轻量 LLM 预检，不达标返回 422 + 原因）→ 语言检测 → 流式返回脚本段落 |
 | `POST /api/episodes/:id/generate` | ✓ | **脚本内容安全审核**（DeepSeek，拒绝 422 + 原因且不扣配额）→ 配额校验 → 建 job → 后台执行 |
 | `GET /api/episodes/:id/job` | ✓ | 轮询生成进度（阶段 + 百分比） |
@@ -121,58 +126,82 @@ queued → tts → merge → upload → done（failed 可重试）
 - **润色免费（获客漏斗）**：质量门（低质对话 422）过滤垃圾输入；**对话级润色上限：每对话最多 5 个脚本版本**（=5 次润色调用，`episodes.polish_count` 计数，仅计 LLM 润色、手动保存不计；pro 不限；超限 429；配置化）+ 单次输入对话量上限，防规模化白嫖；单次润色成本约 ¥0.04；重新润色支持**方向指示**（instruction 拼入 prompt），有未保存手动改动时先确认
 - 发布时发放邀请码：已发布期数 > 3 起，每发布一期 +1 码（`source=reward`，**前 3 期不补发**），见 PRD §4.1
 
-### 3.5 采集与导入（分享链接采集服务）
+### 3.5 采集与导入（importer 纯解析 + API 编排）
 
-- **统一采集器（服务端 `importer`，`importer.dailog.fm`）**：用户粘贴 AI 平台对话**分享链接** → 服务端按平台解析（公开接口 / SSR 内嵌数据 / RSC payload / batchexecute RPC）→ 结构化对话 → 经 `POST /api/share/collect`（API 转发，鉴权复用）→ 工作台预览确认 → `POST /api/imports` 入库
-- **元数据**：`{ platform, conversation_id, title, url, messages[] }`——标题取分享页元数据预填节目名；`(user_id, platform, conversation_id)` 唯一约束防重复导入；播放页展示来源信息
-- **平台通道（实测全通，`services/importer`）**：
+**职责分层**：
+- **importer（纯解析器）**：URL → 解析内容。无状态、无 LLM、无业务逻辑——只做「抓取 + 结构化」，平台规则变化只更新它
+- **API（业务编排）**：快照缓存、质量分析（LLM）、对话容器管理——全部业务在 API 侧
 
-| 平台 | 可行性 | 关键适配 |
-|---|---|---|
-| Claude | **高（首批）** | `[data-testid="user-message"]` + `[data-is-streaming]` 判角色；无虚拟化公开证据；**页面 CSP 阻止 content script 外发 fetch → 回传必须走 background service worker** |
-| DeepSeek | **高（首批）** | `.ds-markdown` 产品前缀稳定；**虚拟列表必做滚动采集**（>50 轮直接复制可见区丢 ~30% 历史的坑） |
-| ChatGPT | 中~高 | `data-message-author-role` 多年稳定；原生虚拟化：边滚边采 + 记录 offsetTop 排序 + `data-message-id` 去重 + 空块内容校验 |
-| Gemini | 中 | 自定义元素 `user-query`/`model-response` 较稳；Angular class 混淆频繁，禁用 class 依赖 |
-| Kimi | 中~低 | 类名/哈希约 24h 轮换；首选内部 API（`/api/user/v6/chat/message/{chat_id}`）或通用 DOM 引擎 |
-| 豆包 | 中~低 | 虚拟列表强截断；首选 hook `POST /im/chain/single` API（登录态 XHR 注入） |
-| 通义 | 低 | 无公开稳定选择器、会话路由格式未知；备选官方数据导出（24h 邮箱 ZIP） |
+**导入流程（POST /api/import）**：
+```
+① snapshots 查 URL（分享链接内容固定 → 快照资源全局唯一）：
+   未命中 → 调 importer（成功/失败都写快照；platform_unreachable 标注 10 分钟可重试）
+② conversations 查 user × snapshot：
+   已存在 → 返回 { existing: true, conversationId } → 前端直接跳编辑页
+   不存在 → 质量分析（DeepSeek，结果写 snapshot）→ 返回 { dialogue, quality }
+③ 前端预览确认 → POST /api/conversations 创建容器 → 跳编辑页
+```
 
-- **通道重试链**：直连 → ScraperAPI（CF 挑战兜底，免费额度内）→ Web Unlocker → CF Worker → socks 代理池——数据中心 IP 直连 claude.ai 被 CF 拦（新加坡/美区实测 403），ScraperAPI 实测全通
-- **真实性 = 分享页公开数据**：分享链接为平台公开内容，无需登录态；采集服务无鉴权（内部服务，经 API 转发调用）
-- **采集服务定位 = 独立部署的解析器**：只做「采集 → 结构化对话」，编辑/生成/发布全部在 SPA 工作台完成；平台规则变化只更新 `services/importer` 重新部署，不影响主站
-- ~~浏览器扩展采集（Manifest V3 登录态 DOM 采集）~~：**已停用**——源码保留在 `apps/extension`（含各平台 DOM 解析器、滚动采集、主世界 hook），不再作为导入通道；`docs/spikes/chat-dom.md` 为历史勘察记录
+**质量分析归属 API**：importer 不调 LLM。基于快照内容分析（对话过短 <3 轮 / 寒暄 / 信息量不足 / 违规 → 拒绝 + 原因；语言识别 zh/en），结果随快照存库——内容固定 → 分析一次全局复用，生成环节不再重复检测（原 polish 流程的 qualityCheck 移除）。
+
+**用户 × 快照唯一**：同一用户对同一分享链接只有一个 conversation（重复粘贴 → 跳转编辑页，语义是「继续创作」而非重复导入）；不同用户可用同一快照各自创建容器（快照是公开资源，不做限制）。
+
+**平台通道（`services/importer`，实测全通）**：
+| 平台 | 通道 |
+|---|---|
+| claude | chat_snapshots API（CF 拦时 ScraperAPI）|
+| chatgpt | RSC payload 解码（ScraperAPI 兜底）|
+| gemini | batchexecute RPC（直连）|
+| doubao | SSR 快照（ScraperAPI + 香港出口）|
+| kimi | SSR HYDRATION（直连）|
+| deepseek | share/content API（直连）|
+
+**URL 校验三级**：协议 → 平台域名锚定 → 分享页结构（id 格式）——规则经 `GET /platforms` 下发给前端预检（单一来源不双写）。
 
 ## 4. 数据模型（Railway Postgres）
 
-| 表 | 关键字段 |
-|---|---|
-| `profiles` | `id`(=auth.users), `username`(唯一), `display_name`, `bio`, `plan`(free/pro), `credit_balance`(int, 按期付费余额), `created_at` |
-| `voice_samples` | `user_id`, `audio_url`(R2), `reference_id`（已废弃——不再训练音色模型，样本直传模式；`transcript` 为朗读固定文案，零样本克隆用）, `duration`, `status`, `created_at`（可重录覆盖） |
-| `invite_codes` | `code`(唯一), `created_by`, `used_by`, `used_at`, `expires_at`, `source`(admin/reward), `issued_for_episode_id` |
-| `imports` | `user_id`, `platform`(chatgpt/claude/kimi/doubao/tongyi/gemini/deepseek/plain), `source_title`, `source_conversation_id`, `source_url`, `raw_content`, `parsed_dialogue`(JSONB), `status`, `created_at`；唯一约束 `(user_id, platform, source_conversation_id)` 防重复导入 |
-| `episodes` | `id`, `user_id`, `import_id`（来源导入，polish 质量门经它读 `parsed_dialogue`，迁移 0001）, `slug`, `title`, `description`, `cover_url`, `audio_url`, `duration_seconds`, `status`(draft/generating/published/failed), `quality_status`(pending/passed/rejected), `quality_reason`, `language`, `is_public`, `created_at`, `published_at` |
-| `scripts` | `episode_id`, `version`, `segments`(JSONB: `[{speaker: host\|guest, text}]`), `created_at` |
-| `generation_jobs` | `episode_id`, `status`(queued/tts/merge/upload/done/failed), `progress`, `error`, `attempts`, `timestamps` |
-| `payments` | `user_id`, `stripe_session_id`, `amount`, `episodes_granted`, `status`, `created_at`（按期付费购买记录） |
-| `subscriptions` | `user_id`, `stripe_customer_id`, `stripe_subscription_id`, `plan`, `status`, `current_period_end` |
+**五层分层**：快照（资源，无用户）→ 对话容器（用户创作区）→ 润色脚本 → 节目 → 音轨。
 
-**R2 存储路径（目录规划 v2，2026-08-04）**：
+| 表 | 关键字段 | 说明 |
+|---|---|---|
+| `snapshots` | `url`(唯一), `platform`, `source_title`, `source_conversation_id`, `parsed_dialogue`(JSONB), `quality`(JSONB: `{pass, reason?, language?}`), `status`(ok/unreachable), `last_error`, `created_at`, `updated_at` | **分享快照**：对分享 URL 的内容提取（全局资源，与用户无耦合；URL 唯一）。分享页是原对话的快照——内容固定、永久有效；关闭后重开 = 新 URL。`status=unreachable` 时 10 分钟内不重试 importer |
+| `conversations` | `id`, `user_id`, `snapshot_id`, `title`, `status`(editing/generating/published/failed), `created_at`, `updated_at` | **对话容器**：用户 × 快照的创作工作区（**唯一约束 `(user_id, snapshot_id)`**——同一用户对同一分享链接只有一个容器，重复粘贴跳转已有容器）。质量门/语言随快照（内容固定 → 质量固定） |
+| `polishes` | `id`, `conversation_id`, `version`, `segments`(JSONB: `[{speaker: host\|guest, text}]`), `language`, `created_at` | **润色脚本**：conversation 可生成多个版本（多次润色） |
+| `episodes` | `id`, `user_id`, `polish_id`, `conversation_id`, `slug`, `title`, `description`, `cover_url`, `audio_url`, `duration_seconds`, `status`(generating/published/failed), `is_public`, `created_at`, `published_at` | **节目**：由一条润色脚本生成（`polish_id` 关联）。**无 draft 状态**（创作态归 conversations；`status=generating` 表示生成中） |
+| `tracks` | `episode_id`, `language`(zh/en/ja), `audio_url`, `duration_seconds`, `created_at` | **音轨**（预留）：一期节目可生成多语言音轨 |
+| `profiles` | `id`(=auth.users), `username`(唯一), `display_name`, `bio`, `plan`(free/pro), `credit_balance`, `created_at` | 用户 |
+| `voice_samples` | `user_id`, `audio_url`(R2), `duration`, `status`, `created_at` | 录音样本（可重录覆盖） |
+| `invite_codes` | `code`(唯一), `created_by`, `used_by`, `used_at`, `expires_at`, `source` | 邀请码 |
+| `generation_jobs` | `episode_id`(或 conversation_id), `status`(queued/tts/merge/upload/done/failed), `progress`, `error`, `attempts` | 生成任务 |
+| `payments` / `subscriptions` | （沿用） | 计费 |
+
+**废弃表**：`imports`（由 snapshots + conversations 替代）、`scripts`（由 polishes 替代）；`episodes.status=draft` 移除（创作态归 conversations）。
+**迁移策略**：**清空重建**（内测期数据量小，不做存量迁移；`imports`/`scripts` 表删除，`episodes` 重建去掉 draft/quality 字段——质量归 snapshots）。
+
+**R2 存储路径**：
 ```
-voices/{user_id}.webm                            ← 用户录音样本（MediaRecorder 实际输出 webm；覆盖更新）
-episodes/{user_id}/{episode_id}.mp3              ← 生成产物（不可变）
-imports/{import_id}.dialogue.json                ← 原始对话（meta 存库，内容在 R2；key 由 importId 推导）
-imports/{import_id}.raw.json                     ← 原始导出全文（分享链接采集原始数据，预留）
-covers/{user_id}/{episode_id}.jpg                ← 封面图（预留）
-assets/guest-voice-zh.mp3 等                     ← 平台资产（嘉宾音色按语言；热更新无需部署）
+snapshots/{snapshot_id}.dialogue.json        ← 快照内容（URL 维度；meta 存库，内容在 R2）
+polishes/{conversation_id}/{version}.json    ← 润色脚本备份（可选；segments 主存库 jsonb）
+episodes/{user_id}/{episode_id}.mp3          ← 生成产物（不可变）
+tracks/{episode_id}/{language}.mp3           ← 音轨（预留）
+covers/{user_id}/{episode_id}.jpg            ← 封面图（预留）
+voices/{user_id}.webm                        ← 录音样本
+assets/guest-voice-zh.mp3 等                 ← 平台资产
 ```
-**存储决策**（二进制/大文件 → R2；结构化/可查询文本 → 数据库）：
-- 语音样本/播客音频/封面/原始对话/平台资产 → R2
-- 脚本 segments（jsonb）/ 对话 meta（imports 表）→ 数据库（查询、关联、事务）
-- 本地开发也用 R2（STORAGE_DRIVER=r2 + R2_PROXY_URL socks 代理；大陆网络直连 R2 握手失败）
+**存储决策**：二进制/大文件 → R2；结构化/可查询文本（segments/quality/dialogue meta）→ 数据库。
 
 ## 5. 前端
 
 ### 5.1 工作台 SPA（apps/studio）
+
+**路由规划**：
+```
+/                     导入页（粘贴分享链接 → 采集预览 → 确认创建容器）
+/polish/:conversationId   编辑页（conversation → 生成润色脚本 polishes → 生成节目）
+/episodes             节目列表
+/settings             设置
+```
+
 
 - Vite + SolidJS + Solid Router + StyleX（Babel/Oxc 插件接入）
 - 页面：auth / onboarding-voice / dashboard / episodes-new（四步向导）/ settings
