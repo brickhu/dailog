@@ -89,9 +89,22 @@ print_env() {
   echo "=============================================="
 }
 
+# 系统开了 SOCKS 代理时（本机 1081 常见）：浏览器访问 sslip 域名会走代理
+# → 代理解析到 127.0.0.1（代理自己）连接死循环。需把 *.sslip.io 加入忽略代理：
+#   networksetup -setproxybypassdomains Wi-Fi "*.sslip.io" "localhost" "127.0.0.1"
+setup_proxy_bypass() {
+  if scutil --proxy | grep -q "SOCKSEnable : 1"; then
+    if ! networksetup -getproxybypassdomains Wi-Fi 2>/dev/null | grep -q "sslip.io"; then
+      echo "[setup] 检测到系统 SOCKS 代理——设置 *.sslip.io 忽略代理（否则浏览器连不上）"
+      networksetup -setproxybypassdomains Wi-Fi "*.sslip.io" "localhost" "127.0.0.1"
+    fi
+  fi
+}
+
 case "${1:-}" in
   install)
     install_tools
+    setup_proxy_bypass
     setup_certs
     write_caddyfile
     print_env
