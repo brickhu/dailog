@@ -16,7 +16,12 @@ export interface CollectedDialogue {
 
 /** 采集失败（可诊断：状态码 + CF 特征）——不静默吞错 */
 export interface CollectError {
-  error: "platform_unreachable" | "parse_failed" | "invalid_url" | "unsupported_platform";
+  error:
+    | "platform_unreachable"
+    | "parse_failed"
+    | "invalid_url"
+    | "unsupported_platform"
+    | "share_unavailable";
   platform?: Platform;
   detail?: {
     status?: number;

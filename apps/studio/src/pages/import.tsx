@@ -270,7 +270,9 @@ export default function CollectPage() {
                 ? "暂不支持该平台/链接格式。支持：Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 分享链接。"
                 : err === "share_collect_unreachable"
                   ? "采集服务暂不可用，请稍后重试。"
-                  : err,
+                  : err === "share_unavailable"
+                    ? "该分享链接已失效或被取消，请确认后重试。"
+                    : err,
       });
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {

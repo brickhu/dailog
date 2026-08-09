@@ -8,7 +8,7 @@ import { collectChatgptShare } from "./platforms/chatgpt";
 import { collectDoubaoShare } from "./platforms/doubao";
 import { collectGeminiShare } from "./platforms/gemini";
 import { collectKimiShare } from "./platforms/kimi";
-import { HttpError } from "./fetch";
+import { httpGet, HttpError } from "./fetch";
 import type { CollectedDialogue, CollectError } from "./types";
 
 type CollectFn = (url: string) => Promise<CollectedDialogue | null>;
@@ -45,7 +45,7 @@ export function getPlatformRules(): PlatformRuleDto[] {
   return PLATFORMS.map((p) => ({ id: p.id, label: p.label, sharePattern: p.shareRe.source }));
 }
 
-/** 统一入口：按 URL 匹配平台 → 采集 → CollectedDialogue 或 CollectError */
+/** 统一入口：按 URL 匹配平台 → 触达预检 → 采集 → CollectedDialogue 或 CollectError */
 export async function collectShareUrl(url: string): Promise<CollectedDialogue | CollectError> {
   if (!/^https?:\/\//.test(url)) {
     return { error: "invalid_url", detail: { message: "必须是 http(s) 链接" } };
@@ -59,6 +59,12 @@ export async function collectShareUrl(url: string): Promise<CollectedDialogue | 
   if (!platform.shareRe.test(url)) {
     return { error: "invalid_url", detail: { message: "链接不是有效的分享页" } };
   }
+  // 触达预检：分享链接可能随时被平台取消——解码前先确认可达，
+  // 失效直接快速失败（不浪费 ScraperAPI 额度/通道重试）
+  const reach = await checkReachable(url);
+  if (reach === "gone") {
+    return { error: "share_unavailable", detail: { message: "分享链接已失效或被取消" } };
+  }
   try {
     const d = await platform.collect(url);
     if (!d) {
@@ -67,6 +73,10 @@ export async function collectShareUrl(url: string): Promise<CollectedDialogue | 
     return d;
   } catch (e) {
     if (e instanceof HttpError) {
+      // 平台 API/页面 404/410 = 分享被取消（触达预检漏网的软失效）
+      if (e.status === 404 || e.status === 410) {
+        return { error: "share_unavailable", detail: { status: e.status, message: "分享链接已失效或被取消" } };
+      }
       return {
         error: "platform_unreachable",
         detail: { status: e.status, cf: e.cf },
@@ -76,5 +86,20 @@ export async function collectShareUrl(url: string): Promise<CollectedDialogue | 
       error: "platform_unreachable",
       detail: { message: e instanceof Error ? e.message : String(e) },
     };
+  }
+}
+
+/** 触达预检：直连 GET 分享页（轻量、不花 ScraperAPI）。
+ *  gone = 明确失效（404/410）；ok = 可达（2xx/3xx/4xx 非 404——403 是 CF
+ *  挑战但链接存在，不算失效）；unknown = 无法判断（网络错/超时）→ 继续解码 */
+async function checkReachable(url: string): Promise<"ok" | "gone" | "unknown"> {
+  try {
+    const res = await httpGet(url);
+    if (res.status === 404 || res.status === 410) return "gone";
+    if (res.status >= 200 && res.status < 500) return "ok";
+    return "unknown";
+  } catch (e) {
+    if (e instanceof HttpError && (e.status === 404 || e.status === 410)) return "gone";
+    return "unknown";
   }
 }
