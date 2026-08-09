@@ -7,12 +7,15 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { z } from "zod";
-import { collectShareUrl } from "./collect";
+import { collectShareUrl, getPlatformRules } from "./collect";
 import { isCollectedDialogue } from "./types";
 
 const app = new Hono();
 
 app.get("/health", (c) => c.json({ ok: true, at: new Date().toISOString() }));
+
+/** 平台校验规则（公开下发，前端本地预检用——规则单一来源，不双写） */
+app.get("/platforms", (c) => c.json({ platforms: getPlatformRules() }));
 
 const CollectBody = z.object({
   url: z.string().url(),

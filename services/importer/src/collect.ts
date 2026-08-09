@@ -14,6 +14,9 @@ import type { CollectedDialogue, CollectError } from "./types";
 type CollectFn = (url: string) => Promise<CollectedDialogue | null>;
 
 interface PlatformRule {
+  /** 平台标识 + 展示名（规则端点下发用） */
+  id: string;
+  label: string;
   /** 域名 + 路径前缀（识别平台归属） */
   match: RegExp;
   /** 分享页结构（id 格式）——严格校验，防止伪链接/对话页链接漏进来 */
@@ -22,13 +25,25 @@ interface PlatformRule {
 }
 
 const PLATFORMS: PlatformRule[] = [
-  { match: /^https?:\/\/(www\.)?claude\.ai\/share\//, shareRe: /^https?:\/\/(www\.)?claude\.ai\/share\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/, collect: collectClaudeShare },
-  { match: /^https?:\/\/chat\.deepseek\.com\/share\//, shareRe: /^https?:\/\/chat\.deepseek\.com\/share\/([A-Za-z0-9]+)/, collect: collectDeepSeekShare },
-  { match: /^https?:\/\/(www\.)?chatgpt\.com\/share\//, shareRe: /^https?:\/\/(www\.)?chatgpt\.com\/share\/([A-Za-z0-9-]+)/, collect: collectChatgptShare },
-  { match: /^https?:\/\/(www\.)?doubao\.com\/thread\//, shareRe: /^https?:\/\/(www\.)?doubao\.com\/thread\/([A-Za-z0-9]+)/, collect: collectDoubaoShare },
-  { match: /^https?:\/\/share\.gemini\.google\//, shareRe: /^https?:\/\/share\.gemini\.google\/([A-Za-z0-9]+)/, collect: collectGeminiShare },
-  { match: /^https?:\/\/(www\.)?kimi\.com\/share\//, shareRe: /^https?:\/\/(www\.)?kimi\.com\/share\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/, collect: collectKimiShare },
+  { id: "claude", label: "Claude", match: /^https?:\/\/(www\.)?claude\.ai\/share\//, shareRe: /^https?:\/\/(www\.)?claude\.ai\/share\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/, collect: collectClaudeShare },
+  { id: "deepseek", label: "DeepSeek", match: /^https?:\/\/chat\.deepseek\.com\/share\//, shareRe: /^https?:\/\/chat\.deepseek\.com\/share\/([A-Za-z0-9]+)/, collect: collectDeepSeekShare },
+  { id: "chatgpt", label: "ChatGPT", match: /^https?:\/\/(www\.)?chatgpt\.com\/share\//, shareRe: /^https?:\/\/(www\.)?chatgpt\.com\/share\/([A-Za-z0-9-]+)/, collect: collectChatgptShare },
+  { id: "doubao", label: "豆包", match: /^https?:\/\/(www\.)?doubao\.com\/thread\//, shareRe: /^https?:\/\/(www\.)?doubao\.com\/thread\/([A-Za-z0-9]+)/, collect: collectDoubaoShare },
+  { id: "gemini", label: "Gemini", match: /^https?:\/\/share\.gemini\.google\//, shareRe: /^https?:\/\/share\.gemini\.google\/([A-Za-z0-9]+)/, collect: collectGeminiShare },
+  { id: "kimi", label: "Kimi", match: /^https?:\/\/(www\.)?kimi\.com\/share\//, shareRe: /^https?:\/\/(www\.)?kimi\.com\/share\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/, collect: collectKimiShare },
 ];
+
+/** 校验规则（下发给前端做本地预检——单一来源，前端不双写规则） */
+export interface PlatformRuleDto {
+  id: string;
+  label: string;
+  /** 分享页结构正则（source 字符串，前端 new RegExp 使用） */
+  sharePattern: string;
+}
+
+export function getPlatformRules(): PlatformRuleDto[] {
+  return PLATFORMS.map((p) => ({ id: p.id, label: p.label, sharePattern: p.shareRe.source }));
+}
 
 /** 统一入口：按 URL 匹配平台 → 采集 → CollectedDialogue 或 CollectError */
 export async function collectShareUrl(url: string): Promise<CollectedDialogue | CollectError> {

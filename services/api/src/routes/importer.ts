@@ -8,6 +8,22 @@ import { Hono } from "hono";
 export function importerRoutes(getShareCollectUrl: () => string | null) {
   const app = new Hono<{ Variables: { userId: string } }>();
 
+  /** 平台校验规则（转发 importer /platforms——前端本地预检，规则单一来源） */
+  app.get("/importer/platforms", async (c) => {
+    const base = getShareCollectUrl();
+    if (!base) return c.json({ error: "share_collect_not_configured" }, 503);
+    try {
+      const res = await fetch(`${base.replace(/\/$/, "")}/platforms`, {
+        signal: AbortSignal.timeout(10000),
+      });
+      const data = (await res.json().catch(() => null)) as unknown;
+      if (!res.ok) return c.json(data ?? { error: "share_collect_error" }, 502);
+      return c.json(data);
+    } catch {
+      return c.json({ error: "share_collect_unreachable" }, 502);
+    }
+  });
+
   /** 采集分享页 → dialogue（透传 importer 结果/错误） */
   app.post("/importer/collect", async (c) => {
     const body = (await c.req.json().catch(() => null)) as { url?: unknown } | null;

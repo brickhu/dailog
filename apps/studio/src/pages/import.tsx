@@ -102,7 +102,18 @@ const styles = stylex.create({
     backgroundColor: colors.background,
     color: colors.foreground,
     fontSize: dimensions.fontSizeSm,
+    marginBottom: dimensions.spacing2,
+  },
+  urlHint: {
+    fontSize: dimensions.fontSizeSm,
     marginBottom: dimensions.spacing4,
+    lineHeight: "1.5",
+  },
+  urlHintOk: {
+    color: "#15803d",
+  },
+  urlHintBad: {
+    color: colors.danger,
   },
   warn: {
     backgroundColor: "#fffbeb",
@@ -128,6 +139,13 @@ type State =
   | { kind: "error"; message: string }
   | { kind: "ready"; dialogue: CachedCollect };
 
+/** importer 下发的平台校验规则（单一来源，前端本地预检） */
+interface PlatformRule {
+  id: string;
+  label: string;
+  sharePattern: string;
+}
+
 export default function CollectPage() {
   const auth = useAuth();
   const navigate = useNavigate();
@@ -137,6 +155,42 @@ export default function CollectPage() {
   const [busy, setBusy] = createSignal(false);
   const [actionError, setActionError] = createSignal<string | null>(null);
   const [shareUrl, setShareUrl] = createSignal("");
+  const [rules, setRules] = createSignal<PlatformRule[] | null>(null);
+  const [urlHint, setUrlHint] = createSignal<{ ok: boolean; label?: string; message?: string } | null>(null);
+
+  /** 拉取 importer 校验规则（失败不阻塞——采集时服务端仍会校验） */
+  const loadRules = async () => {
+    try {
+      const res = await api.request("/api/importer/platforms");
+      const body = (await res.json().catch(() => null)) as { platforms?: PlatformRule[] } | null;
+      if (res.ok && Array.isArray(body?.platforms)) setRules(body.platforms);
+    } catch {
+      /* 规则拉取失败：跳过前端预检，服务端兜底 */
+    }
+  };
+
+  /** 本地预检：匹配 importer 下发的分享页结构正则 */
+  const validateUrl = (url: string): { ok: boolean; label?: string; message?: string } => {
+    const trimmed = url.trim();
+    if (!trimmed) return { ok: false };
+    if (!/^https?:\/\//.test(trimmed)) return { ok: false, message: "链接需以 http(s):// 开头" };
+    const rs = rules();
+    if (!rs) return { ok: true }; // 规则未就绪：放行，服务端校验
+    for (const r of rs) {
+      try {
+        if (new RegExp(r.sharePattern).test(trimmed)) return { ok: true, label: r.label };
+      } catch {
+        /* 规则异常跳过 */
+      }
+    }
+    return { ok: false, message: "不是有效的分享页链接（支持：Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包）" };
+  };
+
+  const onUrlInput = (value: string) => {
+    setShareUrl(value);
+    setUrlHint(validateUrl(value));
+    setActionError(null);
+  };
 
   // 扩展模式：页面生命周期兜底，关窗/导航离开时自动清缓存（扩展侧 tab 关闭监听是主保险，
   // 此处双保险——极端情况下扩展 SW 未及时处理也能清掉）
@@ -145,6 +199,7 @@ export default function CollectPage() {
   });
 
   onMount(async () => {
+    void loadRules();
     if (!collectId) {
       // 无 collectId = 分享链接模式：显示输入框，用户粘贴分享链接后采集
       setState({ kind: "input" });
@@ -161,12 +216,14 @@ export default function CollectPage() {
     setState({ kind: "ready", dialogue });
   });
 
-  /** 分享链接采集：调 API 转发 → importer 服务 → 预览确认 */
+  /** 分享链接采集：本地预检 → 调 API 转发 → importer 服务 → 预览确认 */
   const collectFromUrl = async () => {
     const url = shareUrl().trim();
     if (!url || busy()) return;
-    if (!/^https?:\/\//.test(url)) {
-      setActionError("请输入完整的分享链接（https://…）");
+    // 前端预检（规则来自 importer，非法链接直接拦截，不发请求）
+    const hint = validateUrl(url);
+    if (!hint.ok) {
+      setActionError(hint.message ?? "请输入完整的分享链接（https://…）");
       return;
     }
     setBusy(true);
@@ -353,14 +410,30 @@ export default function CollectPage() {
               type="url"
               placeholder="https://claude.ai/share/…"
               value={shareUrl()}
-              onInput={(e) => setShareUrl((e.currentTarget as HTMLInputElement).value)}
+              onInput={(e) => onUrlInput((e.currentTarget as HTMLInputElement).value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") void collectFromUrl();
               }}
               {...stylex.props(styles.input)}
             />
+            <Show when={urlHint() && shareUrl().trim().length > 0}>
+              <div
+                {...stylex.props(
+                  styles.urlHint,
+                  urlHint()!.ok ? styles.urlHintOk : styles.urlHintBad,
+                )}
+              >
+                {urlHint()!.ok
+                  ? `✓ 检测到 ${urlHint()!.label} 分享链接`
+                  : urlHint()!.message}
+              </div>
+            </Show>
             <div {...stylex.props(styles.actions)}>
-              <Button block disabled={busy()} onClick={collectFromUrl}>
+              <Button
+                block
+                disabled={busy() || (!!urlHint() && !urlHint()!.ok)}
+                onClick={collectFromUrl}
+              >
                 {busy() ? "采集中…" : "采集对话"}
               </Button>
               <Button block appear="ghost" disabled={busy()} onClick={cancel}>回工作台</Button>

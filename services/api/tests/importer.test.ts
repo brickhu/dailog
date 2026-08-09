@@ -195,6 +195,23 @@ describe("importer 转发路由", () => {
     expect(res.status).toBe(503);
   });
 
+  it("转发 /platforms 规则", async () => {
+    const rules = { platforms: [{ id: "claude", label: "Claude", sharePattern: "^https?://(www\\.)?claude\\.ai/share/[0-9a-f-]+" }] };
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => rules });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const app = makeApp("https://importer.internal");
+      const res = await app.request("/api/importer/platforms");
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as typeof rules;
+      expect(body.platforms[0].id).toBe("claude");
+      const [url] = fetchMock.mock.calls[0];
+      expect(String(url)).toBe("https://importer.internal/platforms");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("非法 URL → 400", async () => {
     const app = makeApp("https://importer.internal");
     const res = await app.request("/api/importer/collect", {
