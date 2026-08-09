@@ -9,7 +9,7 @@
 |---|---|---|
 | 工作台 SPA（app.dailog.fm） | SolidJS + Solid Router + StyleX | Cloudflare Pages（静态，免费） |
 | 内容站 SSR（dailog.fm） | SolidStart（SSR）+ StyleX | Cloudflare Pages/Workers（免费） |
-| 分享采集服务（extract.dailog.fm） | Node.js + TypeScript + Hono + undici（解析器 + 多通道重试） | **Railway**（独立 service；平台规则变化只更新此服务） |
+| 分享采集服务（scraper.dailog.fm） | Node.js + TypeScript + Hono + undici（解析器 + 多通道重试） | **Railway**（独立 service；平台规则变化只更新此服务） |
 | 统一后端（api.dailog.fm） | Node.js + TypeScript + Hono + Drizzle ORM + fluent-ffmpeg | **Railway**（Git 集成自动部署，Docker，按用量约 $5–10/月） |
 | 数据库 | Railway Postgres（纯 Postgres 用法：Drizzle + postgres.js 直连） | Railway（与后端同平台，~$5–15/月） |
 | 认证 | **better-auth**（自托管：邮箱 + 密码 + 会话，跑在统一后端内） | $0 无外部依赖（邮件验证可后接 Resend 免费额度） |
@@ -29,7 +29,7 @@
          └─────────────────────────────┬──────────────────────────────────────┘
                                        │ POST /api/share/collect（转发，鉴权复用）
                                        ▼
-                          share-collect（extract.dailog.fm，独立服务）
+                          share-collect（scraper.dailog.fm，独立服务）
                                        ▼
                         ┌─────────────────────────────────────────┐
                         │            dailog.fm                 │
@@ -58,7 +58,7 @@ app.dailog.fm (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
                         └─────────────────────────────┘
 ```
 
-**数据流向**：用户粘贴分享链接 → share-collect 服务解析（extract.dailog.fm）→ 工作台预览确认 → 统一后端落库；SPA 与 SSR 站读 Railway Postgres（内容站直连读库，只读查询；无 RLS，靠查询层约束）；统一后端是唯一写方；音频资产全部在 R2。
+**数据流向**：用户粘贴分享链接 → share-collect 服务解析（scraper.dailog.fm）→ 工作台预览确认 → 统一后端落库；SPA 与 SSR 站读 Railway Postgres（内容站直连读库，只读查询；无 RLS，靠查询层约束）；统一后端是唯一写方；音频资产全部在 R2。
 
 ## 3. 统一后端（services/api）
 
@@ -123,7 +123,7 @@ queued → tts → merge → upload → done（failed 可重试）
 
 ### 3.5 采集与导入（分享链接采集服务）
 
-- **统一采集器（服务端 `share-collect`，`extract.dailog.fm`）**：用户粘贴 AI 平台对话**分享链接** → 服务端按平台解析（公开接口 / SSR 内嵌数据 / RSC payload / batchexecute RPC）→ 结构化对话 → 经 `POST /api/share/collect`（API 转发，鉴权复用）→ 工作台预览确认 → `POST /api/imports` 入库
+- **统一采集器（服务端 `share-collect`，`scraper.dailog.fm`）**：用户粘贴 AI 平台对话**分享链接** → 服务端按平台解析（公开接口 / SSR 内嵌数据 / RSC payload / batchexecute RPC）→ 结构化对话 → 经 `POST /api/share/collect`（API 转发，鉴权复用）→ 工作台预览确认 → `POST /api/imports` 入库
 - **元数据**：`{ platform, conversation_id, title, url, messages[] }`——标题取分享页元数据预填节目名；`(user_id, platform, conversation_id)` 唯一约束防重复导入；播放页展示来源信息
 - **平台通道（实测全通，`services/share-collect`）**：
 

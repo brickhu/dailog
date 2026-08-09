@@ -46,7 +46,7 @@
 ### 4.3 导入（分享链接采集服务）
 
 - **唯一导入通道：分享链接**——用户粘贴 AI 平台对话的**分享链接**（无需登录态、无需安装任何东西），服务端采集后在工作台预览确认
-- **服务端采集服务（`extract.dailog.fm`）**：按平台解析分享页数据（公开接口 / SSR 内嵌数据 / RSC payload），无需用户登录、无需浏览器；平台规则变化只更新采集服务，不影响主站
+- **服务端采集服务（`scraper.dailog.fm`）**：按平台解析分享页数据（公开接口 / SSR 内嵌数据 / RSC payload），无需用户登录、无需浏览器；平台规则变化只更新采集服务，不影响主站
 - **平台（按采集通道）**：Claude（chat_snapshots 公开接口，CF 拦截时走 ScraperAPI）、DeepSeek（share/content API）、ChatGPT（RSC payload 解码）、Gemini（batchexecute RPC）、Kimi（SSR HYDRATION_INIT_STATE）、豆包（SSR 快照，海外出口用香港代理）
 - **体验**：粘贴分享链接 → 采集预览（标题/条数/全文）→ 确认入库 → 工作台编辑发布
 - **元数据**：分享页标题（预填节目标题）、对话 ID + 原始链接（来源展示、重复导入识别）、平台标识

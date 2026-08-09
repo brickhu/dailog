@@ -1,7 +1,7 @@
 # AGENT — 项目总览
 
 > 本项目所有文档的入口与汇总。任何 Agent / 协作者先读本文件。
-> 最后更新：2026-08-09（M1-M4 已完成；**采集已切换为分享链接服务**（extract.dailog.fm，六平台全通）——扩展采集停用、源码保留在 apps/extension；M4 门控 E2E 待 DEEPSEEK_API_KEY 实跑）
+> 最后更新：2026-08-09（M1-M4 已完成；**采集已切换为分享链接服务**（scraper.dailog.fm，六平台全通）——扩展采集停用、源码保留在 apps/extension；M4 门控 E2E 待 DEEPSEEK_API_KEY 实跑）
 
 ## 项目一句话
 
@@ -28,7 +28,7 @@ dailog/
 │   ├── site/                   # dailog.fm — 内容分发 SSR（SolidStart + CF adapter）
 │   │   └── src/routes/         #   /(首页) /episode/:id(单集页) /@username /@username/feed.xml
 │   └── extension/              # 采集扩展（已停用，源码保留——登录态 DOM 采集历史实现）
-│   └── share-collect/          # 分享链接采集服务（独立部署 extract.dailog.fm，六平台解析器）
+│   └── share-collect/          # 分享链接采集服务（独立部署 scraper.dailog.fm，六平台解析器）
 │       ├── manifest.json       #   content_scripts 按平台 URL 匹配 + background 权限
 │       ├── src/content/        #   按平台采集器：claude.ts / deepseek.ts / chatgpt.ts / ...
 │       │   └── core.ts         #   虚拟列表滚动循环 + MutationObserver + 去重排序
@@ -109,7 +109,7 @@ dailog/
 - [ ] M0：文档定稿（PRD/ARC/MRD 审阅通过）
 - [x] M1：Fish Audio 集成 spike（多说话人格式、单请求限额、克隆音质、计费实测）—— 已完成（`docs/spikes/fish-audio.md`；真实扣费金额上线前用付费账号核对）
 - [x] M2：统一后端骨架（Hono + Drizzle + 9 表迁移 + 本地 Postgres 集成测试 + JWT 认证 + Docker/Railway 配置 + CI）—— 代码完成，**待用户：GitHub 仓库推送 + Railway（Postgres + 应用）绑定部署**
-- [x] M3：采集器—— 扩展版（Manifest V3）已完成（历史实现，已停用）；分享链接服务版（六平台）已完成并部署（extract.dailog.fm，实测全通）
+- [x] M3：采集器—— 扩展版（Manifest V3）已完成（历史实现，已停用）；分享链接服务版（六平台）已完成并部署（scraper.dailog.fm，实测全通）
 - [x] M4：质量审核 + 润色（LLM 流式）+ 生成前内容安全审核 + 生成管线（TTS → ffmpeg → R2）—— 已完成（代码全链 + 门控 E2E 待 DEEPSEEK_API_KEY 实跑；真实扣费沿用 M1 核对注记）
 - [ ] M5：认证与数据层迁移——**better-auth 替换 Supabase Auth**（api 认证中间件 + studio auth 基建 + env 清理）+ 数据库切换 Railway Postgres（换连接串 + 跑迁移）工作台 SPA（录音引导 → 向导 → 发布）
 - [ ] M6：内容站 SSR + RSS + 首页/搜索
