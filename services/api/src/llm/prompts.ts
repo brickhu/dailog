@@ -5,15 +5,15 @@ import type { LlmMessage } from "./client";
  *  instruction 为用户方向指示（重新润色时可选）。
  *  情绪标注：为段落加 Fish Audio S2 情绪标签（[方括号]，随文本直达 TTS），
  *  情绪须贴合话题语境与场景推进（规则见 EMOTION_GUIDE）。 */
-const EMOTION_GUIDE = `7. 情绪标注（Fish Audio S2 语法）：在文本中嵌入方括号情绪标签（如 [happy]），让每段话的情绪贴合话题与场景
-   7.1 可用标签（只用下列标准名，可选强度修饰 slightly/very/extremely，如 [very excited]）：
+const EMOTION_GUIDE = `10. 情绪标注（Fish Audio S2 语法）：在文本中嵌入方括号情绪标签（如 [happy]），让每段话的情绪贴合话题与场景
+   10.1 可用标签（只用下列标准名，可选强度修饰 slightly/very/extremely，如 [very excited]）：
    - 基础情绪：happy sad angry excited calm nervous confident surprised satisfied delighted scared worried upset frustrated depressed empathetic embarrassed moved proud relaxed grateful curious sarcastic
    - 进阶情绪：uncertain doubtful confused disappointed regretful hopeful nostalgic determined sympathetic anxious
    - 语气：in a hurry tone shouting screaming whispering soft tone emphasis
    - 音效：laughing chuckling sighing sobbing gasping groaning
    - 停顿（留白）：[break] 短停顿、[long-break] 长停顿
    - 组合示例：[sad][whispering]、[excited][laughing]、[slightly sad]
-   7.2 规则：
+   10.2 规则：
    - 标签放句首；每句 1 个主情绪，复杂时最多组合 3 个；短句与中性叙述不加标签，避免过度标注
    - 情绪随场景推进自然变化（开场好奇/欢迎 → 探讨兴奋/自信 → 转折 surprised/uncertain → 共情 empathetic → 结尾 grateful/hopeful/determined），由对话内容推断，不得机械循环
    - 角色差异化：host=引导/共情/好奇/惊讶，guest=专业/自信/深沉/感慨
@@ -36,7 +36,7 @@ export function polishPrompt(
   meta?: PolishCallMeta,
 ): LlmMessage[] {
   const direction = instruction
-    ? `9. 用户方向指示（优先遵循，可指定情绪风格）：${instruction}\n`
+    ? `11. 用户方向指示（优先遵循，可指定情绪风格）：${instruction}\n`
     : "";
   const hostCall = meta?.hostName?.trim() || "主持人";
   const aiCall = meta?.aiName?.trim() || "AI 嘉宾";
@@ -75,7 +75,7 @@ ${guestBlock}
 6. 多主题切分：长对话可能包含多个独立主题——识别并切分为多个脚本（每个主题一个脚本，各自独立成期）
 7. 每个脚本附带：title（简洁有吸引力的脚本标题）、creationNote（创作说明——给创作者看：这段脚本讲什么、为什么值得做成一期）
 8. 输出 JSON：{"language": "zh"|"en"|..., "scripts": [{"topic": "简短主题名", "title": "脚本标题", "creationNote": "创作说明", "segments": [{"speaker": "host"|"guest", "text": "..."}]}]}，不要输出其他内容
-8. 若对话内容不足以拆分为有意义的主题（纯寒暄/无实质内容/主题无法独立成期），输出 {"quality_failed": true, "reason": "简短原因"}，不要输出脚本
+9. 若对话内容不足以拆分为有意义的主题（纯寒暄/无实质内容/主题无法独立成期），输出 {"quality_failed": true, "reason": "简短原因"}，不要输出脚本
 ${EMOTION_GUIDE}
 ${direction}`,
   }, {
