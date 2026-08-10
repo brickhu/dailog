@@ -16,6 +16,9 @@ export interface Episode {
   topic: string | null;
   tags: string[] | null;
   coverUrl: string | null;
+  /** 最新生成 job 状态（queued/tts/merge/upload/done/failed；null = 从未生成） */
+  jobStatus: string | null;
+  jobError: string | null;
   createdAt: string;
 }
 
@@ -129,6 +132,14 @@ const styles = stylex.create({
     backgroundColor: colors.surfaceWeak,
     color: colors.neutralWeak,
   },
+  badgeGenerating: {
+    backgroundColor: "#fef3c7",
+    color: "#92400e",
+  },
+  badgeFailed: {
+    backgroundColor: "#fde8ec",
+    color: "#c81e3f",
+  },
   extCard: {
     padding: dimensions.spacing6,
     borderRadius: dimensions.radiusMd,
@@ -212,7 +223,17 @@ export default function Dashboard() {
         </Show>
 
         <For each={episodes()}>
-          {(ep) => (
+          {(ep) => {
+            // 展示状态：已发布 > 生成失败 > 生成中 > 未发布（episodes.status 只有 published 会被更新，其余看 job）
+            const badge =
+              ep.status === "published"
+                ? { text: t("studio.episode.published"), cls: styles.badgePublished }
+                : ep.jobStatus === "failed"
+                  ? { text: t("studio.status.failed"), cls: styles.badgeFailed }
+                  : ep.jobStatus && ["queued", "tts", "merge", "upload"].includes(ep.jobStatus)
+                    ? { text: t("studio.status.generating"), cls: styles.badgeGenerating }
+                    : { text: t("studio.episode.unpublished"), cls: styles.badgeUnpublished };
+            return (
             <div
               {...stylex.props(styles.card)}
               onClick={() => navigate(`/episodes/${ep.id}`)}
@@ -247,14 +268,7 @@ export default function Dashboard() {
                 </Show>
               </div>
               <div {...stylex.props(styles.cardActions)}>
-                <span
-                  {...stylex.props(
-                    styles.badge,
-                    ep.status === "published" ? styles.badgePublished : styles.badgeUnpublished,
-                  )}
-                >
-                  {ep.status === "published" ? t("studio.episode.published") : t("studio.episode.unpublished")}
-                </span>
+                <span {...stylex.props(styles.badge, badge.cls)}>{badge.text}</span>
                 <Show when={ep.status === "published"}>
                   <a
                     href={`${env.siteBaseUrl}/episode/${ep.id}`}
@@ -268,7 +282,8 @@ export default function Dashboard() {
                 </Show>
               </div>
             </div>
-          )}
+            );
+          }}
         </For>
 
         <div {...stylex.props(styles.placeholderRow)}>

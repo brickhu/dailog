@@ -165,6 +165,9 @@ export interface EpisodesRepo {
     topic: string | null;
     tags: string[] | null;
     coverUrl: string | null;
+    /** 最新生成 job 状态（列表区分 生成中/失败；episodes.status 只有 published 会被更新） */
+    jobStatus: string | null;
+    jobError: string | null;
     createdAt: Date;
   }[]>;
   /** 详情（/episodes/:id 页）：元数据 + 封面 + 状态 */
@@ -678,7 +681,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return rows[0] ?? null;
       },
       async listByUser(userId) {
-        return db
+        const episodes = await db
           .select({
             id: schema.episodes.id,
             title: schema.episodes.title,
@@ -693,6 +696,25 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .from(schema.episodes)
           .where(eq(schema.episodes.userId, userId))
           .orderBy(desc(schema.episodes.createdAt));
+        // 最新 job 归并（数据量小；episodes.status 不随管线更新，job 才是真状态）
+        const jobRows = await db
+          .select({
+            episodeId: schema.generationJobs.episodeId,
+            status: schema.generationJobs.status,
+            error: schema.generationJobs.error,
+            createdAt: schema.generationJobs.createdAt,
+          })
+          .from(schema.generationJobs)
+          .orderBy(desc(schema.generationJobs.createdAt));
+        const latestByEpisode = new Map<string, { status: string; error: string | null }>();
+        for (const j of jobRows) {
+          if (!latestByEpisode.has(j.episodeId)) latestByEpisode.set(j.episodeId, { status: j.status, error: j.error });
+        }
+        return episodes.map((e) => ({
+          ...e,
+          jobStatus: latestByEpisode.get(e.id)?.status ?? null,
+          jobError: latestByEpisode.get(e.id)?.error ?? null,
+        }));
       },
       async getOwned(id, userId) {
         const rows = await db

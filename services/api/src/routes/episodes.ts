@@ -6,7 +6,11 @@ export interface ScriptSegment { speaker: "host" | "guest"; text: string; }
 
 export interface EpisodesDeps {
   // ---- 列表/详情/音频 ----
-  listByUser(userId: string): Promise<Array<{ id: string; title: string | null; status: string; polishId: string; durationSeconds: number | null; topic: string | null; tags: string[] | null; coverUrl: string | null; createdAt: Date }>>;
+  listByUser(userId: string): Promise<Array<{
+    id: string; title: string | null; status: string; polishId: string;
+    durationSeconds: number | null; topic: string | null; tags: string[] | null; coverUrl: string | null;
+    jobStatus: string | null; jobError: string | null; createdAt: Date;
+  }>>;
   /** 详情（/episodes/:id 页） */
   getOwned(id: string, userId: string): Promise<{
     id: string;

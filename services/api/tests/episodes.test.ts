@@ -7,7 +7,8 @@ function fakeDeps(overrides: Partial<EpisodesDeps> = {}): EpisodesDeps {
     listByUser: async () => [
       {
         id: "ep-1", title: "测试对话", status: "generating", polishId: "p-1", durationSeconds: null,
-        topic: null, tags: null, coverUrl: null, createdAt: new Date("2026-01-01T00:00:00Z"),
+        topic: null, tags: null, coverUrl: null, jobStatus: null, jobError: null,
+        createdAt: new Date("2026-01-01T00:00:00Z"),
       },
     ],
     getOwned: async (id, userId) =>
