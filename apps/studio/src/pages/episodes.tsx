@@ -15,15 +15,9 @@ export interface Episode {
   /** 主题（脚本 topic 继承）+ 标签（大模型生成） */
   topic: string | null;
   tags: string[] | null;
+  coverUrl: string | null;
   createdAt: string;
 }
-
-const STATUS_LABEL: Record<Episode["status"], { textKey: string; color: string }> = {
-  draft: { textKey: "studio.status.draft", color: "#8b95a7" },
-  generating: { textKey: "studio.status.generating", color: "#e0a23c" },
-  published: { textKey: "studio.status.published", color: "#3fb68b" },
-  failed: { textKey: "studio.status.failed", color: "#f0506e" },
-};
 
 const styles = stylex.create({
   page: {
@@ -58,8 +52,28 @@ const styles = stylex.create({
     marginBottom: dimensions.spacing3,
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
     gap: dimensions.spacing3,
+    cursor: "pointer",
+  },
+  cover: {
+    width: "52px",
+    height: "52px",
+    borderRadius: dimensions.radiusMd,
+    flexShrink: 0,
+    objectFit: "cover",
+  },
+  coverImg: {
+    display: "block",
+  },
+  coverPlaceholder: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: dimensions.fontSizeXl,
+    fontWeight: dimensions.fontWeightBold,
+    color: "#fff",
+    // 渐变占位（无封面图）：主题色系
+    background: "linear-gradient(135deg, #6d5ae0 0%, #3fb68b 100%)",
   },
   cardMain: {
     minWidth: 0,
@@ -106,6 +120,14 @@ const styles = stylex.create({
     borderRadius: dimensions.radiusFull,
     fontSize: "12px",
     flexShrink: 0,
+  },
+  badgePublished: {
+    backgroundColor: "#dcfce7",
+    color: "#166534",
+  },
+  badgeUnpublished: {
+    backgroundColor: colors.surfaceWeak,
+    color: colors.neutralWeak,
   },
   extCard: {
     padding: dimensions.spacing6,
@@ -175,7 +197,7 @@ export default function Dashboard() {
           <div {...stylex.props(styles.title)}>{t("studio.myEpisodes")}</div>
           <div {...stylex.props(styles.heroActions)}>
             <Button appear="ghost" onClick={() => navigate("/")}>{t("studio.importFromLink")}</Button>
-            <Button onClick={() => navigate("/episodes/new")}>{t("studio.startNew")}</Button>
+            <Button onClick={() => navigate("/")}>{t("studio.startNew")}</Button>
           </div>
         </div>
 
@@ -190,48 +212,63 @@ export default function Dashboard() {
         </Show>
 
         <For each={episodes()}>
-          {(ep) => {
-            const status = STATUS_LABEL[ep.status] ?? STATUS_LABEL.draft;
-            return (
-              <div {...stylex.props(styles.card)}>
-                <div {...stylex.props(styles.cardMain)}>
-                  <div {...stylex.props(styles.epTitle)}>{ep.title || t("studio.unnamed")}</div>
-                  <div {...stylex.props(styles.epMeta)}>
-                    {new Date(ep.createdAt).toLocaleDateString(locale() === "zh" ? "zh-CN" : "en-US")}
-                    {ep.durationSeconds ? ` · ${t("studio.episodeDuration", { minutes: Math.max(1, Math.round(ep.durationSeconds / 60)) })}` : ""}
+          {(ep) => (
+            <div
+              {...stylex.props(styles.card)}
+              onClick={() => navigate(`/episodes/${ep.id}`)}
+              role="button"
+            >
+              {/* 封面：无封面图时用标题首字渐变占位 */}
+              <Show
+                when={ep.coverUrl}
+                fallback={
+                  <div {...stylex.props(styles.cover, styles.coverPlaceholder)}>
+                    {(ep.title ?? "D").slice(0, 1).toUpperCase()}
                   </div>
-                  <Show when={ep.topic || (ep.tags && ep.tags.length > 0)}>
-                    <div {...stylex.props(styles.tags)}>
-                      <Show when={ep.topic}>
-                        <span {...stylex.props(styles.tag)}>{ep.topic}</span>
-                      </Show>
-                      <For each={ep.tags ?? []}>
-                        {(tag) => <span {...stylex.props(styles.tag)}>{tag}</span>}
-                      </For>
-                    </div>
-                  </Show>
+                }
+              >
+                <img src={ep.coverUrl!} alt="" {...stylex.props(styles.cover, styles.coverImg)} />
+              </Show>
+              <div {...stylex.props(styles.cardMain)}>
+                <div {...stylex.props(styles.epTitle)}>{ep.title || t("studio.unnamed")}</div>
+                <div {...stylex.props(styles.epMeta)}>
+                  {new Date(ep.createdAt).toLocaleDateString(locale() === "zh" ? "zh-CN" : "en-US")}
+                  {ep.durationSeconds ? ` · ${t("studio.episodeDuration", { minutes: Math.max(1, Math.round(ep.durationSeconds / 60)) })}` : ""}
                 </div>
-                <div {...stylex.props(styles.cardActions)}>
-                  <span
-                    {...stylex.props(styles.badge)}
-                    style={{ background: `${status.color}22`, color: status.color }}
-                  >
-                    {t(status.textKey as never)}
-                  </span>
-                  <Show when={ep.status === "published"}>
-                    <a
-                      href={`${env.siteBaseUrl}/episode/${ep.id}`}
-                      target="_blank"
-                      rel="noopener"
-                      {...stylex.props(styles.viewLink)}
-                    >
-                      {t("studio.episodeView")}
-                    </a>
-                  </Show>
-                </div>
+                <Show when={ep.topic || (ep.tags && ep.tags.length > 0)}>
+                  <div {...stylex.props(styles.tags)}>
+                    <Show when={ep.topic}>
+                      <span {...stylex.props(styles.tag)}>{ep.topic}</span>
+                    </Show>
+                    <For each={ep.tags ?? []}>
+                      {(tag) => <span {...stylex.props(styles.tag)}>{tag}</span>}
+                    </For>
+                  </div>
+                </Show>
               </div>
-            );
-          }}
+              <div {...stylex.props(styles.cardActions)}>
+                <span
+                  {...stylex.props(
+                    styles.badge,
+                    ep.status === "published" ? styles.badgePublished : styles.badgeUnpublished,
+                  )}
+                >
+                  {ep.status === "published" ? t("studio.episode.published") : t("studio.episode.unpublished")}
+                </span>
+                <Show when={ep.status === "published"}>
+                  <a
+                    href={`${env.siteBaseUrl}/episode/${ep.id}`}
+                    target="_blank"
+                    rel="noopener"
+                    onClick={(e) => e.stopPropagation()}
+                    {...stylex.props(styles.viewLink)}
+                  >
+                    {t("studio.episodeView")} →
+                  </a>
+                </Show>
+              </div>
+            </div>
+          )}
         </For>
 
         <div {...stylex.props(styles.placeholderRow)}>

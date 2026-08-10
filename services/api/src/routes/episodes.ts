@@ -6,8 +6,22 @@ export interface ScriptSegment { speaker: "host" | "guest"; text: string; }
 
 export interface EpisodesDeps {
   // ---- 列表/详情/音频 ----
-  listByUser(userId: string): Promise<Array<{ id: string; title: string | null; status: string; polishId: string; createdAt: Date }>>;
-  getOwned(id: string, userId: string): Promise<{ id: string; transcriptId: string; polishId: string; title: string | null; status: string } | null>;
+  listByUser(userId: string): Promise<Array<{ id: string; title: string | null; status: string; polishId: string; durationSeconds: number | null; topic: string | null; tags: string[] | null; coverUrl: string | null; createdAt: Date }>>;
+  /** 详情（/episodes/:id 页） */
+  getOwned(id: string, userId: string): Promise<{
+    id: string;
+    transcriptId: string;
+    polishId: string;
+    title: string | null;
+    description: string | null;
+    status: string;
+    durationSeconds: number | null;
+    topic: string | null;
+    tags: string[] | null;
+    coverUrl: string | null;
+    createdAt: Date;
+    publishedAt: Date | null;
+  } | null>;
   getEpisodeAudio(id: string, userId: string): Promise<string | null>;
   // ---- 创建（由 transcript 生成） ----
   getOwnedTranscript(transcriptId: string, userId: string): Promise<{

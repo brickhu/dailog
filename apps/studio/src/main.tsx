@@ -5,6 +5,7 @@ import { I18nProvider } from "@dailogues/i18n";
 import { AppShell } from "./lib/guards";
 import AppLayout from "./components/app-layout";
 import EpisodesPage from "./pages/episodes";
+import EpisodeDetailPage from "./pages/episode-detail";
 import EditorPage from "./pages/editor";
 import PolishesPage from "./pages/polishes";
 import SettingsPage from "./pages/settings";
@@ -44,6 +45,7 @@ render(
               <Route path="/" component={CollectPage} />
               <Route path="/import" component={CollectPage} />
               <Route path="/episodes" component={EpisodesPage} />
+              <Route path="/episodes/:id" component={EpisodeDetailPage} />
               <Route path="/polish/:id" component={EditorPage} />
               <Route path="/polishes" component={PolishesPage} />
               <Route path="/settings" component={SettingsPage} />

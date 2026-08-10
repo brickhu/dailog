@@ -5,11 +5,18 @@ import { episodesRoutes, type EpisodesDeps } from "../src/routes/episodes";
 function fakeDeps(overrides: Partial<EpisodesDeps> = {}): EpisodesDeps {
   const deps: EpisodesDeps = {
     listByUser: async () => [
-      { id: "ep-1", title: "测试对话", status: "generating", polishId: "p-1", createdAt: new Date("2026-01-01T00:00:00Z") },
+      {
+        id: "ep-1", title: "测试对话", status: "generating", polishId: "p-1", durationSeconds: null,
+        topic: null, tags: null, coverUrl: null, createdAt: new Date("2026-01-01T00:00:00Z"),
+      },
     ],
     getOwned: async (id, userId) =>
       id === "ep-1" && userId === "user-1"
-        ? { id: "ep-1", transcriptId: "t-1", polishId: "p-1", title: "测试对话", status: "generating" }
+        ? {
+            id: "ep-1", transcriptId: "t-1", polishId: "p-1", title: "测试对话", description: null,
+            status: "generating", durationSeconds: null, topic: null, tags: null, coverUrl: null,
+            createdAt: new Date("2026-01-01T00:00:00Z"), publishedAt: null,
+          }
         : null,
     getEpisodeAudio: async () => null,
     getOwnedTranscript: async (id, userId) =>

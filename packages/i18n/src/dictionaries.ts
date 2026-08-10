@@ -277,6 +277,10 @@ export const zh = {
   "studio.script.from": "来自",
   "studio.script.used": "已生成",
   "studio.script.unused": "未生成",
+  "studio.episode.published": "已发布",
+  "studio.episode.unpublished": "未发布",
+  "studio.episode.editScript": "编辑脚本",
+  "studio.episode.audio": "试听",
 
   // ---- studio 脚本编辑器 ----
   "studio.scriptEditor.polishing": "AI 正在打磨你的对话为播客脚本…（可稍等片刻）",
@@ -607,6 +611,10 @@ export const en: Dictionary = {
   "studio.script.from": "from",
   "studio.script.used": "Generated",
   "studio.script.unused": "Not generated",
+  "studio.episode.published": "Published",
+  "studio.episode.unpublished": "Unpublished",
+  "studio.episode.editScript": "Edit script",
+  "studio.episode.audio": "Preview",
 
   // ---- studio 脚本编辑器 ----
   "studio.scriptEditor.polishing": "AI is polishing your conversation into a podcast script…（may take a moment）",

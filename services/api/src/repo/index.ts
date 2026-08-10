@@ -164,9 +164,24 @@ export interface EpisodesRepo {
     /** 主题（脚本 topic 继承）+ 标签（大模型生成） */
     topic: string | null;
     tags: string[] | null;
+    coverUrl: string | null;
     createdAt: Date;
   }[]>;
-  getOwned(id: string, userId: string): Promise<{ id: string; transcriptId: string; polishId: string; title: string | null; status: string } | null>;
+  /** 详情（/episodes/:id 页）：元数据 + 封面 + 状态 */
+  getOwned(id: string, userId: string): Promise<{
+    id: string;
+    transcriptId: string;
+    polishId: string;
+    title: string | null;
+    description: string | null;
+    status: string;
+    durationSeconds: number | null;
+    topic: string | null;
+    tags: string[] | null;
+    coverUrl: string | null;
+    createdAt: Date;
+    publishedAt: Date | null;
+  } | null>;
   /** 一个脚本只能生成一期节目：按 transcript 查已生成节目 */
   getByTranscript(transcriptId: string): Promise<{ id: string } | null>;
   /** 一个脚本只能生成一期节目：按 transcript 查已生成节目 */
@@ -580,6 +595,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             durationSeconds: schema.episodes.durationSeconds,
             topic: schema.episodes.topic,
             tags: schema.episodes.tags,
+            coverUrl: schema.episodes.coverUrl,
             createdAt: schema.episodes.createdAt,
           })
           .from(schema.episodes)
@@ -593,7 +609,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             transcriptId: schema.episodes.transcriptId,
             polishId: schema.episodes.polishId,
             title: schema.episodes.title,
+            description: schema.episodes.description,
             status: schema.episodes.status,
+            durationSeconds: schema.episodes.durationSeconds,
+            topic: schema.episodes.topic,
+            tags: schema.episodes.tags,
+            coverUrl: schema.episodes.coverUrl,
+            createdAt: schema.episodes.createdAt,
+            publishedAt: schema.episodes.publishedAt,
           })
           .from(schema.episodes)
           .where(and(eq(schema.episodes.id, id), eq(schema.episodes.userId, userId)))

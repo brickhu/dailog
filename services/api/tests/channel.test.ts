@@ -314,7 +314,10 @@ describe("channel gates (generate/publish 403 when not active)", () => {
 
   it("publish returns 403 channel_not_active when channel inactive", async () => {
     const deps = fakeEpisodesDeps();
-    deps.getOwned = async () => ({ id: "ep-1", transcriptId: "t-1", polishId: "p-1", title: "t", status: "generating" });
+    deps.getOwned = async () => ({
+      id: "ep-1", transcriptId: "t-1", polishId: "p-1", title: "t", description: null, status: "generating",
+      durationSeconds: null, topic: null, tags: null, coverUrl: null, createdAt: new Date(), publishedAt: null,
+    });
     deps.getChannelActivatedAt = async () => null;
     const app = episodesRoutes(deps, () => "u-1");
     const res = await app.request("/episodes/ep-1/publish", { method: "POST" });
