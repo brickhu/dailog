@@ -195,8 +195,9 @@ export interface EpisodesRepo {
   getEpisodeScript(episodeId: string): Promise<{ segments: ScriptSegment[] } | null>;
   /** 生成管线嘉宾：经 episodes.transcript_id → transcripts.guest_id（无引用 → null） */
   getEpisodeGuest(episodeId: string): Promise<{ guestId: string | null } | null>;
-  /** 公开读音频 key（主站免鉴权端点用）：仅已发布且公开的节目，取最新音轨 */
-  getPublicAudioKey(episodeId: string): Promise<string | null>;
+  /** 公开读音频（主站免鉴权端点用）：仅已发布且公开的节目，取最新音轨；
+   *  version = 音轨创建时间（ETag 用——重试重新生成后内容变化，浏览器据此重新拉取） */
+  getPublicAudioKey(episodeId: string): Promise<{ audioKey: string; version: string } | null>;
   /** 内容站公开读：仅已发布可见；对话内容在 snapshots.parsedDialogue（join 链） */
   getPublishedDialogue(episodeId: string): Promise<{
     platform: string;
@@ -772,7 +773,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       },
       async getPublicAudioKey(episodeId) {
         const rows = await db
-          .select({ audioUrl: schema.tracks.audioUrl })
+          .select({ audioUrl: schema.tracks.audioUrl, createdAt: schema.tracks.createdAt })
           .from(schema.episodes)
           .innerJoin(schema.tracks, eq(schema.tracks.episodeId, schema.episodes.id))
           .where(and(
@@ -782,7 +783,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           ))
           .orderBy(desc(schema.tracks.createdAt))
           .limit(1);
-        return rows[0]?.audioUrl ?? null;
+        const row = rows[0];
+        return row ? { audioKey: row.audioUrl!, version: row.createdAt.toISOString() } : null;
       },
       async getPublishedDialogue(episodeId) {
         const rows = await db

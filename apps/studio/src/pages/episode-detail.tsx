@@ -5,9 +5,9 @@ import * as stylex from "@stylexjs/stylex";
 import { Button } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
+import { env } from "../lib/env";
 import { ApiError } from "../lib/api";
 import { useI18n } from "@dailogues/i18n";
-import { env } from "../lib/env";
 
 // /episodes/:id 节目详情：封面/标题/状态/时长/标签/描述 + 试听 + 发布/发布页链接/编辑脚本。
 
@@ -223,12 +223,32 @@ export default function EpisodeDetailPage() {
     }
   };
 
-  /** 试听：仅当生成完成（job done，音轨必已落库）才请求音频——避免对失败/未生成节目发无谓的 404 请求 */
+  /** 音频本地缓存（Cache Storage 持久化）：同一节目再次进入直接读本地，不再请求服务器；
+   *  retry 重新生成后内容变化 → 显式清掉该条缓存再拉取 */
+  const AUDIO_CACHE = "dailog-audio-v1";
+  const audioCacheUrl = () => `${env.apiBaseUrl}/v1/episodes/${episodeId}/audio`;
+  const clearAudioCache = async () => {
+    try {
+      const cache = await caches.open(AUDIO_CACHE);
+      await cache.delete(audioCacheUrl());
+    } catch {
+      // 环境不支持 Cache API：忽略（退化为每次请求）
+    }
+  };
+
+  /** 试听：仅当生成完成（job done，音轨必已落库）才请求音频——避免对失败/未生成节目发无谓的 404 请求；
+   *  缓存命中（Cache API）直接播放本地副本，不请求服务器 */
   const loadAudio = async () => {
     if (job()?.status !== "done") return;
     try {
-      const res = await api.request(`/v1/episodes/${episodeId}/audio`);
-      if (!res.ok) return;
+      const cache = await caches.open(AUDIO_CACHE);
+      const url = audioCacheUrl();
+      let res = await cache.match(url);
+      if (!res) {
+        res = await api.request(url);
+        if (!res.ok) return;
+        await cache.put(url, res.clone());
+      }
       const blob = await res.blob();
       setAudioUrl(URL.createObjectURL(blob));
     } catch {
@@ -248,6 +268,7 @@ export default function EpisodeDetailPage() {
       }
       setJob(null);
       setRunning(true);
+      await clearAudioCache(); // 重新生成会覆盖音轨：旧缓存作废
     } catch (e) {
       if (e instanceof ApiError && e.code === "job_running") {
         setRunning(true); // 已有进行中 job：直接轮询
@@ -352,11 +373,12 @@ export default function EpisodeDetailPage() {
           <Show when={running()}>
             <GenerateProgress
               episodeId={episodeId}
-              onDone={() => {
+              onDone={async () => {
                 setRunning(false);
-                void load();
-                void loadJob();
-                void loadAudio();
+                await clearAudioCache(); // 音轨已重新生成：清旧缓存
+                await load();
+                await loadJob();
+                await loadAudio();
               }}
               onFailed={(msg) => {
                 setRunning(false);

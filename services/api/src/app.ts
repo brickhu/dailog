@@ -62,12 +62,17 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
 
   // 主站公开端点（免鉴权）：仅已发布公开节目可读——必须在鉴权中间件之前注册
   app.get("/v1/public/episodes/:id/audio", async (c) => {
-    const key = await deps.repo.episodes.getPublicAudioKey(c.req.param("id"));
-    if (!key) return c.json({ error: "not_found" }, 404);
+    const audio = await deps.repo.episodes.getPublicAudioKey(c.req.param("id"));
+    if (!audio) return c.json({ error: "not_found" }, 404);
+    // ETag 按音轨创建时间：重试重新生成后内容变化 → 浏览器重新拉取；未变 → 304 省流量
+    const etag = `"${audio.version}"`;
+    if (c.req.header("If-None-Match") === etag) {
+      return new Response(null, { status: 304, headers: { ETag: etag } });
+    }
     try {
-      const data = await deps.voice.storage.get(key);
+      const data = await deps.voice.storage.get(audio.audioKey);
       return new Response(new Uint8Array(data), {
-        headers: { "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=3600" },
+        headers: { "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=3600", ETag: etag },
       });
     } catch {
       return c.json({ error: "not_found" }, 404);
