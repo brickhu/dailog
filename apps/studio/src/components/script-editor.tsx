@@ -270,9 +270,17 @@ export default function ScriptEditor(props: ScriptEditorProps) {
               <Button appear="ghost" onClick={() => setDirectionOpen(false)}>{t("common.cancel")}</Button>
             </div>
           </Show>
-          <For each={editing()!.segments}>
-            {(seg) => <SegmentView seg={seg} />}
-          </For>
+          <div
+            {...stylex.props(styles.readonlyBox)}
+            onCopy={(e) => e.preventDefault()}
+            onCut={(e) => e.preventDefault()}
+            onContextMenu={(e) => e.preventDefault()}
+            onSelectStart={(e) => e.preventDefault()}
+          >
+            <For each={editing()!.segments}>
+              {(seg) => <SegmentView seg={seg} />}
+            </For>
+          </div>
         </div>
       </Show>
     </div>
@@ -437,6 +445,12 @@ const styles = stylex.create({
     lineHeight: 1.7,
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
+  },
+  readonlyBox: {
+    // 防复制（防君子）：禁选中 + 拦截复制/右键——脚本文本始终在浏览器可读，无法绝对防
+    userSelect: "none",
+    WebkitUserSelect: "none",
+    cursor: "default",
   },  previewText: {
     color: colors.foreground,
     fontSize: dimensions.fontSizeMd,
