@@ -3,14 +3,15 @@ import { useLocation, useNavigate, type RouteSectionProps } from "@solidjs/route
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useAuth } from "../lib/auth";
+import { useI18n } from "@dailogues/i18n";
 import { env } from "../lib/env";
 
 // 两列布局：左导航（节目/设置）+ 右侧内容区（子路由经 props.children 渲染）
 const NAV = [
-  { path: "/", label: "导入" },
-  { path: "/polishes", label: "脚本" },
-  { path: "/episodes", label: "节目" },
-  { path: "/settings", label: "设置" },
+  { path: "/", label: "nav.import" },
+  { path: "/polishes", label: "nav.scripts" },
+  { path: "/episodes", label: "nav.episodes" },
+  { path: "/settings", label: "nav.settings" },
 ];
 
 const styles = stylex.create({
@@ -34,6 +35,7 @@ const styles = stylex.create({
     fontWeight: dimensions.fontWeightBold,
     color: colors.primary,
     cursor: "pointer",
+    textDecoration: "none",
   },
   nav: {
     flex: 1,
@@ -122,6 +124,7 @@ const styles = stylex.create({
 });
 
 export default function AppLayout(props: RouteSectionProps) {
+  const { t, locale, setLocale } = useI18n();
   const auth = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -132,16 +135,16 @@ export default function AppLayout(props: RouteSectionProps) {
     setResending(true);
     setResendMsg(null);
     const { error } = await auth.resendVerification();
-    setResendMsg(error ? { ok: false, text: error } : { ok: true, text: "已重新发送，请查收邮箱。" });
+    setResendMsg(error ? { ok: false, text: error } : { ok: true, text: t("layout.resendSent") });
     setResending(false);
   };
 
   return (
     <div {...stylex.props(styles.shell)}>
       <aside {...stylex.props(styles.sidebar)}>
-        <div {...stylex.props(styles.brand)} onClick={() => navigate("/")}>
+        <a href={env.siteBaseUrl} target="_blank" rel="noopener" {...stylex.props(styles.brand)}>
           dailog
-        </div>
+        </a>
         <nav {...stylex.props(styles.nav)}>
           <For each={NAV}>
             {(item) => (
@@ -149,7 +152,7 @@ export default function AppLayout(props: RouteSectionProps) {
                 {...stylex.props(styles.link, (item.path === "/" ? location.pathname === "/" || location.pathname === "/import" : location.pathname.startsWith(item.path)) && styles.linkActive)}
                 onClick={() => navigate(item.path)}
               >
-                {item.label}
+                {t(item.label as never)}
               </button>
             )}
           </For>
@@ -161,8 +164,11 @@ export default function AppLayout(props: RouteSectionProps) {
               账号管理
             </a>
           </Show>
+          <button {...stylex.props(styles.signOut)} onClick={() => setLocale(locale() === "zh" ? "en" : "zh")}>
+            {locale() === "zh" ? "EN" : "中文"}
+          </button>
           <button {...stylex.props(styles.signOut)} onClick={() => auth.signOut()}>
-            退出登录
+            {t("nav.logout")}
           </button>
         </div>
       </aside>
@@ -173,7 +179,7 @@ export default function AppLayout(props: RouteSectionProps) {
               邮箱尚未验证，请查收验证邮件；未收到可重新发送。
             </span>
             <button {...stylex.props(styles.resendBtn)} disabled={resending()} onClick={resendVerification}>
-              {resending() ? "发送中…" : "重新发送验证邮件"}
+              {resending() ? t("layout.sending") : t("layout.resend")}
             </button>
             <Show when={resendMsg()}>
               <span {...stylex.props(styles.resendMsg, resendMsg()!.ok && styles.resendMsgOk)}>

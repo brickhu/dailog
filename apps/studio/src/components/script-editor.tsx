@@ -7,6 +7,7 @@ import { ApiError } from "../lib/api";
 import { consumeSse } from "../lib/sse";
 import { tryParseSegments } from "../lib/parseJsonLoose";
 import { applyScriptOp, totalCharCount, type ScriptSegment } from "../lib/scriptOps";
+import { useI18n } from "@dailogues/i18n";
 
 export interface ScriptEditorProps {
   polishId: string;
@@ -26,6 +27,7 @@ type EditorState =
   | { kind: "error"; message: string };
 
 export default function ScriptEditor(props: ScriptEditorProps) {
+  const { t } = useI18n();
   const [state, setState] = createSignal<EditorState>({ kind: "loading" });
   const [toast, setToast] = createSignal<string | null>(null);
   const [saving, setSaving] = createSignal(false);
@@ -57,7 +59,7 @@ export default function ScriptEditor(props: ScriptEditorProps) {
     const s = state();
     if (s.kind !== "editing") return;
     const dirty = JSON.stringify(s.segments) !== JSON.stringify(savedSegments());
-    if (dirty && !window.confirm("重新润色将覆盖当前未保存的改动，继续？")) return;
+    if (dirty && !window.confirm(t("studio.scriptEditor.repolishConfirm"))) return;
     setDirection("");
     setDirectionOpen(true);
   };
@@ -94,18 +96,18 @@ export default function ScriptEditor(props: ScriptEditorProps) {
         },
         onError: (data) => {
           const parsed = JSON.parse(data) as { error?: string };
-          setState({ kind: "error", message: parsed.error ?? "润色失败" });
+          setState({ kind: "error", message: parsed.error ?? t("studio.scriptEditor.polishFailed") });
         },
       });
     } catch (e) {
       if (e instanceof ApiError && e.status === 422) {
-        setState({ kind: "error", message: e.detail ?? "对话质量审核未通过" });
+        setState({ kind: "error", message: e.detail ?? t("studio.scriptEditor.qualityFailed") });
       } else if (e instanceof ApiError && e.status === 429) {
-        setState({ kind: "error", message: e.detail ?? "该对话的润色次数已达上限" });
+        setState({ kind: "error", message: e.detail ?? t("studio.scriptEditor.limitReached") });
       } else if (e instanceof ApiError && e.status === 404) {
-        setState({ kind: "error", message: "未找到对话内容" });
+        setState({ kind: "error", message: t("studio.scriptEditor.noDialogue") });
       } else {
-        setState({ kind: "error", message: e instanceof Error ? e.message : "润色失败" });
+        setState({ kind: "error", message: e instanceof Error ? e.message : t("studio.scriptEditor.polishFailed") });
       }
     }
   };
@@ -116,7 +118,7 @@ export default function ScriptEditor(props: ScriptEditorProps) {
     setSaving(true);
     try {
       if (!props.transcriptId) {
-        setToast("请先生成脚本再保存");
+        setToast(t("studio.scriptEditor.saveFirst"));
         return;
       }
       await api.request(`/v1/transcripts/${props.transcriptId}`, {
@@ -125,10 +127,10 @@ export default function ScriptEditor(props: ScriptEditorProps) {
       });
       setState({ ...s, version: null });
       setSavedSegments(s.segments);
-      setToast("草稿已保存");
+      setToast(t("studio.scriptEditor.saved"));
       setTimeout(() => setToast(null), 2000);
     } catch (e) {
-      setToast(e instanceof Error ? `保存失败：${e.message}` : "保存失败");
+      setToast(e instanceof Error ? `保存失败：${e.message}` : t("studio.scriptEditor.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -154,12 +156,12 @@ export default function ScriptEditor(props: ScriptEditorProps) {
   return (
     <div>
       <Show when={cur().kind === "loading"}>
-        <div {...stylex.props(styles.status)}>加载中…</div>
+        <div {...stylex.props(styles.status)}>{t("common.loading")}</div>
       </Show>
 
       <Show when={polishing()}>
         <div>
-          <div {...stylex.props(styles.status)}>AI 正在打磨你的对话为播客脚本…（可稍等片刻）</div>
+          <div {...stylex.props(styles.status)}>{t("studio.scriptEditor.polishing")}</div>
           <For each={polishing()!.segments}>
             {(seg) => <SegmentPreview seg={seg} />}
           </For>
@@ -169,7 +171,7 @@ export default function ScriptEditor(props: ScriptEditorProps) {
       <Show when={failed()}>
         <div {...stylex.props(styles.errorBox)}>
           <div {...stylex.props(styles.errorText)}>{failed()!.message}</div>
-          <Button onClick={loadOrPolish}>重试</Button>
+          <Button onClick={loadOrPolish}>{t("common.retry")}</Button>
         </div>
       </Show>
 
@@ -181,15 +183,15 @@ export default function ScriptEditor(props: ScriptEditorProps) {
               {Math.round(totalCharCount(editing()!.segments) / 240)} 分钟）
             </span>
             <div>
-              <Button appear="ghost" onClick={saveDraft} disabled={saving()}>{saving() ? "保存中…" : "保存草稿"}</Button>
-              <Button appear="ghost" onClick={requestRepolish}>重新润色</Button>
+              <Button appear="ghost" onClick={saveDraft} disabled={saving()}>{saving() ? t("studio.scriptEditor.saving") : t("studio.scriptEditor.save")}</Button>
+              <Button appear="ghost" onClick={requestRepolish}>{t("studio.scriptEditor.repolish")}</Button>
             </div>
           </div>
           <Show when={directionOpen()}>
             <div {...stylex.props(styles.directionBox)}>
               <input
                 {...stylex.props(styles.directionInput)}
-                placeholder="想怎么改？如：更简短、更口语化、换个开场…（可选）"
+                placeholder={t("studio.scriptEditor.instruction")}
                 value={direction()}
                 onInput={(e) => setDirection(e.currentTarget.value)}
                 onKeyDown={(e) => {
@@ -197,8 +199,8 @@ export default function ScriptEditor(props: ScriptEditorProps) {
                   if (e.key === "Escape") setDirectionOpen(false);
                 }}
               />
-              <Button onClick={() => startPolish(direction().trim() || null)}>开始润色</Button>
-              <Button appear="ghost" onClick={() => setDirectionOpen(false)}>取消</Button>
+              <Button onClick={() => startPolish(direction().trim() || null)}>{t("studio.scriptEditor.polish")}</Button>
+              <Button appear="ghost" onClick={() => setDirectionOpen(false)}>{t("common.cancel")}</Button>
             </div>
           </Show>
           <For each={editing()!.segments}>
@@ -242,10 +244,11 @@ function normalize(parsed: Array<{ speaker?: string; text?: string }> | null): S
 }
 
 function SegmentPreview(props: { seg: ScriptSegment }) {
+  const { t } = useI18n();
   return (
     <div {...stylex.props(styles.row, props.seg.speaker === "host" ? styles.rowHost : styles.rowGuest)}>
       <span {...stylex.props(styles.speakerTag, props.seg.speaker === "host" ? styles.tagHost : styles.tagGuest)}>
-        {props.seg.speaker === "host" ? "你" : "AI"}
+        {props.seg.speaker === "host" ? t("studio.scriptEditor.you") : "AI"}
       </span>
       <span {...stylex.props(styles.previewText)}>{props.seg.text}</span>
     </div>
@@ -258,6 +261,7 @@ function SegmentRow(props: {
   total: number;
   onOp: (op: Parameters<typeof applyScriptOp>[1]) => void;
 }) {
+  const { t } = useI18n();
   const [text, setText] = createSignal(props.seg.text);
   return (
     <div {...stylex.props(styles.row, props.seg.speaker === "host" ? styles.rowHost : styles.rowGuest)}>
@@ -265,9 +269,9 @@ function SegmentRow(props: {
         <button
           {...stylex.props(styles.speakerTag, props.seg.speaker === "host" ? styles.tagHost : styles.tagGuest)}
           onClick={() => props.onOp({ type: "setSpeaker", index: props.index, speaker: props.seg.speaker === "host" ? "guest" : "host" })}
-          title="点击切换发言者"
+          title={t("studio.scriptEditor.switchSpeaker")}
         >
-          {props.seg.speaker === "host" ? "你" : "AI"}
+          {props.seg.speaker === "host" ? t("studio.scriptEditor.you") : "AI"}
         </button>
         <div {...stylex.props(styles.rowActions)}>
           <button

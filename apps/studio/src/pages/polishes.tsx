@@ -4,6 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 import { Button } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
+import { useI18n } from "@dailogues/i18n";
 
 // /polishes：创作容器（polish）列表——每个容器可生成多条润色脚本，点击进入编辑页。
 
@@ -18,10 +19,10 @@ interface PolishItem {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  editing: "编辑中",
-  generating: "生成中",
-  published: "已发布",
-  failed: "失败",
+  editing: "studio.status.editing",
+  generating: "studio.status.generating",
+  published: "studio.status.published",
+  failed: "studio.status.none",
 };
 
 const styles = stylex.create({
@@ -105,6 +106,7 @@ const styles = stylex.create({
 });
 
 export default function PolishesPage() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [items, setItems] = createSignal<PolishItem[]>([]);
   const [error, setError] = createSignal<string | null>(null);
@@ -115,7 +117,7 @@ export default function PolishesPage() {
       const list = await api.get<PolishItem[]>("/v1/polishes");
       setItems(list);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "加载失败");
+      setError(e instanceof Error ? e.message : t("studio.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -125,16 +127,16 @@ export default function PolishesPage() {
     <div {...stylex.props(styles.page)}>
       <header {...stylex.props(styles.header)}>
         <div>
-          <div {...stylex.props(styles.title)}>脚本</div>
+          <div {...stylex.props(styles.title)}>{t("studio.scripts")}</div>
           <div {...stylex.props(styles.subtitle)}>
             你的创作容器——每个容器基于一份对话快照，可生成多条润色脚本
           </div>
         </div>
-        <Button onClick={() => navigate("/")}>从分享链接导入</Button>
+        <Button onClick={() => navigate("/")}>{t("studio.importFromLink")}</Button>
       </header>
 
       <Show when={loading()}>
-        <div {...stylex.props(styles.subtitle)}>加载中…</div>
+        <div {...stylex.props(styles.subtitle)}>{t("common.loading")}</div>
       </Show>
       <Show when={error()}>
         <div {...stylex.props(styles.error)}>{error()}</div>
@@ -144,7 +146,7 @@ export default function PolishesPage() {
         <div {...stylex.props(styles.empty)}>
           还没有创作容器。粘贴 AI 对话分享链接导入，创建你的第一个脚本。
           <div {...stylex.props(styles.emptyAction)}>
-            <Button onClick={() => navigate("/")}>从分享链接导入</Button>
+            <Button onClick={() => navigate("/")}>{t("studio.importFromLink")}</Button>
           </div>
         </div>
       </Show>
@@ -166,8 +168,8 @@ export default function PolishesPage() {
               )}
             >
               {item.episodeId
-                ? STATUS_LABEL[item.episodeStatus ?? ""] ?? item.episodeStatus
-                : "未生成节目"}
+                ? t(STATUS_LABEL[item.episodeStatus ?? ""] as never)
+                : t("studio.noEpisode")}
             </span>
           </div>
         )}

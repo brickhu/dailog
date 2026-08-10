@@ -3,6 +3,7 @@ import { createEffect, createSignal, For, onMount, Show } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
+import { useI18n } from "@dailogues/i18n";
 
 // 消费端个人页：dailog.fm/me（收藏列表；登录态经 cookie 判定，未登录跳统一登录）
 interface FavoriteRow {
@@ -57,6 +58,7 @@ const styles = stylex.create({
 });
 
 export default function MePage() {
+  const { t } = useI18n();
   // 会话判定（server 端转发）：仅 client 执行（SSR 无 cookie；createAsync 序列化结果
   // 会被 hydration 复用不再重取，用 onMount + signal 保证挂载后必然重新判定）
   const [session, setSession] = createSignal<{ id: string } | null>(null);
@@ -88,18 +90,18 @@ export default function MePage() {
 
   return (
     <div {...stylex.props(styles.page)}>
-      <Title>我的收藏 · dailog</Title>
+      <Title>{t("me.title")} · dailog</Title>
       <div {...stylex.props(styles.content)}>
         <Show when={session()}>
-          <div {...stylex.props(styles.title)}>我的收藏</div>
+          <div {...stylex.props(styles.title)}>{t("me.title")}</div>
           <Show
             when={favorites()?.length}
-            fallback={<div {...stylex.props(styles.empty)}>还没有收藏的节目</div>}
+            fallback={<div {...stylex.props(styles.empty)}>{t("me.empty")}</div>}
           >
             <For each={favorites()}>
               {(fav) => (
                 <a href={`/episode/${fav.episodeId}`} {...stylex.props(styles.card)}>
-                  <div {...stylex.props(styles.epTitle)}>{fav.title || "未命名节目"}</div>
+                  <div {...stylex.props(styles.epTitle)}>{fav.title || t("common.unnamed")}</div>
                   <div {...stylex.props(styles.meta)}>
                     {fav.publishedAt ? new Date(fav.publishedAt).toLocaleDateString("zh-CN") : ""} ·{" "}
                     {fav.durationSeconds ? `${Math.floor(fav.durationSeconds / 60)} 分钟` : ""}

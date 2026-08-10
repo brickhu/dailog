@@ -4,6 +4,7 @@ import { listLatestEpisodes, type EpisodeSummary } from "../lib/db";
 import { SiteNav } from "../components/site-nav";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
+import { useI18n } from "@dailogues/i18n";
 
 // 首页：最新发布的节目（消费端入口）
 const styles = stylex.create({
@@ -60,21 +61,22 @@ function fmtDuration(sec: number | null): string {
 }
 
 export default function Home() {
+  const { t } = useI18n();
   const episodes = createAsync<EpisodeSummary[]>(() => listLatestEpisodes());
 
   return (
     <div {...stylex.props(styles.page)}>
       <SiteNav />
       <div {...stylex.props(styles.content)}>
-        <div {...stylex.props(styles.title)}>最新节目</div>
+        <div {...stylex.props(styles.title)}>{t("home.latest")}</div>
         <Show
           when={episodes()?.length}
-          fallback={<div {...stylex.props(styles.empty)}>还没有已发布的节目</div>}
+          fallback={<div {...stylex.props(styles.empty)}>{t("home.empty")}</div>}
         >
           <For each={episodes()}>
             {(ep) => (
               <a href={`/episode/${ep.id}`} {...stylex.props(styles.card)}>
-                <div {...stylex.props(styles.epTitle)}>{ep.title || "未命名节目"}</div>
+                <div {...stylex.props(styles.epTitle)}>{ep.title || t("common.unnamed")}</div>
                 <div {...stylex.props(styles.meta)}>
                   @{ep.username} · {fmtDate(ep.publishedAt)} · {fmtDuration(ep.durationSeconds)}
                 </div>

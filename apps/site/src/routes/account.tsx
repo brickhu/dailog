@@ -3,6 +3,7 @@ import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { Button, TextField, Spinner } from "@dailogues/ui";
+import { useI18n } from "@dailogues/i18n";
 
 // 账号中心（dailog.fm/account）：
 //   区块一「账号管理」——邮箱/GitHub 绑定/昵称/修改密码（better-auth 官方端点，站内代理）
@@ -107,6 +108,7 @@ const styles = stylex.create({
 });
 
 export default function AccountPage() {
+  const { t } = useI18n();
   const [session, setSession] = createSignal<{ id: string } | null>(null);
   const [checked, setChecked] = createSignal(false);
   const [profile, setProfile] = createSignal<ProfileData | null>(null);
@@ -136,18 +138,18 @@ export default function AccountPage() {
         return (await res.json()) as ProfileData;
       })
       .then(setProfile)
-      .catch(() => setLoadError("档案加载失败，请刷新重试"));
+      .catch(() => setLoadError(t("account.loadFailed")));
   });
 
   return (
     <div {...stylex.props(styles.page)}>
-      <Title>账号 · dailog</Title>
+      <Title>{t("account.title")} · dailog</Title>
       <div {...stylex.props(styles.content)}>
         <Show when={session()}>
-          <div {...stylex.props(styles.title)}>账号</div>
-          <div {...stylex.props(styles.subtitle)}>管理你的账号（频道设置在创作端）</div>
+          <div {...stylex.props(styles.title)}>{t("account.title")}</div>
+          <div {...stylex.props(styles.subtitle)}>{t("account.subtitle")}</div>
 
-          <Show when={profile()} fallback={<div {...stylex.props(styles.loading)}><Spinner /> 加载中…</div>}>
+          <Show when={profile()} fallback={<div {...stylex.props(styles.loading)}><Spinner /> {t("common.loading")}</div>}>
             <AccountSection profile={profile()!} loadError={loadError()} />
           </Show>
         </Show>
@@ -157,9 +159,10 @@ export default function AccountPage() {
 }
 
 function AccountSection(props: { profile: ProfileData; loadError: string | null }) {
+  const { t } = useI18n();
   return (
     <section {...stylex.props(styles.section)}>
-      <div {...stylex.props(styles.sectionTitle)}>账号管理</div>
+      <div {...stylex.props(styles.sectionTitle)}>{t("account.section")}</div>
       <AccountBlock profile={props.profile} loadError={props.loadError} />
     </section>
   );
@@ -167,6 +170,7 @@ function AccountSection(props: { profile: ProfileData; loadError: string | null 
 
 /** 账号管理：邮箱 / GitHub 绑定 / 昵称 / 修改密码 */
 function AccountBlock(props: { profile: ProfileData; loadError: string | null }) {
+  const { t } = useI18n();
   const p = () => props.profile;
   const [nickname, setNickname] = createSignal(p().nickname ?? "");
   const [nameMsg, setNameMsg] = createSignal<{ ok: boolean; text: string } | null>(null);
@@ -180,19 +184,19 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
   const saveName = async () => {
     setNameMsg(null);
     const trimmed = nickname().trim();
-    if (!trimmed) return setNameMsg({ ok: false, text: "昵称不能为空" });
+    if (!trimmed) return setNameMsg({ ok: false, text: t("account.nicknameRequired") });
     const res = await fetch("/v1/me/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nickname: trimmed }),
     });
-    setNameMsg(res.ok ? { ok: true, text: "已保存" } : { ok: false, text: "保存失败，请重试" });
+    setNameMsg(res.ok ? { ok: true, text: t("account.saved") } : { ok: false, text: t("account.saveFailed") });
   };
 
   const changePassword = async () => {
     setPwMsg(null);
-    if (newPw().length < 8) return setPwMsg({ ok: false, text: "新密码至少 8 位" });
-    if (newPw() !== confirmPw()) return setPwMsg({ ok: false, text: "两次输入的新密码不一致" });
+    if (newPw().length < 8) return setPwMsg({ ok: false, text: t("account.passwordMin") });
+    if (newPw() !== confirmPw()) return setPwMsg({ ok: false, text: t("account.passwordMismatch") });
     setPwBusy(true);
     try {
       const res = await fetch("/v1/auth/change-password", {
@@ -201,11 +205,11 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
         body: JSON.stringify({ currentPassword: curPw(), newPassword: newPw() }),
       });
       if (res.ok) {
-        setPwMsg({ ok: true, text: "密码已更新" });
+        setPwMsg({ ok: true, text: t("account.passwordUpdated") });
         setCurPw(""); setNewPw(""); setConfirmPw("");
       } else {
         const body = (await res.json().catch(() => null)) as { message?: string } | null;
-        setPwMsg({ ok: false, text: body?.message ?? "修改失败，请检查当前密码" });
+        setPwMsg({ ok: false, text: body?.message ?? t("account.passwordFailed") });
       }
     } finally {
       setPwBusy(false);
@@ -221,47 +225,47 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
       {props.loadError && <div {...stylex.props(styles.error)}>{props.loadError}</div>}
       <div {...stylex.props(styles.card)}>
         <div {...stylex.props(styles.row)}>
-          <span {...stylex.props(styles.rowLabel)}>邮箱</span>
+          <span {...stylex.props(styles.rowLabel)}>{t("account.email")}</span>
           <span {...stylex.props(styles.rowValue)}>
             {p().email}
-            <Show when={p().emailVerified} fallback={<span style={{ "margin-left": "8px" }}>未验证</span>}>
-              <span {...stylex.props(styles.badge)} style={{ "margin-left": "8px" }}>已验证</span>
+            <Show when={p().emailVerified} fallback={<span style={{ "margin-left": "8px" }}>{t("account.unverified")}</span>}>
+              <span {...stylex.props(styles.badge)} style={{ "margin-left": "8px" }}>{t("account.verified")}</span>
             </Show>
           </span>
         </div>
         <div {...stylex.props(styles.row)}>
-          <span {...stylex.props(styles.rowLabel)}>GitHub 登录</span>
-          <Show when={p().hasGithub} fallback={<a href={githubUrl}>使用 GitHub 登录</a>}>
-            <span {...stylex.props(styles.badge)}>已绑定 ✓</span>
+          <span {...stylex.props(styles.rowLabel)}>{t("account.github")}</span>
+          <Show when={p().hasGithub} fallback={<a href={githubUrl}>{t("account.githubLink")}</a>}>
+            <span {...stylex.props(styles.badge)}>{t("account.githubLinked")}</span>
           </Show>
         </div>
       </div>
 
       <div {...stylex.props(styles.card)}>
         <div {...stylex.props(styles.row)}>
-          <span {...stylex.props(styles.rowLabel)}>昵称</span>
+          <span {...stylex.props(styles.rowLabel)}>{t("account.nickname")}</span>
         </div>
         <div {...stylex.props(styles.field)}>
-          <TextField label="昵称" value={nickname()} onInput={(v) => setNickname(v)} placeholder="你的昵称" maxLength={30} />
+          <TextField label={t("account.nickname")} value={nickname()} onInput={(v) => setNickname(v)} placeholder={t("account.nicknamePlaceholder")} maxLength={30} />
         </div>
-        <Button onClick={saveName}>保存昵称</Button>
+        <Button onClick={saveName}>{t("account.saveNickname")}</Button>
         <Show when={nameMsg()}>
           <div {...stylex.props(nameMsg()!.ok ? styles.success : styles.error)}>{nameMsg()!.text}</div>
         </Show>
       </div>
 
       <div {...stylex.props(styles.card)}>
-        <div {...stylex.props(styles.rowLabel)}>修改密码</div>
+        <div {...stylex.props(styles.rowLabel)}>{t("account.changePassword")}</div>
         <div {...stylex.props(styles.field)}>
-          <TextField label="当前密码" type="password" value={curPw()} onInput={setCurPw} placeholder="当前密码" />
+          <TextField label={t("account.currentPassword")} type="password" value={curPw()} onInput={setCurPw} placeholder={t("account.currentPassword")} />
         </div>
         <div {...stylex.props(styles.field)}>
-          <TextField label="新密码" type="password" value={newPw()} onInput={setNewPw} placeholder="新密码（至少 8 位）" />
+          <TextField label={t("account.newPassword")} type="password" value={newPw()} onInput={setNewPw} placeholder={t("account.newPassword")} />
         </div>
         <div {...stylex.props(styles.field)}>
-          <TextField label="确认新密码" type="password" value={confirmPw()} onInput={setConfirmPw} placeholder="再次输入新密码" />
+          <TextField label={t("account.confirmPassword")} type="password" value={confirmPw()} onInput={setConfirmPw} placeholder={t("account.confirmPassword")} />
         </div>
-        <Button onClick={changePassword} disabled={pwBusy()}>{pwBusy() ? "提交中…" : "更新密码"}</Button>
+        <Button onClick={changePassword} disabled={pwBusy()}>{pwBusy() ? t("account.submitting") : t("account.updatePassword")}</Button>
         <Show when={pwMsg()}>
           <div {...stylex.props(pwMsg()!.ok ? styles.success : styles.error)}>{pwMsg()!.text}</div>
         </Show>

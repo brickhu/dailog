@@ -4,6 +4,7 @@ import { Button, Card, TextField } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { getLoginRedirect, type LoginRedirectOptions } from "./login-redirect";
 import { getLoginErrorMessage } from "./error-messages";
+import { useI18n } from "@dailogues/i18n";
 
 const styles = stylex.create({
   page: {
@@ -131,6 +132,7 @@ export interface LoginFormProps {
 /** 跨站统一登录页：完整页面（品牌 + Card + 表单）。配置驱动——业务侧只声明
  *  接口/登录方式/跳转白名单；内部统一流程：POST → 校验 → 成功事件 → 回来源。 */
 export function LoginForm(props: LoginFormProps) {
+  const { t } = useI18n();
   const [email, setEmail] = createSignal("");
   const [password, setPassword] = createSignal("");
   const [error, setError] = createSignal<string | null>(null);
@@ -160,9 +162,9 @@ export function LoginForm(props: LoginFormProps) {
         window.location.href = body.url;
         return;
       }
-      setError("GitHub 登录启动失败，请稍后重试");
+      setError(t("auth.githubFailed"));
     } catch {
-      setError("网络错误，请重试");
+      setError(t("auth.networkError"));
     } finally {
       setGithubBusy(false);
     }
@@ -171,7 +173,7 @@ export function LoginForm(props: LoginFormProps) {
   const submit = async (e: SubmitEvent) => {
     e.preventDefault();
     if (password().length < 8) {
-      setError("密码至少 8 位");
+      setError(t("auth.passwordMin"));
       return;
     }
     setBusy(true);
@@ -191,7 +193,7 @@ export function LoginForm(props: LoginFormProps) {
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as { message?: string; code?: string } | null;
-        setError(getLoginErrorMessage(data, res.status));
+        setError(getLoginErrorMessage(t, data, res.status));
         return;
       }
       const body = (await res.json().catch(() => null)) as
@@ -208,7 +210,7 @@ export function LoginForm(props: LoginFormProps) {
         window.location.href = getLoginRedirect(props.redirect);
       }
     } catch {
-      setError("网络错误，请重试");
+      setError(t("auth.networkError"));
     } finally {
       setBusy(false);
     }
@@ -218,7 +220,7 @@ export function LoginForm(props: LoginFormProps) {
   const verifyOtp = async (e: SubmitEvent) => {
     e.preventDefault();
     if (otp().trim().length < 6) {
-      setError("请输入 6 位验证码");
+      setError(t("auth.otpMin"));
       return;
     }
     setBusy(true);
@@ -238,7 +240,7 @@ export function LoginForm(props: LoginFormProps) {
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as { message?: string; code?: string } | null;
-        setError(getLoginErrorMessage(data, res.status));
+        setError(getLoginErrorMessage(t, data, res.status));
         return;
       }
       const body = (await res.json().catch(() => null)) as
@@ -249,7 +251,7 @@ export function LoginForm(props: LoginFormProps) {
         window.location.href = getLoginRedirect(props.redirect);
       }
     } catch {
-      setError("网络错误，请重试");
+      setError(t("auth.networkError"));
     } finally {
       setBusy(false);
     }
@@ -259,8 +261,8 @@ export function LoginForm(props: LoginFormProps) {
     <div {...stylex.props(styles.page)}>
       <Card>
         <div {...stylex.props(styles.brand)}>dailog</div>
-        <div {...stylex.props(styles.tagline)}>把AI对话，变成你们的对谈播客</div>
-        <Show when={!props.checkingSession} fallback={<div {...stylex.props(styles.loading)}>加载中…</div>}>
+        <div {...stylex.props(styles.tagline)}>{t("auth.tagline")}</div>
+        <Show when={!props.checkingSession} fallback={<div {...stylex.props(styles.loading)}>{t("auth.loading")}</div>}>
         <div>
           <Show
             when={!otpStep()}
@@ -268,18 +270,18 @@ export function LoginForm(props: LoginFormProps) {
               /* 注册 OTP 验证码输入（发码后） */
               <form onSubmit={verifyOtp}>
                 <div {...stylex.props(styles.noticeText)}>
-                  验证码已发送至 <b>{email().trim()}</b>，请输入 6 位验证码完成注册。
+                  {t("auth.otpSent", { email: email().trim() })}
                 </div>
                 <TextField
-                  label="验证码"
+                  label={t("auth.otp")}
                   type="text"
                   value={otp()}
                   onInput={setOtp}
-                  placeholder="6 位数字"
+                  placeholder={t("auth.otpPlaceholder")}
                   autocomplete="one-time-code"
                 />
                 <Button type="submit" block disabled={busy()}>
-                  {busy() ? "验证中…" : "完成注册"}
+                  {busy() ? t("auth.verifying") : t("auth.completeSignup")}
                 </Button>
                 <Button
                   block
@@ -297,7 +299,7 @@ export function LoginForm(props: LoginFormProps) {
           >
             <form onSubmit={submit}>
               <TextField
-                label="邮箱"
+                label={t("auth.email")}
                 type="email"
                 value={email()}
                 onInput={setEmail}
@@ -305,31 +307,31 @@ export function LoginForm(props: LoginFormProps) {
                 autocomplete="email"
               />
                   <TextField
-                    label="密码"
+                    label={t("auth.password")}
                     type="password"
                     value={password()}
                     onInput={setPassword}
-                    placeholder="至少 8 位"
+                    placeholder={t("auth.passwordMin")}
                     autocomplete="new-password"
                   />
                   <Button type="submit" block disabled={busy()}>
-                    {busy() ? "提交中…" : "登录"}
+                    {busy() ? t("auth.submitting") : t("auth.login")}
                   </Button>
                   <Show when={error()}>
                     <div {...stylex.props(styles.error)}>{error()}</div>
                   </Show>
-                  <div {...stylex.props(styles.hint)}>注册需邮箱验证码 · 邀请码用于开通频道</div>
+                  <div {...stylex.props(styles.hint)}>{t("auth.hint")}</div>
                   <Show when={props.config.github}>
                     <div {...stylex.props(styles.githubRow)}>
-                      <span {...stylex.props(styles.githubDivider)}>或</span>
+                      <span {...stylex.props(styles.githubDivider)}>{t("auth.or")}</span>
                       <Button block appear="ghost" onClick={signInGithub} disabled={githubBusy()}>
-                        {githubBusy() ? "跳转 GitHub…" : "使用 GitHub 登录"}
+                        {githubBusy() ? t("auth.githubRedirecting") : t("auth.githubLogin")}
                       </Button>
                     </div>
                   </Show>
                   <Show when={props.config.forgotPasswordUrl}>
                     <div {...stylex.props(styles.forgotRow)}>
-                      <a href={props.config.forgotPasswordUrl} {...stylex.props(styles.forgotLink)}>忘记密码？</a>
+                      <a href={props.config.forgotPasswordUrl} {...stylex.props(styles.forgotLink)}>{t("auth.forgotPassword")}</a>
                     </div>
                   </Show>
                 </form>

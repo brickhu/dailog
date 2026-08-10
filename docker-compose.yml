@@ -66,6 +66,7 @@ services:
       # 统一 VITE_ 一套（构建期注入；服务端代理转发与客户端共用）
       VITE_API_BASE_URL: http://api.dailog.orb.local
       VITE_SITE_BASE_URL: http://dailog.orb.local
+      VITE_STUDIO_BASE_URL: http://app.dailog.orb.local
     volumes:
       - .:/app
       - /app/node_modules

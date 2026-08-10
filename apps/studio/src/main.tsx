@@ -1,6 +1,7 @@
 import { Route, Router } from "@solidjs/router";
 import { render } from "solid-js/web";
 import { AuthProvider } from "./lib/auth";
+import { I18nProvider } from "@dailogues/i18n";
 import { AppShell } from "./lib/guards";
 import AppLayout from "./components/app-layout";
 import EpisodesPage from "./pages/episodes";
@@ -35,6 +36,7 @@ const styles = stylex.create({
 render(
   () => (
     <div {...stylex.props(styles.body)}>
+      <I18nProvider>
       <AuthProvider>
         <Router>
           <Route path="/" component={AppShell}>
@@ -51,6 +53,7 @@ render(
           </Route>
         </Router>
       </AuthProvider>
+      </I18nProvider>
     </div>
   ),
   document.getElementById("root")!,

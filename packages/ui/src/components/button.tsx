@@ -2,6 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 import { createSignal, createUniqueId, splitProps, Show, type JSX } from "solid-js";
 import { type StyleXStyles } from "@stylexjs/stylex";
 import { colors, dimensions, durations, fontfamilies, shadows } from "../theme.stylex";
+import { useI18n } from "@dailogues/i18n";
 import { Spinner } from "./spinner";
 import { useButtonGroup } from "./button-group";
 
@@ -539,6 +540,7 @@ const SPLIT_KEYS = [
 
 /** 基础按钮（两站共享）：复刻 Astryx Button 行为；variant 语义色 × appear 外观 × size/round 形态 */
 export function Button(props: ButtonProps) {
+  const { t } = useI18n();
   const [local, rest] = splitProps(props, SPLIT_KEYS);
   // ref 类型绑定 button 元素（ButtonHTMLAttributes），anchor 分支泛化后展开
   const anchorRest = rest as Record<string, unknown>;
@@ -765,7 +767,7 @@ export function Button(props: ButtonProps) {
       </span>
       {/* 加载态播报 live region */}
       <span {...stylex.props(styles.visuallyHidden)} role="status" aria-live="polite">
-        {loading() ? "加载中" : ""}
+        {loading() ? t("common.loading") : ""}
       </span>
       {/* 悬浮提示（hover/focus 触发，随按钮定位在正上方） */}
       <Show when={tooltipVisible() && local.tooltip != null}>

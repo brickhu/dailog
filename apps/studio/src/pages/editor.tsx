@@ -7,6 +7,7 @@ import { api } from "../lib/client";
 import ScriptEditor from "../components/script-editor";
 import GenerateProgress from "../components/generate-progress";
 import type { ScriptSegment } from "../lib/scriptOps";
+import { useI18n } from "@dailogues/i18n";
 
 // /polish/:id 编辑页：创作容器（polish）→ 润色生成 transcripts（可多条）→ 选定一条生成节目 → 发布。
 // 导入页确认创建容器后直达本页；重复粘贴分享链接也会跳转到这里（继续创作）。
@@ -106,6 +107,7 @@ const styles = stylex.create({
 });
 
 export default function PolishPage() {
+  const { t, locale } = useI18n();
   const navigate = useNavigate();
   const params = useParams();
   const polishId = typeof params.id === "string" ? params.id : null;
@@ -134,7 +136,7 @@ export default function PolishPage() {
       }
       setTitle(d.title ?? d.snapshotTitle ?? "");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "加载失败");
+      setError(e instanceof Error ? e.message : t("studio.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -142,9 +144,9 @@ export default function PolishPage() {
 
   onMount(load);
 
-  const selectTranscript = (t: Transcript) => {
-    setActiveTranscriptId(t.id);
-    setActiveSegments(t.segments ?? null);
+  const selectTranscript = (tr: Transcript) => {
+    setActiveTranscriptId(tr.id);
+    setActiveSegments(tr.segments ?? null);
     setGenerated(false);
     setEpisodeId(null);
   };
@@ -168,10 +170,10 @@ export default function PolishPage() {
         return;
       }
       if (res.status === 422) setError(`审核未通过：${body?.reason ?? body?.error}`);
-      else if (res.status === 403) setError(body?.error === "quota_exceeded" ? "配额不足" : "请先开通频道");
+      else if (res.status === 403) setError(body?.error === "quota_exceeded" ? t("studio.quota") : t("studio.channelRequired"));
       else setError(body?.error ?? `生成失败（HTTP ${res.status}）`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "生成失败");
+      setError(e instanceof Error ? e.message : t("studio.generateFailed"));
     } finally {
       setGenerating(false);
     }
@@ -184,7 +186,7 @@ export default function PolishPage() {
       await api.post(`/v1/episodes/${episodeId()}/publish`);
       setPublished(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "发布失败");
+      setError(e instanceof Error ? e.message : t("studio.publishFailed"));
     } finally {
       setPublishBusy(false);
     }
@@ -194,7 +196,7 @@ export default function PolishPage() {
     <div {...stylex.props(styles.page)}>
       <header {...stylex.props(styles.header)}>
         <div>
-          <div {...stylex.props(styles.title)}>{detail()?.snapshotTitle ?? detail()?.title ?? "创作容器"}</div>
+          <div {...stylex.props(styles.title)}>{detail()?.snapshotTitle ?? detail()?.title ?? t("studio.editor.container")}</div>
           <div {...stylex.props(styles.subtitle)}>
             {detail()?.snapshotUrl ? (
               <a href={detail()!.snapshotUrl!} target="_blank" style={{ color: colors.primary }}>
@@ -203,11 +205,11 @@ export default function PolishPage() {
             ) : ""}
           </div>
         </div>
-        <Button appear="ghost" onClick={() => navigate("/episodes")}>我的节目</Button>
+        <Button appear="ghost" onClick={() => navigate("/episodes")}>{t("studio.myEpisodes")}</Button>
       </header>
 
       <Show when={loading()}>
-        <div {...stylex.props(styles.subtitle)}>加载中…</div>
+        <div {...stylex.props(styles.subtitle)}>{t("common.loading")}</div>
       </Show>
       <Show when={error() && !loading()}>
         <div {...stylex.props(styles.error)}>{error()}</div>
@@ -217,30 +219,30 @@ export default function PolishPage() {
         {/* 质量提示 */}
         <Show when={detail()!.quality && !detail()!.quality!.pass}>
           <div {...stylex.props(styles.warn)}>
-            ⚠️ 质量检测未通过：{detail()!.quality!.reason ?? "内容可能不适合制作节目"}。仍可继续。
+            ⚠️ 质量检测未通过：{detail()!.quality!.reason ?? t("studio.editor.contentUnsafe")}。仍可继续。
           </div>
         </Show>
 
         {/* 润色脚本列表 */}
         <div {...stylex.props(styles.section)}>
-          <div {...stylex.props(styles.sectionTitle)}>润色脚本（可生成多条，选一条做节目）</div>
+          <div {...stylex.props(styles.sectionTitle)}>{t("studio.editor.polishTitle")}</div>
           <Show
             when={detail()!.transcripts.length > 0}
-            fallback={<div {...stylex.props(styles.empty)}>还没有脚本。在下方点击「生成新脚本」开始润色。</div>}
+            fallback={<div {...stylex.props(styles.empty)}>{t("studio.editor.noScript")}</div>}
           >
             <For each={detail()!.transcripts}>
-              {(t) => (
+              {(tr) => (
                 <div
-                  {...stylex.props(styles.transcriptCard, t.id === activeTranscriptId() && styles.transcriptCardActive)}
-                  onClick={() => selectTranscript(t)}
+                  {...stylex.props(styles.transcriptCard, tr.id === activeTranscriptId() && styles.transcriptCardActive)}
+                  onClick={() => selectTranscript(tr)}
                 >
                   <div>
-                    <div>脚本 #{detail()!.transcripts.indexOf(t) + 1}</div>
+                    <div>{t("studio.editor.scriptNum", { num: detail()!.transcripts.indexOf(tr) + 1 })}</div>
                     <div {...stylex.props(styles.transcriptMeta)}>
-                      {new Date(t.createdAt).toLocaleString("zh-CN")}
+                      {new Date(tr.createdAt).toLocaleString(locale() === "zh" ? "zh-CN" : "en-US")}
                     </div>
                   </div>
-                  <span {...stylex.props(styles.transcriptMeta)}>{t.id === activeTranscriptId() ? "编辑中 →" : "选择"}</span>
+                  <span {...stylex.props(styles.transcriptMeta)}>{tr.id === activeTranscriptId() ? t("studio.editor.editing") : t("studio.editor.select")}</span>
                 </div>
               )}
             </For>
@@ -262,7 +264,7 @@ export default function PolishPage() {
               disabled={!activeTranscriptId() || generating()}
               onClick={generateEpisode}
             >
-              {generating() ? "生成中…" : "用当前脚本生成节目"}
+              {generating() ? t("studio.editor.generating") : t("studio.editor.generateEpisode")}
             </Button>
           </div>
         </div>
@@ -274,13 +276,13 @@ export default function PolishPage() {
               episodeId={episodeId()!}
               onDone={() => setGenerated(true)}
               onFailed={(msg) => setError(`生成失败：${msg}`)}
-              onQuotaDenied={() => setError("配额不足")}
+              onQuotaDenied={() => setError(t("studio.quota"))}
             />
             <Show when={generated()}>
-              <div {...stylex.props(styles.sectionTitle)}>发布节目</div>
+              <div {...stylex.props(styles.sectionTitle)}>{t("studio.editor.publish")}</div>
               <div {...stylex.props(styles.transcriptCard)}>
                 <div>
-                  <div>标题</div>
+                  <div>{t("studio.editor.title")}</div>
                   <input
                     style={{ width: "100%", padding: "8px" }}
                     value={title()}
@@ -291,10 +293,10 @@ export default function PolishPage() {
               <div {...stylex.props(styles.actions)}>
                 <Show
                   when={!published()}
-                  fallback={<div {...stylex.props(styles.subtitle)}>节目已发布 ✓</div>}
+                  fallback={<div {...stylex.props(styles.subtitle)}>{t("studio.editor.published")}</div>}
                 >
                   <Button onClick={publish} disabled={publishBusy()}>
-                    {publishBusy() ? "发布中…" : "发布"}
+                    {publishBusy() ? t("studio.editor.publishing") : t("studio.editor.publish")}
                   </Button>
                 </Show>
               </div>

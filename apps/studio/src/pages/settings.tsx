@@ -7,6 +7,7 @@ import { api } from "../lib/client";
 import { ApiError } from "../lib/api";
 import { uploadVoiceSample, HOST_READING_SCRIPT } from "../lib/voice";
 import { env } from "../lib/env";
+import { useI18n } from "@dailogues/i18n";
 
 /** GET /api/me/profile 返回的频道字段 */
 interface ChannelProfile {
@@ -84,6 +85,7 @@ const styles = stylex.create({
 });
 
 export default function Settings() {
+  const { t } = useI18n();
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [sample, setSample] = createSignal<{ id: string | null; status: string; duration: number } | null>(null);
@@ -156,16 +158,16 @@ export default function Settings() {
     try {
       await api.patch("/v1/me/channel", { username: slug(), displayName: displayName(), bio: bio() });
       setChannel((c) => ({ ...(c ?? { channelActivatedAt: null }), username: slug(), displayName: displayName(), bio: bio() }));
-      setChannelMsg({ ok: true, text: "已保存——频道页地址即刻生效" });
+      setChannelMsg({ ok: true, text: t("channel.saved") });
     } catch (e) {
       if (e instanceof ApiError) {
         setChannelMsg(
           e.status === 409
-            ? { ok: false, text: "该频道地址已被占用，换一个试试" }
-            : { ok: false, text: e.code === "invalid_username" ? "频道地址仅限 3-30 位小写字母、数字、连字符" : "保存失败，请检查输入" },
+            ? { ok: false, text: t("channel.taken") }
+            : { ok: false, text: e.code === "invalid_username" ? t("channel.slugInvalid") : t("channel.saveFailed") },
         );
       } else {
-        setChannelMsg({ ok: false, text: "保存失败，请重试" });
+        setChannelMsg({ ok: false, text: t("channel.saveFailed") });
       }
     } finally {
       setChannelBusy(false);
@@ -180,9 +182,9 @@ export default function Settings() {
       await refreshSample(); // 重新拉取拿新 id → VoiceSampler 自动回播放视图
     } catch (e) {
       if (e instanceof ApiError && e.status === 502) {
-        setError("采样保存失败（可能是存储服务异常）。已录音，请重试。");
+        setError(t("settings.sampleFailed"));
       } else {
-        setError(e instanceof Error ? e.message : "上传失败");
+        setError(e instanceof Error ? e.message : t("settings.uploadFailed"));
       }
     } finally {
       setBusy(false);
@@ -192,10 +194,10 @@ export default function Settings() {
   return (
     <div {...stylex.props(styles.page)}>
       <div {...stylex.props(styles.content)}>
-        <div {...stylex.props(styles.title)}>设置</div>
+        <div {...stylex.props(styles.title)}>{t("settings.title")}</div>
 
         <div {...stylex.props(styles.card)}>
-          <div {...stylex.props(styles.cardTitle)}>频道设置</div>
+          <div {...stylex.props(styles.cardTitle)}>{t("channel.title")}</div>
           <div {...stylex.props(styles.cardDesc)}>
             频道页地址与公开信息——观众在 dailog.fm 通过频道页订阅你的节目。
           </div>
@@ -208,31 +210,31 @@ export default function Settings() {
             }
           >
             <TextField
-              label="频道地址"
+              label={t("channel.slug")}
               value={slug()}
               onInput={onSlugInput}
-              placeholder="频道地址"
+              placeholder={t("channel.slug")}
               maxLength={30}
             />
             <div {...stylex.props(styles.slugStatus, slugCheck() === "ok" && styles.slugOk, slugCheck() === "taken" && styles.slugTaken)}>
               {slugCheck() === "checking"
-                ? "检测中…"
+                ? t("channel.slugChecking")
                 : slugCheck() === "ok"
-                  ? "✓ 该地址可用"
+                  ? t("channel.slugOk")
                   : slugCheck() === "taken"
-                    ? "✗ 该地址已被占用"
+                    ? t("channel.slugTaken")
                     : slugCheck() === "invalid"
-                      ? "仅限 3-30 位小写字母、数字、连字符"
-                      : "频道页地址：" + (env.siteBaseUrl ? `${env.siteBaseUrl}/@${slug() || "..."}` : `/@${slug() || "..."}`)}
+                      ? t("channel.slugInvalid")
+                      : t("channel.slugPrefix") + (env.siteBaseUrl ? `${env.siteBaseUrl}/@${slug() || "..."}` : `/@${slug() || "..."}`)}
             </div>
-            <TextField label="频道名" value={displayName()} onInput={setDisplayName} placeholder="频道名" maxLength={30} />
-            <TextField label="频道简介" value={bio()} onInput={setBio} placeholder="频道简介（200 字以内）" maxLength={200} />
+            <TextField label={t("channel.displayName")} value={displayName()} onInput={setDisplayName} placeholder={t("channel.displayName")} maxLength={30} />
+            <TextField label={t("channel.bio")} value={bio()} onInput={setBio} placeholder={t("channel.bioPlaceholder")} maxLength={200} />
             <Button
               block
               onClick={saveChannel}
               disabled={channelBusy() || slugCheck() === "taken" || slugCheck() === "invalid"}
             >
-              {channelBusy() ? "保存中…" : "保存频道设置"}
+              {channelBusy() ? t("channel.saving") : t("channel.save")}
             </Button>
             <Show when={channelMsg()}>
               <div {...stylex.props(channelMsg()!.ok ? styles.statusOk : styles.error)} style={{ "margin-top": "12px" }}>
@@ -243,7 +245,7 @@ export default function Settings() {
         </div>
 
         <div {...stylex.props(styles.card)}>
-          <div {...stylex.props(styles.cardTitle)}>你的声音</div>
+          <div {...stylex.props(styles.cardTitle)}>{t("settings.voice")}</div>
           <div {...stylex.props(styles.cardDesc)}>
             采样后立即生效。用于生成节目中"你"的声音——点击采样可试听，随时可以重新采样。
           </div>
@@ -254,14 +256,14 @@ export default function Settings() {
         </div>
 
         <div {...stylex.props(styles.card)}>
-          <div {...stylex.props(styles.cardTitle)}>邀请码</div>
+          <div {...stylex.props(styles.cardTitle)}>{t("settings.inviteCode")}</div>
           <div {...stylex.props(styles.placeholder)}>
             发布满 3 期后，每发布一期获得一个邀请码（功能即将上线）
           </div>
         </div>
 
         <div {...stylex.props(styles.card)}>
-          <div {...stylex.props(styles.cardTitle)}>订阅</div>
+          <div {...stylex.props(styles.cardTitle)}>{t("settings.subscription")}</div>
           <div {...stylex.props(styles.placeholder)}>
             免费用户可生成 1 期；Pro 订阅无限生成（支付功能即将上线）
           </div>

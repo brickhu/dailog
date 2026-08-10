@@ -4,6 +4,7 @@ import { Button } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
 import { ApiError } from "../lib/api";
+import { useI18n } from "@dailogues/i18n";
 
 export interface JobInfo {
   id: string;
@@ -13,12 +14,12 @@ export interface JobInfo {
 }
 
 const STAGE_LABEL: Record<JobInfo["status"], string> = {
-  queued: "排队中",
-  tts: "合成语音",
-  merge: "拼接片头片尾",
-  upload: "上传存储",
-  done: "完成",
-  failed: "生成失败",
+  queued: "studio.generate.stage.queued",
+  tts: "studio.generate.stage.tts",
+  merge: "studio.generate.stage.merge",
+  upload: "studio.generate.stage.upload",
+  done: "studio.generate.stage.done",
+  failed: "studio.generate.failed",
 };
 
 export interface GenerateProgressProps {
@@ -30,6 +31,7 @@ export interface GenerateProgressProps {
 }
 
 export default function GenerateProgress(props: GenerateProgressProps) {
+  const { t } = useI18n();
   const [job, setJob] = createSignal<JobInfo | null>(null);
   const [started, setStarted] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -48,10 +50,10 @@ export default function GenerateProgress(props: GenerateProgressProps) {
         return;
       }
       if (e instanceof ApiError && e.status === 422) {
-        setError(`内容安全审核未通过：${e.detail ?? "请修改脚本后重试"}`);
+        setError(`内容安全审核未通过：${e.detail ?? t("studio.generate.fixScript")}`);
         return;
       }
-      setError(e instanceof Error ? e.message : "触发生成失败");
+      setError(e instanceof Error ? e.message : t("studio.generate.triggerFailed"));
       return;
     }
     poll();
@@ -68,7 +70,7 @@ export default function GenerateProgress(props: GenerateProgressProps) {
           return;
         }
         if (j.status === "failed") {
-          props.onFailed?.(j.error ?? "未知错误");
+          props.onFailed?.(j.error ?? t("studio.generate.unknown"));
           return;
         }
       } catch (e) {
@@ -101,17 +103,17 @@ export default function GenerateProgress(props: GenerateProgressProps) {
     <div>
       <Show when={!started()}>
         <div {...stylex.props(styles.box)}>
-          <div {...stylex.props(styles.title)}>生成播客音频</div>
+          <div {...stylex.props(styles.title)}>{t("studio.generate.title")}</div>
           <div {...stylex.props(styles.hint)}>
             将用你的克隆声音（主持人）和平台固定声音（AI 嘉宾）合成并拼接片头片尾。大约需要 1-3 分钟。
           </div>
-          <Button onClick={trigger}>开始生成</Button>
+          <Button onClick={trigger}>{t("studio.generate.start")}</Button>
         </div>
       </Show>
 
       <Show when={started() && !job()}>
         <div {...stylex.props(styles.box)}>
-          <div {...stylex.props(styles.title)}>任务已提交，等待队列…</div>
+          <div {...stylex.props(styles.title)}>{t("studio.generate.queued")}</div>
         </div>
       </Show>
 
@@ -130,7 +132,7 @@ export default function GenerateProgress(props: GenerateProgressProps) {
       <Show when={error()}>
         <div {...stylex.props(styles.errorBox)}>
           <div {...stylex.props(styles.errorText)}>{error()}</div>
-          <Button onClick={trigger}>重试</Button>
+          <Button onClick={trigger}>{t("studio.generate.retry")}</Button>
         </div>
       </Show>
 
@@ -139,13 +141,13 @@ export default function GenerateProgress(props: GenerateProgressProps) {
           <div {...stylex.props(styles.errorText)}>
             免费额度已用完。购买积分或订阅 Pro 后可继续生成（支付功能即将上线）。
           </div>
-          <Button appear="ghost" onClick={() => props.onQuotaDenied?.()}>返回修改脚本</Button>
+          <Button appear="ghost" onClick={() => props.onQuotaDenied?.()}>{t("studio.generate.back")}</Button>
         </div>
       </Show>
 
       <Show when={audioUrl()}>
         <div {...stylex.props(styles.box)}>
-          <div {...stylex.props(styles.title)}>试听你的节目</div>
+          <div {...stylex.props(styles.title)}>{t("studio.generate.listen")}</div>
           <audio controls src={audioUrl()!} {...stylex.props(styles.audio)} />
         </div>
       </Show>

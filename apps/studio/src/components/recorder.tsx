@@ -2,6 +2,7 @@ import { createSignal, onCleanup, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { Button } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
+import { useI18n } from "@dailogues/i18n";
 
 // ---------------------------------------------------------------------------
 // 录音状态机（纯函数，可单测）
@@ -40,6 +41,7 @@ export interface RecorderProps {
 }
 
 export default function Recorder(props: RecorderProps) {
+  const { t } = useI18n();
   const minSeconds = props.minSeconds ?? 8;
   const maxSeconds = props.maxSeconds ?? 30;
   const [phase, setPhase] = createSignal<RecorderPhase>("idle");
@@ -74,7 +76,7 @@ export default function Recorder(props: RecorderProps) {
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (e) {
-      setError("无法访问麦克风（需要浏览器授权）");
+      setError(t("recorder.micError"));
       return;
     }
     mediaRecorder = new MediaRecorder(stream);
@@ -159,17 +161,17 @@ export default function Recorder(props: RecorderProps) {
       <div {...stylex.props(styles.timer)}>
         {phase() === "recording" && <>{seconds()}s / {maxSeconds}s 最长</>}
         {phase() === "recorded" && <>{seconds()}s（{seconds() < minSeconds ? `至少 ${minSeconds} 秒` : "可以了 ✓"}）</>}
-        {phase() === "idle" && <>10–30 秒，说点你日常的话</>}
+        {phase() === "idle" && <>{t("recorder.recordingHint")}</>}
       </div>
       <div {...stylex.props(styles.controls)}>
         <Show when={phase() !== "recording"}>
-          <Button onClick={start} disabled={props.busy}>{phase() === "recorded" ? "重录" : "开始录音"}</Button>
+          <Button onClick={start} disabled={props.busy}>{phase() === "recorded" ? t("recorder.retry") : t("recorder.start")}</Button>
         </Show>
         <Show when={phase() === "recording"}>
-          <Button onClick={stop}>停止</Button>
+          <Button onClick={stop}>{t("recorder.recording")}</Button>
         </Show>
         <Show when={phase() === "recorded"}>
-          <Button appear="ghost" onClick={discard} disabled={props.busy}>丢弃</Button>
+          <Button appear="ghost" onClick={discard} disabled={props.busy}>{t("recorder.discard")}</Button>
           <audio controls src={previewUrl() ?? undefined} {...stylex.props(styles.audio)} />
         </Show>
       </div>

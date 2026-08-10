@@ -3,6 +3,7 @@ import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { Button, TextField } from "@dailogues/ui";
+import { useI18n } from "@dailogues/i18n";
 
 // 找回密码（dailog.fm/forgot-password）：
 // ① 输邮箱 → POST /api/auth/forget-password/email-otp（发 6 位重置码）
@@ -62,6 +63,7 @@ const styles = stylex.create({
 type Step = "email" | "code";
 
 export default function ForgotPasswordPage() {
+  const { t } = useI18n();
   const [step, setStep] = createSignal<Step>("email");
   const [email, setEmail] = createSignal("");
   const [otp, setOtp] = createSignal("");
@@ -73,7 +75,7 @@ export default function ForgotPasswordPage() {
   /** ① 发重置码 */
   const sendCode = async () => {
     setMsg(null);
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email())) return setMsg({ ok: false, text: "请输入有效的邮箱地址" });
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email())) return setMsg({ ok: false, text: t("forgot.invalidEmail") });
     setBusy(true);
     try {
       const res = await fetch("/v1/auth/forget-password/email-otp", {
@@ -83,9 +85,9 @@ export default function ForgotPasswordPage() {
       });
       if (res.ok) {
         setStep("code");
-        setMsg({ ok: true, text: "验证码已发送——请查收邮件（10 分钟内有效）" });
+        setMsg({ ok: true, text: t("forgot.sent") });
       } else {
-        setMsg({ ok: false, text: "发送失败，请稍后重试" });
+        setMsg({ ok: false, text: t("forgot.sendFailed") });
       }
     } finally {
       setBusy(false);
@@ -95,8 +97,8 @@ export default function ForgotPasswordPage() {
   /** ② 验证码 + 新密码重置 */
   const resetPassword = async () => {
     setMsg(null);
-    if (newPw().length < 8) return setMsg({ ok: false, text: "新密码至少 8 位" });
-    if (newPw() !== confirmPw()) return setMsg({ ok: false, text: "两次输入的新密码不一致" });
+    if (newPw().length < 8) return setMsg({ ok: false, text: t("forgot.passwordMin") });
+    if (newPw() !== confirmPw()) return setMsg({ ok: false, text: t("forgot.passwordMismatch") });
     setBusy(true);
     try {
       const res = await fetch("/v1/auth/email-otp/reset-password", {
@@ -105,11 +107,11 @@ export default function ForgotPasswordPage() {
         body: JSON.stringify({ email: email().trim().toLowerCase(), otp: otp(), password: newPw() }),
       });
       if (res.ok) {
-        setMsg({ ok: true, text: "密码已重置，正在跳转登录…" });
+        setMsg({ ok: true, text: t("forgot.resetSuccess") });
         setTimeout(() => (window.location.href = "/login"), 1200);
       } else {
         const body = (await res.json().catch(() => null)) as { message?: string } | null;
-        setMsg({ ok: false, text: body?.message ?? "重置失败——验证码可能已过期或不正确" });
+        setMsg({ ok: false, text: body?.message ?? t("forgot.resetFailed") });
       }
     } finally {
       setBusy(false);
@@ -122,38 +124,36 @@ export default function ForgotPasswordPage() {
       <div {...stylex.props(styles.card)}>
         <Show when={step() === "email"} fallback={
           <>
-            <div {...stylex.props(styles.title)}>重置密码</div>
+            <div {...stylex.props(styles.title)}>{t("forgot.resetTitle")}</div>
             <div {...stylex.props(styles.desc)}>
-              输入发送到 {email()} 的 6 位验证码，并设置新密码。
+              {t("forgot.resetDesc", { email: email() })}
             </div>
             <div {...stylex.props(styles.field)}>
-              <TextField label="验证码" value={otp()} onInput={setOtp} placeholder="验证码" maxLength={6} />
+              <TextField label={t("forgot.otp")} value={otp()} onInput={setOtp} placeholder={t("forgot.otp")} maxLength={6} />
             </div>
             <div {...stylex.props(styles.field)}>
-              <TextField label="新密码" type="password" value={newPw()} onInput={setNewPw} placeholder="新密码（至少 8 位）" />
+              <TextField label="新密码" type="password" value={newPw()} onInput={setNewPw} placeholder={t("forgot.newPassword")} />
             </div>
             <div {...stylex.props(styles.field)}>
-              <TextField label="确认新密码" type="password" value={confirmPw()} onInput={setConfirmPw} placeholder="再次输入新密码" />
+              <TextField label="确认新密码" type="password" value={confirmPw()} onInput={setConfirmPw} placeholder={t("forgot.confirmPassword")} />
             </div>
-            <Button block onClick={resetPassword} disabled={busy()}>{busy() ? "重置中…" : "重置密码"}</Button>
+            <Button block onClick={resetPassword} disabled={busy()}>{busy() ? t("forgot.resetting") : t("forgot.reset")}</Button>
             <Show when={msg()}>
               <div {...stylex.props(msg()!.ok ? styles.success : styles.error)}>{msg()!.text}</div>
             </Show>
-            <a href="/forgot-password" {...stylex.props(styles.back)}>← 重新发送验证码</a>
+            <a href="/forgot-password" {...stylex.props(styles.back)}>{t("forgot.resend")}</a>
           </>
         }>
-          <div {...stylex.props(styles.title)}>找回密码</div>
-          <div {...stylex.props(styles.desc)}>
-            输入注册邮箱，我们将发送 6 位验证码帮你重置密码。
-          </div>
+          <div {...stylex.props(styles.title)}>{t("forgot.title")}</div>
+          <div {...stylex.props(styles.desc)}>{t("forgot.desc")}</div>
           <div {...stylex.props(styles.field)}>
-            <TextField label="邮箱" type="email" value={email()} onInput={setEmail} placeholder="注册邮箱" />
+            <TextField label={t("forgot.email")} type="email" value={email()} onInput={setEmail} placeholder={t("forgot.email")} />
           </div>
-          <Button block onClick={sendCode} disabled={busy()}>{busy() ? "发送中…" : "发送验证码"}</Button>
+          <Button block onClick={sendCode} disabled={busy()}>{busy() ? t("forgot.sending") : t("forgot.send")}</Button>
           <Show when={msg()}>
             <div {...stylex.props(msg()!.ok ? styles.success : styles.error)}>{msg()!.text}</div>
           </Show>
-          <a href="/login" {...stylex.props(styles.back)}>← 返回登录</a>
+          <a href="/login" {...stylex.props(styles.back)}>{t("forgot.backToLogin")}</a>
         </Show>
       </div>
     </div>

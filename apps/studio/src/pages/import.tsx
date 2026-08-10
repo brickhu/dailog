@@ -6,6 +6,7 @@ import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
 import { ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useI18n } from "@dailogues/i18n";
 
 // /import（根路径 = 导入页）：粘贴 AI 对话分享链接 → 采集预览 → 确认入库（存 R2 + 建草稿）。
 // 是否登录/开通频道由 app 的 auth provider 负责（未登录 → 登录锁定；入库 403 → 频道引导提示）
@@ -17,9 +18,9 @@ const PLATFORM_LABEL: Record<string, string> = {
   chatgpt: "ChatGPT",
   gemini: "Gemini",
   kimi: "Kimi",
-  doubao: "豆包",
-  tongyi: "通义",
-  plain: "其他",
+  doubao: "studio.import.doubao",
+  tongyi: "studio.import.tongyi",
+  plain: "studio.import.other",
 };
 
 interface DialogueMessage {
@@ -150,6 +151,7 @@ type State =
   | { kind: "ready"; dialogue: Dialogue };
 
 export default function CollectPage() {
+  const { t } = useI18n();
   const auth = useAuth();
   const navigate = useNavigate();
   const [state, setState] = createSignal<State>({ kind: "input" });
@@ -178,7 +180,7 @@ export default function CollectPage() {
   const validateUrl = (url: string): { ok: boolean; label?: string; message?: string } => {
     const trimmed = url.trim();
     if (!trimmed) return { ok: false };
-    if (!/^https?:\/\//.test(trimmed)) return { ok: false, message: "链接需以 http(s):// 开头" };
+    if (!/^https?:\/\//.test(trimmed)) return { ok: false, message: t("studio.import.urlHttp") };
     const rs = rules();
     if (!rs) return { ok: true }; // 规则未就绪：放行，服务端校验
     for (const r of rs) {
@@ -188,7 +190,7 @@ export default function CollectPage() {
         /* 规则异常跳过 */
       }
     }
-    return { ok: false, message: "不是有效的分享页链接（支持：Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包）" };
+    return { ok: false, message: t("studio.import.urlInvalid") };
   };
 
   const onUrlInput = (value: string) => {
@@ -204,7 +206,7 @@ export default function CollectPage() {
     // 前端预检（规则来自 importer，非法链接直接拦截，不发请求）
     const hint = validateUrl(url);
     if (!hint.ok) {
-      setActionError(hint.message ?? "请输入完整的分享链接（https://…）");
+      setActionError(hint.message ?? t("studio.import.urlRequired"));
       return;
     }
     setBusy(true);
@@ -242,7 +244,7 @@ export default function CollectPage() {
           dialogue: {
             platform: body.dialogue.platform ?? "plain",
             conversationId: body.dialogue.conversationId ?? url,
-            title: body.dialogue.title ?? "分享对话",
+            title: body.dialogue.title ?? t("studio.import.shareDialogue"),
             url: body.dialogue.url ?? url,
             messages: body.dialogue.messages,
             snapshotId: body.snapshotId ?? null,
@@ -255,17 +257,17 @@ export default function CollectPage() {
         kind: "error",
         message:
           err === "platform_unreachable"
-            ? "该平台暂时不可达（可能被反爬拦截）。请稍后重试，或换一个平台的分享链接。"
+            ? t("import.unreachable")
             : err === "parse_failed"
-              ? "无法解析该分享页（页面结构可能已变化）。请确认链接有效后重试。"
+              ? t("import.parseFailed")
               : err === "too_short"
-                ? "该对话内容过短（少于 3 轮问答或不足 500 字），不适合制作播客单集。请换一个更完整的对话分享链接。"
+                ? t("import.tooShort")
                 : err === "share_unavailable"
-                ? "该分享链接已失效或被取消，请确认后重试。"
+                ? t("import.shareUnavailable")
                 : err === "unsupported_platform"
-                  ? "暂不支持该平台/链接格式。支持：Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 分享链接。"
+                  ? t("import.unsupported")
                   : err === "share_collect_unreachable"
-                    ? "采集服务暂不可用，请稍后重试。"
+                    ? t("import.collectUnreachable")
                     : err,
       });
     } catch (e) {
@@ -273,7 +275,7 @@ export default function CollectPage() {
         auth.expireSession();
         return;
       }
-      setState({ kind: "error", message: e instanceof Error ? e.message : "网络错误，请重试" });
+      setState({ kind: "error", message: e instanceof Error ? e.message : t("studio.networkError") });
     } finally {
       setBusy(false);
     }
@@ -301,7 +303,7 @@ export default function CollectPage() {
         return;
       }
       if (res.status === 403) {
-        setActionError("频道未开通——请先到「初始化频道」完成邀请码 + 录音，再回来确认入库。");
+        setActionError(t("studio.channelNotActivated"));
       } else {
         setActionError(body?.error ?? `入库失败（HTTP ${res.status}），请重试`);
       }
@@ -311,7 +313,7 @@ export default function CollectPage() {
         auth.expireSession();
         return;
       }
-      setActionError(e instanceof Error ? e.message : "网络错误，请重试");
+      setActionError(e instanceof Error ? e.message : t("studio.networkError"));
     } finally {
       setBusy(false);
     }
@@ -327,7 +329,7 @@ export default function CollectPage() {
       <div {...stylex.props(styles.card)}>
         <Show
           when={state().kind !== "loading"}
-          fallback={<div {...stylex.props(styles.meta)}>采集分享页…</div>}
+          fallback={<div {...stylex.props(styles.meta)}>{t("import.collecting")}</div>}
         >
           <Show
             when={state().kind === "input"}
@@ -336,15 +338,15 @@ export default function CollectPage() {
                 when={ready()}
                 fallback={
                   <>
-                    <div {...stylex.props(styles.title)}>无法确认采集</div>
+                    <div {...stylex.props(styles.title)}>{t("import.failed")}</div>
                     <div {...stylex.props(styles.meta)}>{errorMessage()}</div>
-                    <Button block onClick={() => navigate("/episodes")}>回工作台</Button>
+                    <Button block onClick={() => navigate("/episodes")}>{t("import.back")}</Button>
                   </>
                 }
               >
                 <div {...stylex.props(styles.title)}>确认采集「{ready()!.dialogue.title || "未命名对话"}」</div>
                 <div {...stylex.props(styles.meta)}>
-                  平台：{PLATFORM_LABEL[ready()!.dialogue.platform] ?? "其他"}
+                  平台：{t(PLATFORM_LABEL[ready()!.dialogue.platform] as never) ?? t("studio.import.other")}
                   {" "}· 共 {ready()!.dialogue.messages.length} 条消息
                   <br />
                   来源：<a {...stylex.props(styles.source)} href={ready()!.dialogue.url} target="_blank">
@@ -363,8 +365,8 @@ export default function CollectPage() {
                   </For>
                 </div>
                 <div {...stylex.props(styles.actions)}>
-                  <Button block disabled={busy()} onClick={confirm}>{busy() ? "创建中…" : "确认创建"}</Button>
-                  <Button block appear="ghost" disabled={busy()} onClick={() => navigate("/episodes")}>取消</Button>
+                  <Button block disabled={busy()} onClick={confirm}>{busy() ? t("studio.import.creating") : t("studio.import.confirmCreate")}</Button>
+                  <Button block appear="ghost" disabled={busy()} onClick={() => navigate("/episodes")}>{t("common.cancel")}</Button>
                 </div>
                 <Show when={actionError()}>
                   <div {...stylex.props(styles.error)}>{actionError()}</div>
@@ -373,7 +375,7 @@ export default function CollectPage() {
             }
           >
             {/* 分享链接模式：粘贴链接 → 采集 → 预览确认 */}
-            <div {...stylex.props(styles.title)}>从分享链接导入对话</div>
+            <div {...stylex.props(styles.title)}>{t("studio.import.title")}</div>
             <div {...stylex.props(styles.meta)}>
               粘贴 Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 的对话分享链接，
               采集后确认入库。
@@ -406,9 +408,9 @@ export default function CollectPage() {
                 disabled={busy() || (!!urlHint() && !urlHint()!.ok)}
                 onClick={collectFromUrl}
               >
-                {busy() ? "采集中…" : "采集对话"}
+                {busy() ? t("studio.import.collecting") : t("studio.import.collect")}
               </Button>
-              <Button block appear="ghost" disabled={busy()} onClick={() => navigate("/episodes")}>我的节目</Button>
+              <Button block appear="ghost" disabled={busy()} onClick={() => navigate("/episodes")}>{t("studio.myEpisodes")}</Button>
             </div>
             <Show when={actionError()}>
               <div {...stylex.props(styles.error)}>{actionError()}</div>

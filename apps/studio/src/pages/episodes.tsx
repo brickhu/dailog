@@ -4,6 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 import { Button } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
+import { useI18n } from "@dailogues/i18n";
 
 export interface Episode {
   id: string;
@@ -13,11 +14,11 @@ export interface Episode {
   createdAt: string;
 }
 
-const STATUS_LABEL: Record<Episode["status"], { text: string; color: string }> = {
-  draft: { text: "草稿", color: "#8b95a7" },
-  generating: { text: "生成中", color: "#e0a23c" },
-  published: { text: "已发布", color: "#3fb68b" },
-  failed: { text: "生成失败", color: "#f0506e" },
+const STATUS_LABEL: Record<Episode["status"], { textKey: string; color: string }> = {
+  draft: { textKey: "studio.status.draft", color: "#8b95a7" },
+  generating: { textKey: "studio.status.generating", color: "#e0a23c" },
+  published: { textKey: "studio.status.published", color: "#3fb68b" },
+  failed: { textKey: "studio.status.failed", color: "#f0506e" },
 };
 
 const styles = stylex.create({
@@ -122,6 +123,7 @@ const styles = stylex.create({
 });
 
 export default function Dashboard() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [episodes, setEpisodes] = createSignal<Episode[]>([]);
   const [loading, setLoading] = createSignal(true);
@@ -131,7 +133,7 @@ export default function Dashboard() {
     try {
       setEpisodes(await api.get<Episode[]>("/v1/episodes"));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "加载失败");
+      setError(e instanceof Error ? e.message : t("studio.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -141,10 +143,10 @@ export default function Dashboard() {
     <div {...stylex.props(styles.page)}>
       <div {...stylex.props(styles.content)}>
         <div {...stylex.props(styles.hero)}>
-          <div {...stylex.props(styles.title)}>我的节目</div>
+          <div {...stylex.props(styles.title)}>{t("studio.myEpisodes")}</div>
           <div {...stylex.props(styles.heroActions)}>
-            <Button appear="ghost" onClick={() => navigate("/")}>从分享链接导入</Button>
-            <Button onClick={() => navigate("/episodes/new")}>开始新节目</Button>
+            <Button appear="ghost" onClick={() => navigate("/")}>{t("studio.importFromLink")}</Button>
+            <Button onClick={() => navigate("/episodes/new")}>{t("studio.startNew")}</Button>
           </div>
         </div>
 
@@ -173,7 +175,7 @@ export default function Dashboard() {
                   {...stylex.props(styles.badge)}
                   style={{ background: `${status.color}22`, color: status.color }}
                 >
-                  {status.text}
+                  {t(status.textKey as never)}
                 </span>
               </div>
             );
@@ -181,8 +183,8 @@ export default function Dashboard() {
         </For>
 
         <div {...stylex.props(styles.placeholderRow)}>
-          <div {...stylex.props(styles.placeholder)}>邀请好友（计划 7）</div>
-          <div {...stylex.props(styles.placeholder)}>订阅 Pro（计划 7）</div>
+          <div {...stylex.props(styles.placeholder)}>{t("studio.inviteFriends")}</div>
+          <div {...stylex.props(styles.placeholder)}>{t("studio.subscribePro")}</div>
         </div>
       </div>
     </div>

@@ -7,6 +7,7 @@ import { SiteNav } from "../../components/site-nav";
 import { env } from "../../lib/env";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
+import { useI18n } from "@dailogues/i18n";
 
 // 单集页：/episode/:id（播放器 + 元信息；点赞/收藏按钮 Task 4）
 const styles = stylex.create({
@@ -74,6 +75,7 @@ const styles = stylex.create({
 
 /** 收藏/点赞交互（客户端）：未登录点击 → 跳统一登录页（redirect 回当前单集页） */
 function InteractButtons(props: { episodeId: string }) {
+  const { t } = useI18n();
   const [fav, setFav] = createSignal(false);
   const [liked, setLiked] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
@@ -103,19 +105,20 @@ function InteractButtons(props: { episodeId: string }) {
         {...stylex.props(styles.actionBtn, liked() && styles.actionActive)}
         onClick={() => toggle("like")}
       >
-        {liked() ? "♥ 已赞" : "♡ 点赞"}
+        {liked() ? t("episode.liked") : t("episode.like")}
       </button>
       <button
         {...stylex.props(styles.actionBtn, fav() && styles.actionActive)}
         onClick={() => toggle("favorite")}
       >
-        {fav() ? "★ 已收藏" : "☆ 收藏"}
+        {fav() ? t("episode.favorited") : t("episode.favorite")}
       </button>
     </div>
   );
 }
 
 export default function EpisodePage() {
+  const { t } = useI18n();
   const params = useParams<{ id: string }>();
   const ep = createAsync(() => getEpisode(params.id));
   const audioUrl = () =>
@@ -125,12 +128,12 @@ export default function EpisodePage() {
     <div {...stylex.props(styles.page)}>
       <SiteNav />
       <div {...stylex.props(styles.content)}>
-        <Show when={ep()} fallback={<div {...stylex.props(styles.notFound)}>节目不存在或未发布</div>}>
+        <Show when={ep()} fallback={<div {...stylex.props(styles.notFound)}>{t("episode.notFound")}</div>}>
           <Title>{ep()!.title || "dailog"}</Title>
           <a href={`/@${ep()!.username}`} {...stylex.props(styles.back)}>
             ← @{ep()!.username} 的频道
           </a>
-          <div {...stylex.props(styles.title)}>{ep()!.title || "未命名节目"}</div>
+          <div {...stylex.props(styles.title)}>{ep()!.title || t("common.unnamed")}</div>
           <div {...stylex.props(styles.meta)}>
             @{ep()!.username} · {new Date(ep()!.publishedAt ?? 0).toLocaleDateString("zh-CN")} ·{" "}
             {Math.floor((ep()!.durationSeconds ?? 0) / 60)} 分钟
@@ -139,7 +142,7 @@ export default function EpisodePage() {
             <audio controls src={audioUrl()!} {...stylex.props(styles.player)} />
           </Show>
           <InteractButtons episodeId={ep()!.id} />
-          <div {...stylex.props(styles.desc)}>{ep()!.description || "（暂无简介）"}</div>
+          <div {...stylex.props(styles.desc)}>{ep()!.description || t("episode.noDescription")}</div>
         </Show>
       </div>
     </div>

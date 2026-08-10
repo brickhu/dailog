@@ -1,5 +1,7 @@
 /** 前端 API 客户端：统一 baseUrl、Bearer 注入、错误规范化 */
 
+import { useI18n } from "@dailogues/i18n";
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -31,6 +33,7 @@ export interface ApiClient {
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export function createApiClient(opts: ApiClientOptions): ApiClient {
+  const { t } = useI18n();
   const request = async (path: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<Response> => {
     const { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...rest } = init;
     // 无 token 不拦截：cookie 会话（credentials: "include"）可独立认证；
@@ -65,7 +68,7 @@ export function createApiClient(opts: ApiClientOptions): ApiClient {
       return res;
     } catch (e) {
       if (timer) clearTimeout(timer);
-      if (timedOut) throw new ApiError(408, "request_timeout", "请求超时，请检查网络后重试");
+      if (timedOut) throw new ApiError(408, "request_timeout", t("studio.timeout"));
       throw e;
     }
   };

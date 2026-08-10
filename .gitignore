@@ -25,3 +25,6 @@ scripts/spikes/out-*.mp3
 
 # 误放的项目内 Chrome 用户数据目录（本地浏览器配置，非项目产物）
 poc-profile/
+
+# 容器内 pnpm install 生成的 store（误入挂载工作区）
+.pnpm-store/

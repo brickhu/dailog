@@ -1,3 +1,4 @@
+import { detectLocale } from "@dailogues/i18n";
 import { getChannel } from "../../lib/db";
 import { env } from "../../lib/env";
 
@@ -12,7 +13,8 @@ function xmlEscape(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-export async function GET(event: { params: { username: string } }) {
+export async function GET(event: { params: { username: string }; request: Request }) {
+  const locale = detectLocale({ acceptLanguage: event.request.headers.get("accept-language") });
   const { channel, episodes } = await getChannel(event.params.username.replace(/^@/, ""));
   if (!channel) {
     return new Response("channel not found", { status: 404 });
@@ -44,7 +46,7 @@ export async function GET(event: { params: { username: string } }) {
     <title>${xmlEscape(channel.displayName)}</title>
     <link>${channelUrl}</link>
     <description>${xmlEscape(channel.bio || "")}</description>
-    <language>zh-cn</language>
+    <language>${locale === "zh" ? "zh-cn" : "en"}</language>
 ${items}
   </channel>
 </rss>`;

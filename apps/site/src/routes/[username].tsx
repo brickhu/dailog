@@ -5,6 +5,7 @@ import { getChannel, type EpisodeSummary } from "../lib/db";
 import { SiteNav } from "../components/site-nav";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
+import { useI18n } from "@dailogues/i18n";
 
 // 频道页：/@username（简介 + 节目列表 + RSS 订阅入口）
 const styles = stylex.create({
@@ -81,6 +82,7 @@ function fmtDuration(sec: number | null): string {
 }
 
 export default function ChannelPage() {
+  const { t } = useI18n();
   const params = useParams<{ username: string }>();
   // URL /@username → 路由参数含 @ 前缀，查询前归一化
   const username = () => params.username.replace(/^@/, "");
@@ -92,12 +94,12 @@ export default function ChannelPage() {
       <div {...stylex.props(styles.content)}>
         <Show
           when={data()?.channel}
-          fallback={<div {...stylex.props(styles.notFound)}>频道不存在</div>}
+          fallback={<div {...stylex.props(styles.notFound)}>{t("channel.notFound")}</div>}
         >
           <div {...stylex.props(styles.header)}>
             <div {...stylex.props(styles.name)}>@{data()!.channel!.username}</div>
-            <div {...stylex.props(styles.bio)}>{data()!.channel!.bio || "这个频道还没有简介"}</div>
-            <div {...stylex.props(styles.meta)}>{data()!.channel!.episodeCount} 期节目</div>
+            <div {...stylex.props(styles.bio)}>{data()!.channel!.bio || t("channel.noBio")}</div>
+            <div {...stylex.props(styles.meta)}>{t("channel.episodeCount", { count: data()!.channel!.episodeCount })}</div>
             <a href={`/@${username()}/feed.xml`} {...stylex.props(styles.rss)}>
               RSS 订阅
             </a>
@@ -105,7 +107,7 @@ export default function ChannelPage() {
           <For each={data()!.episodes as EpisodeSummary[]}>
             {(ep) => (
               <a href={`/episode/${ep.id}`} {...stylex.props(styles.card)}>
-                <div {...stylex.props(styles.epTitle)}>{ep.title || "未命名节目"}</div>
+                <div {...stylex.props(styles.epTitle)}>{ep.title || t("common.unnamed")}</div>
                 <div {...stylex.props(styles.meta2)}>
                   {new Date(ep.publishedAt ?? 0).toLocaleDateString("zh-CN")} ·{" "}
                   {fmtDuration(ep.durationSeconds)}

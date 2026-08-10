@@ -31,6 +31,9 @@ importers:
       '@dailogues/auth-ui':
         specifier: workspace:^
         version: link:../../packages/auth-ui
+      '@dailogues/i18n':
+        specifier: workspace:^
+        version: link:../../packages/i18n
       '@dailogues/ui':
         specifier: workspace:^
         version: link:../../packages/ui
@@ -77,6 +80,9 @@ importers:
       '@dailogues/auth-ui':
         specifier: workspace:^
         version: link:../../packages/auth-ui
+      '@dailogues/i18n':
+        specifier: workspace:^
+        version: link:../../packages/i18n
       '@dailogues/ui':
         specifier: workspace:^
         version: link:../../packages/ui
@@ -114,6 +120,9 @@ importers:
 
   packages/auth-ui:
     dependencies:
+      '@dailogues/i18n':
+        specifier: workspace:^
+        version: link:../i18n
       '@dailogues/ui':
         specifier: workspace:^
         version: link:../ui
@@ -128,8 +137,21 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
+  packages/i18n:
+    dependencies:
+      solid-js:
+        specifier: ^1.9.14
+        version: 1.9.14
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
   packages/ui:
     dependencies:
+      '@dailogues/i18n':
+        specifier: workspace:^
+        version: link:../i18n
       '@iconify-icon/solid':
         specifier: ^3.0.3
         version: 3.0.3(solid-js@1.9.14)
