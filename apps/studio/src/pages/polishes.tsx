@@ -6,24 +6,32 @@ import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
 import { useI18n } from "@dailogues/i18n";
 
-// /polishes：创作容器（polish）列表——每个容器可生成多条润色脚本，点击进入编辑页。
+// /polishes：脚本列表——按对话（polish）分组展示：
+//   <对话标题> - from <AI 平台>
+//   #1 : <脚本标题> - <已生成/未生成>
+// 点击脚本行进入编辑页并直达该脚本（?script=<id>）。
+
+interface ScriptItem {
+  id: string;
+  title: string | null;
+  topic: string | null;
+  /** unused = 未生成节目；used = 已生成 */
+  status: string | null;
+}
 
 interface PolishItem {
   id: string;
   title: string | null;
   status: string;
   snapshotTitle: string | null;
+  /** 对话来源平台（claude/chatgpt/...）+ 展示名（guests 表，如 DeepSeek） */
+  platform: string | null;
+  aiName: string | null;
+  scripts: ScriptItem[];
   episodeId: string | null;
   episodeStatus: string | null;
   createdAt: string;
 }
-
-const STATUS_LABEL: Record<string, string> = {
-  editing: "studio.status.editing",
-  generating: "studio.status.generating",
-  published: "studio.status.published",
-  failed: "studio.status.none",
-};
 
 const styles = stylex.create({
   page: {
@@ -47,46 +55,73 @@ const styles = stylex.create({
     fontSize: dimensions.fontSizeSm,
     marginTop: dimensions.spacing1,
   },
-  card: {
+  group: {
     padding: dimensions.spacing4,
     borderRadius: dimensions.radiusMd,
     border: `1px solid ${colors.ink}`,
-    marginBottom: dimensions.spacing3,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: dimensions.spacing3,
-    cursor: "pointer",
     backgroundColor: colors.surface,
   },
-  cardMain: {
-    minWidth: 0,
+  groupHeader: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: dimensions.spacing1,
+    marginBottom: dimensions.spacing3,
+    cursor: "pointer",
   },
-  cardTitle: {
-    fontWeight: dimensions.fontWeightMedium,
+  groupTitle: {
+    fontWeight: dimensions.fontWeightBold,
     fontSize: dimensions.fontSizeMd,
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
-  cardMeta: {
+  groupFrom: {
     color: colors.neutral,
     fontSize: dimensions.fontSizeSm,
-    marginTop: dimensions.spacing1,
-  },
-  badge: {
-    padding: `2px ${dimensions.spacing2}`,
-    borderRadius: dimensions.radiusFull,
-    fontSize: "12px",
     flexShrink: 0,
   },
-  badgePublished: {
+  divider: {
+    border: "none",
+    borderTop: `1px dashed ${colors.ink}`,
+    margin: `${dimensions.spacing4} 0`,
+  },
+  scriptRow: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: dimensions.spacing2,
+    padding: `${dimensions.spacing2} ${dimensions.spacing2}`,
+    borderRadius: dimensions.radiusSm,
+    cursor: "pointer",
+    fontSize: dimensions.fontSizeMd,
+  },
+  scriptNum: {
+    color: colors.neutral,
+    fontVariantNumeric: "tabular-nums",
+    flexShrink: 0,
+  },
+  scriptTitle: {
+    flex: 1,
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  scriptStatus: {
+    fontSize: dimensions.fontSizeSm,
+    flexShrink: 0,
+    padding: `1px ${dimensions.spacing2}`,
+    borderRadius: dimensions.radiusFull,
+    backgroundColor: colors.surfaceWeak,
+    color: colors.neutralWeak,
+  },
+  scriptUsed: {
     backgroundColor: "#dcfce7",
     color: "#166534",
   },
-  badgeGenerating: {
-    backgroundColor: "#fef3c7",
-    color: "#92400e",
+  noScript: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    padding: `${dimensions.spacing2} 0`,
   },
   empty: {
     padding: dimensions.spacing8,
@@ -152,25 +187,54 @@ export default function PolishesPage() {
       </Show>
 
       <For each={items()}>
-        {(item) => (
-          <div {...stylex.props(styles.card)} onClick={() => navigate(`/polish/${item.id}`)}>
-            <div {...stylex.props(styles.cardMain)}>
-              <div {...stylex.props(styles.cardTitle)}>{item.snapshotTitle ?? item.title ?? "未命名容器"}</div>
-              <div {...stylex.props(styles.cardMeta)}>
-                {new Date(item.createdAt).toLocaleDateString("zh-CN")}
+        {(item, i) => (
+          <div>
+            <Show when={i() > 0}>
+              <hr {...stylex.props(styles.divider)} />
+            </Show>
+            <div {...stylex.props(styles.group)}>
+              {/* 对话标题 - from AI 平台 */}
+              <div
+                {...stylex.props(styles.groupHeader)}
+                onClick={() => navigate(`/polish/${item.id}`)}
+              >
+                <span {...stylex.props(styles.groupTitle)}>
+                  {item.snapshotTitle ?? item.title ?? t("studio.unnamed")}
+                </span>
+                <Show when={item.aiName}>
+                  <span {...stylex.props(styles.groupFrom)}>
+                    - {t("studio.script.from")} {item.aiName}
+                  </span>
+                </Show>
               </div>
+              {/* 脚本行：#N : 标题 - 已生成/未生成 */}
+              <Show
+                when={item.scripts.length > 0}
+                fallback={<div {...stylex.props(styles.noScript)}>{t("studio.editor.noScript")}</div>}
+              >
+                <For each={item.scripts}>
+                  {(script, j) => (
+                    <div
+                      {...stylex.props(styles.scriptRow)}
+                      onClick={() => navigate(`/polish/${item.id}?script=${script.id}`)}
+                    >
+                      <span {...stylex.props(styles.scriptNum)}>#{j() + 1}</span>
+                      <span {...stylex.props(styles.scriptTitle)}>
+                        {script.title ?? script.topic ?? t("studio.editor.scriptNum", { num: j() + 1 })}
+                      </span>
+                      <span
+                        {...stylex.props(
+                          styles.scriptStatus,
+                          script.status === "used" && styles.scriptUsed,
+                        )}
+                      >
+                        {script.status === "used" ? t("studio.script.used") : t("studio.script.unused")}
+                      </span>
+                    </div>
+                  )}
+                </For>
+              </Show>
             </div>
-            <span
-              {...stylex.props(
-                styles.badge,
-                item.episodeStatus === "published" && styles.badgePublished,
-                item.episodeStatus === "generating" && styles.badgeGenerating,
-              )}
-            >
-              {item.episodeId
-                ? t(STATUS_LABEL[item.episodeStatus ?? ""] as never)
-                : t("studio.noEpisode")}
-            </span>
           </div>
         )}
       </For>

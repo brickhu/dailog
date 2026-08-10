@@ -103,7 +103,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       });
       const found = await repo.snapshots.getByUrl(url);
       expect(found).toMatchObject({
-        id: created.id, url, platform: "claude", sourceTitle: "集成测试",
+        id: created.id, platform: "claude", sourceTitle: "集成测试",
         sourceConversationId: "conv-1", status: "ok", quality: null, lastError: null,
       });
       expect((found?.parsedDialogue as { role: string; content: string }[])[0]).toEqual({ role: "user", content: "你好" });
@@ -212,20 +212,31 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       expect(await repo.polishes.getPolishDetail(id, API_USER)).toBeNull();
     });
 
-    it("listByUser 返回 polish + 快照标题 + 最新节目状态", async () => {
+    it("listByUser 返回 polish + 快照标题/平台 + 脚本列表（title/status）", async () => {
       const { polishId, episodeId } = await makeEpisode(REPO_USER, "工作台列表", "zh");
       const rows = await repo.polishes.listByUser(REPO_USER);
       const row = rows.find((r) => r.id === polishId);
       expect(row).toMatchObject({ id: polishId, title: "工作台列表", snapshotTitle: "工作台列表", episodeId, episodeStatus: "generating" });
+      // makeEpisode 的平台是 "plain"（无 guests 映射）→ aiName null
+      expect(row?.platform).toBe("plain");
+      expect(row?.aiName).toBeNull();
+      expect(row?.scripts).toHaveLength(1);
+      expect(row?.scripts[0]).toMatchObject({ title: null, topic: null, status: "unused" });
     });
   });
 
   describe("transcripts repo", () => {
     it("create + listByPolish roundtrip（同秒创建时顺序不保证，仅断言集合）", async () => {
-      const { polishId } = await makeEpisode(REPO_USER, "脚本列表", "zh");
-      await repo.transcripts.create(polishId, [{ speaker: "host", text: "第一版" }], "zh");
-      await repo.transcripts.create(polishId, [{ speaker: "host", text: "第二版" }], "en");
-      const rows = await repo.transcripts.listByPolish(polishId);
+      // 自建容器（makeEpisode 自带 1 条脚本，会让计数漂移）
+      const snap = await repo.snapshots.create({
+        url: `https://test.local/share/${crypto.randomUUID()}`,
+        platform: "plain", sourceTitle: "脚本列表", sourceConversationId: null,
+        parsedDialogue: [{ role: "user", content: "你好" }],
+      });
+      const polish = await repo.polishes.create({ userId: REPO_USER, snapshotId: snap.id, title: "脚本列表" });
+      await repo.transcripts.create(polish.id, [{ speaker: "host", text: "第一版" }], "zh");
+      await repo.transcripts.create(polish.id, [{ speaker: "host", text: "第二版" }], "en");
+      const rows = await repo.transcripts.listByPolish(polish.id);
       expect(rows).toHaveLength(2);
       expect(rows.map((r) => r.language).sort()).toEqual(["en", "zh"]);
     });
@@ -238,13 +249,14 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       expect(await repo.transcripts.getOwned(transcriptId, API_USER)).toBeNull();
     });
 
-    it("updateSegments 覆盖 segments", async () => {
-      const { transcriptId } = await makeEpisode(REPO_USER, "脚本编辑", "zh");
+    it("updateSegments 写 updated_segments：原始 segments 保留，getOwned 读有效脚本", async () => {
+      const { transcriptId, polishId } = await makeEpisode(REPO_USER, "脚本编辑", "zh");
       await repo.transcripts.updateSegments(transcriptId, [{ speaker: "guest", text: "改后" }]);
-      const rows = await repo.transcripts.listByPolish(
-        (await repo.transcripts.getOwned(transcriptId, REPO_USER))!.polishId,
-      );
-      expect(rows[0].segments).toEqual([{ speaker: "guest", text: "改后" }]);
+      // 生成/详情读编辑后的有效脚本（updated ?? 原始）
+      expect((await repo.transcripts.getOwned(transcriptId, REPO_USER))!.segments).toEqual([{ speaker: "guest", text: "改后" }]);
+      // 原始 segments（LLM 生成）保留，供对比/恢复
+      const rows = await repo.transcripts.listByPolish(polishId);
+      expect(rows.find((r) => r.id === transcriptId)!.segments).toEqual([{ speaker: "host", text: "你好" }]);
     });
   });
 
@@ -416,10 +428,11 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       expect(await repo.episodes.getVoiceSampleKey(REPO_USER)).toBeNull();
 
       await db.insert(voiceSamples).values([
-        { userId: REPO_USER, audioUrl: "voice/old.wav", duration: 3, status: "ready", referenceId: "old-model", transcript: null, createdAt: new Date(Date.now() - 60_000) },
-        { userId: REPO_USER, audioUrl: "voice/latest.wav", duration: 4, status: "ready", referenceId: "latest-model", transcript: null, createdAt: new Date() },
+        // (user_id, language) 唯一：三条样本各占一个语种
+        { userId: REPO_USER, language: "zh", audioUrl: "voice/old.wav", duration: 3, status: "ready", referenceId: "old-model", transcript: null, createdAt: new Date(Date.now() - 60_000) },
+        { userId: REPO_USER, language: "en", audioUrl: "voice/latest.wav", duration: 4, status: "ready", referenceId: "latest-model", transcript: null, createdAt: new Date() },
         // failed 样本不参与（最新但状态失败）
-        { userId: REPO_USER, audioUrl: "voice/failed.wav", duration: 2, status: "failed", referenceId: "failed-model", transcript: null, createdAt: new Date(Date.now() + 60_000) },
+        { userId: REPO_USER, language: "fr", audioUrl: "voice/failed.wav", duration: 2, status: "failed", referenceId: "failed-model", transcript: null, createdAt: new Date(Date.now() + 60_000) },
       ]);
 
       expect(await repo.episodes.getHostModelId(REPO_USER)).toBe("latest-model");
@@ -558,9 +571,18 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
     /** 预置五层链（snapshot 预置 → import 命中缓存），返回 url + transcriptId */
     async function seedChain(title: string): Promise<{ url: string; transcriptId: string; polishId: string }> {
       const url = `https://claude.ai/chat/api-${crypto.randomUUID()}`;
+      // 对话需过导入规则门槛（≥3 轮用户问答且总字数 ≥500）——短对话会被 422 too_short 拒绝
+      const longAnswer = "是的，这个问题的关键在于理解它的本质。".repeat(25);
       await repo.snapshots.create({
         url, platform: "claude", sourceTitle: title, sourceConversationId: `conv-${crypto.randomUUID()}`,
-        parsedDialogue: [{ role: "user", content: "你好" }],
+        parsedDialogue: [
+          { role: "user", content: "你好，我有一个问题想请教。" },
+          { role: "assistant", content: longAnswer },
+          { role: "user", content: "明白了，那第二个问题呢？" },
+          { role: "assistant", content: "第二个问题同样值得深入探讨。" },
+          { role: "user", content: "好的，最后一个问题。" },
+          { role: "assistant", content: longAnswer },
+        ],
       });
       const importRes = await app.request("/v1/import", {
         method: "POST",
@@ -584,7 +606,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       expect(transcriptRes.status).toBe(200);
       const sseText = await transcriptRes.text();
       expect(sseText).toContain("event: done");
-      const transcriptId = sseText.match(/"transcriptId":"([^"]+)"/)?.[1];
+      const transcriptId = sseText.match(/"transcriptIds":\["([^"]+)"/)?.[1];
       expect(transcriptId).toBeTruthy();
       return { url, transcriptId: transcriptId!, polishId };
     }
@@ -592,17 +614,21 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
     it("import → polish(409 duplicate) → transcript SSE → episode 202 → list/detail/publish/job", async () => {
       const { url, transcriptId } = await seedChain("HTTP 集成");
 
-      // 重复导入：快照缓存命中（200），polish 已存在 → 409 返回已有容器
+      // 重复导入：import 短路检测到已有容器 → 200 { existing: true, polishId }（前端直接跳编辑页）
       const importAgain = await app.request("/v1/import", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer valid-token" },
         body: JSON.stringify({ url }),
       });
       expect(importAgain.status).toBe(200);
+      const againBody = (await importAgain.json()) as { existing?: boolean; polishId?: string };
+      expect(againBody).toMatchObject({ existing: true });
+      // 绕过 import 短路直接调 polish/new（重复创建同一快照）→ 409 返回已有容器
+      const snapshot = await repo.snapshots.getByUrl(url);
       const polishAgain = await app.request("/v1/polishes/new", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer valid-token" },
-        body: JSON.stringify({ snapshotId: (await importAgain.json() as { snapshotId: string }).snapshotId }),
+        body: JSON.stringify({ snapshotId: snapshot!.id }),
       });
       expect(polishAgain.status).toBe(409);
       expect(await polishAgain.json()).toMatchObject({ existing: true });

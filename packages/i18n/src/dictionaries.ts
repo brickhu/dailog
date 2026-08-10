@@ -274,6 +274,9 @@ export const zh = {
   "studio.editor.generated": "已生成节目",
   "studio.editor.scriptUsed": "此脚本已生成过节目（一个脚本只能生成一期）",
   "studio.editor.missingVoiceSample": "缺少该语种录音采样，已使用兜底音色（建议录制该语种采样）",
+  "studio.script.from": "来自",
+  "studio.script.used": "已生成",
+  "studio.script.unused": "未生成",
 
   // ---- studio 脚本编辑器 ----
   "studio.scriptEditor.polishing": "AI 正在打磨你的对话为播客脚本…（可稍等片刻）",
@@ -601,6 +604,9 @@ export const en: Dictionary = {
   "studio.editor.generated": "Episode generated",
   "studio.editor.scriptUsed": "This script already generated an episode（one script = one episode）",
   "studio.editor.missingVoiceSample": "Missing a voice sample for this language — using a fallback voice (consider recording one)",
+  "studio.script.from": "from",
+  "studio.script.used": "Generated",
+  "studio.script.unused": "Not generated",
 
   // ---- studio 脚本编辑器 ----
   "studio.scriptEditor.polishing": "AI is polishing your conversation into a podcast script…（may take a moment）",

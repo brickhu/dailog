@@ -8,12 +8,15 @@ export interface PolishesDeps {
   getChannelActivatedAt(userId: string): Promise<Date | null>;
   findPolishByUserSnapshot(userId: string, snapshotId: string): Promise<{ id: string; title: string | null } | null>;
   createPolish(row: { userId: string; snapshotId: string; title: string | null }): Promise<{ id: string }>;
-  /** 列表（工作台"脚本"页） */
+  /** 列表（工作台"脚本"页）：对话分组 + 每条脚本（title/status）+ 来源平台 */
   listByUser(userId: string): Promise<{
     id: string;
     title: string | null;
     status: string;
     snapshotTitle: string | null;
+    platform: string | null;
+    aiName: string | null;
+    scripts: { id: string; title: string | null; topic: string | null; status: string | null }[];
     episodeId: string | null;
     episodeStatus: string | null;
     createdAt: Date;

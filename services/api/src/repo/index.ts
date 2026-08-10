@@ -93,12 +93,17 @@ export interface PolishesRepo {
       episodeId: string | null;
     }[];
   } | null>;
-  /** 工作台列表：polish + 快照标题 + 节目状态 */
+  /** 工作台列表：polish + 快照标题 + 节目状态 + 每条脚本（title/status） */
   listByUser(userId: string): Promise<{
     id: string;
     title: string | null;
     status: string;
     snapshotTitle: string | null;
+    /** 对话来源平台（claude/chatgpt/...）+ 展示名（guests 表，如 DeepSeek） */
+    platform: string | null;
+    aiName: string | null;
+    /** 该对话下的脚本（新→旧，与编辑页同序）；title 为空时前端回退 topic/编号 */
+    scripts: { id: string; title: string | null; topic: string | null; status: string | null }[];
     episodeId: string | null;
     episodeStatus: string | null;
     createdAt: Date;
@@ -414,13 +419,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         };
       },
       async listByUser(userId) {
-        // 工作台：polish 列表 + 快照标题；每 polish 最新节目状态在 JS 里归并（数据量小）
+        // 工作台：polish 列表 + 快照标题/平台；每 polish 最新节目状态与脚本列表在 JS 里归并（数据量小）
         const polishRows = await db
           .select({
             id: schema.polishes.id,
             title: schema.polishes.title,
             status: schema.polishes.status,
             snapshotTitle: schema.snapshots.sourceTitle,
+            platform: schema.snapshots.platform,
             createdAt: schema.polishes.createdAt,
           })
           .from(schema.polishes)
@@ -437,6 +443,29 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .from(schema.episodes)
           .where(eq(schema.episodes.userId, userId))
           .orderBy(desc(schema.episodes.createdAt));
+        // 全部脚本一次取回按 polish 归并（新→旧，与编辑页同序）
+        const trRows = await db
+          .select({
+            polishId: schema.transcripts.polishId,
+            id: schema.transcripts.id,
+            title: schema.transcripts.title,
+            topic: schema.transcripts.topic,
+            status: schema.transcripts.status,
+          })
+          .from(schema.transcripts)
+          .orderBy(desc(schema.transcripts.createdAt));
+        const scriptsByPolish = new Map<string, { id: string; title: string | null; topic: string | null; status: string | null }[]>();
+        for (const tr of trRows) {
+          const list = scriptsByPolish.get(tr.polishId) ?? [];
+          list.push({ id: tr.id, title: tr.title, topic: tr.topic, status: tr.status });
+          scriptsByPolish.set(tr.polishId, list);
+        }
+        // AI 平台展示名（guests 表，7 平台小表一次取）
+        const guestRows = await db
+          .select({ platform: schema.guests.platform, name: schema.guests.name })
+          .from(schema.guests);
+        // 快照 platform 可能含测试用非枚举值（plain），按 string 索引
+        const nameByPlatform = new Map<string, string>(guestRows.map((g) => [g.platform, g.name]));
         const latestByPolish = new Map<string, { id: string; status: string }>();
         for (const ep of epRows) {
           if (!latestByPolish.has(ep.polishId)) latestByPolish.set(ep.polishId, { id: ep.id, status: ep.status });
@@ -446,6 +475,9 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           title: p.title,
           status: p.status,
           snapshotTitle: p.snapshotTitle,
+          platform: p.platform,
+          aiName: p.platform ? (nameByPlatform.get(p.platform) ?? null) : null,
+          scripts: scriptsByPolish.get(p.id) ?? [],
           episodeId: latestByPolish.get(p.id)?.id ?? null,
           episodeStatus: latestByPolish.get(p.id)?.status ?? null,
           createdAt: p.createdAt,
@@ -717,7 +749,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           episodeId,
           language: language as "zh",
           audioUrl: audioKey,
-          durationSeconds,
+          // ffprobe 时长是小数（如 164.05s），duration_seconds 列为 integer——取整写入
+          durationSeconds: Math.round(durationSeconds),
         });
       },
 

@@ -1,5 +1,5 @@
-import { createSignal, For, onMount, Show } from "solid-js";
-import { useNavigate, useParams } from "@solidjs/router";
+import { createEffect, createSignal, For, Show } from "solid-js";
+import { useNavigate, useParams, useSearchParams } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { Button } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
@@ -133,20 +133,24 @@ export default function PolishPage() {
   const [hostName, setHostName] = createSignal("");
   /** 生成节目时的提示（如缺该语种采样 → 已用兜底音色） */
   const [warning, setWarning] = createSignal<string | null>(null);
+  // /polishes 页点击脚本行进入：?script=<id> 直达该脚本
+  const [searchParams, setSearchParams] = useSearchParams();
 
   /** 更新 host 节目称呼（本地状态；生成脚本时随 transcripts/new 请求提交固化） */
   const saveHostName = (name: string) => {
     setHostName(name);
   };
 
-  const load = async () => {
+  const load = async (wantedScriptId?: string | null) => {
     if (!polishId) return;
     setLoading(true);
     try {
       const d = await api.get<PolishDetail>(`/v1/polishes/${polishId}`);
       setDetail(d);
       if (d.transcripts.length > 0) {
-        const latest = d.transcripts[0];
+        // 深链指定脚本优先；否则默认最新一条
+        const target = wantedScriptId ? d.transcripts.find((x) => x.id === wantedScriptId) : undefined;
+        const latest = target ?? d.transcripts[0];
         setActiveTranscriptId(latest.id);
         setActiveSegments(latest.segments ?? null);
       }
@@ -158,7 +162,13 @@ export default function PolishPage() {
     }
   };
 
-  onMount(load);
+  // URL ?script=<id> 变化（/polishes 页进入/切换脚本）→ 重新加载并选中；
+  // 本页列表切换已同步 URL（selectTranscript），目标已选中时跳过，避免无谓重载
+  createEffect(() => {
+    const wanted = typeof searchParams.script === "string" ? searchParams.script : undefined;
+    if (wanted && wanted === activeTranscriptId()) return;
+    void load(wanted);
+  });
 
   /** 当前选中的脚本是否已生成过节目（一个脚本只能生成一期） */
   const activeTranscriptUsed = () => {
@@ -175,6 +185,8 @@ export default function PolishPage() {
     setGenerated(false);
     setEpisodeId(null);
     setWarning(null);
+    // 同步 URL（不触发重载：effect 只在值变化且 load 重选同一脚本，结果一致）
+    setSearchParams({ script: tr.id }, { replace: true });
   };
 
   /** 生成节目（选定 transcript） */
