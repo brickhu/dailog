@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { VoiceSampleRow } from "./voice";
 import { canGenerate } from "../quota";
+import { segmentsToSubtitle } from "../lib/script-text";
 
 export interface ScriptSegment { speaker: "host" | "guest"; text: string; }
 
@@ -75,12 +76,9 @@ export interface EpisodesDeps {
   saveVoiceSample(row: VoiceSampleRow): Promise<void>;
 }
 
-/** 字幕程序化生成：脚本去情绪/停顿标签（[break]/[happy] 等）后的纯文本 */
+/** 字幕程序化生成：脚本去情绪/停顿标签后的纯文本（复用通用 strip 工具） */
 export function subtitleFromSegments(segments: ScriptSegment[]): string {
-  return segments
-    .map((s) => s.text.replace(/\[[a-zA-Z-]+\]/g, "").replace(/\s+/g, " ").trim())
-    .filter(Boolean)
-    .join("\n");
+  return segmentsToSubtitle(segments);
 }
 
 export function episodesRoutes(

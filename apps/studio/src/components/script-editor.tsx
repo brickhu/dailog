@@ -10,6 +10,10 @@ import { totalCharCount, type ScriptSegment } from "../lib/scriptOps";
 import { useI18n } from "@dailogues/i18n";
 import { EMPTY_PERSONA, type HostPersona } from "../lib/persona";
 
+/** 去情绪标签（展示/复制层）：标签是平台 TTS 专用指令，对外只展示纯文本 */
+const EMOTION_TAG = /\[[a-zA-Z][a-zA-Z -]*\]/g;
+const stripTags = (text: string): string => text.replace(EMOTION_TAG, "").replace(/\s+/g, " ").trim();
+
 export interface ScriptEditorProps {
   polishId: string;
   /** host 结构化人设（称呼/职业/年龄/爱好…）——生成脚本时随请求提交（仅本次生效）；
@@ -285,7 +289,7 @@ export default function ScriptEditor(props: ScriptEditorProps) {
               // 复制可以，但带走的是带水印版本（搬运成本 + 可溯源）
               e.preventDefault();
               const sel = window.getSelection()?.toString() ?? "";
-              const text = sel || editing()!.segments.map((seg) => seg.text).join("\n");
+              const text = sel || editing()!.segments.map((seg) => stripTags(seg.text)).join("\n");
               void navigator.clipboard.writeText(`${text}\n\n—— 摘自 dailog 播客工作台 · ${props.userLabel ?? "用户"}`).catch(() => {});
             }}
             onCut={(e) => e.preventDefault()}
@@ -316,7 +320,7 @@ function SegmentPreview(props: { seg: ScriptSegment }) {
       <span {...stylex.props(styles.speakerTag, props.seg.speaker === "host" ? styles.tagHost : styles.tagGuest)}>
         {props.seg.speaker === "host" ? t("studio.scriptEditor.you") : "AI"}
       </span>
-      <span {...stylex.props(styles.previewText)}>{props.seg.text}</span>
+      <span {...stylex.props(styles.previewText)}>{stripTags(props.seg.text)}</span>
     </div>
   );
 }
@@ -329,7 +333,7 @@ function SegmentView(props: { seg: ScriptSegment }) {
       <span {...stylex.props(styles.speakerTag, props.seg.speaker === "host" ? styles.tagHost : styles.tagGuest)}>
         {props.seg.speaker === "host" ? t("studio.scriptEditor.you") : "AI"}
       </span>
-      <span {...stylex.props(styles.readonlyText)}>{props.seg.text}</span>
+      <span {...stylex.props(styles.readonlyText)}>{stripTags(props.seg.text)}</span>
     </div>
   );
 }

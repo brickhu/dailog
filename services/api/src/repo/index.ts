@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import * as schema from "../db/schema";
 import type { ScriptSegment } from "../db/schema";
 import type { VoiceSampleRow } from "../routes/voice";
+import { stripSegmentTexts } from "../lib/script-text";
 
 function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "23505";
@@ -524,7 +525,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           quality: row.quality ?? null,
           transcripts: transcripts.map((t) => ({
             id: t.id,
-            segments: (t.updatedSegments ?? t.segments) as schema.ScriptSegment[],
+            // 对外去标签（防搬运到其他 TTS）；TTS 管线用存储原始带标签文本
+            segments: stripSegmentTexts((t.updatedSegments ?? t.segments) as schema.ScriptSegment[]),
             topic: t.topic,
             title: t.title,
             creationNote: t.creationNote,
@@ -648,7 +650,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return {
           id: row.id,
           polishId: row.polishId,
-          segments: (row.updatedSegments ?? row.segments) as ScriptSegment[],
+          // 对外去标签；TTS 管线用存储原始带标签文本
+          segments: stripSegmentTexts((row.updatedSegments ?? row.segments) as ScriptSegment[]),
           topic: row.topic,
           language: row.language,
           guestId: row.guestId,

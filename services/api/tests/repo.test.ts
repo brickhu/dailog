@@ -318,6 +318,33 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       const rows = await repo.transcripts.listByPolish(polishId);
       expect(rows.find((r) => r.id === transcriptId)!.segments).toEqual([{ speaker: "host", text: "你好" }]);
     });
+
+    it("对外读出去标签：情绪标签仅存存储层，接口返回纯文本（防搬运到其他 TTS）", async () => {
+      const { transcriptId, polishId } = await makeEpisode(REPO_USER, "标签隔离", "zh");
+      await repo.transcripts.updateSegments(transcriptId, [
+        { speaker: "host", text: "[happy] 欢迎回来 [break] 今天我们聊点干货" },
+        { speaker: "guest", text: "[calm] 这个话题值得展开" },
+      ]);
+      // getOwned：去标签
+      expect((await repo.transcripts.getOwned(transcriptId, REPO_USER))!.segments).toEqual([
+        { speaker: "host", text: "欢迎回来 今天我们聊点干货" },
+        { speaker: "guest", text: "这个话题值得展开" },
+      ]);
+      // getPolishDetail：去标签
+      const detail = await repo.polishes.getPolishDetail(polishId, REPO_USER);
+      expect(detail?.transcripts.find((t) => t.id === transcriptId)?.segments).toEqual([
+        { speaker: "host", text: "欢迎回来 今天我们聊点干货" },
+        { speaker: "guest", text: "这个话题值得展开" },
+      ]);
+      // 存储层（updated_segments）保留原始带标签文本——TTS 管线专用
+      const stored = await db.select({ updatedSegments: transcripts.updatedSegments })
+        .from(transcripts)
+        .where(eq(transcripts.id, transcriptId));
+      expect(stored[0].updatedSegments).toEqual([
+        { speaker: "host", text: "[happy] 欢迎回来 [break] 今天我们聊点干货" },
+        { speaker: "guest", text: "[calm] 这个话题值得展开" },
+      ]);
+    });
   });
 
   describe("episodes repo", () => {
