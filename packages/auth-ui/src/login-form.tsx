@@ -38,6 +38,11 @@ const styles = stylex.create({
     marginTop: dimensions.spacing3,
     textAlign: "center",
   },
+  loading: {
+    color: colors.neutral,
+    textAlign: "center",
+    padding: `${dimensions.spacing8} 0`,
+  },
   forgotRow: {
     marginTop: dimensions.spacing2,
     textAlign: "center",
@@ -119,6 +124,8 @@ export interface LoginFormProps {
   onSuccess?: (result: LoginSuccess) => void;
   /** 共享跳转："从哪里来就返回哪里去"（默认启用；白名单/回退由业务配置） */
   redirect?: LoginRedirectOptions & { enabled?: boolean };
+  /** session 确认中（宿主在查 get-session、未决定是否跳转）：true 时渲染 loading 而非表单，防已登录用户看到登录页闪烁 */
+  checkingSession?: boolean;
 }
 
 /** 跨站统一登录页：完整页面（品牌 + Card + 表单）。配置驱动——业务侧只声明
@@ -253,6 +260,7 @@ export function LoginForm(props: LoginFormProps) {
       <Card>
         <div {...stylex.props(styles.brand)}>dailog</div>
         <div {...stylex.props(styles.tagline)}>把AI对话，变成你们的对谈播客</div>
+        <Show when={!props.checkingSession} fallback={<div {...stylex.props(styles.loading)}>加载中…</div>}>
         <div>
           <Show
             when={!otpStep()}
@@ -327,6 +335,7 @@ export function LoginForm(props: LoginFormProps) {
                 </form>
               </Show>
         </div>
+        </Show>
       </Card>
     </div>
   );
