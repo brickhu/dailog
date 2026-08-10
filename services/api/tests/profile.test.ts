@@ -47,6 +47,7 @@ function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
       getByTranscript: async () => null,
       getEpisodeScript: async () => null,
       getEpisodeGuest: async () => null,
+      getPublicAudioKey: async () => null,
       getPublishedDialogue: async () => null,
       setPublished: async () => {},
       getEpisodeUserId: async () => null,

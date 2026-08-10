@@ -47,6 +47,7 @@ function fakeRepo(): AppDeps["repo"] {
       getByTranscript: async () => null,
       getEpisodeScript: async () => null,
       getEpisodeGuest: async () => null,
+      getPublicAudioKey: async () => null,
       getPublishedDialogue: async () => null,
       setPublished: async () => {},
       getEpisodeUserId: async () => null,

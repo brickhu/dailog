@@ -23,7 +23,7 @@ export async function GET(event: { params: { username: string }; request: Reques
   const channelUrl = `${env.siteBaseUrl}/@${channel.username}`;
   const items = episodes
     .map((ep) => {
-      const audio = `${env.apiBaseUrl}/${ep.audioUrl ?? ""}`;
+      const audio = `${env.apiBaseUrl}/v1/public/episodes/${ep.id}/audio`;
       const epUrl = `${env.siteBaseUrl}/episode/${ep.id}`;
       const pubDate = ep.publishedAt
         ? new Date(ep.publishedAt).toUTCString()

@@ -225,6 +225,21 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
     });
   });
 
+  describe("episodes public audio", () => {
+    it("getPublicAudioKey 仅已发布且公开的节目可读（音轨最新一条）", async () => {
+      const { episodeId } = await makeEpisode(REPO_USER, "公开音频", "zh");
+      // 未发布 → null
+      expect(await repo.episodes.getPublicAudioKey(episodeId)).toBeNull();
+      // 发布后（isPublic 置 true）→ 返回最新音轨 key
+      await repo.episodes.setPublished(episodeId);
+      await repo.episodes.insertTrack(episodeId, "zh", "episodes/k1.mp3", 100);
+      await repo.episodes.insertTrack(episodeId, "zh", "episodes/k2.mp3", 120);
+      expect(await repo.episodes.getPublicAudioKey(episodeId)).toBe("episodes/k2.mp3");
+      // 不存在的节目 → null
+      expect(await repo.episodes.getPublicAudioKey("00000000-0000-4000-8000-000000000000")).toBeNull();
+    });
+  });
+
   describe("guest voice samples repo", () => {
     // 共享 dev DB：测试数据跑完即清，避免污染管线（假 referenceId/缺失音频会打到生产生成）
     afterEach(async () => {

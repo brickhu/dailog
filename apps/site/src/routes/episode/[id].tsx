@@ -121,8 +121,9 @@ export default function EpisodePage() {
   const { t } = useI18n();
   const params = useParams<{ id: string }>();
   const ep = createAsync(() => getEpisode(params.id));
+  // 公开音频端点（免鉴权）：音频在 tracks（storage key 不是 API 路径，不能直接拼 baseUrl）
   const audioUrl = () =>
-    ep()?.audioUrl ? `${env.apiBaseUrl}/${ep()!.audioUrl}` : null;
+    ep() ? `${env.apiBaseUrl}/v1/public/episodes/${params.id}/audio` : null;
 
   return (
     <div {...stylex.props(styles.page)}>

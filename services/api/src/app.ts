@@ -60,6 +60,20 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   // better-auth 会话路由（注册/登录/登出/get-session）：挂在认证中间件之前，免鉴权
   app.on(["POST", "GET"], "/v1/auth/*", (c) => deps.auth.handler(c.req.raw));
 
+  // 主站公开端点（免鉴权）：仅已发布公开节目可读——必须在鉴权中间件之前注册
+  app.get("/v1/public/episodes/:id/audio", async (c) => {
+    const key = await deps.repo.episodes.getPublicAudioKey(c.req.param("id"));
+    if (!key) return c.json({ error: "not_found" }, 404);
+    try {
+      const data = await deps.voice.storage.get(key);
+      return new Response(new Uint8Array(data), {
+        headers: { "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=3600" },
+      });
+    } catch {
+      return c.json({ error: "not_found" }, 404);
+    }
+  });
+
   app.use("/v1/*", createAuthMiddleware(deps.auth));
 
   app.get("/v1/me", async (c) => {
