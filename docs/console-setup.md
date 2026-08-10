@@ -63,9 +63,10 @@
 | Node 版本 | 22 | 22 |
 | **Node.js compatibility** | **开启（Node 22）**——postgres 直连需要 | 同左 |
 | 自定义域名 | `dailog.fm` | `candelbot.app`（绑 dev 分支；域名在 CF DNS 时） |
-| 变量 | `DATABASE_URL`=生产 Postgres、`API_BASE_URL`=`https://api.dailog.fm`、`SITE_BASE_URL`=`https://dailog.fm`、`STUDIO_BASE_URL`=`https://app.dailog.fm`、`SITE_COOKIE_DOMAIN`=`.dailog.fm` | `DATABASE_URL`=dev Postgres、`API_BASE_URL`=`https://api.candelbot.app`、`SITE_BASE_URL`=dev 站点 URL、`STUDIO_BASE_URL`=`https://app.candelbot.app`、`SITE_COOKIE_DOMAIN`=留空 |
+| 变量 | `DATABASE_URL`=生产 Postgres、`API_BASE_URL`=`https://api.dailog.fm`、`SITE_BASE_URL`=`https://dailog.fm`、`STUDIO_BASE_URL`=`https://app.dailog.fm` | `DATABASE_URL`=dev Postgres、`API_BASE_URL`=`https://api.candelbot.app`、`SITE_BASE_URL`=`https://candelbot.app`、`STUDIO_BASE_URL`=`https://app.candelbot.app` |
 
-> 变量（各环境）：`DATABASE_URL`（对应环境 Postgres，只读连接可加 `?sslmode=require`）、`API_BASE_URL`（`https://api.candelbot.app` / `https://api.dailog.fm`）、`SITE_BASE_URL`（站点自身，**登录代理以它作为 Origin 转发给 API**）、`STUDIO_BASE_URL`（`app.*`）、`SITE_COOKIE_DOMAIN`（生产 `.dailog.fm`，dev 留空）。
+> 变量（各环境）：`DATABASE_URL`（对应环境 Postgres，只读连接可加 `?sslmode=require`）、`API_BASE_URL`（`https://api.candelbot.app` / `https://api.dailog.fm`）、`SITE_BASE_URL`（站点自身，**登录代理以它作为 Origin 转发给 API**）、`STUDIO_BASE_URL`（`app.*`）。
+> **site 是 SSR——一套变量两端共用**：`entry-server.tsx` 把服务端 env 序列化注入 `window.__ENV__`，客户端直接读取，**无需再配 VITE_API_BASE_URL / VITE_SITE_BASE_URL**（新部署不用配；旧值可留作兼容）。studio（纯 SPA 无 SSR）仍需 `VITE_API_BASE_URL` / `VITE_SITE_BASE_URL`。
 > ⚠️ **站点实际域名必须加入 API 的 `APP_ORIGINS`**（auth-proxy 转发时以 `SITE_BASE_URL` 为 Origin，better-auth CSRF 白名单校验）——dev 用 Pages 默认域名时也要加（如 preview 分支的 `https://dev.dailog-site.pages.dev`）。
 > 消费端登录统一走本站 `/login`（server 代理 api 认证端点，SSO cookie 与 studio 共享）。
 

@@ -1,4 +1,5 @@
 import { createHandler, StartServer } from "@solidjs/start/server";
+import { env } from "./lib/env";
 
 export default createHandler(() => (
   <StartServer
@@ -10,6 +11,8 @@ export default createHandler(() => (
           {assets}
         </head>
         <body>
+          {/* SSR 注入服务端 env → 客户端 lib/env.ts 直接读（一套变量两端共用，无需 VITE_ 双份） */}
+          <script innerHTML={`window.__ENV__ = ${JSON.stringify(env)}`} />
           <div id="app">{children}</div>
           {scripts}
         </body>

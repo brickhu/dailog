@@ -63,7 +63,8 @@ services:
       PORT: "80"
       # site 的 server functions（lib/db.ts）直连 postgres——容器内用服务名
       DATABASE_URL: postgres://dailogues:dailogues@postgres:5432/dailogues
-      API_BASE_URL: http://api:8787
+      # 浏览器域名（显式端口）：服务端代理转发（容器内可达）与客户端 window.__ENV__ 注入两端通用
+      API_BASE_URL: http://api.dailog.orb.local:8787
       SITE_BASE_URL: http://dailog.orb.local
       VITE_API_BASE_URL: http://api.dailog.orb.local
       VITE_SITE_BASE_URL: http://dailog.orb.local
