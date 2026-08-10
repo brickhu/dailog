@@ -133,6 +133,8 @@ export default function PolishPage() {
   const [title, setTitle] = createSignal("");
   const [publishBusy, setPublishBusy] = createSignal(false);
   const [persona, setPersona] = createSignal<HostPersona | null>(null);
+  /** 用户标识（脚本水印/剪贴板溯源） */
+  const [userLabel, setUserLabel] = createSignal<string | undefined>(undefined);
   /** 生成节目时的提示（如缺该语种采样 → 已用兜底音色） */
   const [warning, setWarning] = createSignal<string | null>(null);
   // /polishes 页点击脚本行进入：?script=<id> 直达该脚本
@@ -147,10 +149,11 @@ export default function PolishPage() {
       // 默认人设（设置页维护；本次修改仅本地，不写回）
       const [d, prof] = await Promise.all([
         api.get<PolishDetail>(`/v1/polishes/${polishId}`),
-        api.get<{ persona: HostPersona | null }>("/v1/me/profile").catch(() => ({ persona: null })),
+        api.get<{ persona: HostPersona | null; nickname: string | null }>("/v1/me/profile").catch(() => ({ persona: null, nickname: null })),
       ]);
       setDetail(d);
       setPersona(prof.persona);
+      setUserLabel(prof.nickname ?? undefined);
       if (d.transcripts.length > 0) {
         // 深链指定脚本优先；否则默认最新一条
         const target = wantedScriptId ? d.transcripts.find((x) => x.id === wantedScriptId) : undefined;
@@ -321,6 +324,7 @@ export default function PolishPage() {
             topic={activeTranscript()?.topic ?? null}
             persona={persona()}
             onPersonaChange={(p) => setPersona(p)}
+            userLabel={userLabel()}
             onDone={() => {
               void load(); // 新脚本生成完成：刷新列表（多主题多条）
             }}

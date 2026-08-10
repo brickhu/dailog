@@ -24,6 +24,8 @@ export interface ScriptEditorProps {
   title?: string | null;
   creationNote?: string | null;
   topic?: string | null;
+  /** 用户标识（水印/剪贴板溯源用；缺省 "dailog 用户"） */
+  userLabel?: string;
   /** 润色完成回调（新建 transcript 时带 transcriptId） */
   onDone?: (transcriptId: string) => void;
 }
@@ -41,6 +43,12 @@ export default function ScriptEditor(props: ScriptEditorProps) {
   // 重新润色方向输入（展开态 + 值）
   const [directionOpen, setDirectionOpen] = createSignal(false);
   const [direction, setDirection] = createSignal("");
+  // 界面水印（SVG 平铺）：截图/拍照泄露可溯源；防不了铁了心的人，但显著提高搬运成本
+  const watermarkBg = () => {
+    const label = props.userLabel ?? "dailog 用户";
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='260' height='180'><text x='8' y='24' font-size='13' fill='rgba(120,120,130,0.10)' transform='rotate(-22 20 30)'>dailog · ${label}</text></svg>`;
+    return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  };
   // 刚生成的脚本元数据（done 事件带回 title/creationNote/topic；切换 transcript 后回落 props）
   const [scriptMeta, setScriptMeta] = createSignal<{
     id: string; title: string | null; creationNote: string | null; topic: string | null;
@@ -272,10 +280,16 @@ export default function ScriptEditor(props: ScriptEditorProps) {
           </Show>
           <div
             {...stylex.props(styles.readonlyBox)}
-            onCopy={(e) => e.preventDefault()}
+            style={{ backgroundImage: watermarkBg() } as never}
+            onCopy={(e) => {
+              // 复制可以，但带走的是带水印版本（搬运成本 + 可溯源）
+              e.preventDefault();
+              const sel = window.getSelection()?.toString() ?? "";
+              const text = sel || editing()!.segments.map((seg) => seg.text).join("\n");
+              void navigator.clipboard.writeText(`${text}\n\n—— 摘自 dailog 播客工作台 · ${props.userLabel ?? "用户"}`).catch(() => {});
+            }}
             onCut={(e) => e.preventDefault()}
             onContextMenu={(e) => e.preventDefault()}
-            onSelectStart={(e) => e.preventDefault()}
           >
             <For each={editing()!.segments}>
               {(seg) => <SegmentView seg={seg} />}
@@ -447,10 +461,11 @@ const styles = stylex.create({
     wordBreak: "break-word",
   },
   readonlyBox: {
-    // 防复制（防君子）：禁选中 + 拦截复制/右键——脚本文本始终在浏览器可读，无法绝对防
-    userSelect: "none",
-    WebkitUserSelect: "none",
+    // 防搬运：可选中（复制体验正常），但复制走水印版；背景铺文字水印（截图可溯源）
     cursor: "default",
+    backgroundRepeat: "repeat",
+    borderRadius: dimensions.radiusMd,
+    padding: dimensions.spacing2,
   },  previewText: {
     color: colors.foreground,
     fontSize: dimensions.fontSizeMd,
