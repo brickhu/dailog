@@ -5,12 +5,13 @@ import { Button } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
 import { useI18n } from "@dailogues/i18n";
+import { env } from "../lib/env";
 
 export interface Episode {
   id: string;
   title: string | null;
   status: "draft" | "generating" | "published" | "failed";
-  
+  durationSeconds: number | null;
   createdAt: string;
 }
 
@@ -72,6 +73,17 @@ const styles = stylex.create({
     fontSize: dimensions.fontSizeSm,
     marginTop: dimensions.spacing1,
   },
+  cardActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: dimensions.spacing2,
+  },
+  viewLink: {
+    color: colors.primary,
+    fontSize: dimensions.fontSizeSm,
+    textDecoration: "none",
+    ":hover": { textDecoration: "underline" },
+  },
   badge: {
     padding: `2px ${dimensions.spacing2}`,
     borderRadius: dimensions.radiusFull,
@@ -123,7 +135,7 @@ const styles = stylex.create({
 });
 
 export default function Dashboard() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const navigate = useNavigate();
   const [episodes, setEpisodes] = createSignal<Episode[]>([]);
   const [loading, setLoading] = createSignal(true);
@@ -166,17 +178,30 @@ export default function Dashboard() {
             return (
               <div {...stylex.props(styles.card)}>
                 <div {...stylex.props(styles.cardMain)}>
-                  <div {...stylex.props(styles.epTitle)}>{ep.title || "未命名对话"}</div>
+                  <div {...stylex.props(styles.epTitle)}>{ep.title || t("studio.unnamed")}</div>
                   <div {...stylex.props(styles.epMeta)}>
-                    {new Date(ep.createdAt).toLocaleDateString("zh-CN")}
+                    {new Date(ep.createdAt).toLocaleDateString(locale() === "zh" ? "zh-CN" : "en-US")}
+                    {ep.durationSeconds ? ` · ${t("studio.episodeDuration", { minutes: Math.max(1, Math.round(ep.durationSeconds / 60)) })}` : ""}
                   </div>
                 </div>
-                <span
-                  {...stylex.props(styles.badge)}
-                  style={{ background: `${status.color}22`, color: status.color }}
-                >
-                  {t(status.textKey as never)}
-                </span>
+                <div {...stylex.props(styles.cardActions)}>
+                  <span
+                    {...stylex.props(styles.badge)}
+                    style={{ background: `${status.color}22`, color: status.color }}
+                  >
+                    {t(status.textKey as never)}
+                  </span>
+                  <Show when={ep.status === "published"}>
+                    <a
+                      href={`${env.siteBaseUrl}/episode/${ep.id}`}
+                      target="_blank"
+                      rel="noopener"
+                      {...stylex.props(styles.viewLink)}
+                    >
+                      {t("studio.episodeView")}
+                    </a>
+                  </Show>
+                </div>
               </div>
             );
           }}

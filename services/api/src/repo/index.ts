@@ -118,6 +118,7 @@ export interface EpisodesRepo {
     title: string | null;
     status: string;
     polishId: string;
+    durationSeconds: number | null;
     createdAt: Date;
   }[]>;
   getOwned(id: string, userId: string): Promise<{ id: string; transcriptId: string; polishId: string; title: string | null; status: string } | null>;
@@ -438,6 +439,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             title: schema.episodes.title,
             status: schema.episodes.status,
             polishId: schema.episodes.polishId,
+            durationSeconds: schema.episodes.durationSeconds,
             createdAt: schema.episodes.createdAt,
           })
           .from(schema.episodes)

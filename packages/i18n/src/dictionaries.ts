@@ -225,6 +225,8 @@ export const zh = {
   "studio.unnamedContainer": "未命名容器",
   "studio.inviteFriends": "邀请好友（计划 7）",
   "studio.subscribePro": "订阅 Pro（计划 7）",
+  "studio.episodeDuration": "{minutes} 分钟",
+  "studio.episodeView": "查看发布页 →",
   "studio.channelNotActivated": "频道未开通——请先到「初始化频道」完成邀请码 + 录音，再回来确认入库。",
 
   // ---- studio 导入页 ----
@@ -549,6 +551,8 @@ export const en: Dictionary = {
   "studio.unnamedContainer": "Untitled container",
   "studio.inviteFriends": "Invite friends (plan 7)",
   "studio.subscribePro": "Subscribe Pro (plan 7)",
+  "studio.episodeDuration": "{minutes} min",
+  "studio.episodeView": "View page →",
   "studio.channelNotActivated": "Channel not activated — complete「Activate channel + record voice」first, then confirm the import.",
 
   // ---- studio 导入页 ----
