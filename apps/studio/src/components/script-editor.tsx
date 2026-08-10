@@ -6,7 +6,7 @@ import { api } from "../lib/client";
 import { ApiError } from "../lib/api";
 import { consumeSse } from "../lib/sse";
 import { tryParseSegments } from "../lib/parseJsonLoose";
-import { applyScriptOp, totalCharCount, type ScriptSegment } from "../lib/scriptOps";
+import { totalCharCount, type ScriptSegment } from "../lib/scriptOps";
 import { useI18n } from "@dailogues/i18n";
 import { EMPTY_PERSONA, type HostPersona } from "../lib/persona";
 
@@ -38,10 +38,6 @@ type EditorState =
 export default function ScriptEditor(props: ScriptEditorProps) {
   const { t } = useI18n();
   const [state, setState] = createSignal<EditorState>({ kind: "loading" });
-  const [toast, setToast] = createSignal<string | null>(null);
-  const [saving, setSaving] = createSignal(false);
-  // 未保存改动快照（覆盖确认用）：加载/保存成功/润色完成时更新
-  const [savedSegments, setSavedSegments] = createSignal<ScriptSegment[]>([]);
   // 重新润色方向输入（展开态 + 值）
   const [directionOpen, setDirectionOpen] = createSignal(false);
   const [direction, setDirection] = createSignal("");
@@ -60,29 +56,19 @@ export default function ScriptEditor(props: ScriptEditorProps) {
     });
   };
 
-  const update = (op: Parameters<typeof applyScriptOp>[1]) => {
-    setState((s) => {
-      if (s.kind !== "editing") return s;
-      return { ...s, segments: applyScriptOp(s.segments, op) };
-    });
-  };
-
   const loadOrPolish = async () => {
     if (props.transcriptId && Array.isArray(props.initialSegments)) {
       setState({ kind: "editing", segments: props.initialSegments, version: null });
-      setSavedSegments(props.initialSegments);
       return;
     }
     // 无 transcript：等待用户点击「生成脚本」（SSE 润色）
     setState({ kind: "empty" });
   };
 
-  /** 重新润色入口：未保存改动先确认（覆盖保护）→ 展开方向输入 */
+  /** 重新润色入口（纠错通道）：展开方向输入 → AI 重写生成新脚本 */
   const requestRepolish = () => {
     const s = state();
     if (s.kind !== "editing") return;
-    const dirty = JSON.stringify(s.segments) !== JSON.stringify(savedSegments());
-    if (dirty && !window.confirm(t("studio.scriptEditor.repolishConfirm"))) return;
     setDirection("");
     setDirectionOpen(true);
   };
@@ -130,7 +116,6 @@ export default function ScriptEditor(props: ScriptEditorProps) {
           if (meta) setScriptMeta({ id: meta.id, title: meta.title, creationNote: meta.creationNote, topic: meta.topic });
           const final = normalize(tryParseSegments(raw) ?? []);
           setState({ kind: "editing", segments: final, version: null });
-          setSavedSegments(final);
           props.onDone?.(done.transcriptId ?? done.transcriptIds?.[0] ?? "");
         },
         onError: (data) => {
@@ -148,30 +133,6 @@ export default function ScriptEditor(props: ScriptEditorProps) {
       } else {
         setState({ kind: "error", message: e instanceof Error ? e.message : t("studio.scriptEditor.polishFailed") });
       }
-    }
-  };
-
-  const saveDraft = async () => {
-    const s = state();
-    if (s.kind !== "editing") return;
-    setSaving(true);
-    try {
-      if (!props.transcriptId) {
-        setToast(t("studio.scriptEditor.saveFirst"));
-        return;
-      }
-      await api.request(`/v1/transcripts/${props.transcriptId}`, {
-        method: "PUT",
-        body: JSON.stringify({ segments: s.segments }),
-      });
-      setState({ ...s, version: null });
-      setSavedSegments(s.segments);
-      setToast(t("studio.scriptEditor.saved"));
-      setTimeout(() => setToast(null), 2000);
-    } catch (e) {
-      setToast(e instanceof Error ? `保存失败：${e.message}` : t("studio.scriptEditor.saveFailed"));
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -282,13 +243,13 @@ export default function ScriptEditor(props: ScriptEditorProps) {
 
       <Show when={editing()}>
         <div>
+          {/* 只读查看器：AI 生成即定稿，不可直接编辑——纠错走「重新润色」（带方向指令） */}
           <div {...stylex.props(styles.toolbar)}>
             <span {...stylex.props(styles.count)}>
               {editing()!.segments.length} 段 · {totalCharCount(editing()!.segments)} 字（约
               {Math.round(totalCharCount(editing()!.segments) / 240)} 分钟）
             </span>
             <div>
-              <Button appear="ghost" onClick={saveDraft} disabled={saving()}>{saving() ? t("studio.scriptEditor.saving") : t("studio.scriptEditor.save")}</Button>
               <Button appear="ghost" onClick={requestRepolish}>{t("studio.scriptEditor.repolish")}</Button>
             </div>
           </div>
@@ -310,31 +271,8 @@ export default function ScriptEditor(props: ScriptEditorProps) {
             </div>
           </Show>
           <For each={editing()!.segments}>
-            {(seg, i) => (
-              <SegmentRow
-                seg={seg}
-                index={i()}
-                total={editing()!.segments.length}
-                onOp={(op) => update(op)}
-              />
-            )}
+            {(seg) => <SegmentView seg={seg} />}
           </For>
-          <Button
-            appear="ghost"
-            style={{ "margin-top": dimensions.spacing3 }}
-            onClick={() =>
-              update({
-                type: "insert",
-                index: editing()!.segments.length,
-                segment: { speaker: "host", text: "" },
-              })
-            }
-          >
-            + 添加段落
-          </Button>
-          <Show when={toast()}>
-            <div {...stylex.props(styles.toast)}>{toast()}</div>
-          </Show>
         </div>
       </Show>
     </div>
@@ -361,53 +299,15 @@ function SegmentPreview(props: { seg: ScriptSegment }) {
   );
 }
 
-function SegmentRow(props: {
-  seg: ScriptSegment;
-  index: number;
-  total: number;
-  onOp: (op: Parameters<typeof applyScriptOp>[1]) => void;
-}) {
+/** 只读段落：AI 生成即定稿，不可直接编辑（纠错走重新润色） */
+function SegmentView(props: { seg: ScriptSegment }) {
   const { t } = useI18n();
-  const [text, setText] = createSignal(props.seg.text);
   return (
     <div {...stylex.props(styles.row, props.seg.speaker === "host" ? styles.rowHost : styles.rowGuest)}>
-      <div {...stylex.props(styles.rowHeader)}>
-        <button
-          {...stylex.props(styles.speakerTag, props.seg.speaker === "host" ? styles.tagHost : styles.tagGuest)}
-          onClick={() => props.onOp({ type: "setSpeaker", index: props.index, speaker: props.seg.speaker === "host" ? "guest" : "host" })}
-          title={t("studio.scriptEditor.switchSpeaker")}
-        >
-          {props.seg.speaker === "host" ? t("studio.scriptEditor.you") : "AI"}
-        </button>
-        <div {...stylex.props(styles.rowActions)}>
-          <button
-            {...stylex.props(styles.iconButton)}
-            disabled={props.index === 0}
-            onClick={() => props.onOp({ type: "move", index: props.index, dir: -1 })}
-          >
-            ↑
-          </button>
-          <button
-            {...stylex.props(styles.iconButton)}
-            disabled={props.index === props.total - 1}
-            onClick={() => props.onOp({ type: "move", index: props.index, dir: 1 })}
-          >
-            ↓
-          </button>
-          <button {...stylex.props(styles.iconButton, styles.iconDanger)} onClick={() => props.onOp({ type: "remove", index: props.index })}>
-            ✕
-          </button>
-        </div>
-      </div>
-      <textarea
-        {...stylex.props(styles.textarea)}
-        value={text()}
-        onInput={(e) => {
-          setText(e.currentTarget.value);
-          props.onOp({ type: "updateText", index: props.index, text: e.currentTarget.value });
-        }}
-        rows={Math.max(2, Math.ceil(props.seg.text.length / 40))}
-      />
+      <span {...stylex.props(styles.speakerTag, props.seg.speaker === "host" ? styles.tagHost : styles.tagGuest)}>
+        {props.seg.speaker === "host" ? t("studio.scriptEditor.you") : "AI"}
+      </span>
+      <span {...stylex.props(styles.readonlyText)}>{props.seg.text}</span>
     </div>
   );
 }
@@ -516,12 +416,6 @@ const styles = stylex.create({
     backgroundColor: "rgba(159, 122, 234, 0.06)",
     borderLeft: `3px solid #9f7aea`,
   },
-  rowHeader: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: dimensions.spacing2,
-  },
   speakerTag: {
     padding: `2px ${dimensions.spacing2}`,
     borderRadius: dimensions.radiusFull,
@@ -537,46 +431,15 @@ const styles = stylex.create({
     backgroundColor: "rgba(159, 122, 234, 0.2)",
     color: "#b794f4",
   },
-  rowActions: {
-    display: "flex",
-    gap: dimensions.spacing1,
-  },
-  iconButton: {
-    backgroundColor: colors.surface,
-    border: `1px solid ${colors.ink}`,
-    color: colors.neutral,
-    borderRadius: dimensions.radiusSm,
-    cursor: "pointer",
-    padding: `2px ${dimensions.spacing2}`,
-  },
-  iconDanger: {
-    color: colors.danger,
-  },
-  textarea: {
-    width: "100%",
-    boxSizing: "border-box",
-    backgroundColor: "transparent",
-    border: "none",
+  readonlyText: {
+    flex: 1,
+    fontSize: dimensions.fontSizeMd,
+    lineHeight: 1.7,
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+  },  previewText: {
     color: colors.foreground,
     fontSize: dimensions.fontSizeMd,
     lineHeight: 1.6,
-    resize: "vertical",
-    fontFamily: "inherit",
-  },
-  previewText: {
-    color: colors.foreground,
-    fontSize: dimensions.fontSizeMd,
-    lineHeight: 1.6,
-  },
-  toast: {
-    position: "fixed",
-    bottom: dimensions.spacing8,
-    left: "50%",
-    transform: "translateX(-50%)",
-    padding: `${dimensions.spacing2} ${dimensions.spacing4}`,
-    borderRadius: dimensions.radiusMd,
-    background: colors.success,
-    color: colors.onSuccess,
-    fontSize: dimensions.fontSizeSm,
   },
 });
