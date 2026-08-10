@@ -25,6 +25,27 @@ export interface ImportDeps {
   findPolishByUserSnapshot(userId: string, snapshotId: string): Promise<{ id: string; title: string | null } | null>;
 }
 
+/** 平台分享页的占位标题（用户未命名对话时的默认值）——不能当节目标题用 */
+const PLACEHOLDER_TITLES = new Set([
+  "shared conversation", "shared chat", "untitled", "新对话",
+  "claude 分享对话", "chatgpt 分享对话", "deepseek 分享对话",
+  "kimi 分享对话", "豆包分享对话", "gemini 分享对话",
+]);
+
+/**
+ * 有效标题：非占位且长度 ≥2 直接用；否则用首条用户消息摘要（≤40 字）。
+ * 各平台分享接口的 title 常是占位值（如 DeepSeek "Shared Conversation"），
+ * 展示/建容器都用真实内容标题。
+ */
+export function effectiveTitle(title: string | null | undefined, messages: { role: string; content: string }[]): string | null {
+  const t = (title ?? "").trim();
+  if (t.length >= 2 && !PLACEHOLDER_TITLES.has(t.toLowerCase())) return t;
+  const first = messages.find((m) => m.role === "user" && typeof m.content === "string" && m.content.trim());
+  const content = first?.content?.trim() ?? "";
+  if (!content) return null;
+  return content.length > 40 ? content.slice(0, 40) + "…" : content;
+}
+
 interface Dialogue {
   platform: string;
   conversationId: string;
@@ -95,7 +116,7 @@ export function importRoutes(deps: ImportDeps) {
       const created = await deps.createSnapshot({
         url,
         platform: result.dialogue.platform,
-        sourceTitle: result.dialogue.title || null,
+        sourceTitle: effectiveTitle(result.dialogue.title, result.dialogue.messages),
         sourceConversationId: result.dialogue.conversationId || null,
         parsedDialogue: result.dialogue.messages,
       });
@@ -104,9 +125,15 @@ export function importRoutes(deps: ImportDeps) {
     }
 
     // ② polish 检查：用户已创建过该快照的容器 → 跳转编辑页
+    // 展示标题用有效标题（旧容器名可能是占位复制来的；不影响 polish.title 数据本身）
     const existing = await deps.findPolishByUserSnapshot(userId, snapshot.id);
     if (existing) {
-      return c.json({ existing: true, polishId: existing.id, title: existing.title ?? snapshot.sourceTitle });
+      return c.json({
+        existing: true,
+        polishId: existing.id,
+        title: effectiveTitle(existing.title ?? snapshot.sourceTitle, (snapshot.parsedDialogue ?? []) as { role: string; content: string }[])
+          ?? existing.title ?? snapshot.sourceTitle,
+      });
     }
 
     // ③ 规则检查（非 LLM，零成本）：内容门槛——少于 3 轮问答或总字数 < 500 拒绝
@@ -126,7 +153,7 @@ export function importRoutes(deps: ImportDeps) {
       dialogue: {
         platform: snapshot.platform,
         conversationId: snapshot.sourceConversationId ?? url,
-        title: snapshot.sourceTitle ?? "分享对话",
+        title: effectiveTitle(snapshot.sourceTitle, (snapshot.parsedDialogue ?? []) as { role: string; content: string }[]) ?? "分享对话",
         url,
         messages: snapshot.parsedDialogue ?? [],
       },

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createApp, type AppDeps } from "../src/app";
+import { effectiveTitle } from "../src/routes/import";
 import type { Env } from "../src/config/env";
 
 // share 转发路由测试：mock 全局 fetch 模拟 importer 服务响应
@@ -305,6 +306,33 @@ describe("importer 转发路由", () => {
       body: JSON.stringify({ url: "not-a-url" }),
     });
     expect(res.status).toBe(400);
+  });
+});
+
+describe("effectiveTitle（占位标题 → 首条用户消息摘要）", () => {
+  it("正常标题直接保留", () => {
+    expect(effectiveTitle("如何提高英语口语", [])).toBe("如何提高英语口语");
+  });
+
+  it("平台占位标题 → 首条用户消息（≤40 字加省略号）", () => {
+    const msgs = [
+      { role: "user", content: "分别在多个网贷平台借款，目前缺乏偿还能力，这种情况下应该怎么办？" },
+      { role: "assistant", content: "建议…" },
+    ];
+    expect(effectiveTitle("Shared Conversation", msgs)).toBe("分别在多个网贷平台借款，目前缺乏偿还能力，这种情况下应该怎么办？");
+    // 超过 40 字截断加省略号
+    const longMsg = { role: "user", content: "分别在多个网贷平台借款，目前缺乏偿还能力，这种情况下应该怎么办？还有没有其他的解决办法可以尝试一下？" };
+    expect(effectiveTitle("Shared Conversation", [longMsg])).toBe("分别在多个网贷平台借款，目前缺乏偿还能力，这种情况下应该怎么办？还有没有其他的解…");
+  });
+
+  it("占位标题 + 短消息 → 完整消息；无消息 → null", () => {
+    expect(effectiveTitle("DeepSeek 分享对话", [{ role: "user", content: "你好" }])).toBe("你好");
+    expect(effectiveTitle("Shared Chat", [])).toBeNull();
+    expect(effectiveTitle("", [{ role: "assistant", content: "只有 AI 回复" }])).toBeNull();
+  });
+
+  it("大小写不敏感（shared conversation）", () => {
+    expect(effectiveTitle("SHARED CONVERSATION", [{ role: "user", content: "问题内容" }])).toBe("问题内容");
   });
 });
 
