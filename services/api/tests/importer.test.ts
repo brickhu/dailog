@@ -169,7 +169,7 @@ describe("importer 转发路由", () => {
     vi.stubGlobal("fetch", fetchMock);
     try {
       const app = makeApp("https://importer.internal");
-      const res = await app.request("/api/importer/collect", {
+      const res = await app.request("/v1/importer/collect", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ url: "https://claude.ai/share/abc" }),
@@ -198,7 +198,7 @@ describe("importer 转发路由", () => {
     );
     try {
       const app = makeApp("https://importer.internal");
-      const res = await app.request("/api/importer/collect", {
+      const res = await app.request("/v1/importer/collect", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ url: "https://claude.ai/share/abc" }),
@@ -214,7 +214,7 @@ describe("importer 转发路由", () => {
 
   it("未配置 importer → 503", async () => {
     const app = makeApp(null);
-    const res = await app.request("/api/importer/collect", {
+    const res = await app.request("/v1/importer/collect", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ url: "https://claude.ai/share/abc" }),
@@ -228,7 +228,7 @@ describe("importer 转发路由", () => {
     vi.stubGlobal("fetch", fetchMock);
     try {
       const app = makeApp("https://importer.internal");
-      const res = await app.request("/api/importer/platforms");
+      const res = await app.request("/v1/importer/platforms");
       expect(res.status).toBe(200);
       const body = (await res.json()) as typeof rules;
       expect(body.platforms[0].id).toBe("claude");
@@ -264,7 +264,7 @@ describe("importer 转发路由", () => {
       }),
     );
     try {
-      const res = await app.request("/api/import", {
+      const res = await app.request("/v1/import", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ url: "https://claude.ai/share/6cc0f373-72c5-4afd-a223-98471688e736" }),
@@ -281,7 +281,7 @@ describe("importer 转发路由", () => {
 
   it("非法 URL → 400", async () => {
     const app = makeApp("https://importer.internal");
-    const res = await app.request("/api/importer/collect", {
+    const res = await app.request("/v1/importer/collect", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ url: "not-a-url" }),
@@ -290,7 +290,7 @@ describe("importer 转发路由", () => {
   });
 });
 
-describe("/api/import 规则检查（内容门槛）", () => {
+describe("/v1/import 规则检查（内容门槛）", () => {
   /** 已有快照（跳过 importer），直接走规则检查 */
   const snapshotDeps = (messages: { role: string; content: string }[]) => ({
     getSnapshotByUrl: async () => ({
@@ -306,7 +306,7 @@ describe("/api/import 规则检查（内容门槛）", () => {
     findPolishByUserSnapshot: async () => null,
   });
   const postImport = (app: ReturnType<typeof makeApp>) =>
-    app.request("/api/import", {
+    app.request("/v1/import", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ url: "https://claude.ai/share/abc" }),

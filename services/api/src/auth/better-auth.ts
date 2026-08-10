@@ -39,6 +39,8 @@ export function createAuth(opts: CreateAuthOptions) {
   };
 
   return betterAuth({
+    // API 路径统一 /v1 前缀（域名已标识 API，路径前缀做版本化）——认证端点 /v1/auth/*
+    basePath: "/v1/auth",
     baseURL: opts.baseURL,
     trustedOrigins: opts.trustedOrigins,
     database: drizzleAdapter(opts.db, {

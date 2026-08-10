@@ -112,7 +112,7 @@ export default function PolishesPage() {
 
   onMount(async () => {
     try {
-      const list = await api.get<PolishItem[]>("/api/polishes");
+      const list = await api.get<PolishItem[]>("/v1/polishes");
       setItems(list);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");

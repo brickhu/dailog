@@ -49,7 +49,7 @@ export default function VoiceSampler(props: VoiceSamplerProps) {
     setRecording(false);
     let cancelled = false;
     api
-      .request("/api/me/voice-sample/audio")
+      .request("/v1/me/voice-sample/audio")
       .then(async (res) => {
         if (cancelled) return;
         if (!res.ok) throw new Error(`HTTP ${res.status}`);

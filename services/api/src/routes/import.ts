@@ -61,7 +61,7 @@ export function importRoutes(deps: ImportDeps) {
     }
   };
 
-  app.post("/api/import", async (c) => {
+  app.post("/v1/import", async (c) => {
     const userId = c.get("userId") as string;
     const body = (await c.req.json().catch(() => null)) as { url?: unknown } | null;
     if (!body || typeof body.url !== "string" || !body.url.startsWith("http")) {

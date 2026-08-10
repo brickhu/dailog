@@ -214,7 +214,7 @@ describe.skipIf(!hasDb)("channel activation (授权码开通频道, real local P
     });
 
     // 注册一个用户（开放注册）
-    const res = await app.request("/api/auth/sign-up/email", {
+    const res = await app.request("/v1/auth/sign-up/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: `ch-user-${randomUUID().slice(0, 8)}@test.local`, password: "password123", name: "频道用户" }),
@@ -233,7 +233,7 @@ describe.skipIf(!hasDb)("channel activation (授权码开通频道, real local P
   });
 
   it("rejects activation with unknown code", async () => {
-    const res = await app.request("/api/me/channel/activate", {
+    const res = await app.request("/v1/me/channel/activate", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ inviteCode: "no-such-code" }),
@@ -243,7 +243,7 @@ describe.skipIf(!hasDb)("channel activation (授权码开通频道, real local P
   });
 
   it("rejects activation without code", async () => {
-    const res = await app.request("/api/me/channel/activate", {
+    const res = await app.request("/v1/me/channel/activate", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({}),
@@ -252,7 +252,7 @@ describe.skipIf(!hasDb)("channel activation (授权码开通频道, real local P
   });
 
   it("activates channel with valid code → invite marked used + channelActive true", async () => {
-    const res = await app.request("/api/me/channel/activate", {
+    const res = await app.request("/v1/me/channel/activate", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ inviteCode: testCode }),
@@ -276,7 +276,7 @@ describe.skipIf(!hasDb)("channel activation (授权码开通频道, real local P
   });
 
   it("rejects second use of same code", async () => {
-    const res = await app.request("/api/me/channel/activate", {
+    const res = await app.request("/v1/me/channel/activate", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ inviteCode: testCode }),

@@ -27,35 +27,35 @@ export function favoritesRoutes(repo: FavoritesRepo) {
   const app = new Hono<{ Variables: { userId: string } }>();
   // 路径自带 /api 前缀（与其它路由一致，挂载在根路径）
 
-  app.post("/api/episodes/:id/favorite", async (c) => {
+  app.post("/v1/episodes/:id/favorite", async (c) => {
     const ep = await repo.getPublishableEpisode(c.req.param("id"));
     if (!ep) return c.json({ error: "not_found" }, 404);
     const result = await repo.toggleFavorite(c.get("userId") as string, ep.id);
     return c.json(result);
   });
 
-  app.delete("/api/episodes/:id/favorite", async (c) => {
+  app.delete("/v1/episodes/:id/favorite", async (c) => {
     const ep = await repo.getPublishableEpisode(c.req.param("id"));
     if (!ep) return c.json({ error: "not_found" }, 404);
     const result = await repo.toggleFavorite(c.get("userId") as string, ep.id);
     return c.json(result);
   });
 
-  app.post("/api/episodes/:id/like", async (c) => {
+  app.post("/v1/episodes/:id/like", async (c) => {
     const ep = await repo.getPublishableEpisode(c.req.param("id"));
     if (!ep) return c.json({ error: "not_found" }, 404);
     const result = await repo.toggleLike(c.get("userId") as string, ep.id);
     return c.json(result);
   });
 
-  app.delete("/api/episodes/:id/like", async (c) => {
+  app.delete("/v1/episodes/:id/like", async (c) => {
     const ep = await repo.getPublishableEpisode(c.req.param("id"));
     if (!ep) return c.json({ error: "not_found" }, 404);
     const result = await repo.toggleLike(c.get("userId") as string, ep.id);
     return c.json(result);
   });
 
-  app.get("/api/me/favorites", async (c) => {
+  app.get("/v1/me/favorites", async (c) => {
     const rows = await repo.listFavorites(c.get("userId") as string);
     return c.json(rows);
   });

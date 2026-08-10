@@ -8,7 +8,7 @@ export default function LoginPage() {
   // 已登录访问登录页 → 统一回跳（client 判定，SSR 首帧不跳）：
   // 来源路径（?redirect= 白名单内）或根路径——与登录成功后的跳转同一套共享逻辑
   onMount(async () => {
-    const res = await fetch("/api/auth/get-session");
+    const res = await fetch("/v1/auth/get-session");
     if (!res.ok) return;
     // better-auth 未登录返回 JSON null——必须整体可选链
     const data = (await res.json()) as { user?: unknown } | null;
@@ -22,10 +22,10 @@ export default function LoginPage() {
   return (
     <LoginForm
       config={{
-        loginOrOtpEndpoint: "/api/auth/login-or-otp",
-        otpCompleteEndpoint: "/api/auth/otp-complete",
+        loginOrOtpEndpoint: "/v1/auth/login-or-otp",
+        otpCompleteEndpoint: "/v1/auth/otp-complete",
         forgotPasswordUrl: "/forgot-password",
-        github: { signInSocialEndpoint: "/api/auth/sign-in-social", callbackURL: `${env.siteBaseUrl}/account` },
+        github: { signInSocialEndpoint: "/v1/auth/sign-in-social", callbackURL: `${env.siteBaseUrl}/account` },
       }}
       redirect={{ allowedOrigins: [env.siteBaseUrl, env.studioBaseUrl] }}
     />

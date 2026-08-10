@@ -76,7 +76,7 @@ export default function ForgotPasswordPage() {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email())) return setMsg({ ok: false, text: "请输入有效的邮箱地址" });
     setBusy(true);
     try {
-      const res = await fetch("/api/auth/forget-password/email-otp", {
+      const res = await fetch("/v1/auth/forget-password/email-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email().trim().toLowerCase() }),
@@ -99,7 +99,7 @@ export default function ForgotPasswordPage() {
     if (newPw() !== confirmPw()) return setMsg({ ok: false, text: "两次输入的新密码不一致" });
     setBusy(true);
     try {
-      const res = await fetch("/api/auth/email-otp/reset-password", {
+      const res = await fetch("/v1/auth/email-otp/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email().trim().toLowerCase(), otp: otp(), password: newPw() }),

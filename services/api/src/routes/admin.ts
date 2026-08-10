@@ -20,7 +20,7 @@ const CODE_RE = /^[A-Za-z0-9_-]{3,64}$/;
 
 export function adminRoutes(deps: AdminDeps) {
   const app = new Hono<{ Variables: { userId: string } }>();
-  app.post("/api/admin/invite-codes", async (c) => {
+  app.post("/v1/admin/invite-codes", async (c) => {
     const userId = c.get("userId") as string;
     if (!(await deps.isAdmin(userId))) return c.json({ error: "forbidden" }, 403);
 

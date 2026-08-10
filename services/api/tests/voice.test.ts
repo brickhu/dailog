@@ -21,7 +21,7 @@ function makeVoice(deps: Partial<VoiceDeps> = {}) {
 describe("GET /api/me/voice-sample", () => {
   it("returns 404 when user has no sample", async () => {
     const app = makeVoice({ getVoiceSample: async () => null });
-    const res = await app.request("/api/me/voice-sample");
+    const res = await app.request("/v1/me/voice-sample");
     expect(res.status).toBe(404);
   });
 
@@ -37,7 +37,7 @@ describe("GET /api/me/voice-sample", () => {
         createdAt: new Date("2026-01-01T00:00:00Z"),
       }),
     });
-    const res = await app.request("/api/me/voice-sample");
+    const res = await app.request("/v1/me/voice-sample");
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toMatchObject({ status: "ready", referenceId: null, duration: 15 });
@@ -55,7 +55,7 @@ describe("POST /api/me/voice-sample（样本直传：只保存，不训练）", 
     });
     const form = new FormData();
     form.append("file", new Blob([new Uint8Array([1, 2, 3])], { type: "audio/wav" }), "voice.wav");
-    const res = await app.request("/api/me/voice-sample", { method: "POST", body: form });
+    const res = await app.request("/v1/me/voice-sample", { method: "POST", body: form });
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual({ ok: true });
@@ -69,7 +69,7 @@ describe("POST /api/me/voice-sample（样本直传：只保存，不训练）", 
 
   it("returns 400 when file missing", async () => {
     const app = makeVoice();
-    const res = await app.request("/api/me/voice-sample", { method: "POST", body: new FormData() });
+    const res = await app.request("/v1/me/voice-sample", { method: "POST", body: new FormData() });
     expect(res.status).toBe(400);
   });
 });

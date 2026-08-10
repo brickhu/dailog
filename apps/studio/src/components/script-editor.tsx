@@ -67,7 +67,7 @@ export default function ScriptEditor(props: ScriptEditorProps) {
     setDirectionOpen(false);
     let raw = "";
     try {
-      const res = await api.request(`/api/transcripts/new`, {
+      const res = await api.request(`/v1/transcripts/new`, {
         method: "POST",
         body: JSON.stringify({ polishId: props.polishId, ...(instruction ? { instruction } : {}) }),
         // SSE 长连接（润色流式输出可能 1-3 分钟）：跳过默认 30s 超时
@@ -119,7 +119,7 @@ export default function ScriptEditor(props: ScriptEditorProps) {
         setToast("请先生成脚本再保存");
         return;
       }
-      await api.request(`/api/transcripts/${props.transcriptId}`, {
+      await api.request(`/v1/transcripts/${props.transcriptId}`, {
         method: "PUT",
         body: JSON.stringify({ segments: s.segments }),
       });

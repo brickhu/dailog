@@ -228,7 +228,7 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
 
   it("signs up without invite code → token + profile row（注册开放，码仅用于开通频道）", async () => {
     const mail = email();
-    const res = await app.request("/api/auth/sign-up/email", {
+    const res = await app.request("/v1/auth/sign-up/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: mail, password: "password123", name: "新用户" }),
@@ -247,7 +247,7 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
     expect(profiles[0]?.channelActivatedAt).toBeNull(); // 频道未开通
 
     // 带 token 访问受保护接口
-    const me = await app.request("/api/me", {
+    const me = await app.request("/v1/me", {
       headers: { Authorization: `Bearer ${json.token}` },
     });
     expect(me.status).toBe(200);
@@ -259,12 +259,12 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
 
   it("signs in and get-session restores via bearer token", async () => {
     const mail = email();
-    await app.request("/api/auth/sign-up/email", {
+    await app.request("/v1/auth/sign-up/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: mail, password: "password123", name: "登录用户" }),
     });
-    const signIn = await app.request("/api/auth/sign-in/email", {
+    const signIn = await app.request("/v1/auth/sign-in/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: mail, password: "password123" }),
@@ -272,7 +272,7 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
     expect(signIn.status).toBe(200);
     const { token, user } = (await signIn.json()) as { token: string; user: { id: string } };
 
-    const session = await app.request("/api/auth/get-session", {
+    const session = await app.request("/v1/auth/get-session", {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(session.status).toBe(200);
@@ -281,14 +281,14 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
   });
 
   it("rejects invalid bearer token with 401", async () => {
-    const res = await app.request("/api/me", {
+    const res = await app.request("/v1/me", {
       headers: { Authorization: "Bearer garbage-token" },
     });
     expect(res.status).toBe(401);
   });
 
   it("rejects missing token with 401", async () => {
-    const res = await app.request("/api/me");
+    const res = await app.request("/v1/me");
     expect(res.status).toBe(401);
   });
 });

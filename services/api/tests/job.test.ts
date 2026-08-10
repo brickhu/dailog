@@ -13,7 +13,7 @@ describe("GET /api/episodes/:id/job", () => {
   it("returns latest job with status/progress/error", async () => {
     const getLatestJob = vi.fn(async () => ({ id: "job-9", status: "tts", progress: 30, error: null }));
     const app = makeJob({ getLatestJob });
-    const res = await app.request("/api/episodes/ep-1/job");
+    const res = await app.request("/v1/episodes/ep-1/job");
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ id: "job-9", status: "tts", progress: 30, error: null });
     expect(getLatestJob).toHaveBeenCalledWith("ep-1");
@@ -21,14 +21,14 @@ describe("GET /api/episodes/:id/job", () => {
 
   it("surfaces failed job error text", async () => {
     const app = makeJob({ getLatestJob: async () => ({ id: "job-f", status: "failed", progress: 40, error: "tts_timeout" }) });
-    const res = await app.request("/api/episodes/ep-1/job");
+    const res = await app.request("/v1/episodes/ep-1/job");
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ status: "failed", error: "tts_timeout" });
   });
 
   it("returns 404 when no job exists", async () => {
     const app = makeJob({ getLatestJob: async () => null });
-    const res = await app.request("/api/episodes/ep-1/job");
+    const res = await app.request("/v1/episodes/ep-1/job");
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "not_found" });
   });
@@ -37,7 +37,7 @@ describe("GET /api/episodes/:id/job", () => {
 describe("ownership", () => {
   it("returns 404 for another user's episode", async () => {
     const app = makeJob({ getOwnedEpisode: async () => null });
-    const res = await app.request("/api/episodes/ep-other/job");
+    const res = await app.request("/v1/episodes/ep-other/job");
     expect(res.status).toBe(404);
   });
 });

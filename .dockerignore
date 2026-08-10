@@ -1,0 +1,11 @@
+# 构建上下文排除（Dockerfile COPY . . 体积控制）
+node_modules
+**/node_modules
+.git
+poc-profile
+*.log
+.tmp
+services/api/data
+services/api/assets
+apps/site/.output
+apps/site/.vinxi

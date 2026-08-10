@@ -166,7 +166,7 @@ export default function CollectPage() {
   /** 拉取 importer 校验规则（失败不阻塞——采集时服务端仍会校验） */
   const loadRules = async () => {
     try {
-      const res = await api.request("/api/importer/platforms");
+      const res = await api.request("/v1/importer/platforms");
       const body = (await res.json().catch(() => null)) as { platforms?: PlatformRule[] } | null;
       if (res.ok && Array.isArray(body?.platforms)) setRules(body.platforms);
     } catch {
@@ -211,7 +211,7 @@ export default function CollectPage() {
     setActionError(null);
     setState({ kind: "loading" });
     try {
-      const res = await api.request("/api/import", {
+      const res = await api.request("/v1/import", {
         method: "POST",
         body: JSON.stringify({ url }),
       });
@@ -287,7 +287,7 @@ export default function CollectPage() {
     setActionError(null);
     try {
       // 创建创作容器（user × snapshot 唯一）；已存在 → 跳已有编辑页
-      const res = await api.request("/api/polishes/new", {
+      const res = await api.request("/v1/polishes/new", {
         method: "POST",
         body: JSON.stringify({ snapshotId: s.dialogue.snapshotId, title: s.dialogue.title }),
       });

@@ -196,27 +196,27 @@ function makeApp(admin: AppDeps["admin"], auth: AppDeps["auth"]) {
 describe("admin invite endpoints (fake deps)", () => {
   it("rejects unauthenticated request with 401", async () => {
     const app = makeApp(fakeAdmin(), fakeAuth(null));
-    const res = await app.request("/api/admin/invite-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+    const res = await app.request("/v1/admin/invite-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
     expect(res.status).toBe(401);
   });
 
   it("rejects non-admin with 403 forbidden", async () => {
     const app = makeApp(fakeAdmin({ isAdmin: async () => false }), fakeAuth());
-    const res = await app.request("/api/admin/invite-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+    const res = await app.request("/v1/admin/invite-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ error: "forbidden" });
   });
 
   it("creates invite code (201) with auto-generated code when code omitted", async () => {
     const app = makeApp(fakeAdmin(), fakeAuth());
-    const res = await app.request("/api/admin/invite-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+    const res = await app.request("/v1/admin/invite-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
     expect(res.status).toBe(201);
     expect(await res.json()).toMatchObject({ code: "dlg-auto1234", expiresAt: null });
   });
 
   it("creates invite code with explicit code and expiresDays", async () => {
     const app = makeApp(fakeAdmin(), fakeAuth());
-    const res = await app.request("/api/admin/invite-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: "VIP-2026", expiresDays: 30 }) });
+    const res = await app.request("/v1/admin/invite-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: "VIP-2026", expiresDays: 30 }) });
     expect(res.status).toBe(201);
     const body = (await res.json()) as { code: string; expiresAt: string };
     expect(body.code).toBe("VIP-2026");
@@ -225,7 +225,7 @@ describe("admin invite endpoints (fake deps)", () => {
 
   it("rejects duplicate code with 400 duplicate_invite_code", async () => {
     const app = makeApp(fakeAdmin({ createInviteCode: async () => ({ error: "duplicate_invite_code" }) }), fakeAuth());
-    const res = await app.request("/api/admin/invite-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: "DUP-1" }) });
+    const res = await app.request("/v1/admin/invite-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: "DUP-1" }) });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: "duplicate_invite_code" });
   });
@@ -233,7 +233,7 @@ describe("admin invite endpoints (fake deps)", () => {
   it("rejects malformed code with 400 invalid_invite_code", async () => {
     const app = makeApp(fakeAdmin(), fakeAuth());
     for (const code of ["ab", "a".repeat(65), "bad code!", "含中文"]) {
-      const res = await app.request("/api/admin/invite-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
+      const res = await app.request("/v1/admin/invite-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
       expect(res.status).toBe(400);
       expect(await res.json()).toMatchObject({ error: "invalid_invite_code" });
     }
@@ -242,7 +242,7 @@ describe("admin invite endpoints (fake deps)", () => {
   it("rejects malformed expiresDays with 400 invalid_expires_days", async () => {
     const app = makeApp(fakeAdmin(), fakeAuth());
     for (const expiresDays of [0, -1, 3651, 1.5, "30"]) {
-      const res = await app.request("/api/admin/invite-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expiresDays }) });
+      const res = await app.request("/v1/admin/invite-codes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expiresDays }) });
       expect(res.status).toBe(400);
       expect(await res.json()).toMatchObject({ error: "invalid_expires_days" });
     }
@@ -278,7 +278,7 @@ describe.skipIf(!hasDb)("admin invite endpoints (real local PG)", () => {
     });
 
     // 管理员（白名单邮箱）与普通用户各注册一个，拿真实 token
-    const adminRes = await app.request("/api/auth/sign-up/email", {
+    const adminRes = await app.request("/v1/auth/sign-up/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: adminEmail, password: "password123", name: "管理员" }),
@@ -288,7 +288,7 @@ describe.skipIf(!hasDb)("admin invite endpoints (real local PG)", () => {
     adminToken = adminBody.token;
     adminUserId = adminBody.user.id;
 
-    const normalRes = await app.request("/api/auth/sign-up/email", {
+    const normalRes = await app.request("/v1/auth/sign-up/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: `adm-user-${randomUUID().slice(0, 8)}@test.local`, password: "password123", name: "普通用户" }),
@@ -309,7 +309,7 @@ describe.skipIf(!hasDb)("admin invite endpoints (real local PG)", () => {
 
   it("creates invite code with explicit code → row persisted with source=admin", async () => {
     const code = `adm-code-${randomUUID().slice(0, 8)}`;
-    const res = await app.request("/api/admin/invite-codes", {
+    const res = await app.request("/v1/admin/invite-codes", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
       body: JSON.stringify({ code }),
@@ -327,12 +327,12 @@ describe.skipIf(!hasDb)("admin invite endpoints (real local PG)", () => {
 
   it("rejects duplicate code", async () => {
     const code = `adm-code-${randomUUID().slice(0, 8)}`;
-    await app.request("/api/admin/invite-codes", {
+    await app.request("/v1/admin/invite-codes", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
       body: JSON.stringify({ code }),
     });
-    const res = await app.request("/api/admin/invite-codes", {
+    const res = await app.request("/v1/admin/invite-codes", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
       body: JSON.stringify({ code }),
@@ -342,7 +342,7 @@ describe.skipIf(!hasDb)("admin invite endpoints (real local PG)", () => {
   });
 
   it("creates invite code with expiresDays → expires_at ≈ now + days", async () => {
-    const res = await app.request("/api/admin/invite-codes", {
+    const res = await app.request("/v1/admin/invite-codes", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
       body: JSON.stringify({ expiresDays: 30 }),
@@ -356,7 +356,7 @@ describe.skipIf(!hasDb)("admin invite endpoints (real local PG)", () => {
   });
 
   it("rejects non-whitelisted user with 403", async () => {
-    const res = await app.request("/api/admin/invite-codes", {
+    const res = await app.request("/v1/admin/invite-codes", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${normalToken}` },
       body: JSON.stringify({}),

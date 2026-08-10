@@ -26,7 +26,7 @@ export interface TranscriptsDeps {
 export function transcriptsRoutes(deps: TranscriptsDeps) {
   const app = new Hono<{ Variables: { userId: string } }>();
 
-  app.post("/api/transcripts/new", async (c) => {
+  app.post("/v1/transcripts/new", async (c) => {
     const userId = c.get("userId") as string;
     const body = (await c.req.json().catch(() => null)) as { polishId?: unknown; instruction?: unknown } | null;
     if (!body || typeof body.polishId !== "string") {
@@ -84,7 +84,7 @@ export function transcriptsRoutes(deps: TranscriptsDeps) {
   });
 
   /** 编辑保存 transcript 脚本 */
-  app.put("/api/transcripts/:id", async (c) => {
+  app.put("/v1/transcripts/:id", async (c) => {
     const userId = c.get("userId") as string;
     const body = (await c.req.json().catch(() => null)) as { segments?: unknown } | null;
     if (!Array.isArray(body?.segments) || !body.segments.every((seg: ScriptSegment) =>

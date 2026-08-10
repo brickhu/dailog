@@ -1,0 +1,108 @@
+# 本地调试全家桶（OrbStack）：
+#   docker compose up -d          → 起全部
+#   pnpm dev:orb                  → 同上（含首次迁移）
+# 域名（无端口，OrbStack DNS + 自动 TLS）：
+#   site    https://dailog.orb.local          （容器名 dailog）
+#   studio  https://app.dailog.orb.local      （服务名 app.项目名 dailog）
+#   api     https://api.dailog.orb.local
+#   importer https://importer.dailog.orb.local
+# 容器间调用走服务名（api/postgres/importer）；宿主机 localhost:端口 同样可达（publish）。
+name: dailog
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dailog-pg
+    environment:
+      POSTGRES_USER: dailogues
+      POSTGRES_PASSWORD: dailogues
+      POSTGRES_DB: dailogues
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dailogues"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+  api:
+    build: .
+    container_name: api
+    command: sh -c "pnpm --filter @dailogues/api db:migrate && pnpm --filter @dailogues/api dev"
+    ports:
+      - "8787:8787"
+    environment:
+      # 覆盖 .env.local（node --env-file 不覆盖已存在的环境变量）
+      DATABASE_URL: postgres://dailogues:dailogues@postgres:5432/dailogues
+      IMPORTER_URL: http://importer:8798
+      BETTER_AUTH_URL: http://api.dailog.orb.local
+      BETTER_AUTH_COOKIE_DOMAIN: .dailog.orb.local
+      APP_ORIGINS: http://app.dailog.orb.local,http://dailog.orb.local
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  site:
+    build: .
+    container_name: dailog
+    # 容器内监听 80；OrbStack 域名自动探测多端口服务可能误选（HMR 3001 返回 426）
+    # → label 强制域名 HTTP 端口 = 80
+    labels:
+      - "dev.orbstack.http-port=80"
+    command: pnpm --filter @dailogues/site dev
+    ports:
+      - "3000:80"
+      # HMR 3001 不 publish：OrbStack 域名带端口直连容器（dailog.orb.local:3001）
+    environment:
+      ORB: "1"
+      PORT: "80"
+      # site 的 server functions（lib/db.ts）直连 postgres——容器内用服务名
+      DATABASE_URL: postgres://dailogues:dailogues@postgres:5432/dailogues
+      API_BASE_URL: http://api:8787
+      SITE_BASE_URL: http://dailog.orb.local
+      VITE_API_BASE_URL: http://api.dailog.orb.local
+      VITE_SITE_BASE_URL: http://dailog.orb.local
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - api
+
+  app:
+    build: .
+    container_name: app
+    # vite 默认绑 localhost（容器内不可达）→ 显式 --host 0.0.0.0（pnpm 9 直接追加参数）
+    command: pnpm --filter @dailogues/studio dev --host 0.0.0.0
+    ports:
+      - "5173:5173"
+    environment:
+      # 浏览器经 app.dailog.orb.local → vite proxy → api:8787（容器内转发）
+      VITE_PROXY_TARGET: http://api:8787
+      VITE_SITE_BASE_URL: http://dailog.orb.local
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - api
+
+  importer:
+    build: .
+    container_name: importer
+    command: pnpm --filter @dailogues/importer dev
+    ports:
+      - "8798:8798"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+    # 复用旧项目（dailog-dev）的数据卷——项目名改了但数据不丢
+    name: dailog-dev_pgdata

@@ -114,7 +114,7 @@ export default function AccountPage() {
 
   // 登录守卫：未登录跳统一登录页（redirect 回 /account）
   onMount(async () => {
-    const res = await fetch("/api/auth/get-session");
+    const res = await fetch("/v1/auth/get-session");
     if (res.ok) {
       const data = (await res.json()) as { user?: { id: string } | null } | null;
       setSession(data?.user ?? null);
@@ -130,7 +130,7 @@ export default function AccountPage() {
   // 加载档案
   createEffect(() => {
     if (!session()) return;
-    fetch("/api/me/profile")
+    fetch("/v1/me/profile")
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return (await res.json()) as ProfileData;
@@ -181,7 +181,7 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
     setNameMsg(null);
     const trimmed = nickname().trim();
     if (!trimmed) return setNameMsg({ ok: false, text: "昵称不能为空" });
-    const res = await fetch("/api/me/profile", {
+    const res = await fetch("/v1/me/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nickname: trimmed }),
@@ -195,7 +195,7 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
     if (newPw() !== confirmPw()) return setPwMsg({ ok: false, text: "两次输入的新密码不一致" });
     setPwBusy(true);
     try {
-      const res = await fetch("/api/auth/change-password", {
+      const res = await fetch("/v1/auth/change-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ currentPassword: curPw(), newPassword: newPw() }),

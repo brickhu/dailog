@@ -41,7 +41,7 @@ export default function GenerateProgress(props: GenerateProgressProps) {
     setError(null);
     setQuotaDenied(false);
     try {
-      await api.post(`/api/episodes/${props.episodeId}/generate`);
+      await api.post(`/v1/episodes/${props.episodeId}/generate`);
     } catch (e) {
       if (e instanceof ApiError && e.status === 403) {
         setQuotaDenied(true);
@@ -60,7 +60,7 @@ export default function GenerateProgress(props: GenerateProgressProps) {
   const poll = async () => {
     while (true) {
       try {
-        const j = await api.get<JobInfo>(`/api/episodes/${props.episodeId}/job`);
+        const j = await api.get<JobInfo>(`/v1/episodes/${props.episodeId}/job`);
         setJob(j);
         if (j.status === "done") {
           props.onDone?.();
@@ -80,7 +80,7 @@ export default function GenerateProgress(props: GenerateProgressProps) {
 
   const loadAudio = async () => {
     try {
-      const res = await api.request(`/api/episodes/${props.episodeId}/audio`);
+      const res = await api.request(`/v1/episodes/${props.episodeId}/audio`);
       if (!res.ok) return;
       const blob = await res.blob();
       setAudioUrl(URL.createObjectURL(blob));

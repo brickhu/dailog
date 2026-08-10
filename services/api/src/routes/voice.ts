@@ -25,7 +25,7 @@ export interface VoiceDeps {
 export function voiceRoutes(deps: VoiceDeps) {
   const app = new Hono<{ Variables: { userId: string } }>();
 
-  app.get("/api/me/voice-sample", async (c) => {
+  app.get("/v1/me/voice-sample", async (c) => {
     const userId = c.get("userId") as string;
     const row = await deps.getVoiceSample?.(userId);
     if (!row) return c.json({ error: "not_found" }, 404);
@@ -39,7 +39,7 @@ export function voiceRoutes(deps: VoiceDeps) {
   });
 
   /** 采样音频流（设置页播放用）：读 storage key 返回 webm */
-  app.get("/api/me/voice-sample/audio", async (c) => {
+  app.get("/v1/me/voice-sample/audio", async (c) => {
     const userId = c.get("userId") as string;
     const row = await deps.getVoiceSample?.(userId);
     if (!row) return c.json({ error: "not_found" }, 404);
@@ -53,7 +53,7 @@ export function voiceRoutes(deps: VoiceDeps) {
     });
   });
 
-  app.post("/api/me/voice-sample", async (c) => {
+  app.post("/v1/me/voice-sample", async (c) => {
     const userId = c.get("userId") as string;
     const form = await c.req.formData().catch(() => null);
     const file = form?.get("file");

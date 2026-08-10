@@ -21,7 +21,7 @@ const USER = { id: "user-1", email: "a@b.co", name: "A" };
 describe("authApi.signUp", () => {
   it("posts inviteCode and persists token", async () => {
     mockFetchOnce(async (url, init) => {
-      expect(String(url)).toContain("/api/auth/sign-up/email");
+      expect(String(url)).toContain("/v1/auth/sign-up/email");
       const body = JSON.parse(String(init?.body));
       expect(body).toMatchObject({ email: "a@b.co", password: "pw123456", name: "A" });
       return jsonResponse(200, { token: "t1", user: USER });
@@ -71,7 +71,7 @@ describe("authApi.signOut", () => {
 describe("authApi.activateChannel", () => {
   it("posts inviteCode with bearer token", async () => {
     mockFetchOnce(async (url, init) => {
-      expect(String(url)).toContain("/api/me/channel/activate");
+      expect(String(url)).toContain("/v1/me/channel/activate");
       expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer t5");
       expect(JSON.parse(String(init?.body))).toEqual({ inviteCode: "code-1" });
       return jsonResponse(200, { ok: true });

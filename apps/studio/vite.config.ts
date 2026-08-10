@@ -16,9 +16,10 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
-    // 本地域名绑定（SSO 测试）：允许 *.dailog.local 访问 dev server
-    allowedHosts: [".dailog.local", ".127.0.0.1.sslip.io"],
-    // 本地开发直连后端（api 侧 APP_ORIGINS 白名单 + CORS 双保险）
-    proxy: { "/api": "http://localhost:8787" },
+    // 本地域名绑定（SSO 测试）：orb 容器访问 app.orb.local
+    allowedHosts: [".orb.local", ".dailog.local", ".127.0.0.1.sslip.io"],
+    // 本地开发直连后端（api 侧 APP_ORIGINS 白名单 + CORS 双保险）。
+    // orb 容器内经 compose 设 VITE_PROXY_TARGET=http://api:8787；本机跑默认 localhost
+    proxy: { "/v1": process.env.VITE_PROXY_TARGET ?? "http://localhost:8787" },
   },
 });

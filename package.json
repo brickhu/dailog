@@ -8,14 +8,9 @@
   "scripts": {
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "dev:api": "pnpm --filter @dailogues/api dev",
-    "dev:studio": "pnpm --filter @dailogues/studio dev",
-    "dev": "bash scripts/dev-db.sh && pnpm --parallel --stream --filter @dailogues/api --filter @dailogues/studio --filter @dailogues/importer dev",
+    "dev:orb": "bash scripts/dev-orb.sh",
     "invite": "pnpm --filter @dailogues/api invites:create",
     "invite:create": "pnpm --filter @dailogues/api invites:create",
-    "dev:importer": "pnpm --filter @dailogues/importer dev",
-    "otp": "bash scripts/otp.sh",
-    "dev:db": "bash scripts/dev-db.sh",
-    "dev:status": "bash scripts/dev-status.sh"
+    "otp": "bash scripts/otp.sh"
   }
 }

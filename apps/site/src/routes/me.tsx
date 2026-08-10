@@ -62,7 +62,7 @@ export default function MePage() {
   const [session, setSession] = createSignal<{ id: string } | null>(null);
   const [checked, setChecked] = createSignal(false);
   onMount(async () => {
-    const res = await fetch("/api/auth/get-session");
+    const res = await fetch("/v1/auth/get-session");
     if (res.ok) {
       // better-auth 未登录返回 JSON null（代理透传）——必须整体可选链
       const data = (await res.json()) as { user?: { id: string } | null } | null;
@@ -74,7 +74,7 @@ export default function MePage() {
   const favorites = createAsync<FavoriteRow[] | null>(async () => {
     const user = session();
     if (!user) return null;
-    const res = await fetch("/api/me/favorites");
+    const res = await fetch("/v1/me/favorites");
     if (!res.ok) return [];
     return (await res.json()) as FavoriteRow[];
   });

@@ -64,14 +64,17 @@ dailog/
 
 **环境矩阵**（`git branch → 环境 → 域名 → 托管`）：
 
-| | 开发环境（dev 分支） | 生产环境（master 分支） |
-|---|---|---|
-| 后端 API | `gracious-caring-development.up.railway.app`（Railway Development 环境默认 URL） | `api.dailog.fm`（Railway Production 环境）⚠️ 生产域名待定：`dailog.fm` 或保留 `dailog.fm` |
-| 工作台 SPA | `app.candelbot.app`（CF Pages project `dailog-studio-dev`，production branch = dev） | `app.dailog.fm`（CF Pages project `dailog-studio`，production branch = master） |
-| 内容站 SSR | `candelbot.app`（Pages project 预留，等 apps/site 创建） | `dailog.fm`（Pages/Workers） |
-| Postgres | Railway Development 环境内独立实例 | Railway Production 环境内实例 |
-| ~~采集扩展~~ | ~~已停用~~（源码保留；不再构建/部署） | |
-| 分享采集服务 | `pnpm --filter @dailogues/importer dev` | Railway 部署（Nixpacks，`IMPORTER_URL`/`SCRAPERAPI_KEY` env） |
+| | 本地（dev 分支） | 开发环境（dev 分支） | 生产环境（master 分支） |
+|---|---|---|---|
+| 后端 API | `http://api.dailog.orb.local`（OrbStack 容器，见 `docs/local-dev.md`） | `gracious-caring-development.up.railway.app`（Railway Development 环境默认 URL） | `api.dailog.fm`（Railway Production 环境）⚠️ 生产域名待定：`dailog.fm` 或保留 `dailog.fm` |
+| 工作台 SPA | `http://app.dailog.orb.local` | `app.candelbot.app`（CF Pages project `dailog-studio-dev`，production branch = dev） | `app.dailog.fm`（CF Pages project `dailog-studio`，production branch = master） |
+| 内容站 SSR | `http://dailog.orb.local` | `candelbot.app`（Pages project 预留，等 apps/site 创建） | `dailog.fm`（Pages/Workers） |
+| Postgres | `dailog-pg` 容器（5432） | Railway Development 环境内独立实例 | Railway Production 环境内实例 |
+| ~~采集扩展~~ | ~~已停用~~（源码保留；不再构建/部署） | | |
+| 分享采集服务 | `importer` 容器（`http://importer.dailog.orb.local`） | `pnpm --filter @dailogues/importer dev` | Railway 部署（Nixpacks，`IMPORTER_URL`/`SCRAPERAPI_KEY` env） |
+
+> 本地开发全家桶 = OrbStack docker compose（`pnpm dev:orb` 一键起停），详见 **`docs/local-dev.md`**。
+> API 路径统一 `/v1/` 前缀（认证 `/v1/auth/*` 为 better-auth basePath）。
 
 > **品牌名**：`dailog`——由 `dialogues` 交换 `ia→ai` 变形（寓意 AI）。开发域名 `candelbot.app`（已确认），生产域名待定（`dailog.fm` / `dailog.fm`），定稿后统一替换文档与扩展 manifest 中的占位。
 

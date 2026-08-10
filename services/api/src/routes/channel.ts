@@ -13,7 +13,7 @@ export interface ChannelDeps {
 
 export function channelRoutes(deps: ChannelDeps) {
   const app = new Hono<{ Variables: { userId: string } }>();
-  app.post("/api/me/channel/activate", async (c) => {
+  app.post("/v1/me/channel/activate", async (c) => {
     const body = await c.req.json().catch(() => null);
     const inviteCode = typeof body?.inviteCode === "string" ? body.inviteCode.trim() : "";
     if (!inviteCode) return c.json({ error: "invalid_invite_code" }, 400);

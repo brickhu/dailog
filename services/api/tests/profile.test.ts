@@ -168,9 +168,9 @@ const patch = (path: string, body: unknown) =>
       body: JSON.stringify(body),
     });
 
-describe("/api/me/profile", () => {
+describe("/v1/me/profile", () => {
   it("GET 返回账号 + 频道档案", async () => {
-    const res = await makeApp().request("/api/me/profile");
+    const res = await makeApp().request("/v1/me/profile");
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.email).toBe("tester@test.dev");
@@ -180,26 +180,26 @@ describe("/api/me/profile", () => {
 
   it("PATCH 昵称：合法 → 200；空 → 400；超 30 字 → 400", async () => {
     const app = makeApp();
-    const ok = await patch("/api/me/profile", { nickname: "新昵称" })(app);
+    const ok = await patch("/v1/me/profile", { nickname: "新昵称" })(app);
     expect(ok.status).toBe(200);
     expect(((await ok.json()) as { nickname: string }).nickname).toBe("新昵称");
 
-    const empty = await patch("/api/me/profile", { nickname: "   " })(app);
+    const empty = await patch("/v1/me/profile", { nickname: "   " })(app);
     expect(empty.status).toBe(400);
 
-    const long = await patch("/api/me/profile", { nickname: "很".repeat(31) })(app);
+    const long = await patch("/v1/me/profile", { nickname: "很".repeat(31) })(app);
     expect(long.status).toBe(400);
   });
 });
 
-describe("/api/me/channel/check", () => {
+describe("/v1/me/channel/check", () => {
   it("slug 可用 → available: true；被占用 → false", async () => {
     const app = makeApp({ isUsernameTaken: async (_uid, username) => username === "taken-name" });
-    const free = await app.request("/api/me/channel/check?username=my-channel");
+    const free = await app.request("/v1/me/channel/check?username=my-channel");
     expect(free.status).toBe(200);
     expect(((await free.json()) as { available: boolean }).available).toBe(true);
 
-    const busy = await app.request("/api/me/channel/check?username=taken-name");
+    const busy = await app.request("/v1/me/channel/check?username=taken-name");
     expect(busy.status).toBe(200);
     expect(((await busy.json()) as { available: boolean }).available).toBe(false);
   });
@@ -207,23 +207,23 @@ describe("/api/me/channel/check", () => {
   it("非法格式 → 400（特殊字符/过短/中文）", async () => {
     const app = makeApp();
     for (const username of ["U_PPER", "ab", "中文"]) {
-      const res = await app.request(`/api/me/channel/check?username=${encodeURIComponent(username)}`);
+      const res = await app.request(`/v1/me/channel/check?username=${encodeURIComponent(username)}`);
       expect(res.status, `slug=${username}`).toBe(400);
     }
   });
 });
 
-describe("/api/me/channel", () => {
+describe("/v1/me/channel", () => {
   it("slug 合法（自动小写化）→ 200", async () => {
     const app = makeApp();
-    const res = await patch("/api/me/channel", { username: "My-Channel" })(app);
+    const res = await patch("/v1/me/channel", { username: "My-Channel" })(app);
     expect(res.status).toBe(200);
   });
 
   it("slug 非法格式 → 400（特殊字符/中文/过短）", async () => {
     const app = makeApp();
     for (const username of ["U_PPER", "a b", "中文", "a!", "ab"]) {
-      const res = await patch("/api/me/channel", { username })(app);
+      const res = await patch("/v1/me/channel", { username })(app);
       expect(res.status, `slug=${username}`).toBe(400);
     }
   });
@@ -232,22 +232,22 @@ describe("/api/me/channel", () => {
     const app = makeApp({
       updateChannel: async () => ({ error: "username_taken" as const }),
     });
-    const res = await patch("/api/me/channel", { username: "taken-name" })(app);
+    const res = await patch("/v1/me/channel", { username: "taken-name" })(app);
     expect(res.status).toBe(409);
     expect(((await res.json()) as { error: string }).error).toBe("username_taken");
   });
 
   it("频道名超 30 字 / bio 超 200 字 → 400", async () => {
     const app = makeApp();
-    const name = await patch("/api/me/channel", { displayName: "名".repeat(31) })(app);
+    const name = await patch("/v1/me/channel", { displayName: "名".repeat(31) })(app);
     expect(name.status).toBe(400);
-    const bio = await patch("/api/me/channel", { bio: "介".repeat(201) })(app);
+    const bio = await patch("/v1/me/channel", { bio: "介".repeat(201) })(app);
     expect(bio.status).toBe(400);
   });
 
   it("空 body → 400", async () => {
     const app = makeApp();
-    const res = await patch("/api/me/channel", {})(app);
+    const res = await patch("/v1/me/channel", {})(app);
     expect(res.status).toBe(400);
   });
 });

@@ -80,7 +80,7 @@ function InteractButtons(props: { episodeId: string }) {
 
   const toggle = async (kind: "favorite" | "like") => {
     if (busy()) return;
-    const res = await fetch(`/api/episodes/${props.episodeId}/${kind}`, { method: "POST" });
+    const res = await fetch(`/v1/episodes/${props.episodeId}/${kind}`, { method: "POST" });
     if (res.status === 401) {
       // 未登录：跳统一登录页，登录后回当前页
       window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;

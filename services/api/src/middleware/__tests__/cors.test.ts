@@ -9,13 +9,13 @@ const ALLOWED = ["https://dailog.pages.dev", "http://localhost:5173"];
 function buildApp() {
   const app = new Hono();
   app.use("*", createCorsMiddleware(ALLOWED));
-  app.get("/api/auth/get-session", () =>
+  app.get("/v1/auth/get-session", () =>
     new Response(JSON.stringify({ user: null }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     }),
   );
-  app.post("/api/auth/sign-in/email", () =>
+  app.post("/v1/auth/sign-in/email", () =>
     new Response(JSON.stringify({ error: "invalid" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
@@ -26,7 +26,7 @@ function buildApp() {
 
 describe("createCorsMiddleware（裸 Response 场景）", () => {
   it("GET 白名单 Origin → 响应带 ACAO/ACAC（此前丢失）", async () => {
-    const res = await buildApp().request("/api/auth/get-session", {
+    const res = await buildApp().request("/v1/auth/get-session", {
       headers: { Origin: "https://dailog.pages.dev" },
     });
     expect(res.status).toBe(200);
@@ -35,7 +35,7 @@ describe("createCorsMiddleware（裸 Response 场景）", () => {
   });
 
   it("POST 白名单 Origin → 响应带 ACAO", async () => {
-    const res = await buildApp().request("/api/auth/sign-in/email", {
+    const res = await buildApp().request("/v1/auth/sign-in/email", {
       method: "POST",
       headers: { Origin: "http://localhost:5173", "Content-Type": "application/json" },
       body: JSON.stringify({}),
@@ -45,7 +45,7 @@ describe("createCorsMiddleware（裸 Response 场景）", () => {
   });
 
   it("OPTIONS 预检 → 204 + ACAO", async () => {
-    const res = await buildApp().request("/api/auth/sign-in/email", {
+    const res = await buildApp().request("/v1/auth/sign-in/email", {
       method: "OPTIONS",
       headers: {
         Origin: "https://dailog.pages.dev",
@@ -58,7 +58,7 @@ describe("createCorsMiddleware（裸 Response 场景）", () => {
   });
 
   it("非白名单 Origin → 不加任何 CORS 头", async () => {
-    const res = await buildApp().request("/api/auth/get-session", {
+    const res = await buildApp().request("/v1/auth/get-session", {
       headers: { Origin: "https://evil.example.com" },
     });
     expect(res.status).toBe(200);

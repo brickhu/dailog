@@ -58,7 +58,7 @@ export function SiteNav() {
   // onMount 保证挂载后必然重新 fetch，首帧渲染"登录"、挂载后更新为邮箱。
   const [user, setUser] = createSignal<{ email?: string } | null>(null);
   onMount(async () => {
-    const res = await fetch("/api/auth/get-session");
+    const res = await fetch("/v1/auth/get-session");
     if (!res.ok) return;
     // better-auth 未登录返回 JSON null（代理透传）——必须整体可选链，否则 onMount 抛错、导航永不更新
     const data = (await res.json()) as { user?: { email?: string } | null } | null;
@@ -66,7 +66,7 @@ export function SiteNav() {
   });
 
   const signOut = async () => {
-    await fetch("/api/auth/sign-out", { method: "POST" }).catch(() => {});
+    await fetch("/v1/auth/sign-out", { method: "POST" }).catch(() => {});
     window.location.reload();
   };
 

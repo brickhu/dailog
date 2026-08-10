@@ -129,7 +129,7 @@ export default function Dashboard() {
 
   onMount(async () => {
     try {
-      setEpisodes(await api.get<Episode[]>("/api/episodes"));
+      setEpisodes(await api.get<Episode[]>("/v1/episodes"));
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
     } finally {

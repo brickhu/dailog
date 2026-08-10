@@ -230,7 +230,7 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
     });
 
     // 注册真实用户拿 token
-    const res = await app.request("/api/auth/sign-up/email", {
+    const res = await app.request("/v1/auth/sign-up/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: `fav-live-${randomUUID().slice(0, 8)}@test.local`, password: "password123", name: "Live" }),
@@ -250,24 +250,24 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
 
   it("favorite toggle: POST → 列表可见 → DELETE 取消", async () => {
     const h = { Authorization: `Bearer ${token}` };
-    const add = await app.request(`/api/episodes/${episodeId}/favorite`, { method: "POST", headers: h });
+    const add = await app.request(`/v1/episodes/${episodeId}/favorite`, { method: "POST", headers: h });
     expect(add.status).toBe(200);
     expect(await add.json()).toEqual({ favorited: true });
 
-    const list = await app.request("/api/me/favorites", { headers: h });
+    const list = await app.request("/v1/me/favorites", { headers: h });
     expect(list.status).toBe(200);
     const rows = (await list.json()) as Array<{ episodeId: string; title: string | null }>;
     expect(rows.some((r) => r.episodeId === episodeId && r.title === "收藏测试节目")).toBe(true);
 
-    const del = await app.request(`/api/episodes/${episodeId}/favorite`, { method: "DELETE", headers: h });
+    const del = await app.request(`/v1/episodes/${episodeId}/favorite`, { method: "DELETE", headers: h });
     expect(await del.json()).toEqual({ favorited: false });
   });
 
   it("like toggle: POST liked → DELETE unliked", async () => {
     const h = { Authorization: `Bearer ${token}` };
-    const add = await app.request(`/api/episodes/${episodeId}/like`, { method: "POST", headers: h });
+    const add = await app.request(`/v1/episodes/${episodeId}/like`, { method: "POST", headers: h });
     expect(await add.json()).toEqual({ liked: true });
-    const del = await app.request(`/api/episodes/${episodeId}/like`, { method: "DELETE", headers: h });
+    const del = await app.request(`/v1/episodes/${episodeId}/like`, { method: "DELETE", headers: h });
     expect(await del.json()).toEqual({ liked: false });
   });
 
@@ -276,7 +276,7 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
       .insert(schema.episodes)
       .values({ userId, transcriptId: testTranscriptId, polishId: testPolishId, slug: `fav-draft-${randomUUID().slice(0, 8)}`, title: "draft", status: "generating" })
       .returning({ id: schema.episodes.id });
-    const res = await app.request(`/api/episodes/${draft[0].id}/favorite`, {
+    const res = await app.request(`/v1/episodes/${draft[0].id}/favorite`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -285,7 +285,7 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
   });
 
   it("unauthenticated → 401", async () => {
-    const res = await app.request(`/api/episodes/${episodeId}/like`, { method: "POST" });
+    const res = await app.request(`/v1/episodes/${episodeId}/like`, { method: "POST" });
     expect(res.status).toBe(401);
   });
 });

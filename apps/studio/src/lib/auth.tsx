@@ -43,7 +43,7 @@ export function AuthProvider(props: { children: JSX.Element }) {
   /** 拉取频道开通/录音状态（/api/me 走 better-auth 会话：cookie 或 Bearer 均可） */
   const refreshChannel = async () => {
     try {
-      const me = await api.get<{ channelActive: boolean; hasVoiceSample: boolean }>("/api/me");
+      const me = await api.get<{ channelActive: boolean; hasVoiceSample: boolean }>("/v1/me");
       setChannelActive(me.channelActive);
       setHasVoiceSample(me.hasVoiceSample);
     } catch {

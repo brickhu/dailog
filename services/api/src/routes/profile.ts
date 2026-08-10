@@ -17,7 +17,7 @@ const USERNAME_RE = /^[a-z0-9-]{3,30}$/;
 export function profileRoutes(deps: ProfileDeps) {
   const app = new Hono<{ Variables: { userId: string } }>();
 
-  app.get("/api/me/profile", async (c) => {
+  app.get("/v1/me/profile", async (c) => {
     const userId = c.get("userId") as string;
     const profile = await deps.repo.episodes.getProfile(userId);
     if (!profile) return c.json({ error: "not_found" }, 404);
@@ -25,7 +25,7 @@ export function profileRoutes(deps: ProfileDeps) {
   });
 
   /** 账号昵称（≤30 字，去空白）——接口字段 nickname（DB 列 user.name 为 better-auth 标准字段，内部映射） */
-  app.patch("/api/me/profile", async (c) => {
+  app.patch("/v1/me/profile", async (c) => {
     const userId = c.get("userId") as string;
     const body = (await c.req.json().catch(() => null)) as { nickname?: unknown } | null;
     const nickname = typeof body?.nickname === "string" ? body.nickname.trim() : "";
@@ -35,7 +35,7 @@ export function profileRoutes(deps: ProfileDeps) {
   });
 
   /** slug 占用检测（输入时实时校验；排除自己；保存时后端仍兜底 409） */
-  app.get("/api/me/channel/check", async (c) => {
+  app.get("/v1/me/channel/check", async (c) => {
     const userId = c.get("userId") as string;
     const username = (c.req.query("username") ?? "").trim().toLowerCase();
     if (!USERNAME_RE.test(username)) return c.json({ error: "invalid_username" }, 400);
@@ -44,7 +44,7 @@ export function profileRoutes(deps: ProfileDeps) {
   });
 
   /** 频道设置：slug/频道名/简介（至少一项；slug 小写字母数字连字符） */
-  app.patch("/api/me/channel", async (c) => {
+  app.patch("/v1/me/channel", async (c) => {
     const userId = c.get("userId") as string;
     const body = (await c.req.json().catch(() => null)) as { username?: unknown; displayName?: unknown; bio?: unknown } | null;
     if (!body) return c.json({ error: "invalid_input" }, 400);

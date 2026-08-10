@@ -10,7 +10,7 @@ export function jobRoutes(deps: JobDeps, getUserId: (c: unknown) => string) {
   const app = new Hono();
   // 路径自带 /api 前缀（与 job.test.ts 直接对裸 app 请求 /api/... 一致），
   // 挂载时用 app.route("/", jobRoutes(...))，避免前缀重复；/api/* 鉴权中间件依然覆盖
-  app.get("/api/episodes/:id/job", async (c) => {
+  app.get("/v1/episodes/:id/job", async (c) => {
     const episodeId = c.req.param("id");
     const owned = await deps.getOwnedEpisode(episodeId, getUserId(c));
     if (!owned) return c.json({ error: "not_found" }, 404);

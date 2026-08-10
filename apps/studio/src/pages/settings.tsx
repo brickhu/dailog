@@ -117,7 +117,7 @@ export default function Settings() {
     setSlugCheck("checking");
     slugCheckTimer = setTimeout(async () => {
       try {
-        const r = await api.get<{ available: boolean }>(`/api/me/channel/check?username=${encodeURIComponent(trimmed)}`);
+        const r = await api.get<{ available: boolean }>(`/v1/me/channel/check?username=${encodeURIComponent(trimmed)}`);
         setSlugCheck(r.available ? "ok" : "taken");
       } catch {
         setSlugCheck("idle"); // 检测失败静默（保存时后端兜底）
@@ -129,7 +129,7 @@ export default function Settings() {
     await refreshSample();
     // 频道档案（slug/频道名/简介）
     try {
-      const p = await api.get<ChannelProfile>("/api/me/profile");
+      const p = await api.get<ChannelProfile>("/v1/me/profile");
       setChannel(p);
       setSlug(p.username ?? "");
       setDisplayName(p.displayName ?? "");
@@ -142,7 +142,7 @@ export default function Settings() {
   /** 拉取最新采样（含 id——VoiceSampler 靠它切播放/录音视图） */
   const refreshSample = async () => {
     try {
-      const s = await api.get<{ id: string | null; status: string; duration: number }>("/api/me/voice-sample");
+      const s = await api.get<{ id: string | null; status: string; duration: number }>("/v1/me/voice-sample");
       setSample(s);
     } catch {
       setSample(null); // 从未录制
@@ -154,7 +154,7 @@ export default function Settings() {
     setChannelMsg(null);
     setChannelBusy(true);
     try {
-      await api.patch("/api/me/channel", { username: slug(), displayName: displayName(), bio: bio() });
+      await api.patch("/v1/me/channel", { username: slug(), displayName: displayName(), bio: bio() });
       setChannel((c) => ({ ...(c ?? { channelActivatedAt: null }), username: slug(), displayName: displayName(), bio: bio() }));
       setChannelMsg({ ok: true, text: "已保存——频道页地址即刻生效" });
     } catch (e) {

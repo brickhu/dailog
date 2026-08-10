@@ -188,7 +188,7 @@ describe("CORS", () => {
   const app = makeApp({ APP_ORIGINS: "http://localhost:5173,https://app.dailog.fm" });
 
   it("answers OPTIONS preflight with allow headers for whitelisted origin", async () => {
-    const res = await app.request("/api/me", {
+    const res = await app.request("/v1/me", {
       method: "OPTIONS",
       headers: { Origin: "http://localhost:5173" },
     });

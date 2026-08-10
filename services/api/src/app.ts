@@ -58,11 +58,11 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   app.route("/", authExtRoutes(deps.authExt as never));
 
   // better-auth 会话路由（注册/登录/登出/get-session）：挂在认证中间件之前，免鉴权
-  app.on(["POST", "GET"], "/api/auth/*", (c) => deps.auth.handler(c.req.raw));
+  app.on(["POST", "GET"], "/v1/auth/*", (c) => deps.auth.handler(c.req.raw));
 
-  app.use("/api/*", createAuthMiddleware(deps.auth));
+  app.use("/v1/*", createAuthMiddleware(deps.auth));
 
-  app.get("/api/me", async (c) => {
+  app.get("/v1/me", async (c) => {
     const userId = c.get("userId");
     const activated = await deps.repo.episodes.getChannelActivatedAt(userId);
     const sample = await deps.repo.episodes.getVoiceSample(userId);
@@ -74,8 +74,8 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   app.route("/", polishesRoutes(deps.polishesDeps));
   app.route("/", transcriptsRoutes(deps.transcriptsDeps));
   app.route("/", profileRoutes({ repo: deps.repo }));
-  app.route("/api", importerRoutes(() => deps.shareCollectUrl?.() ?? process.env.IMPORTER_URL ?? null));
-  app.route("/api", episodesRoutes(deps.episodesDeps, (c) => (c as Context<AuthEnv>).get("userId"), deps.voice.storage));
+  app.route("/v1", importerRoutes(() => deps.shareCollectUrl?.() ?? process.env.IMPORTER_URL ?? null));
+  app.route("/v1", episodesRoutes(deps.episodesDeps, (c) => (c as Context<AuthEnv>).get("userId"), deps.voice.storage));
   // polish/generate/job/voice 路由自带 /api 前缀（与各自 test.ts 直接对裸 app 请求 /api/... 一致），故挂载在根路径；
   // 上面的 /api/* 鉴权中间件依然覆盖
   app.route("/", jobRoutes(deps.job, (c) => (c as unknown as { get: (k: string) => string }).get("userId")));

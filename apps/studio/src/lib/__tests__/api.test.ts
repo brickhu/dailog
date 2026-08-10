@@ -24,7 +24,7 @@ describe("createApiClient", () => {
       expect(new Headers(init?.headers).get("Authorization")).toBe(`Bearer ${TOKEN}`);
       return jsonResponse(200, { userId: "u-1" });
     });
-    const out = await client.get<{ userId: string }>("/api/me");
+    const out = await client.get<{ userId: string }>("/v1/me");
     expect(out.userId).toBe("u-1");
     expect(spy).toHaveBeenCalledTimes(1);
   });
@@ -34,13 +34,13 @@ describe("createApiClient", () => {
       expect(JSON.parse(String(init?.body))).toEqual({ a: 1 });
       return jsonResponse(201, { id: "x" });
     });
-    await client.post("/api/episodes", { a: 1 });
+    await client.post("/v1/episodes", { a: 1 });
     expect(spy).toHaveBeenCalled();
   });
 
   it("throws ApiError with code on non-2xx", async () => {
     mockFetchOnce(async () => jsonResponse(422, { error: "quality_rejected", detail: "信息量不足" }));
-    const err = await client.get("/api/episodes/e1/polish").catch((e) => e);
+    const err = await client.get("/v1/episodes/e1/polish").catch((e) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(422);
     expect((err as ApiError).code).toBe("quality_rejected");
@@ -53,14 +53,14 @@ describe("createApiClient", () => {
       expect(new Headers(init?.headers).get("Authorization")).toBeNull();
       return jsonResponse(200, { userId: "u-1" });
     });
-    const out = await anon.get<{ userId: string }>("/api/me");
+    const out = await anon.get<{ userId: string }>("/v1/me");
     expect(out.userId).toBe("u-1");
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it("maps 401 response to unauthorized error", async () => {
     mockFetchOnce(async () => jsonResponse(401, { error: "unauthorized" }));
-    const err = await client.get("/api/me").catch((e) => e);
+    const err = await client.get("/v1/me").catch((e) => e);
     expect((err as ApiError).status).toBe(401);
     expect((err as ApiError).code).toBe("unauthorized");
   });
@@ -80,7 +80,7 @@ describe("超时保护（fetch 挂起不再静默卡死）", () => {
           );
         }),
       );
-      const p = client.get("/api/episodes");
+      const p = client.get("/v1/episodes");
       const assertion = expect(p).rejects.toMatchObject({ status: 408, code: "request_timeout" });
       await vi.advanceTimersByTimeAsync(30_000);
       await assertion;
@@ -102,7 +102,7 @@ describe("超时保护（fetch 挂起不再静默卡死）", () => {
         });
       });
       // 30s 内不超时：请求自己以 error 结束（模拟 SSE 正常结束由调用方控制）
-      const p = client.request("/api/episodes/x/polish", { timeoutMs: 0 });
+      const p = client.request("/v1/episodes/x/polish", { timeoutMs: 0 });
       await vi.advanceTimersByTimeAsync(35_000);
       await expect(p).rejects.toThrow("done");
       expect(aborted).toBe(false); // 未被超时中止

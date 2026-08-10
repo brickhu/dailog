@@ -52,7 +52,7 @@ export function authExtRoutes(deps: AuthExtDeps) {
   const app = new Hono();
 
   /** 统一提交：老用户密码登录 / 新用户发验证码 */
-  app.post("/api/auth/login-or-otp", async (c) => {
+  app.post("/v1/auth/login-or-otp", async (c) => {
     const ip = (c.req.header("x-forwarded-for") ?? "local").split(",")[0].trim();
     if (!checkRate(ip)) return c.json({ error: "rate_limited" }, 429);
     const body = (await c.req.json().catch(() => null)) as
@@ -114,7 +114,7 @@ export function authExtRoutes(deps: AuthExtDeps) {
   });
 
   /** OTP 完成注册：校验验证码 → 创建用户（带密码）→ 自动登录 */
-  app.post("/api/auth/otp-complete", async (c) => {
+  app.post("/v1/auth/otp-complete", async (c) => {
     const ip = (c.req.header("x-forwarded-for") ?? "local").split(",")[0].trim();
     if (!checkRate(ip)) return c.json({ error: "rate_limited" }, 429);
     const body = (await c.req.json().catch(() => null)) as

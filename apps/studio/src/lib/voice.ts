@@ -12,5 +12,5 @@ export async function uploadVoiceSample(blob: Blob, transcript: string): Promise
   const form = new FormData();
   form.append("file", blob, "voice.webm");
   form.append("transcript", transcript);
-  return api.post<{ ok: true }>("/api/me/voice-sample", form);
+  return api.post<{ ok: true }>("/v1/me/voice-sample", form);
 }

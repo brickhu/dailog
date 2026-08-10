@@ -32,7 +32,7 @@ export interface PolishesDeps {
 export function polishesRoutes(deps: PolishesDeps) {
   const app = new Hono<{ Variables: { userId: string } }>();
 
-  app.post("/api/polishes/new", async (c) => {
+  app.post("/v1/polishes/new", async (c) => {
     const userId = c.get("userId") as string;
     const body = (await c.req.json().catch(() => null)) as { snapshotId?: unknown; title?: unknown } | null;
     if (!body || typeof body.snapshotId !== "string") {
@@ -53,14 +53,14 @@ export function polishesRoutes(deps: PolishesDeps) {
   });
 
   /** polish 列表（工作台"脚本"页）：标题 + 快照 + 最新节目状态 */
-  app.get("/api/polishes", async (c) => {
+  app.get("/v1/polishes", async (c) => {
     const userId = c.get("userId") as string;
     const list = await deps.listByUser(userId);
     return c.json(list);
   });
 
   /** 编辑页详情：polish + 快照 meta + transcripts 列表 */
-  app.get("/api/polishes/:id", async (c) => {
+  app.get("/v1/polishes/:id", async (c) => {
     const userId = c.get("userId") as string;
     const detail = await deps.getPolishDetail(c.req.param("id"), userId);
     if (!detail) return c.json({ error: "not_found" }, 404);

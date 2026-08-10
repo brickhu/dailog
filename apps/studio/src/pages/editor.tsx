@@ -125,7 +125,7 @@ export default function PolishPage() {
     if (!polishId) return;
     setLoading(true);
     try {
-      const d = await api.get<PolishDetail>(`/api/polishes/${polishId}`);
+      const d = await api.get<PolishDetail>(`/v1/polishes/${polishId}`);
       setDetail(d);
       if (d.transcripts.length > 0) {
         const latest = d.transcripts[0];
@@ -155,7 +155,7 @@ export default function PolishPage() {
     setGenerating(true);
     setError(null);
     try {
-      const res = await api.request("/api/episodes/new", {
+      const res = await api.request("/v1/episodes/new", {
         method: "POST",
         body: JSON.stringify({
           transcriptId: activeTranscriptId(),
@@ -181,7 +181,7 @@ export default function PolishPage() {
     if (!episodeId()) return;
     setPublishBusy(true);
     try {
-      await api.post(`/api/episodes/${episodeId()}/publish`);
+      await api.post(`/v1/episodes/${episodeId()}/publish`);
       setPublished(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "发布失败");

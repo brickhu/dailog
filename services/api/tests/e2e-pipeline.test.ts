@@ -220,7 +220,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
         createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }),
       },
     });
-    const signUp = await app.request("/api/auth/sign-up/email", {
+    const signUp = await app.request("/v1/auth/sign-up/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -235,7 +235,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     }
     const { token, user } = (await signUp.json()) as { token: string; user: { id: string } };
     // 开通频道（授权码）：e2e 生成管线需要频道已开通
-    const activate = await app.request("/api/me/channel/activate", {
+    const activate = await app.request("/v1/me/channel/activate", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ inviteCode: INVITE_CODE }),
@@ -280,7 +280,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     });
 
     // 1. 导入（快照缓存命中）：真实质量门（LLM）→ dialogue + quality + snapshotId
-    const importRes = await app.request("/api/import", {
+    const importRes = await app.request("/v1/import", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${AUTH_TOKEN}` },
       body: JSON.stringify({ url }),
@@ -292,7 +292,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     expect(imported.quality?.pass).toBe(true);
 
     // 2. 创建创作容器（polish）
-    const polishRes = await app.request("/api/polishes/new", {
+    const polishRes = await app.request("/v1/polishes/new", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${AUTH_TOKEN}` },
       body: JSON.stringify({ snapshotId: imported.snapshotId, title: "E2E 测试对话" }),
@@ -302,7 +302,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     expect(polishId).toBeTruthy();
 
     // 3. 润色：真实 DeepSeek 流式 → SSE 含 done（无 error），transcript 落库（含语言 zh）
-    const transcriptRes = await app.request("/api/transcripts/new", {
+    const transcriptRes = await app.request("/v1/transcripts/new", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${AUTH_TOKEN}` },
       body: JSON.stringify({ polishId }),
@@ -319,7 +319,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     expect(transcript!.language).toBe("zh"); // 语言由 LLM 识别（中文对话 → zh；生成管线语言必填）
 
     // 4. 生成：真实安全门 + 配额（free 首期 0 credit）→ 202 + episodeId/jobId
-    const genRes = await app.request("/api/episodes/new", {
+    const genRes = await app.request("/v1/episodes/new", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${AUTH_TOKEN}` },
       body: JSON.stringify({ transcriptId, title: "E2E 测试对话" }),
@@ -333,7 +333,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     let job: { status: string; error: string | null } | null = null;
     const deadline = Date.now() + 300_000;
     while (Date.now() < deadline) {
-      const jobRes = await app.request(`/api/episodes/${episodeId}/job`, {
+      const jobRes = await app.request(`/v1/episodes/${episodeId}/job`, {
         headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
       });
       expect(jobRes.status).toBe(200);

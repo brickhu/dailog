@@ -555,21 +555,21 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
         url, platform: "claude", sourceTitle: title, sourceConversationId: `conv-${crypto.randomUUID()}`,
         parsedDialogue: [{ role: "user", content: "你好" }],
       });
-      const importRes = await app.request("/api/import", {
+      const importRes = await app.request("/v1/import", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer valid-token" },
         body: JSON.stringify({ url }),
       });
       expect(importRes.status).toBe(200);
       const { snapshotId } = (await importRes.json()) as { snapshotId: string };
-      const polishRes = await app.request("/api/polishes/new", {
+      const polishRes = await app.request("/v1/polishes/new", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer valid-token" },
         body: JSON.stringify({ snapshotId, title }),
       });
       expect(polishRes.status).toBe(200);
       const { polishId } = (await polishRes.json()) as { polishId: string };
-      const transcriptRes = await app.request("/api/transcripts/new", {
+      const transcriptRes = await app.request("/v1/transcripts/new", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer valid-token" },
         body: JSON.stringify({ polishId }),
@@ -586,13 +586,13 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       const { url, transcriptId } = await seedChain("HTTP 集成");
 
       // 重复导入：快照缓存命中（200），polish 已存在 → 409 返回已有容器
-      const importAgain = await app.request("/api/import", {
+      const importAgain = await app.request("/v1/import", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer valid-token" },
         body: JSON.stringify({ url }),
       });
       expect(importAgain.status).toBe(200);
-      const polishAgain = await app.request("/api/polishes/new", {
+      const polishAgain = await app.request("/v1/polishes/new", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer valid-token" },
         body: JSON.stringify({ snapshotId: (await importAgain.json() as { snapshotId: string }).snapshotId }),
@@ -609,7 +609,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       ]);
 
       // 创建节目 → 202 + job
-      const genRes = await app.request("/api/episodes/new", {
+      const genRes = await app.request("/v1/episodes/new", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer valid-token" },
         body: JSON.stringify({ transcriptId, title: "HTTP 集成" }),
@@ -618,32 +618,32 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       const { episodeId, jobId } = (await genRes.json()) as { episodeId: string; jobId: string; status: string };
 
       // 列表 / 详情 / 音频（无音频 404）
-      const list = await app.request("/api/episodes", { headers: { Authorization: "Bearer valid-token" } });
+      const list = await app.request("/v1/episodes", { headers: { Authorization: "Bearer valid-token" } });
       expect(list.status).toBe(200);
       const listJson = (await list.json()) as Array<{ id: string; title: string | null }>;
       expect(listJson).toEqual(expect.arrayContaining([expect.objectContaining({ id: episodeId, title: "HTTP 集成" })]));
 
-      const detail = await app.request(`/api/episodes/${episodeId}`, { headers: { Authorization: "Bearer valid-token" } });
+      const detail = await app.request(`/v1/episodes/${episodeId}`, { headers: { Authorization: "Bearer valid-token" } });
       expect(detail.status).toBe(200);
       expect((await detail.json()) as { status: string }).toMatchObject({ status: "generating" });
 
-      const audio = await app.request(`/api/episodes/${episodeId}/audio`, { headers: { Authorization: "Bearer valid-token" } });
+      const audio = await app.request(`/v1/episodes/${episodeId}/audio`, { headers: { Authorization: "Bearer valid-token" } });
       expect(audio.status).toBe(404);
 
       // job 可查（queued）
-      const jobRes = await app.request(`/api/episodes/${episodeId}/job`, {
+      const jobRes = await app.request(`/v1/episodes/${episodeId}/job`, {
         headers: { Authorization: "Bearer valid-token" },
       });
       expect(jobRes.status).toBe(200);
       expect(await jobRes.json()).toMatchObject({ id: jobId, status: "queued", progress: 0, error: null });
 
       // 发布 → 详情 status published
-      const publish = await app.request(`/api/episodes/${episodeId}/publish`, {
+      const publish = await app.request(`/v1/episodes/${episodeId}/publish`, {
         method: "POST", headers: { Authorization: "Bearer valid-token" },
       });
       expect(publish.status).toBe(200);
       expect(await publish.json()).toEqual({ ok: true });
-      const after = await app.request(`/api/episodes/${episodeId}`, { headers: { Authorization: "Bearer valid-token" } });
+      const after = await app.request(`/v1/episodes/${episodeId}`, { headers: { Authorization: "Bearer valid-token" } });
       expect((await after.json()) as { status: string }).toMatchObject({ status: "published" });
 
       // 配额视角：job 尚未 done，generatedCount 仍为 0；free 首期不扣 credit
@@ -653,14 +653,14 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
     });
 
     it("episodes/new rejects missing/unknown transcript", async () => {
-      const missing = await app.request("/api/episodes/new", {
+      const missing = await app.request("/v1/episodes/new", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer valid-token" },
         body: JSON.stringify({}),
       });
       expect(missing.status).toBe(400);
 
-      const unknown = await app.request("/api/episodes/new", {
+      const unknown = await app.request("/v1/episodes/new", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer valid-token" },
         body: JSON.stringify({ transcriptId: "00000000-0000-4000-8000-000000000000" }),
@@ -670,7 +670,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
 
     it("GET /api/episodes/:id/job returns 404 when no job", async () => {
       const { episodeId } = await makeEpisode(API_USER, "无 job 集成", "zh");
-      const jobRes = await app.request(`/api/episodes/${episodeId}/job`, {
+      const jobRes = await app.request(`/v1/episodes/${episodeId}/job`, {
         headers: { Authorization: "Bearer valid-token" },
       });
       expect(jobRes.status).toBe(404);
@@ -679,7 +679,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
 
     it("PUT /api/transcripts/:id edits segments with ownership check", async () => {
       const { transcriptId } = await seedChain("脚本编辑集成");
-      const res = await app.request(`/api/transcripts/${transcriptId}`, {
+      const res = await app.request(`/v1/transcripts/${transcriptId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: "Bearer valid-token" },
         body: JSON.stringify({ segments: [{ speaker: "host", text: "编辑后" }] }),
@@ -691,7 +691,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
 
       // 他人 transcript 不可编辑（IDOR）
       const { transcriptId: theirs } = await makeEpisode(REPO_USER, "他人脚本", "zh");
-      const forbidden = await app.request(`/api/transcripts/${theirs}`, {
+      const forbidden = await app.request(`/v1/transcripts/${theirs}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: "Bearer valid-token" },
         body: JSON.stringify({ segments: [{ speaker: "host", text: "x" }] }),
@@ -699,7 +699,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       expect(forbidden.status).toBe(404);
 
       // 非法 segments → 400
-      const bad = await app.request(`/api/transcripts/${transcriptId}`, {
+      const bad = await app.request(`/v1/transcripts/${transcriptId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: "Bearer valid-token" },
         body: JSON.stringify({ segments: [{ speaker: "robot", text: "x" }] }),

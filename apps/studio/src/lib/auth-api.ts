@@ -67,7 +67,7 @@ export function clearToken(): void {
 export const authApi = {
   async signUp(input: SignUpInput): Promise<{ token: string; user: AuthUser }> {
     const res = await expectOk(
-      await request("/api/auth/sign-up/email", {
+      await request("/v1/auth/sign-up/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
@@ -80,7 +80,7 @@ export const authApi = {
 
   async signIn(input: SignInInput): Promise<{ token: string; user: AuthUser }> {
     const res = await expectOk(
-      await request("/api/auth/sign-in/email", {
+      await request("/v1/auth/sign-in/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
@@ -93,7 +93,7 @@ export const authApi = {
 
   /** 启动恢复：Bearer 会话验证；无效/过期返回 null */
   async getSession(token: string): Promise<AuthUser | null> {
-    const res = await request("/api/auth/get-session", {
+    const res = await request("/v1/auth/get-session", {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return null;
@@ -104,7 +104,7 @@ export const authApi = {
   /** 授权码开通频道（注册开放；生成/发布前需开通）；token 可为 null——SSO cookie 会话无需 Bearer */
   async activateChannel(token: string | null, inviteCode: string): Promise<void> {
     const res = await expectOk(
-      await request("/api/me/channel/activate", {
+      await request("/v1/me/channel/activate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -119,7 +119,7 @@ export const authApi = {
   /** 重发验证邮件（better-auth: POST send-verification-email { email, callbackURL }） */
   async resendVerification(email: string, callbackURL: string): Promise<void> {
     await expectOk(
-      await request("/api/auth/send-verification-email", {
+      await request("/v1/auth/send-verification-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, callbackURL }),
@@ -129,7 +129,7 @@ export const authApi = {
 
   /** 登出：token 存在时带 Bearer；cookie 会话由 credentials include 携带，服务端清 cookie */
   async signOut(token: string | null): Promise<void> {
-    await request("/api/auth/sign-out", {
+    await request("/v1/auth/sign-out", {
       method: "POST",
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     }).catch(() => {});
