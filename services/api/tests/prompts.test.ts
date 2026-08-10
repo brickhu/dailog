@@ -23,16 +23,17 @@ describe("polishPrompt 嘉宾信息注入", () => {
     const [sys] = polishPrompt(msgs, null, {
       hostName: "小明",
       aiName: "Claude",
-      hostPersona: "称呼：小明；性格：风趣幽默，雷厉风行",
+      hostPersona: "称呼：小明；性别：男；职业：程序员；年龄：28；性格：风趣幽默，雷厉风行",
     });
-    expect(sys.content).toContain("5.6 主持人风格");
+    expect(sys.content).toContain("5.6 主持人档案");
+    expect(sys.content).toContain("职业：程序员");
     expect(sys.content).toContain("性格：风趣幽默，雷厉风行");
-    expect(sys.content).toContain("全篇主持人的语气、节奏、用词遵循此风格");
+    expect(sys.content).toContain("性格描述是用户明确指定的风格要求");
   });
 
-  it("无 hostPersona：不注入主持人风格段", () => {
+  it("无 hostPersona：不注入主持人档案段", () => {
     const [sys] = polishPrompt(msgs, null, { hostName: "小明" });
-    expect(sys.content).not.toContain("5.6 主持人风格");
+    expect(sys.content).not.toContain("5.6 主持人档案");
   });
 
   it("无 intro（未映射平台）：不注入嘉宾信息段（降级）", () => {

@@ -10,7 +10,10 @@ export interface ScriptSegment { speaker: "host" | "guest"; text: string; }
 export interface HostPersona {
   /** 节目中的称呼（优先级高于 transcripts/new 的 hostName 字段） */
   callName?: string | null;
-  /** 性格/风格描述（自由文本；如"风趣幽默，雷厉风行，说话直来直去"） */
+  gender?: string | null;
+  profession?: string | null;
+  age?: string | null;
+  /** 性格/风格描述（自由文本；如"风趣幽默，雷厉风行，说话直来直去"）——用户指定，生成时遵循 */
   traits?: string | null;
 }
 export interface QualityResult { pass: boolean; reason?: string; language?: string; }

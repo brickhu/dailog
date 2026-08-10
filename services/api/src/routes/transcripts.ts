@@ -41,7 +41,7 @@ export function transcriptsRoutes(deps: TranscriptsDeps) {
     const userId = c.get("userId") as string;
     const body = (await c.req.json().catch(() => null)) as {
       polishId?: unknown; instruction?: unknown; hostName?: unknown;
-      persona?: { callName?: unknown; traits?: unknown } | null;
+      persona?: { callName?: unknown; gender?: unknown; profession?: unknown; age?: unknown; traits?: unknown } | null;
     } | null;
     if (!body || typeof body.polishId !== "string") {
       return c.json({ error: "invalid_polish" }, 400);
@@ -70,10 +70,18 @@ export function transcriptsRoutes(deps: TranscriptsDeps) {
     const p = body.persona;
     const callName = p && typeof p.callName === "string" && p.callName.trim() ? p.callName.trim().slice(0, 20) : null;
     const hostName = callName ?? (typeof body.hostName === "string" && body.hostName.trim() ? body.hostName.trim().slice(0, 20) : null);
-    // 人设拼文本注入提示词（仅本次生效）：称呼 + 性格画像（用户指定风格，生成时遵循）
-    const traits = p && typeof p.traits === "string" && p.traits.trim() ? p.traits.trim().slice(0, 100) : null;
-    const personaText = callName || traits
-      ? [callName ? `称呼：${callName}` : null, traits ? `性格：${traits}` : null].filter(Boolean).join("；")
+    // 人设拼文本注入提示词（仅本次生效）：称呼/性别/职业/年龄（事实层）+ 性格（风格要求）
+    const str = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
+    const traits = str(p?.traits, 100);
+    const personaText = [callName, str(p?.gender, 10), str(p?.profession, 30), str(p?.age, 10), traits]
+      .some(Boolean)
+      ? [
+          callName ? `称呼：${callName}` : null,
+          str(p?.gender, 10) ? `性别：${str(p?.gender, 10)}` : null,
+          str(p?.profession, 30) ? `职业：${str(p?.profession, 30)}` : null,
+          str(p?.age, 10) ? `年龄：${str(p?.age, 10)}` : null,
+          traits ? `性格：${traits}` : null,
+        ].filter(Boolean).join("；")
       : "";
     const aiGuest = deps.guestsByPlatform?.[dialogue.platform];
 

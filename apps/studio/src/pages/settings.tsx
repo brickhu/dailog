@@ -66,6 +66,11 @@ const styles = stylex.create({
     color: colors.neutral,
     fontSize: dimensions.fontSizeSm,
   },
+  personaRow: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: dimensions.spacing3,
+  },
   slugStatus: {
     color: colors.neutral,
     fontSize: dimensions.fontSizeSm,
@@ -167,6 +172,9 @@ export default function Settings() {
       const body = {
         persona: {
           callName: persona().callName?.trim() || null,
+          gender: persona().gender?.trim() || null,
+          profession: persona().profession?.trim() || null,
+          age: persona().age?.trim() || null,
           traits: persona().traits?.trim() || null,
         },
       };
@@ -276,6 +284,11 @@ export default function Settings() {
           <div {...stylex.props(styles.cardTitle)}>{t("settings.persona")}</div>
           <div {...stylex.props(styles.cardDesc)}>{t("settings.personaHint")}</div>
           <TextField label={t("persona.callName")} value={persona().callName ?? ""} onInput={(v) => setPersonaField("callName", v)} placeholder={t("persona.callName")} maxLength={20} />
+          <div {...stylex.props(styles.personaRow)}>
+            <TextField label={t("persona.gender")} value={persona().gender ?? ""} onInput={(v) => setPersonaField("gender", v)} placeholder={t("persona.gender")} maxLength={10} />
+            <TextField label={t("persona.age")} value={persona().age ?? ""} onInput={(v) => setPersonaField("age", v)} placeholder={t("persona.age")} maxLength={10} />
+          </div>
+          <TextField label={t("persona.profession")} value={persona().profession ?? ""} onInput={(v) => setPersonaField("profession", v)} placeholder={t("persona.profession")} maxLength={30} />
           <TextField label={t("persona.traits")} value={persona().traits ?? ""} onInput={(v) => setPersonaField("traits", v)} placeholder={t("persona.traits")} maxLength={100} />
           <Button block onClick={savePersona} disabled={personaBusy()}>
             {personaBusy() ? t("persona.saving") : t("persona.save")}

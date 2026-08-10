@@ -216,6 +216,26 @@ export default function ScriptEditor(props: ScriptEditorProps) {
             value={persona().callName ?? ""}
             onInput={(e) => setField("callName", e.currentTarget.value)}
           />
+          <div {...stylex.props(styles.personaRow)}>
+            <input
+              {...stylex.props(styles.directionInput)}
+              placeholder={t("persona.profession")}
+              value={persona().profession ?? ""}
+              onInput={(e) => setField("profession", e.currentTarget.value)}
+            />
+            <input
+              {...stylex.props(styles.directionInput)}
+              placeholder={t("persona.gender")}
+              value={persona().gender ?? ""}
+              onInput={(e) => setField("gender", e.currentTarget.value)}
+            />
+            <input
+              {...stylex.props(styles.directionInput)}
+              placeholder={t("persona.age")}
+              value={persona().age ?? ""}
+              onInput={(e) => setField("age", e.currentTarget.value)}
+            />
+          </div>
           <textarea
             {...stylex.props(styles.directionInput, styles.personaTraits)}
             placeholder={t("persona.traits")}
@@ -463,6 +483,11 @@ const styles = stylex.create({
     background: colors.background,
     border: `1px solid ${colors.ink}`,
     marginBottom: dimensions.spacing3,
+  },
+  personaRow: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
+    gap: dimensions.spacing2,
   },
   personaTraits: {
     minHeight: "56px",

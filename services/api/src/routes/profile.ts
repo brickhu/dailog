@@ -51,6 +51,9 @@ export function profileRoutes(deps: ProfileDeps) {
     const str = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
     const persona = {
       callName: str(o.callName, 20),
+      gender: str(o.gender, 10),
+      profession: str(o.profession, 30),
+      age: str(o.age, 10),
       traits: str(o.traits, 100),
     };
     await deps.repo.episodes.updatePersona(userId, persona);
