@@ -6,7 +6,7 @@ import { env } from "../lib/env";
 // 页面与流程全部由共享 LoginForm 提供。
 export default function LoginPage() {
   // 已登录访问登录页 → 统一回跳（client 判定，SSR 首帧不跳）：
-  // 来源路径（?redirect= 白名单内）或根路径——与登录成功后的跳转同一套共享逻辑
+  // 来源路径（?redirect= 白名单内）或账号页——与登录成功后的跳转同一套共享逻辑
   onMount(async () => {
     const res = await fetch("/v1/auth/get-session");
     if (!res.ok) return;
@@ -15,7 +15,7 @@ export default function LoginPage() {
     if (!data?.user) return;
     window.location.href = getLoginRedirect({
       allowedOrigins: [env.siteBaseUrl, env.studioBaseUrl],
-      fallback: "/",
+      fallback: "/account",
     });
   });
 

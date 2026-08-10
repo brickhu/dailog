@@ -214,7 +214,7 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
 
   // GitHub 登录入口（未配置 GITHUB_CLIENT_ID 时按钮隐藏——由 api 侧插件未注册决定，
   // 这里用 profile 是否返回 hasGithub 无法判断配置；直接点击后由 api 返回错误提示）
-  const githubUrl = `${clientEnv.apiBaseUrl}/api/auth/sign-in/social?provider=github&callbackURL=${encodeURIComponent(`${clientEnv.siteBaseUrl}/account`)}`;
+  const githubUrl = `${clientEnv.apiBaseUrl}/v1/auth/sign-in/social?provider=github&callbackURL=${encodeURIComponent(`${clientEnv.siteBaseUrl}/account`)}`;
 
   return (
     <>

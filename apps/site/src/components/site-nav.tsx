@@ -50,7 +50,7 @@ const styles = stylex.create({
 });
 
 /** 消费端导航：brand + 登录态。
- *  会话经 site 代理（/api/auth/get-session）在 client 判定（cookie 同站自动携带）；
+ *  会话经 site 代理（/v1/auth/get-session）在 client 判定（cookie 同站自动携带）；
  *  SSR 首帧无 cookie 渲染"登录"，hydration 后更新为邮箱 + 登出。 */
 export function SiteNav() {
   // 会话判定：仅 client 执行（SSR 无浏览器 cookie、相对 fetch 在 workerd 抛 Invalid URL）。

@@ -13,7 +13,7 @@ export async function proxyAuth(path: string, request: Request): Promise<Respons
 
   // 显式声明来源站点（better-auth CSRF：无 Origin 请求被拒）
   headers["Origin"] = env.siteBaseUrl;
-  const res = await fetch(`${env.apiBaseUrl}/api/auth/${path}`, {
+  const res = await fetch(`${env.apiBaseUrl}/v1/auth/${path}`, {
     method: request.method,
     headers,
     body: await request.text().catch(() => ""),
@@ -32,7 +32,7 @@ export async function proxyAuth(path: string, request: Request): Promise<Respons
 /** 登出：透传 cookie（api 按 cookie 识别会话并清除） */
 export async function proxySignOut(request: Request): Promise<Response> {
   const cookie = request.headers.get("cookie");
-  const res = await fetch(`${env.apiBaseUrl}/api/auth/sign-out`, {
+  const res = await fetch(`${env.apiBaseUrl}/v1/auth/sign-out`, {
     method: "POST",
     headers: {
       ...(cookie ? { Cookie: cookie } : {}),
