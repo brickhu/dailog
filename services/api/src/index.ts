@@ -121,7 +121,7 @@ const transcriptsDeps: TranscriptsDeps = {
     return quota.plan === "pro" ? null : env.POLISH_MAX_VERSIONS;
   },
   createTranscript: (polishId, segments, language, opts) => repo.transcripts.create(polishId, segments, language, opts),
-  guestsByPlatform: Object.fromEntries((await repo.guests.list()).map((g) => [g.platform, { id: g.id, name: g.name }])),
+  guestsByPlatform: Object.fromEntries((await repo.guests.list()).map((g) => [g.platform, { id: g.id, name: g.name, intro: g.intro }])),
   getOwnedTranscript: (id, userId) => repo.transcripts.getOwned(id, userId),
   updateTranscriptSegments: (id, segments) => repo.transcripts.updateSegments(id, segments),
   llm,

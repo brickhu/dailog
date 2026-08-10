@@ -26,8 +26,8 @@ export interface TranscriptsDeps {
     language: string | null,
     opts?: { topic?: string | null; title?: string | null; creationNote?: string | null; hostName?: string | null; guestId?: string | null; guestName?: string | null },
   ): Promise<{ id: string }>;
-  /** 平台 → 嘉宾（guests 表）映射：id + name（脚本引用 guestId，展示用 guestName 快照） */
-  guestsByPlatform: Record<string, { id: string; name: string }>;
+  /** 平台 → 嘉宾（guests 表）映射：id + name + intro（脚本引用 guestId；intro 注入润色提示词） */
+  guestsByPlatform: Record<string, { id: string; name: string; intro: string | null }>;
   /** 编辑保存（归属校验） */
   getOwnedTranscript(id: string, userId: string): Promise<{ id: string } | null>;
   updateTranscriptSegments(id: string, segments: ScriptSegment[]): Promise<void>;
@@ -72,7 +72,7 @@ export function transcriptsRoutes(deps: TranscriptsDeps) {
       let full = "";
       try {
         const result = await deps.llm.stream(
-          polishPrompt(dialogue.messages, instruction, { hostName, aiName: aiGuest?.name ?? null }),
+          polishPrompt(dialogue.messages, instruction, { hostName, aiName: aiGuest?.name ?? null, aiIntro: aiGuest?.intro ?? null }),
           (delta: string) => {
             full += delta;
             void stream.writeSSE({ event: "segment", data: delta });

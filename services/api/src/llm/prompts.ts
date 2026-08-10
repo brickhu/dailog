@@ -24,6 +24,8 @@ export interface PolishCallMeta {
   hostName?: string | null;
   /** AI 称呼（对话来源平台名：Claude/ChatGPT/豆包…）；缺省用"AI 嘉宾" */
   aiName?: string | null;
+  /** AI 平台背景简介（guests 表 intro，如"Anthropic 的 AI 助手"）；缺省不注入 */
+  aiIntro?: string | null;
 }
 
 export function polishPrompt(
@@ -36,6 +38,15 @@ export function polishPrompt(
     : "";
   const hostCall = meta?.hostName?.trim() || "主持人";
   const aiCall = meta?.aiName?.trim() || "AI 嘉宾";
+  // 嘉宾信息注入（事实层）：背景简介（guests 表 intro，截断防超长）；风格由对话内容提炼，不硬编码人设
+  const guestBlock = meta?.aiIntro?.trim()
+    ? `5.5 嘉宾信息（对话中的 AI 平台）：
+   - 名称：${aiCall}
+   - 背景：${meta.aiIntro.trim().slice(0, 200)}
+   开场时让嘉宾结合背景自然介绍自己（如"我是 ${aiCall}，${meta.aiIntro.trim().slice(0, 60)}…"）；
+   嘉宾的语气风格从原始对话中该 AI 的说话方式提炼（严谨/幽默/简洁…），保持自然一致，
+   不要套用与对话内容不符的人设。`
+    : "";
   return [{
     role: "system",
     content: `你是播客制作人。把下面的用户与 AI 对话润色成二人对谈播客脚本（用户=主持人 host，AI=嘉宾 guest）。
@@ -49,6 +60,7 @@ export function polishPrompt(
    - 穿插：自然融入"对""当然""嗯""确实"等反馈接话，像真实对谈一样有来有回（可嵌入自己话里，也可作对方长段后的简短回应）
    - 比喻：复杂概念用听众熟悉的生活化比喻解释，把抽象变具体
 5. 开场结构（像真实访谈节目）：主持人先向听众打招呼，再介绍自己（自称「${hostCall}」，如"大家好，欢迎收听…，我是${hostCall}"），接着介绍今天的嘉宾（自称「${aiCall}」，身份与话题），最后嘉宾打招呼回应；开场约 2-4 段，用 [happy]/[excited] 等积极情绪开场，切忌直接进入正题
+${guestBlock}
 6. 多主题切分：长对话可能包含多个独立主题——识别并切分为多个脚本（每个主题一个脚本，各自独立成期）
 7. 每个脚本附带：title（简洁有吸引力的脚本标题）、creationNote（创作说明——给创作者看：这段脚本讲什么、为什么值得做成一期）
 8. 输出 JSON：{"language": "zh"|"en"|..., "scripts": [{"topic": "简短主题名", "title": "脚本标题", "creationNote": "创作说明", "segments": [{"speaker": "host"|"guest", "text": "..."}]}]}，不要输出其他内容

@@ -169,7 +169,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       getPolishLimit: async () => 5,
       createTranscript: (polishId, segments, language, opts) => repo.transcripts.create(polishId, segments, language, opts),
       getOwnedTranscript: (id, userId) => repo.transcripts.getOwned(id, userId),
-      guestsByPlatform: Object.fromEntries((await repo.guests.list()).map((g) => [g.platform, { id: g.id, name: g.name }])),
+      guestsByPlatform: Object.fromEntries((await repo.guests.list()).map((g) => [g.platform, { id: g.id, name: g.name, intro: g.intro }])),
       updateTranscriptSegments: (id, segments) => repo.transcripts.updateSegments(id, segments),
       llm,
     };
