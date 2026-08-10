@@ -166,6 +166,7 @@ function makeApp(episodesOverrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
       getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
       consumeQuota: async () => {},
       createJob: async (episodeId: string) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
+      getLatestJob: async () => null,
       enqueueJob: async () => {},
       setPublished: async () => {},
       getChannelActivatedAt: async () => new Date(),

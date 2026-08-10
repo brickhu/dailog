@@ -151,6 +151,7 @@ const episodesDeps: EpisodesDeps = {
   getQuota: (userId) => repo.jobs.getQuotaInfo(userId),
   consumeQuota: (userId, credit) => repo.jobs.consumeQuota(userId, credit),
   createJob: (episodeId) => repo.jobs.createJob(episodeId),
+  getLatestJob: (episodeId) => repo.jobs.getLatestJob(episodeId),
   enqueueJob: async (job) => {
     void queue.enqueue({ id: job.id, episodeId: job.episodeId }, (p) => {
       console.log(`[queue] job ${job.id} progress ${p}%`);

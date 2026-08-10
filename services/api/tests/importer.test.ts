@@ -101,6 +101,7 @@ function fakeEpisodesDeps(): AppDeps["episodesDeps"] {
     safetyCheck: async () => ({ pass: true }), getChannelActive: async () => true,
     getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }), consumeQuota: async () => {},
     createJob: async (episodeId: string) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }), enqueueJob: async () => {},
+    getLatestJob: async () => null,
     setPublished: async () => {}, getChannelActivatedAt: async () => new Date(),
     getHostModelId: async () => null, getVoiceSampleKey: async () => null, getVoiceSample: async () => null, getVoiceSampleByLanguage: async () => null, markUsed: async () => {}, saveVoiceSample: async () => {},
   };

@@ -1,13 +1,22 @@
 import { createSignal, For, onMount, Show } from "solid-js";
+import GenerateProgress from "../components/generate-progress";
 import { useNavigate, useParams } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { Button } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
+import { ApiError } from "../lib/api";
 import { useI18n } from "@dailogues/i18n";
 import { env } from "../lib/env";
 
 // /episodes/:id 节目详情：封面/标题/状态/时长/标签/描述 + 试听 + 发布/发布页链接/编辑脚本。
+
+export interface JobInfo {
+  id: string;
+  status: "queued" | "tts" | "merge" | "upload" | "done" | "failed";
+  progress: number;
+  error: string | null;
+}
 
 interface EpisodeDetail {
   id: string;
@@ -116,6 +125,32 @@ const styles = stylex.create({
     backgroundColor: colors.surfaceWeak,
     color: colors.neutralWeak,
   },
+  badgeGenerating: {
+    backgroundColor: "#fef3c7",
+    color: "#92400e",
+  },
+  badgeFailed: {
+    backgroundColor: "#fde8ec",
+    color: "#c81e3f",
+  },
+  failBox: {
+    border: `1px solid ${colors.danger}`,
+    borderRadius: dimensions.radiusMd,
+    padding: dimensions.spacing4,
+    marginBottom: dimensions.spacing4,
+    backgroundColor: colors.surface,
+  },
+  failTitle: {
+    fontWeight: dimensions.fontWeightBold,
+    marginBottom: dimensions.spacing1,
+  },
+  failReason: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    fontFamily: "monospace",
+    marginBottom: dimensions.spacing3,
+    wordBreak: "break-all",
+  },
   desc: {
     color: colors.foreground,
     fontSize: dimensions.fontSizeMd,
@@ -161,6 +196,9 @@ export default function EpisodeDetailPage() {
   const [loading, setLoading] = createSignal(true);
   const [audioUrl, setAudioUrl] = createSignal<string | null>(null);
   const [publishBusy, setPublishBusy] = createSignal(false);
+  const [job, setJob] = createSignal<JobInfo | null>(null);
+  /** 生成中（进行中 job 或刚点击重新生成）：挂 GenerateProgress 轮询 */
+  const [running, setRunning] = createSignal(false);
 
   const load = async () => {
     setLoading(true);
@@ -175,20 +213,53 @@ export default function EpisodeDetailPage() {
     }
   };
 
-  /** 试听：音频在 tracks（多语言音轨）——接口按归属流式返回；无音频 404 隐藏 */
+  const loadJob = async () => {
+    try {
+      const j = await api.get<JobInfo>(`/v1/episodes/${episodeId}/job`);
+      setJob(j);
+      if (["queued", "tts", "merge", "upload"].includes(j.status)) setRunning(true);
+    } catch {
+      // 无 job（未生成过）：保持现状
+    }
+  };
+
+  /** 试听：仅当生成完成（job done，音轨必已落库）才请求音频——避免对失败/未生成节目发无谓的 404 请求 */
   const loadAudio = async () => {
+    if (job()?.status !== "done") return;
     try {
       const res = await api.request(`/v1/episodes/${episodeId}/audio`);
       if (!res.ok) return;
       const blob = await res.blob();
       setAudioUrl(URL.createObjectURL(blob));
     } catch {
-      // 生成中/无音轨：试听区隐藏
+      // 音频加载失败：试听区保持隐藏
+    }
+  };
+
+  /** 重新生成（失败/中断的节目重跑管线；不重复扣配额） */
+  const retry = async () => {
+    setError(null);
+    try {
+      const res = await api.request(`/v1/episodes/${episodeId}/retry`, { method: "POST" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string; detail?: string } | null;
+        setError(body?.detail ?? body?.error ?? "retry failed");
+        return;
+      }
+      setJob(null);
+      setRunning(true);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "job_running") {
+        setRunning(true); // 已有进行中 job：直接轮询
+        return;
+      }
+      setError(e instanceof Error ? e.message : t("studio.generateFailed"));
     }
   };
 
   onMount(async () => {
     await load();
+    await loadJob();
     await loadAudio();
   });
 
@@ -205,6 +276,16 @@ export default function EpisodeDetailPage() {
   };
 
   const published = () => ep()?.status === "published";
+  /** 状态徽标：已发布 / 生成中 / 生成失败 / 未发布 */
+  const badge = () => {
+    if (published()) return { text: t("studio.episode.published"), cls: styles.badgePublished };
+    const j = job();
+    if (j?.status === "failed") return { text: t("studio.status.failed"), cls: styles.badgeFailed };
+    if (j && ["queued", "tts", "merge", "upload"].includes(j.status)) {
+      return { text: t("studio.status.generating"), cls: styles.badgeGenerating };
+    }
+    return { text: t("studio.episode.unpublished"), cls: styles.badgeUnpublished };
+  };
 
   return (
     <div {...stylex.props(styles.page)}>
@@ -253,15 +334,38 @@ export default function EpisodeDetailPage() {
                 </div>
               </Show>
             </div>
-            <span
-              {...stylex.props(
-                styles.badge,
-                published() ? styles.badgePublished : styles.badgeUnpublished,
-              )}
-            >
-              {published() ? t("studio.episode.published") : t("studio.episode.unpublished")}
-            </span>
+            <span {...stylex.props(styles.badge, badge().cls)}>{badge().text}</span>
           </div>
+
+          {/* 生成失败：原因 + 重新生成 */}
+          <Show when={job()?.status === "failed" && !running()}>
+            <div {...stylex.props(styles.failBox)}>
+              <div {...stylex.props(styles.failTitle)}>{t("studio.status.failed")}</div>
+              <div {...stylex.props(styles.failReason)}>{job()!.error ?? t("studio.generate.unknown")}</div>
+              <div {...stylex.props(styles.actions)}>
+                <Button onClick={retry}>{t("studio.episode.retry")}</Button>
+              </div>
+            </div>
+          </Show>
+
+          {/* 生成中：进度 + 试听（复用生成进度组件） */}
+          <Show when={running()}>
+            <GenerateProgress
+              episodeId={episodeId}
+              onDone={() => {
+                setRunning(false);
+                void load();
+                void loadJob();
+                void loadAudio();
+              }}
+              onFailed={(msg) => {
+                setRunning(false);
+                void loadJob();
+                setError(`生成失败：${msg}`);
+              }}
+              onQuotaDenied={() => setError(t("studio.quota"))}
+            />
+          </Show>
 
           <Show when={ep()!.description}>
             <div {...stylex.props(styles.desc)}>{ep()!.description}</div>

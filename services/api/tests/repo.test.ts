@@ -557,6 +557,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       getQuota: (userId) => repo.jobs.getQuotaInfo(userId),
       consumeQuota: (userId, credit) => repo.jobs.consumeQuota(userId, credit),
       createJob: (episodeId) => repo.jobs.createJob(episodeId),
+      getLatestJob: async () => null,
       enqueueJob: async () => {},
       setPublished: (id) => repo.episodes.setPublished(id),
       getChannelActivatedAt: (userId) => repo.episodes.getChannelActivatedAt(userId),

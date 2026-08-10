@@ -57,6 +57,8 @@ export interface EpisodesDeps {
   consumeQuota(userId: string, consumeCredit: number): Promise<void>;
   createJob(episodeId: string): Promise<{ id: string; episodeId: string; status: string; progress: number }>;
   enqueueJob(job: { id: string; episodeId: string }): Promise<void>;
+  /** 最新 job（重试前查进行中状态；失败重跑不重复扣配额） */
+  getLatestJob(episodeId: string): Promise<{ id: string; status: string; progress: number; error: string | null } | null>;
   // ---- 发布 ----
   setPublished(id: string): Promise<void>;
   getChannelActivatedAt(userId: string): Promise<Date | null>;
@@ -161,6 +163,21 @@ export function episodesRoutes(
     const job = await deps.createJob(episode.id);
     await deps.enqueueJob({ id: job.id, episodeId: job.episodeId });
     return c.json({ episodeId: episode.id, jobId: job.id, status: job.status, ...(warning ? { warning } : {}) }, 202);
+  });
+
+  /** 重新生成（失败/中断的节目重跑管线）：不重新扣配额（生成时才扣） */
+  app.post("/episodes/:id/retry", async (c) => {
+    const userId = getUserId(c);
+    const ep = await deps.getOwned(c.req.param("id"), userId);
+    if (!ep) return c.json({ error: "not_found" }, 404);
+    // 进行中的 job 不重复跑
+    const latest = await deps.getLatestJob(c.req.param("id"));
+    if (latest && ["queued", "tts", "merge", "upload"].includes(latest.status)) {
+      return c.json({ error: "job_running", detail: "节目正在生成中" }, 409);
+    }
+    const job = await deps.createJob(c.req.param("id"));
+    await deps.enqueueJob({ id: job.id, episodeId: job.episodeId });
+    return c.json({ episodeId: ep.id, jobId: job.id, status: job.status }, 202);
   });
 
   app.post("/episodes/:id/publish", async (c) => {

@@ -281,6 +281,7 @@ export const zh = {
   "studio.episode.unpublished": "未发布",
   "studio.episode.editScript": "编辑脚本",
   "studio.episode.audio": "试听",
+  "studio.episode.retry": "重新生成",
 
   // ---- studio 脚本编辑器 ----
   "studio.scriptEditor.polishing": "AI 正在打磨你的对话为播客脚本…（可稍等片刻）",
@@ -615,6 +616,7 @@ export const en: Dictionary = {
   "studio.episode.unpublished": "Unpublished",
   "studio.episode.editScript": "Edit script",
   "studio.episode.audio": "Preview",
+  "studio.episode.retry": "Regenerate",
 
   // ---- studio 脚本编辑器 ----
   "studio.scriptEditor.polishing": "AI is polishing your conversation into a podcast script…（may take a moment）",

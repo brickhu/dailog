@@ -30,6 +30,7 @@ function fakeDeps(overrides: Partial<EpisodesDeps> = {}): EpisodesDeps {
     getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
     consumeQuota: async () => {},
     createJob: async (episodeId) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
+    getLatestJob: async () => null,
     enqueueJob: async () => {},
     setPublished: async () => {},
     getChannelActivatedAt: async () => new Date(),
@@ -169,6 +170,32 @@ describe("episodes routes", () => {
     const res = await app.request("/episodes/ep-1/publish", { method: "POST" });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
+  });
+
+  it("retry re-enqueues job (202); blocks when job running (409)", async () => {
+    const enqueued: Array<{ id: string; episodeId: string }> = [];
+    const deps = fakeDeps({
+      enqueueJob: async (job) => { enqueued.push(job); },
+    });
+    const app = episodesRoutes(deps, () => "user-1");
+    // 无进行中 job → 202 + 新 job
+    const res = await app.request("/episodes/ep-1/retry", { method: "POST" });
+    expect(res.status).toBe(202);
+    const body = (await res.json()) as { episodeId: string; jobId: string };
+    expect(body).toMatchObject({ episodeId: "ep-1" });
+    expect(enqueued).toHaveLength(1);
+    // 进行中 job → 409 job_running（不重复入队）
+    const running = fakeDeps({
+      getLatestJob: async () => ({ id: "job-9", status: "tts", progress: 30, error: null }),
+      enqueueJob: async () => { throw new Error("should not enqueue"); },
+    });
+    const runningApp = episodesRoutes(running, () => "user-1");
+    const conflict = await runningApp.request("/episodes/ep-1/retry", { method: "POST" });
+    expect(conflict.status).toBe(409);
+    expect(await conflict.json()).toMatchObject({ error: "job_running" });
+    // 他人节目 → 404
+    const forbidden = await episodesRoutes(fakeDeps(), () => "user-2").request("/episodes/ep-1/retry", { method: "POST" });
+    expect(forbidden.status).toBe(404);
   });
 
   it("streams audio when episode has audio (GET /episodes/:id/audio)", async () => {

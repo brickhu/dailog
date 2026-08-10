@@ -188,6 +188,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       getQuota: (userId) => repo.jobs.getQuotaInfo(userId),
       consumeQuota: (userId, credit) => repo.jobs.consumeQuota(userId, credit),
       createJob: (id) => repo.jobs.createJob(id),
+      getLatestJob: async () => null,
       enqueueJob: async (job) => {
         void queue.enqueue({ id: job.id, episodeId: job.episodeId }, () => {}).then((result) => {
           if (result.status === "failed") {
