@@ -19,7 +19,14 @@ function fakeAuth(session: { user: { id: string } } | null = { user: { id: "user
 
 function fakeRepo(): AppDeps["repo"] {
   return {
-    guests: { getByPlatform: async () => null, list: async () => [] },
+        guests: {
+      getByPlatform: async () => null,
+      list: async () => [],
+      voiceSampleByLanguage: async () => null,
+      voiceSampleAny: async () => null,
+      upsertVoiceSample: async () => {},
+      listVoiceSamples: async () => [],
+    },
     snapshots: {
       getByUrl: async () => null,
       getById: async () => null,
@@ -51,6 +58,7 @@ function fakeRepo(): AppDeps["repo"] {
       getEpisodeAudio: async () => null,
       getByTranscript: async () => null,
       getEpisodeScript: async () => null,
+      getEpisodeGuest: async () => null,
       getPublishedDialogue: async () => null,
       setPublished: async () => {},
       getEpisodeUserId: async () => null,
@@ -107,7 +115,7 @@ function fakeTranscriptsDeps(): AppDeps["transcriptsDeps"] {
     getDialogueForPolish: async () => null,
     getTranscriptCount: async () => 0,
     getPolishLimit: async () => 5,
-          guestNames: {},
+          guestsByPlatform: {},
 createTranscript: async () => ({ id: "transcript-1" }),
     getOwnedTranscript: async () => null,
     updateTranscriptSegments: async () => {},
@@ -161,6 +169,10 @@ function fakeAdmin(overrides: Partial<AppDeps["admin"]> = {}): AppDeps["admin"] 
       code: opts.code ?? "dlg-auto1234",
       expiresAt: opts.expiresDays !== undefined ? new Date(Date.now() + opts.expiresDays * 86400_000) : null,
     }),
+    storage: { put: async () => {} },
+    upsertGuestVoiceSample: async () => {},
+    listGuestVoiceSamples: async () => [],
+    listGuests: async () => [],
     ...overrides,
   };
 }
@@ -374,5 +386,55 @@ describe.skipIf(!hasDb)("admin invite endpoints (real local PG)", () => {
     });
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ error: "forbidden" });
+  });
+});
+
+describe("admin guest voice endpoints (fake deps)", () => {
+  it("rejects non-admin with 403 forbidden", async () => {
+    const app = makeApp(fakeAdmin({ isAdmin: async () => false }), fakeAuth());
+    const res = await app.request("/v1/admin/guest-voices", { method: "GET" });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: "forbidden" });
+  });
+
+  it("PUT uploads sample: storage.put + upsert（guest×language 唯一）", async () => {
+    const putKeys: string[] = [];
+    const upserted: unknown[] = [];
+    const app = makeApp(fakeAdmin({
+      storage: { put: async (key: string) => { putKeys.push(key); } },
+      upsertGuestVoiceSample: async (row) => { upserted.push(row); },
+      listGuests: async () => [{ id: "claude", name: "Claude" }],
+    }), fakeAuth());
+    const form = new FormData();
+    form.append("file", new File([new Uint8Array([1, 2, 3])], "voice.mp3", { type: "audio/mpeg" }));
+    form.append("guestId", "claude");
+    form.append("language", "en");
+    form.append("referenceId", "ref-claude-en");
+    form.append("transcript", "Hi, I am Claude.");
+    const res = await app.request("/v1/admin/guest-voices", { method: "PUT", body: form });
+    expect(res.status).toBe(200);
+    expect(putKeys).toEqual(["guest-voices/claude/en.mp3"]);
+    expect(upserted).toEqual([{
+      guestId: "claude", language: "en", audioKey: "guest-voices/claude/en.mp3",
+      referenceId: "ref-claude-en", transcript: "Hi, I am Claude.",
+    }]);
+  });
+
+  it("PUT rejects unknown guest or missing file", async () => {
+    const app = makeApp(fakeAdmin({ listGuests: async () => [{ id: "claude", name: "Claude" }] }), fakeAuth());
+    const noFile = await app.request("/v1/admin/guest-voices", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ guestId: "claude" }),
+    });
+    expect(noFile.status).toBe(400);
+    expect(await noFile.json()).toMatchObject({ error: "file_required" });
+
+    const form = new FormData();
+    form.append("file", new File([new Uint8Array([1])], "v.mp3"));
+    form.append("guestId", "nope");
+    const unknown = await app.request("/v1/admin/guest-voices", { method: "PUT", body: form });
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toMatchObject({ error: "unknown_guest" });
   });
 });

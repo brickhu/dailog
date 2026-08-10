@@ -18,6 +18,9 @@ function makeDeps(overrides: Partial<RunnerDeps> = {}): RunnerDeps {
     getEpisodeUserId: vi.fn(async () => "user-1"),
     getEpisodeLanguage: vi.fn(async () => "zh"),
     getEpisodeScript: vi.fn(async () => ({ version: 1, segments: SEGMENTS })),
+    getEpisodeGuest: vi.fn(async () => ({ guestId: null })),
+    getGuestVoiceSample: vi.fn(async () => null),
+    getGuestVoiceSampleAny: vi.fn(async () => null),
     getGuestModelId: vi.fn(async () => null),
     getVoiceSampleByLanguage: vi.fn(async () => null),
     getVoiceSample: vi.fn(async () => null),
@@ -30,6 +33,7 @@ function makeDeps(overrides: Partial<RunnerDeps> = {}): RunnerDeps {
     tts: {
       // merge 阶段跑真实 ffmpeg，mock 必须返回合法音频字节
       synthesizeSingle: vi.fn(async () => makeSilenceWav()),
+      synthesizeMultiSpeaker: vi.fn(async () => makeSilenceWav()),
     } as unknown as RunnerDeps["tts"],
     storage: {
       put: vi.fn(async (_key: string, _data: Uint8Array) => {}),
@@ -72,6 +76,64 @@ describe("createPipelineRunner (full chain: tts → merge → upload → done)",
     expect(deps.tts.synthesizeSingle).toHaveBeenNthCalledWith(2, { text: "你好！", referenceId: "guest-model" });
     expect(vi.mocked(deps.storage.put).mock.calls[0][0]).toBe(AUDIO_KEY);
     expect(deps.repo.markJobDone).toHaveBeenCalledWith("job-1");
+  });
+
+
+  it("嘉宾表采样: 平台 × 语种命中 → 2D references 主路径（host/guest 参考音频齐备）", async () => {
+    const deps = makeDeps();
+    // host 采样（zh）+ 嘉宾表采样（claude × zh）
+    vi.mocked(deps.repo.getVoiceSampleByLanguage).mockResolvedValue({ audioUrl: "voice/user-1.wav", transcript: "大家好，这是测试文案。" });
+    vi.mocked(deps.repo.getEpisodeGuest).mockResolvedValue({ guestId: "claude" });
+    vi.mocked(deps.repo.getGuestVoiceSample).mockResolvedValue({
+      audioKey: "guest-voices/claude/zh.mp3",
+      referenceId: null,
+      transcript: "我是 dailog 的 AI 嘉宾，很高兴和你一起聊今天的节目。",
+    });
+    deps.storage.get = vi.fn(async (key: string) =>
+      key === "voice/user-1.wav" ? new Uint8Array([1]) : key === "guest-voices/claude/zh.mp3" ? new Uint8Array([2]) : new Uint8Array([9]),
+    ) as never;
+    const update = vi.fn(async (_p: number) => {});
+
+    const result = await createPipelineRunner(deps)(JOB, update);
+
+    expect(result).toEqual({ status: "done" });
+    // 2D 一次调用：host 样本 + 嘉宾表采样（transcript 随采样记录，非代码兜底文案）
+    expect(deps.tts.synthesizeMultiSpeaker).toHaveBeenCalledTimes(1);
+    const call = vi.mocked(deps.tts.synthesizeMultiSpeaker).mock.calls[0][0];
+    expect(call.referenceAudios).toEqual([new Uint8Array([1]), new Uint8Array([2])]);
+    expect(call.transcripts).toEqual(["大家好，这是测试文案。", "我是 dailog 的 AI 嘉宾，很高兴和你一起聊今天的节目。"]);
+    // 表采样优先：不再请求旧 guest-voice 资产兜底（merge 阶段 intro/outro 资产照常）
+    const assetKeys = vi.mocked(deps.assets.get).mock.calls.map((c) => c[0]);
+    expect(assetKeys.some((k) => k.startsWith("assets/guest-voice"))).toBe(false);
+  });
+
+  it("嘉宾缺该语种采样 → 任意语种兜底（voiceSampleAny）", async () => {
+    const deps = makeDeps();
+    vi.mocked(deps.repo.getVoiceSampleByLanguage).mockResolvedValue({ audioUrl: "voice/user-1.wav", transcript: "大家好，这是测试文案。" });
+    vi.mocked(deps.repo.getEpisodeGuest).mockResolvedValue({ guestId: "deepseek" });
+    // 目标语种 zh 无采样 → any 兜底返回 en 采样
+    vi.mocked(deps.repo.getGuestVoiceSample).mockResolvedValue(null);
+    vi.mocked(deps.repo.getGuestVoiceSampleAny).mockResolvedValue({
+      audioKey: "guest-voices/deepseek/en.mp3",
+      referenceId: "ref-deepseek",
+      transcript: "Hi, I am the AI guest.",
+    });
+    deps.storage.get = vi.fn(async (key: string) =>
+      key === "voice/user-1.wav" ? new Uint8Array([1]) : new Uint8Array([3]),
+    ) as never;
+    const update = vi.fn(async (_p: number) => {});
+
+    const result = await createPipelineRunner(deps)(JOB, update);
+
+    expect(result).toEqual({ status: "done" });
+    expect(deps.repo.getGuestVoiceSample).toHaveBeenCalledWith("deepseek", "zh");
+    expect(deps.repo.getGuestVoiceSampleAny).toHaveBeenCalledWith("deepseek");
+    expect(deps.tts.synthesizeMultiSpeaker).toHaveBeenCalledTimes(1);
+    const call = vi.mocked(deps.tts.synthesizeMultiSpeaker).mock.calls[0][0];
+    expect(call.referenceAudios).toEqual([new Uint8Array([1]), new Uint8Array([3])]);
+    // 逐段降级路径的音色 id 也随采样（referenceId）；未请求 guest-voice 资产兜底
+    const assetKeys = vi.mocked(deps.assets.get).mock.calls.map((c) => c[0]);
+    expect(assetKeys.some((k) => k.startsWith("assets/guest-voice"))).toBe(false);
   });
 
   it("无样本降级: host 段不带参考音频，仍逐段合成完成", async () => {

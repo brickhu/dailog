@@ -225,6 +225,31 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
     });
   });
 
+  describe("guest voice samples repo", () => {
+    it("upsert 按 guest×language 唯一：重复录入覆盖 audio_key/transcript", async () => {
+      await repo.guests.upsertVoiceSample({
+        guestId: "claude", language: "zh", audioKey: "guest-voices/claude/zh.mp3", transcript: "第一版文案",
+      });
+      await repo.guests.upsertVoiceSample({
+        guestId: "claude", language: "zh", audioKey: "guest-voices/claude/zh-v2.mp3", transcript: "第二版文案",
+      });
+      const rows = await repo.guests.listVoiceSamples();
+      const zh = rows.filter((r) => r.guestId === "claude" && r.language === "zh");
+      expect(zh).toHaveLength(1);
+      expect(zh[0]).toMatchObject({ audioKey: "guest-voices/claude/zh-v2.mp3", transcript: "第二版文案", guestName: "Claude" });
+    });
+
+    it("voiceSampleByLanguage 按语种取；无该语种 → voiceSampleAny 兜底", async () => {
+      await repo.guests.upsertVoiceSample({ guestId: "deepseek", language: "en", audioKey: "guest-voices/deepseek/en.mp3", referenceId: "ref-en" });
+      expect((await repo.guests.voiceSampleByLanguage("deepseek", "en"))?.audioKey).toBe("guest-voices/deepseek/en.mp3");
+      // 目标语种 zh 无采样 → null → any 兜底取 en
+      expect(await repo.guests.voiceSampleByLanguage("deepseek", "zh")).toBeNull();
+      expect((await repo.guests.voiceSampleAny("deepseek"))?.language).toBe("en");
+      // 无任何采样的嘉宾
+      expect(await repo.guests.voiceSampleAny("kimi")).toBeNull();
+    });
+  });
+
   describe("transcripts repo", () => {
     it("create + listByPolish roundtrip（同秒创建时顺序不保证，仅断言集合）", async () => {
       // 自建容器（makeEpisode 自带 1 条脚本，会让计数漂移）
@@ -504,7 +529,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       getPolishLimit: async () => 5,
       createTranscript: (polishId, segments, language) => repo.transcripts.create(polishId, segments, language),
       getOwnedTranscript: (id, userId) => repo.transcripts.getOwned(id, userId),
-      guestNames: {},
+      guestsByPlatform: {},
       updateTranscriptSegments: (id, segments) => repo.transcripts.updateSegments(id, segments),
       llm: {
         complete: async () => "",
@@ -565,6 +590,10 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       admin: {
         isAdmin: async () => false,
         createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }),
+        storage: { put: async () => {} },
+        upsertGuestVoiceSample: async () => {},
+        listGuestVoiceSamples: async () => [],
+        listGuests: async () => [],
       },
     });
 

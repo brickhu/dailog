@@ -7,7 +7,14 @@ import type { Repos } from "../src/repo";
 
 function fakeRepo(): Repos {
   return {
-    guests: { getByPlatform: async () => null, list: async () => [] },
+        guests: {
+      getByPlatform: async () => null,
+      list: async () => [],
+      voiceSampleByLanguage: async () => null,
+      voiceSampleAny: async () => null,
+      upsertVoiceSample: async () => {},
+      listVoiceSamples: async () => [],
+    },
     snapshots: {
       getByUrl: async () => null,
       getById: async () => null,
@@ -38,6 +45,7 @@ function fakeRepo(): Repos {
       getEpisodeAudio: async () => null,
       getByTranscript: async () => null,
       getEpisodeScript: async () => null,
+      getEpisodeGuest: async () => null,
       getPublishedDialogue: async () => null,
       setPublished: async () => {},
       getEpisodeUserId: async () => null,
@@ -113,7 +121,7 @@ function makeApp(llmOutput: string) {
       toggleLike: async () => ({ liked: true }),
       listFavorites: async () => [],
     },
-    admin: { isAdmin: async () => false, createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }) },
+    admin: { isAdmin: async () => false, createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }), storage: { put: async () => {} }, upsertGuestVoiceSample: async () => {}, listGuestVoiceSamples: async () => [], listGuests: async () => [] },
     shareCollectUrl: () => null,
     polishesDeps: {
       getChannelActivatedAt: async () => new Date(),
@@ -131,7 +139,7 @@ function makeApp(llmOutput: string) {
       getPolishLimit: async () => 5,
       createTranscript: (polishId, segments, language, opts) => repo.transcripts.create(polishId, segments, language, opts),
       getOwnedTranscript: async () => null,
-      guestNames: {},
+      guestsByPlatform: {},
       updateTranscriptSegments: async () => {},
       llm: {
         complete: async () => "",

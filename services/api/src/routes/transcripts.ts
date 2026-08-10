@@ -26,8 +26,8 @@ export interface TranscriptsDeps {
     language: string | null,
     opts?: { topic?: string | null; title?: string | null; creationNote?: string | null; hostName?: string | null; guestId?: string | null; guestName?: string | null },
   ): Promise<{ id: string }>;
-  /** 平台 → 嘉宾（guests 表）映射 */
-  guestNames: Record<string, string>;
+  /** 平台 → 嘉宾（guests 表）映射：id + name（脚本引用 guestId，展示用 guestName 快照） */
+  guestsByPlatform: Record<string, { id: string; name: string }>;
   /** 编辑保存（归属校验） */
   getOwnedTranscript(id: string, userId: string): Promise<{ id: string } | null>;
   updateTranscriptSegments(id: string, segments: ScriptSegment[]): Promise<void>;
@@ -63,16 +63,16 @@ export function transcriptsRoutes(deps: TranscriptsDeps) {
     const dialogue = await deps.getDialogueForPolish(body.polishId, userId).catch(() => null);
     if (!dialogue || dialogue.messages.length === 0) return c.json({ error: "no_dialogue" }, 404);
 
-    // 称呼：host 由前端生成时输入（s3）；AI 从 guests 表按平台取
+    // 称呼：host 由前端生成时输入（s3）；AI 从 guests 表按平台取（id 引用 + name 快照）
     const hostName = typeof body.hostName === "string" && body.hostName.trim() ? body.hostName.trim().slice(0, 20) : null;
-    const aiName = deps.guestNames?.[dialogue.platform] ?? null;
+    const aiGuest = deps.guestsByPlatform?.[dialogue.platform];
 
     // 语言由 LLM 随润色识别（跟随原对话语言）；多主题切分 → 每条脚本一个 transcript
     return streamSSE(c, async (stream) => {
       let full = "";
       try {
         const result = await deps.llm.stream(
-          polishPrompt(dialogue.messages, instruction, { hostName, aiName }),
+          polishPrompt(dialogue.messages, instruction, { hostName, aiName: aiGuest?.name ?? null }),
           (delta: string) => {
             full += delta;
             void stream.writeSSE({ event: "segment", data: delta });
@@ -125,7 +125,7 @@ export function transcriptsRoutes(deps: TranscriptsDeps) {
             title: script.title,
             creationNote: script.creationNote,
             hostName,
-            ...(aiName ? { guestName: aiName } : {}),
+            ...(aiGuest ? { guestId: aiGuest.id, guestName: aiGuest.name } : {}),
           }));
         }
         await stream.writeSSE({

@@ -209,6 +209,19 @@ export const guests = pgTable("guests", {
 });
 
 /** 音轨：一期节目可生成多语言音轨（episodes.audio_url 已废弃，音频全在 tracks） */
+/** 嘉宾音频采样（按平台 × 语种各一条）：生成时按 episode 语言注入同语种采样；
+ *  audio_key = storage key（R2/fs），reference_id = TTS 音色 id（逐段降级路径），
+ *  transcript = 参考音频转录文本（2D references 主路径用，替换采样音频时一并更新） */
+export const guestVoiceSamples = pgTable("guest_voice_samples", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  guestId: text("guest_id").notNull().references(() => guests.id, { onDelete: "cascade" }),
+  language: text("language").notNull().default("zh"),
+  audioKey: text("audio_key").notNull(),
+  referenceId: text("reference_id"),
+  transcript: text("transcript"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("guest_voice_samples_guest_language_unique").on(t.guestId, t.language)]);
+
 export const tracks = pgTable("tracks", {
   id: uuid("id").defaultRandom().primaryKey(),
   episodeId: uuid("episode_id").notNull().references(() => episodes.id, { onDelete: "cascade" }),

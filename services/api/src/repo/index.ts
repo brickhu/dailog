@@ -190,6 +190,8 @@ export interface EpisodesRepo {
   getEpisodeAudio(id: string, userId: string): Promise<string | null>;
   /** 生成管线来源脚本：经 episodes.transcript_id → transcripts.segments */
   getEpisodeScript(episodeId: string): Promise<{ segments: ScriptSegment[] } | null>;
+  /** 生成管线嘉宾：经 episodes.transcript_id → transcripts.guest_id（无引用 → null） */
+  getEpisodeGuest(episodeId: string): Promise<{ guestId: string | null } | null>;
   /** 内容站公开读：仅已发布可见；对话内容在 snapshots.parsedDialogue（join 链） */
   getPublishedDialogue(episodeId: string): Promise<{
     platform: string;
@@ -231,9 +233,34 @@ export interface EpisodesRepo {
   isUsernameTaken(userId: string, username: string): Promise<boolean>;
 }
 
+export interface GuestVoiceSampleRow {
+  id: string;
+  guestId: string;
+  language: string;
+  audioKey: string;
+  referenceId: string | null;
+  transcript: string | null;
+}
+
 export interface GuestsRepo {
   getByPlatform(platform: string): Promise<{ id: string; name: string } | null>;
   list(): Promise<{ id: string; platform: string; name: string; avatar: string | null; intro: string | null; url: string | null }[]>;
+  /** 嘉宾音频采样：按语种取（生成时同语种优先注入）；无该语种 → null（调用方兜底任意语种） */
+  voiceSampleByLanguage(guestId: string, language: string): Promise<GuestVoiceSampleRow | null>;
+  /** 兜底：该嘉宾任意语种采样（缺目标语种时用） */
+  voiceSampleAny(guestId: string): Promise<GuestVoiceSampleRow | null>;
+  /** 管理录入/更新（guest_id + language 唯一，upsert） */
+  upsertVoiceSample(row: { guestId: string; language: string; audioKey: string; referenceId?: string | null; transcript?: string | null }): Promise<void>;
+  /** 管理列表（join guests 展示名） */
+  listVoiceSamples(): Promise<{
+    id: string;
+    guestId: string;
+    guestName: string;
+    language: string;
+    audioKey: string;
+    referenceId: string | null;
+    transcript: string | null;
+  }[]>;
 }
 
 export interface JobsRepo {
@@ -272,6 +299,71 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return db
           .select({ id: schema.guests.id, platform: schema.guests.platform, name: schema.guests.name, avatar: schema.guests.avatar, intro: schema.guests.intro, url: schema.guests.url })
           .from(schema.guests)
+          .orderBy(schema.guests.platform);
+      },
+      async voiceSampleByLanguage(guestId, language) {
+        const rows = await db
+          .select({
+            id: schema.guestVoiceSamples.id,
+            guestId: schema.guestVoiceSamples.guestId,
+            language: schema.guestVoiceSamples.language,
+            audioKey: schema.guestVoiceSamples.audioKey,
+            referenceId: schema.guestVoiceSamples.referenceId,
+            transcript: schema.guestVoiceSamples.transcript,
+          })
+          .from(schema.guestVoiceSamples)
+          .where(and(
+            eq(schema.guestVoiceSamples.guestId, guestId),
+            eq(schema.guestVoiceSamples.language, language),
+          ))
+          .limit(1);
+        return rows[0] ?? null;
+      },
+      async voiceSampleAny(guestId) {
+        const rows = await db
+          .select({
+            id: schema.guestVoiceSamples.id,
+            guestId: schema.guestVoiceSamples.guestId,
+            language: schema.guestVoiceSamples.language,
+            audioKey: schema.guestVoiceSamples.audioKey,
+            referenceId: schema.guestVoiceSamples.referenceId,
+            transcript: schema.guestVoiceSamples.transcript,
+          })
+          .from(schema.guestVoiceSamples)
+          .where(eq(schema.guestVoiceSamples.guestId, guestId))
+          .orderBy(desc(schema.guestVoiceSamples.createdAt))
+          .limit(1);
+        return rows[0] ?? null;
+      },
+      async upsertVoiceSample(row) {
+        await db.insert(schema.guestVoiceSamples).values({
+          guestId: row.guestId,
+          language: row.language,
+          audioKey: row.audioKey,
+          referenceId: row.referenceId ?? null,
+          transcript: row.transcript ?? null,
+        }).onConflictDoUpdate({
+          target: [schema.guestVoiceSamples.guestId, schema.guestVoiceSamples.language],
+          set: {
+            audioKey: row.audioKey,
+            referenceId: row.referenceId ?? null,
+            transcript: row.transcript ?? null,
+          },
+        });
+      },
+      async listVoiceSamples() {
+        return db
+          .select({
+            id: schema.guestVoiceSamples.id,
+            guestId: schema.guestVoiceSamples.guestId,
+            guestName: schema.guests.name,
+            language: schema.guestVoiceSamples.language,
+            audioKey: schema.guestVoiceSamples.audioKey,
+            referenceId: schema.guestVoiceSamples.referenceId,
+            transcript: schema.guestVoiceSamples.transcript,
+          })
+          .from(schema.guestVoiceSamples)
+          .innerJoin(schema.guests, eq(schema.guests.id, schema.guestVoiceSamples.guestId))
           .orderBy(schema.guests.platform);
       },
     },
@@ -644,6 +736,15 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         const row = rows[0];
         if (!row) return null;
         return { segments: (row.updatedSegments ?? row.segments) as ScriptSegment[] };
+      },
+      async getEpisodeGuest(episodeId) {
+        const rows = await db
+          .select({ guestId: schema.transcripts.guestId })
+          .from(schema.episodes)
+          .innerJoin(schema.transcripts, eq(schema.episodes.transcriptId, schema.transcripts.id))
+          .where(eq(schema.episodes.id, episodeId))
+          .limit(1);
+        return rows[0] ?? null;
       },
       async getPublishedDialogue(episodeId) {
         const rows = await db

@@ -120,6 +120,9 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
         getEpisodeUserId: repo.episodes.getEpisodeUserId,
         getEpisodeLanguage: repo.episodes.getEpisodeLanguage,
         getEpisodeScript: repo.episodes.getEpisodeScript,
+        getEpisodeGuest: repo.episodes.getEpisodeGuest,
+        getGuestVoiceSample: (guestId, language) => repo.guests.voiceSampleByLanguage(guestId, language),
+        getGuestVoiceSampleAny: (guestId) => repo.guests.voiceSampleAny(guestId),
         getVoiceSampleByLanguage: repo.episodes.getVoiceSampleByLanguage,
         getVoiceSample: repo.episodes.getVoiceSample,
         getGuestModelId: async () => null, // 嘉宾固定音色 id 未提供（Task 10 音色体系），走零样本/默认音色 fallback
@@ -164,9 +167,9 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       },
       getTranscriptCount: async (polishId) => (await repo.transcripts.listByPolish(polishId)).length,
       getPolishLimit: async () => 5,
-      createTranscript: (polishId, segments, language) => repo.transcripts.create(polishId, segments, language),
+      createTranscript: (polishId, segments, language, opts) => repo.transcripts.create(polishId, segments, language, opts),
       getOwnedTranscript: (id, userId) => repo.transcripts.getOwned(id, userId),
-      guestNames: {},
+      guestsByPlatform: Object.fromEntries((await repo.guests.list()).map((g) => [g.platform, { id: g.id, name: g.name }])),
       updateTranscriptSegments: (id, segments) => repo.transcripts.updateSegments(id, segments),
       llm,
     };
@@ -226,6 +229,10 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       admin: {
         isAdmin: async () => false,
         createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }),
+        storage: { put: async () => {} },
+        upsertGuestVoiceSample: async () => {},
+        listGuestVoiceSamples: async () => [],
+        listGuests: async () => [],
       },
     });
     const signUp = await app.request("/v1/auth/sign-up/email", {
@@ -327,6 +334,8 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     expect(transcript).not.toBeNull();
     expect(transcript!.segments.length).toBeGreaterThan(0);
     expect(transcript!.language).toBe("zh"); // 语言由 LLM 识别（中文对话 → zh；生成管线语言必填）
+    // 嘉宾引用落库：snapshot platform=claude → guests 表映射（生成管线按此取嘉宾采样）
+    expect(transcript!.guestId).toBe("claude");
 
     // 4. 生成：真实安全门 + 配额（free 首期 0 credit）→ 202 + episodeId/jobId
     const genRes = await app.request("/v1/episodes/new", {

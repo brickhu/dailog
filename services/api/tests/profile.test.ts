@@ -7,7 +7,14 @@ import type { Repos } from "../src/repo";
 
 function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
   return {
-    guests: { getByPlatform: async () => null, list: async () => [] },
+        guests: {
+      getByPlatform: async () => null,
+      list: async () => [],
+      voiceSampleByLanguage: async () => null,
+      voiceSampleAny: async () => null,
+      upsertVoiceSample: async () => {},
+      listVoiceSamples: async () => [],
+    },
     snapshots: {
       getByUrl: async () => null,
       getById: async () => null,
@@ -39,6 +46,7 @@ function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
       getEpisodeAudio: async () => null,
       getByTranscript: async () => null,
       getEpisodeScript: async () => null,
+      getEpisodeGuest: async () => null,
       getPublishedDialogue: async () => null,
       setPublished: async () => {},
       getEpisodeUserId: async () => null,
@@ -126,7 +134,7 @@ function makeApp(episodesOverrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
       toggleLike: async () => ({ liked: true }),
       listFavorites: async () => [],
     },
-    admin: { isAdmin: async () => false, createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }) },
+    admin: { isAdmin: async () => false, createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }), storage: { put: async () => {} }, upsertGuestVoiceSample: async () => {}, listGuestVoiceSamples: async () => [], listGuests: async () => [] },
     shareCollectUrl: () => null,
     polishesDeps: {
       getChannelActivatedAt: async () => new Date(),
@@ -142,7 +150,7 @@ function makeApp(episodesOverrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
       getPolishLimit: async () => 5,
       createTranscript: async () => ({ id: "transcript-1" }),
       getOwnedTranscript: async () => null,
-      guestNames: {},
+      guestsByPlatform: {},
       updateTranscriptSegments: async () => {},
       llm: { complete: async () => "", stream: async () => "" },
     },

@@ -6,7 +6,14 @@ import type { Env } from "../src/config/env";
 
 function fakeRepo(): AppDeps["repo"] {
   return {
-    guests: { getByPlatform: async () => null, list: async () => [] },
+        guests: {
+      getByPlatform: async () => null,
+      list: async () => [],
+      voiceSampleByLanguage: async () => null,
+      voiceSampleAny: async () => null,
+      upsertVoiceSample: async () => {},
+      listVoiceSamples: async () => [],
+    },
     snapshots: {
       getByUrl: async () => null,
       getById: async () => null,
@@ -38,6 +45,7 @@ function fakeRepo(): AppDeps["repo"] {
       getEpisodeAudio: async () => null,
       getByTranscript: async () => null,
       getEpisodeScript: async () => null,
+      getEpisodeGuest: async () => null,
       getPublishedDialogue: async () => null,
       setPublished: async () => {},
       getEpisodeUserId: async () => null,
@@ -83,7 +91,7 @@ function fakePolishesDeps(): AppDeps["polishesDeps"] {
   return { getChannelActivatedAt: async () => new Date(), findPolishByUserSnapshot: async () => null, createPolish: async () => ({ id: "polish-1" }), getPolishDetail: async () => null, listByUser: async () => [] };
 }
 function fakeTranscriptsDeps(): AppDeps["transcriptsDeps"] {
-  return { getDialogueForPolish: async () => null, getTranscriptCount: async () => 0, getPolishLimit: async () => 5, createTranscript: async () => ({ id: "transcript-1" }), getOwnedTranscript: async () => null, guestNames: {}, updateTranscriptSegments: async () => {}, llm: { complete: async () => "", stream: async () => "" } };
+  return { getDialogueForPolish: async () => null, getTranscriptCount: async () => 0, getPolishLimit: async () => 5, createTranscript: async () => ({ id: "transcript-1" }), getOwnedTranscript: async () => null, guestsByPlatform: {}, updateTranscriptSegments: async () => {}, llm: { complete: async () => "", stream: async () => "" } };
 }
 function fakeEpisodesDeps(): AppDeps["episodesDeps"] {
   return {
@@ -150,6 +158,10 @@ function makeApp(shareCollectUrl: string | null, importOverrides: Partial<AppDep
     admin: {
       isAdmin: async () => false,
       createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }),
+      storage: { put: async () => {} },
+      upsertGuestVoiceSample: async () => {},
+      listGuestVoiceSamples: async () => [],
+      listGuests: async () => [],
     },
     shareCollectUrl: () => shareCollectUrl,
     polishesDeps: fakePolishesDeps(),

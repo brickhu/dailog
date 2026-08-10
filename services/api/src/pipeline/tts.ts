@@ -12,6 +12,8 @@ export interface TtsDeps {
   hostTranscript?: string | null;
   /** 嘉宾固定参考音频（资产 guest-voice.mp3；与 host 都齐备时走 references 2D 一次调用） */
   guestReferenceAudio?: Uint8Array | null;
+  /** 嘉宾参考音频转录文本（采样表记录优先；无则用代码兜底 GUEST_TRANSCRIPTS） */
+  guestTranscript?: string | null;
   /** 节目语言（zh/en…）——决定嘉宾转录文本 */
   language: string;
 }
@@ -20,6 +22,7 @@ export interface TtsDeps {
  *  与 assets/audio/guest-voice-<lang>.mp3 资产配套——替换嘉宾音频时必须同步更新对应文案。 */
 export const GUEST_TRANSCRIPTS: Record<string, string> = {
   zh: "大家好，我是 dailog 的 AI 嘉宾，很高兴和你一起聊今天的节目。无论科技、生活还是创作，好内容都值得被听见。让我们开始吧！",
+  en: "Hi, I'm the AI guest on dailog, and I'm thrilled to chat with you today. Whether it's tech, life, or creativity, great stories deserve to be heard. Let's get started!",
 };
 
 export type SynthesizeResult =
@@ -37,7 +40,7 @@ export async function synthesizeEpisode(args: {
   deps: TtsDeps;
 }): Promise<SynthesizeResult> {
   const { segments, deps } = args;
-  const guestTranscript = GUEST_TRANSCRIPTS[deps.language] ?? null;
+  const guestTranscript = deps.guestTranscript ?? GUEST_TRANSCRIPTS[deps.language] ?? null;
   if (deps.hostReferenceAudio && deps.guestReferenceAudio) {
     try {
       const mainAudio = await deps.tts.synthesizeMultiSpeaker({

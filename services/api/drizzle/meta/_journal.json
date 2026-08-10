@@ -106,6 +106,13 @@
       "when": 1786600000000,
       "tag": "0014_structured_content",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1786364267832,
+      "tag": "0015_guest_voice_samples",
+      "breakpoints": true
     }
   ]
 }

@@ -36,7 +36,7 @@ function fakeTranscriptsDeps(): AppDeps["transcriptsDeps"] {
     getDialogueForPolish: async () => null,
     getTranscriptCount: async () => 0,
     getPolishLimit: async () => 5,
-          guestNames: {},
+          guestsByPlatform: {},
 createTranscript: async () => ({ id: "transcript-1" }),
     getOwnedTranscript: async () => null,
     updateTranscriptSegments: async () => {},
@@ -70,7 +70,14 @@ function fakeEpisodesDeps(): AppDeps["episodesDeps"] {
 
 function fakeRepo(): AppDeps["repo"] {
   return {
-    guests: { getByPlatform: async () => null, list: async () => [] },
+        guests: {
+      getByPlatform: async () => null,
+      list: async () => [],
+      voiceSampleByLanguage: async () => null,
+      voiceSampleAny: async () => null,
+      upsertVoiceSample: async () => {},
+      listVoiceSamples: async () => [],
+    },
     snapshots: {
       getByUrl: async () => null,
       getById: async () => null,
@@ -102,6 +109,7 @@ function fakeRepo(): AppDeps["repo"] {
       getEpisodeAudio: async () => null,
       getByTranscript: async () => null,
       getEpisodeScript: async () => null,
+      getEpisodeGuest: async () => null,
       getPublishedDialogue: async () => null,
       setPublished: async () => {},
       getEpisodeUserId: async () => null,
@@ -221,6 +229,10 @@ describe.skipIf(!hasDb)("channel activation (授权码开通频道, real local P
       admin: {
         isAdmin: async () => false,
         createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }),
+        storage: { put: async () => {} },
+        upsertGuestVoiceSample: async () => {},
+        listGuestVoiceSamples: async () => [],
+        listGuests: async () => [],
       },
     });
 

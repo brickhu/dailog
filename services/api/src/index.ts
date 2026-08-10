@@ -60,6 +60,9 @@ const queue = createJobQueue(createPipelineRunner({
     getEpisodeUserId: repo.episodes.getEpisodeUserId,
     getEpisodeLanguage: repo.episodes.getEpisodeLanguage,
     getEpisodeScript: repo.episodes.getEpisodeScript,
+    getEpisodeGuest: repo.episodes.getEpisodeGuest,
+    getGuestVoiceSample: (guestId, language) => repo.guests.voiceSampleByLanguage(guestId, language),
+    getGuestVoiceSampleAny: (guestId) => repo.guests.voiceSampleAny(guestId),
     getVoiceSample: repo.episodes.getVoiceSample,
     // 按语种取采样（生成管线用：同语种优先，缺失 → getVoiceSample 兜底）
     getVoiceSampleByLanguage: repo.episodes.getVoiceSampleByLanguage,
@@ -118,7 +121,7 @@ const transcriptsDeps: TranscriptsDeps = {
     return quota.plan === "pro" ? null : env.POLISH_MAX_VERSIONS;
   },
   createTranscript: (polishId, segments, language, opts) => repo.transcripts.create(polishId, segments, language, opts),
-  guestNames: Object.fromEntries((await repo.guests.list()).map((g) => [g.platform, g.name])),
+  guestsByPlatform: Object.fromEntries((await repo.guests.list()).map((g) => [g.platform, { id: g.id, name: g.name }])),
   getOwnedTranscript: (id, userId) => repo.transcripts.getOwned(id, userId),
   updateTranscriptSegments: (id, segments) => repo.transcripts.updateSegments(id, segments),
   llm,
@@ -188,7 +191,13 @@ const app = createApp({
   voice,
   channel: { activateChannel: createActivateChannel(db) },
   favorites: createFavoritesRepo(db),
-  admin: createAdminDeps(db, env.ADMIN_EMAILS),
+  admin: {
+    ...createAdminDeps(db, env.ADMIN_EMAILS),
+    storage,
+    upsertGuestVoiceSample: (row) => repo.guests.upsertVoiceSample(row),
+    listGuestVoiceSamples: () => repo.guests.listVoiceSamples(),
+    listGuests: () => repo.guests.list(),
+  },
 });
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => {
