@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { createApp, type AppDeps } from "../src/app";
 import { createFavoritesRepo } from "../src/routes/favorites";
@@ -6,7 +6,7 @@ import { createDb } from "../src/db/client";
 import { createRepo } from "../src/repo";
 import type { Env } from "../src/config/env";
 import {
-  authUsers, episodes, generationJobs, polishes, profiles, snapshots, tracks, transcripts, voiceSamples,
+  authUsers, episodes, generationJobs, guestVoiceSamples, polishes, profiles, snapshots, tracks, transcripts, voiceSamples,
 } from "../src/db/schema";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
@@ -226,6 +226,11 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
   });
 
   describe("guest voice samples repo", () => {
+    // 共享 dev DB：测试数据跑完即清，避免污染管线（假 referenceId/缺失音频会打到生产生成）
+    afterEach(async () => {
+      await db.delete(guestVoiceSamples);
+    });
+
     it("upsert 按 guest×language 唯一：重复录入覆盖 audio_key/transcript", async () => {
       await repo.guests.upsertVoiceSample({
         guestId: "claude", language: "zh", audioKey: "guest-voices/claude/zh.mp3", transcript: "第一版文案",

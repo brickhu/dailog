@@ -107,6 +107,29 @@ describe("createPipelineRunner (full chain: tts → merge → upload → done)",
     expect(assetKeys.some((k) => k.startsWith("assets/guest-voice"))).toBe(false);
   });
 
+  it("采样音频缺失（文件不存在）→ 采样视为无效，走资产兜底（不用失效 referenceId）", async () => {
+    const deps = makeDeps();
+    vi.mocked(deps.repo.getVoiceSampleByLanguage).mockResolvedValue({ audioUrl: "voice/user-1.wav", transcript: "大家好，这是测试文案。" });
+    vi.mocked(deps.repo.getEpisodeGuest).mockResolvedValue({ guestId: "deepseek" });
+    // 采样记录存在但音频文件读不到（storage.get 抛错）→ 整条采样弃用
+    vi.mocked(deps.repo.getGuestVoiceSampleAny).mockResolvedValue({
+      audioKey: "guest-voices/deepseek/zh.mp3",
+      referenceId: "ref-dead", // 失效音色 id——绝不能被使用
+      transcript: "我是嘉宾",
+    });
+    deps.storage.get = vi.fn(async (key: string) =>
+      key === "voice/user-1.wav" ? new Uint8Array([1]) : (() => { throw new Error("missing"); })() as never,
+    ) as never;
+    const update = vi.fn(async (_p: number) => {});
+
+    const result = await createPipelineRunner(deps)(JOB, update);
+
+    expect(result).toEqual({ status: "done" });
+    // 降级到逐段：guest 段不得带失效 referenceId（assets 兜底也缺失 → undefined）
+    expect(deps.tts.synthesizeMultiSpeaker).not.toHaveBeenCalled();
+    expect(deps.tts.synthesizeSingle).toHaveBeenNthCalledWith(2, { text: "你好！", referenceId: undefined });
+  });
+
   it("嘉宾缺该语种采样 → 任意语种兜底（voiceSampleAny）", async () => {
     const deps = makeDeps();
     vi.mocked(deps.repo.getVoiceSampleByLanguage).mockResolvedValue({ audioUrl: "voice/user-1.wav", transcript: "大家好，这是测试文案。" });

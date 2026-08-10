@@ -4,6 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 import { Button } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
+import { ApiError } from "../lib/api";
 import ScriptEditor from "../components/script-editor";
 import GenerateProgress from "../components/generate-progress";
 import type { ScriptSegment } from "../lib/scriptOps";
@@ -213,7 +214,15 @@ export default function PolishPage() {
       else if (res.status === 403) setError(body?.error === "quota_exceeded" ? t("studio.quota") : t("studio.channelRequired"));
       else setError(body?.error ?? `生成失败（HTTP ${res.status}）`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("studio.generateFailed"));
+      if (e instanceof ApiError) {
+        // 403 双门禁（配额/频道）与脚本占用：code 判断给友好提示（ApiError 已带 status/code/detail）
+        if (e.code === "quota_exceeded") setError(t("studio.quota"));
+        else if (e.code === "channel_not_active") setError(t("studio.channelRequired"));
+        else if (e.code === "script_used") setError(t("studio.editor.scriptUsed"));
+        else setError(e.message);
+      } else {
+        setError(e instanceof Error ? e.message : t("studio.generateFailed"));
+      }
     } finally {
       setGenerating(false);
     }

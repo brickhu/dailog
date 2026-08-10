@@ -70,12 +70,19 @@ export function createPipelineRunner(deps: RunnerDeps): JobHandler {
     let guestReferenceAudio: Uint8Array | null = null;
     let guestTranscript = GUEST_TRANSCRIPTS[language] ?? null;
     if (guestSample) {
-      // 表采样：音频 + 转录文本 + 音色 id 都随记录
+      // 表采样：音频 + 转录文本 + 音色 id 都随记录。
+      // 采样音频读不到（文件缺失/失效记录）→ 整条采样视为无效，走资产兜底——
+      // 否则失效的 referenceId 会打到 Fish 400（Reference not found）
       guestReferenceAudio = await deps.storage.get(guestSample.audioKey).catch(() => null);
-      guestTranscript = guestSample.transcript ?? guestTranscript;
-      guestModelId = guestSample.referenceId ?? null;
-    } else {
-      // 兼容：无平台采样 → 旧通用资产（assets/guest-voice-<lang>.mp3）+ env 音色 id
+      if (guestReferenceAudio) {
+        guestTranscript = guestSample.transcript ?? guestTranscript;
+        guestModelId = guestSample.referenceId ?? null;
+      } else {
+        guestSample = null;
+      }
+    }
+    if (!guestSample) {
+      // 兼容：无平台采样（或采样音频缺失）→ 旧通用资产（assets/guest-voice-<lang>.mp3）+ env 音色 id
       guestReferenceAudio = (await deps.assets.get(`assets/guest-voice-${language}.mp3`))
         ?? (await deps.assets.get("assets/guest-voice-zh.mp3"));
       guestModelId = await deps.repo.getGuestModelId();

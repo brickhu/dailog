@@ -36,6 +36,9 @@ services:
     environment:
       # 覆盖 .env.local（node --env-file 不覆盖已存在的环境变量）
       DATABASE_URL: postgres://dailogues:dailogues@postgres:5432/dailogues
+      # 容器内 127.0.0.1 是容器自身——出网代理经 host.docker.internal 指向宿主 socks 代理
+      # （宿主直跑时用 .env.local 的 127.0.0.1:1081；compose 环境变量覆盖 .env.local）
+      FISH_PROXY_URL: socks5://host.docker.internal:1081
       IMPORTER_URL: http://importer:8798
       BETTER_AUTH_URL: http://api.dailog.orb.local
       BETTER_AUTH_COOKIE_DOMAIN: .dailog.orb.local

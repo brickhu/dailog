@@ -204,7 +204,7 @@ export const zh = {
   "recorder.micError": "无法访问麦克风（需要浏览器授权）",
   // ---- studio 通用 ----
   "studio.loadFailed": "加载失败",
-  "studio.quota": "配额不足",
+  "studio.quota": "免费额度已用完（首期免费，后续生成需要额度）",
   "studio.channelRequired": "请先开通频道",
   "studio.generateFailed": "生成失败",
   "studio.publishFailed": "发布失败",
@@ -538,7 +538,7 @@ export const en: Dictionary = {
   "recorder.micError": "Can't access microphone（grant permission in your browser）",
   // ---- studio 通用 ----
   "studio.loadFailed": "Failed to load",
-  "studio.quota": "Insufficient quota",
+  "studio.quota": "Free quota used up (first episode is free; further generation needs credits)",
   "studio.channelRequired": "Activate your channel first",
   "studio.generateFailed": "Generation failed",
   "studio.publishFailed": "Publish failed",
