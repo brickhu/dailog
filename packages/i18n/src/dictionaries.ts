@@ -241,6 +241,20 @@ export const zh = {
   "studio.import.confirmCreate": "确认创建",
   "studio.import.creating": "创建中…",
 
+  // ---- Importer 组件 ----
+  "importer.hint": "粘贴 Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 的对话分享链接，采集后确认入库。",
+  "importer.failed": "会话导入失败",
+  "importer.url": "链接",
+  "importer.reason": "失败原因",
+  "importer.ack": "我知道了",
+  "importer.successTitle": "成功导入对话",
+  "importer.generate": "生成脚本",
+  "importer.field.title": "标题",
+  "importer.field.turns": "问答轮次",
+  "importer.field.messages": "消息数量",
+  "importer.field.url": "对话链接",
+  "importer.field.platform": "AI平台",
+
   // ---- studio 编辑器 ----
   "studio.editor.container": "创作容器",
   "studio.editor.polishTitle": "润色脚本（可生成多条，选一条做节目）",
@@ -273,6 +287,7 @@ export const zh = {
   "studio.scriptEditor.instruction": "想怎么改？如：更简短、更口语化、换个开场…（可选）",
   "studio.scriptEditor.you": "你",
   "studio.scriptEditor.switchSpeaker": "点击切换发言者",
+  "studio.scriptEditor.emotionHint": "文本中的 [情绪] 标签（如 [happy]）是台词的一部分，合成时会被识别为语气，可直接编辑或删除",
 
   // ---- studio onboarding ----
   "studio.onboarding.stepVoice": "② 录你的声音",
@@ -545,6 +560,20 @@ export const en: Dictionary = {
   "studio.import.confirmCreate": "Confirm create",
   "studio.import.creating": "Creating…",
 
+  // ---- Importer 组件 ----
+  "importer.hint": "Paste a Claude / ChatGPT / DeepSeek / Gemini / Kimi / Doubao conversation share link to import.",
+  "importer.failed": "Import failed",
+  "importer.url": "Link",
+  "importer.reason": "Reason",
+  "importer.ack": "Got it",
+  "importer.successTitle": "Conversation imported",
+  "importer.generate": "Generate script",
+  "importer.field.title": "Title",
+  "importer.field.turns": "Q&A turns",
+  "importer.field.messages": "Messages",
+  "importer.field.url": "Link",
+  "importer.field.platform": "AI platform",
+
   // ---- studio 编辑器 ----
   "studio.editor.container": "Workspace",
   "studio.editor.polishTitle": "Polish scripts（create several, pick one for the episode）",
@@ -577,6 +606,7 @@ export const en: Dictionary = {
   "studio.scriptEditor.instruction": "How to adjust? e.g. shorter, more casual, new opening…（optional）",
   "studio.scriptEditor.you": "You",
   "studio.scriptEditor.switchSpeaker": "Click to switch speaker",
+  "studio.scriptEditor.emotionHint": "Bracketed [emotion] tags (e.g. [happy]) are part of the line and are read as tone during synthesis — edit or delete them freely",
 
   // ---- studio onboarding ----
   "studio.onboarding.stepVoice": "② Record your voice",

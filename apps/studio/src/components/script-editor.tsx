@@ -187,6 +187,7 @@ export default function ScriptEditor(props: ScriptEditorProps) {
               <Button appear="ghost" onClick={requestRepolish}>{t("studio.scriptEditor.repolish")}</Button>
             </div>
           </div>
+          <div {...stylex.props(styles.emotionHint)}>{t("studio.scriptEditor.emotionHint")}</div>
           <Show when={directionOpen()}>
             <div {...stylex.props(styles.directionBox)}>
               <input
@@ -334,6 +335,12 @@ const styles = stylex.create({
   count: {
     color: colors.neutral,
     fontSize: dimensions.fontSizeSm,
+  },
+  emotionHint: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    marginBottom: dimensions.spacing3,
+    opacity: 0.8,
   },
   directionBox: {
     display: "flex",
