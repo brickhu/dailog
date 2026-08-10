@@ -25,6 +25,7 @@ function fakePolishesDeps(): AppDeps["polishesDeps"] {
   return {
     getChannelActivatedAt: async () => new Date(),
     findPolishByUserSnapshot: async () => null,
+    updateHostName: async () => {},
     createPolish: async () => ({ id: "polish-1" }),
     getPolishDetail: async () => null,
       listByUser: async () => [],
@@ -76,6 +77,7 @@ function fakeRepo(): AppDeps["repo"] {
     },
     polishes: {
       findByUserSnapshot: async () => null,
+      updateHostName: async () => {},
       create: async () => ({ id: "polish-1" }),
       getOwned: async () => null,
       getPolishDetail: async () => null,

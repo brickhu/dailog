@@ -132,6 +132,8 @@ export const polishes = pgTable(
     userId: text("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
     snapshotId: uuid("snapshot_id").notNull().references(() => snapshots.id),
     title: text("title"),
+    /** 播客中 host（用户）的自称——生成脚本前设置（AI 称呼取对话平台名） */
+    hostName: text("host_name"),
     status: text("status", { enum: ["editing", "generating", "published", "failed"] }).notNull().default("editing"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -144,6 +146,8 @@ export const transcripts = pgTable("transcripts", {
   id: uuid("id").defaultRandom().primaryKey(),
   polishId: uuid("polish_id").notNull().references(() => polishes.id, { onDelete: "cascade" }),
   segments: jsonb("segments").$type<ScriptSegment[]>().notNull(),
+  /** 主题名（多主题切分润色：一对话多脚本，各属一个主题；旧数据为空） */
+  topic: text("topic"),
   language: text("language"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

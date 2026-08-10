@@ -287,6 +287,9 @@ export const zh = {
   "studio.scriptEditor.instruction": "想怎么改？如：更简短、更口语化、换个开场…（可选）",
   "studio.scriptEditor.you": "你",
   "studio.scriptEditor.switchSpeaker": "点击切换发言者",
+  "studio.scriptEditor.hostNamePlaceholder": "你的节目称呼（如：小明）",
+  "studio.scriptEditor.hostNameHint": "生成脚本前设置你的称呼——播客中你自称这个名字；AI 将使用对话平台名（Claude / ChatGPT / 豆包…）",
+  "studio.scriptEditor.generate": "生成脚本",
   "studio.scriptEditor.emotionHint": "文本中的 [情绪] 标签（如 [happy]）是台词的一部分，合成时会被识别为语气，可直接编辑或删除",
 
   // ---- studio onboarding ----
@@ -606,6 +609,9 @@ export const en: Dictionary = {
   "studio.scriptEditor.instruction": "How to adjust? e.g. shorter, more casual, new opening…（optional）",
   "studio.scriptEditor.you": "You",
   "studio.scriptEditor.switchSpeaker": "Click to switch speaker",
+  "studio.scriptEditor.hostNamePlaceholder": "Your host name（e.g. Alex）",
+  "studio.scriptEditor.hostNameHint": "Set your host name before generating — the AI will use the platform name（Claude / ChatGPT / Doubao…）",
+  "studio.scriptEditor.generate": "Generate script",
   "studio.scriptEditor.emotionHint": "Bracketed [emotion] tags (e.g. [happy]) are part of the line and are read as tone during synthesis — edit or delete them freely",
 
   // ---- studio onboarding ----

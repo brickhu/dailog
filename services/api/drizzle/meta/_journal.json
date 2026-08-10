@@ -85,6 +85,13 @@
       "when": 1786212000000,
       "tag": "0011_email_otp_verification",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1786400000000,
+      "tag": "0012_topic_hostname",
+      "breakpoints": true
     }
   ]
 }

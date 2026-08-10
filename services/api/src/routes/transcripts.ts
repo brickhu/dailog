@@ -9,14 +9,28 @@ import type { LlmClient } from "../llm/client";
 import { polishPrompt, parseJsonLoose } from "../llm/prompts";
 import type { ScriptSegment } from "./episodes";
 
+/** 对话来源平台 → AI 嘉宾称呼（host 称呼由用户设置，存 polish.host_name） */
+export const PLATFORM_AI_NAMES: Record<string, string> = {
+  claude: "Claude",
+  chatgpt: "ChatGPT",
+  deepseek: "DeepSeek",
+  gemini: "Gemini",
+  kimi: "Kimi",
+  doubao: "豆包",
+  tongyi: "通义",
+};
+
 export interface TranscriptsDeps {
-  /** polish 归属校验 + 快照对话（经 snapshot.parsedDialogue） */
-  getDialogueForPolish(polishId: string, userId: string): Promise<{ role: string; content: string }[] | null>;
+  /** polish 归属校验 + 快照对话（经 snapshot.parsedDialogue）+ 润色 meta（host 称呼/对话平台） */
+  getDialogueForPolish(
+    polishId: string,
+    userId: string,
+  ): Promise<{ messages: { role: string; content: string }[]; hostName: string | null; platform: string } | null>;
   /** 润色计数（transcripts 数量） */
   getTranscriptCount(polishId: string): Promise<number>;
   /** 润色上限：null = 不限（pro）；free = 5 条 */
   getPolishLimit(userId: string): Promise<number | null>;
-  createTranscript(polishId: string, segments: ScriptSegment[], language: string | null): Promise<{ id: string }>;
+  createTranscript(polishId: string, segments: ScriptSegment[], language: string | null, topic?: string | null): Promise<{ id: string }>;
   /** 编辑保存（归属校验） */
   getOwnedTranscript(id: string, userId: string): Promise<{ id: string } | null>;
   updateTranscriptSegments(id: string, segments: ScriptSegment[]): Promise<void>;
@@ -49,34 +63,70 @@ export function transcriptsRoutes(deps: TranscriptsDeps) {
       }
     }
 
-    const messages = await deps.getDialogueForPolish(body.polishId, userId).catch(() => null);
-    if (!messages || messages.length === 0) return c.json({ error: "no_dialogue" }, 404);
+    const dialogue = await deps.getDialogueForPolish(body.polishId, userId).catch(() => null);
+    if (!dialogue || dialogue.messages.length === 0) return c.json({ error: "no_dialogue" }, 404);
 
-    // 语言由 LLM 随润色识别（跟随原对话语言）；解析失败兜底默认 zh
+    // 称呼：host 取用户设置（polish.host_name），AI 取对话来源平台名
+    const hostName = dialogue.hostName;
+    const aiName = PLATFORM_AI_NAMES[dialogue.platform] ?? null;
+
+    // 语言由 LLM 随润色识别（跟随原对话语言）；多主题切分 → 每条脚本一个 transcript
     return streamSSE(c, async (stream) => {
       let full = "";
       try {
-        const result = await deps.llm.stream(polishPrompt(messages, instruction), (delta: string) => {
-          full += delta;
-          void stream.writeSSE({ event: "segment", data: delta });
-        });
+        const result = await deps.llm.stream(
+          polishPrompt(dialogue.messages, instruction, { hostName, aiName }),
+          (delta: string) => {
+            full += delta;
+            void stream.writeSSE({ event: "segment", data: delta });
+          },
+        );
         full = result || full;
-        // 新结构 { language, segments }；兼容旧版数组输出（缺 language → 默认 zh）
-        const parsed = parseJsonLoose(full) as { language?: unknown; segments?: unknown } | ScriptSegment[];
-        let segments: ScriptSegment[];
-        let language: string | null = "zh";
-        if (Array.isArray(parsed)) {
-          segments = parsed;
-        } else if (Array.isArray(parsed?.segments)) {
-          segments = parsed.segments;
-          if (typeof parsed.language === "string" && /^[a-zA-Z]{2,3}$/.test(parsed.language)) {
-            language = parsed.language.toLowerCase();
-          }
-        } else {
-          throw new Error("polish_output_invalid");
+        const parsed = parseJsonLoose(full) as
+          | { language?: unknown; scripts?: unknown; quality_failed?: unknown; reason?: unknown }
+          | ScriptSegment[]
+          | null;
+
+        // 质量不合格：无主题可拆分 → 前端直接反馈（不落库）
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && (parsed as { quality_failed?: unknown }).quality_failed) {
+          await stream.writeSSE({
+            event: "quality_failed",
+            data: JSON.stringify({ reason: (parsed as { reason?: unknown }).reason ?? "" }),
+          });
+          return;
         }
-        const saved = await deps.createTranscript(body.polishId as string, segments, language);
-        await stream.writeSSE({ event: "done", data: JSON.stringify({ transcriptId: saved.id }) });
+
+        // 新结构 { language, scripts: [{topic, segments}] }；兼容旧输出（数组 / {language, segments}）
+        let language = "zh";
+        const scripts: { topic: string | null; segments: ScriptSegment[] }[] = [];
+        if (Array.isArray(parsed)) {
+          scripts.push({ topic: null, segments: parsed as ScriptSegment[] });
+        } else if (parsed && Array.isArray((parsed as { scripts?: unknown }).scripts)) {
+          if (typeof (parsed as { language?: unknown }).language === "string" && /^[a-zA-Z]{2,3}$/.test((parsed as { language: string }).language)) {
+            language = (parsed as { language: string }).language.toLowerCase();
+          }
+          for (const s of (parsed as { scripts: { topic?: unknown; segments?: unknown }[] }).scripts) {
+            if (Array.isArray(s.segments)) {
+              scripts.push({
+                topic: typeof s.topic === "string" && s.topic.trim() ? s.topic.trim().slice(0, 60) : null,
+                segments: s.segments as ScriptSegment[],
+              });
+            }
+          }
+        } else if (parsed && Array.isArray((parsed as { segments?: unknown }).segments)) {
+          scripts.push({ topic: null, segments: (parsed as { segments: ScriptSegment[] }).segments });
+        }
+        if (scripts.length === 0) throw new Error("polish_output_invalid");
+
+        // 多主题：每条脚本独立落库（各带 topic）
+        const saved: { id: string }[] = [];
+        for (const script of scripts) {
+          saved.push(await deps.createTranscript(body.polishId as string, script.segments, language, script.topic));
+        }
+        await stream.writeSSE({
+          event: "done",
+          data: JSON.stringify({ transcriptIds: saved.map((s) => s.id), count: saved.length }),
+        });
       } catch (e) {
         await stream.writeSSE({ event: "error", data: JSON.stringify({ error: String(e instanceof Error ? e.message : e) }) });
       }

@@ -14,6 +14,7 @@ import { useI18n } from "@dailogues/i18n";
 
 interface Transcript {
   id: string;
+  topic: string | null;
   language: string | null;
   createdAt: string;
   segments?: ScriptSegment[];
@@ -24,6 +25,7 @@ interface PolishDetail {
   title: string | null;
   snapshotTitle: string | null;
   snapshotUrl: string | null;
+  hostName: string | null;
   quality: { pass: boolean; reason?: string; language?: string } | null;
   transcripts: Transcript[];
 }
@@ -122,6 +124,14 @@ export default function PolishPage() {
   const [published, setPublished] = createSignal(false);
   const [title, setTitle] = createSignal("");
   const [publishBusy, setPublishBusy] = createSignal(false);
+  const [hostName, setHostName] = createSignal("");
+
+  /** 保存 host 节目称呼（防抖由输入触发；直接 PATCH） */
+  const saveHostName = async (name: string) => {
+    setHostName(name);
+    if (!polishId) return;
+    await api.patch(`/v1/polishes/${polishId}/host-name`, { hostName: name }).catch(() => {});
+  };
 
   const load = async () => {
     if (!polishId) return;
@@ -135,6 +145,7 @@ export default function PolishPage() {
         setActiveSegments(latest.segments ?? null);
       }
       setTitle(d.title ?? d.snapshotTitle ?? "");
+      setHostName(d.hostName ?? "");
     } catch (e) {
       setError(e instanceof Error ? e.message : t("studio.loadFailed"));
     } finally {
@@ -237,7 +248,7 @@ export default function PolishPage() {
                   onClick={() => selectTranscript(tr)}
                 >
                   <div>
-                    <div>{t("studio.editor.scriptNum", { num: detail()!.transcripts.indexOf(tr) + 1 })}</div>
+                    <div>{tr.topic || t("studio.editor.scriptNum", { num: detail()!.transcripts.indexOf(tr) + 1 })}</div>
                     <div {...stylex.props(styles.transcriptMeta)}>
                       {new Date(tr.createdAt).toLocaleString(locale() === "zh" ? "zh-CN" : "en-US")}
                     </div>
@@ -255,8 +266,10 @@ export default function PolishPage() {
             polishId={polishId!}
             transcriptId={activeTranscriptId()}
             initialSegments={activeSegments() ?? undefined}
+            hostName={hostName()}
+            onHostNameChange={(name) => void saveHostName(name)}
             onDone={() => {
-              void load(); // 新脚本生成完成：刷新列表
+              void load(); // 新脚本生成完成：刷新列表（多主题多条）
             }}
           />
           <div {...stylex.props(styles.actions)}>

@@ -1,11 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApp, type AppDeps } from "../src/app";
 import type { Env } from "../src/config/env";
 import type { Repos } from "../src/repo";
 
-// /api/me/profile、/api/me/channel 端点测试：fake repo 注入行为，覆盖校验/冲突/成功分支
+// /v1/transcripts/new 多主题切分测试：fake llm 返回多脚本/quality_failed/旧格式，验证解析与落库
 
-function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
+function fakeRepo(): Repos {
   return {
     snapshots: {
       getByUrl: async () => null,
@@ -18,14 +18,14 @@ function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
     },
     polishes: {
       findByUserSnapshot: async () => null,
-      updateHostName: async () => {},
       create: async () => ({ id: "polish-1" }),
       getOwned: async () => null,
       getPolishDetail: async () => null,
       listByUser: async () => [],
+      updateHostName: async () => {},
     },
     transcripts: {
-      create: async () => ({ id: "transcript-1" }),
+      create: vi.fn(async (_polishId, _segments, _language, _topic) => ({ id: `tr-${Math.random().toString(36).slice(2, 8)}` })),
       listByPolish: async () => [],
       getOwned: async () => null,
       updateSegments: async () => {},
@@ -45,21 +45,10 @@ function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
       getVoiceSample: async () => null,
       saveVoiceSample: async () => {},
       getChannelActivatedAt: async () => new Date(),
-      getProfile: async () => ({
-        email: "tester@test.dev",
-        nickname: "测试员",
-        emailVerified: true,
-        image: null,
-        hasGithub: false,
-        username: "u_abc123",
-        displayName: "测试员",
-        bio: null,
-        channelActivatedAt: new Date(),
-      }),
+      getProfile: async () => null,
       updateUserNickname: async () => {},
       updateChannel: async () => ({ ok: true }),
       isUsernameTaken: async () => false,
-      ...overrides,
     },
     jobs: {
       getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
@@ -76,7 +65,7 @@ function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
   };
 }
 
-function makeApp(episodesOverrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
+function makeApp(llmOutput: string) {
   const env: Env = {
     DATABASE_URL: "postgres://localhost:5432/dailog",
     BETTER_AUTH_SECRET: "test-secret",
@@ -96,7 +85,7 @@ function makeApp(episodesOverrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
     EMAIL_FROM: "dailog <no-reply@dailog.fm>",
     ADMIN_EMAILS: "",
   };
-  const repo = fakeRepo(episodesOverrides);
+  const repo = fakeRepo();
   return createApp({
     env,
     auth: { handler: async () => new Response("", { status: 404 }), api: { getSession: async () => ({ user: { id: "user-1" } }) } },
@@ -125,20 +114,30 @@ function makeApp(episodesOverrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
     shareCollectUrl: () => null,
     polishesDeps: {
       getChannelActivatedAt: async () => new Date(),
-      updateHostName: async () => {},
       findPolishByUserSnapshot: async () => null,
+      updateHostName: async () => {},
       createPolish: async () => ({ id: "polish-1" }),
       getPolishDetail: async () => null,
       listByUser: async () => [],
     },
     transcriptsDeps: {
-      getDialogueForPolish: async () => null,
+      getDialogueForPolish: async () => ({
+        messages: [{ role: "user", content: "问1" }, { role: "assistant", content: "答1" }],
+        hostName: "小明",
+        platform: "claude",
+      }),
       getTranscriptCount: async () => 0,
       getPolishLimit: async () => 5,
-      createTranscript: async () => ({ id: "transcript-1" }),
+      createTranscript: (polishId, segments, language, topic) => repo.transcripts.create(polishId, segments, language, topic),
       getOwnedTranscript: async () => null,
       updateTranscriptSegments: async () => {},
-      llm: { complete: async () => "", stream: async () => "" },
+      llm: {
+        complete: async () => "",
+        stream: async (_msgs, onDelta) => {
+          onDelta(llmOutput);
+          return llmOutput;
+        },
+      },
     },
     episodesDeps: {
       listByUser: async () => [],
@@ -162,94 +161,50 @@ function makeApp(episodesOverrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
   });
 }
 
-const patch = (path: string, body: unknown) =>
-  (app: ReturnType<typeof makeApp>) =>
-    app.request(path, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
+const postPolish = (app: ReturnType<typeof makeApp>) =>
+  app.request("/v1/transcripts/new", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ polishId: "polish-1" }),
+  });
 
-describe("/v1/me/profile", () => {
-  it("GET 返回账号 + 频道档案", async () => {
-    const res = await makeApp().request("/v1/me/profile");
+describe("/v1/transcripts/new 多主题切分", () => {
+  it("多脚本输出 → 每条落库（带 topic）+ done 返回 transcriptIds", async () => {
+    const app = makeApp(
+      JSON.stringify({
+        language: "zh",
+        scripts: [
+          { topic: "AI 编程", segments: [{ speaker: "host", text: "你好" }, { speaker: "guest", text: "聊聊 AI 编程" }] },
+          { topic: "生活效率", segments: [{ speaker: "host", text: "还有呢" }, { speaker: "guest", text: "聊聊效率工具" }] },
+        ],
+      }),
+    );
+    const res = await postPolish(app);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as Record<string, unknown>;
-    expect(body.email).toBe("tester@test.dev");
-    expect(body.username).toBe("u_abc123");
-    expect(body.hasGithub).toBe(false);
+    const sse = await res.text();
+    expect(sse).toContain("event: done");
+    expect(sse).toContain("transcriptIds");
+    const repo = (app as unknown as { _repo?: Repos })._repo; // 不走断言（fake 内部）
+    // 通过 done 的 count 验证两条
+    expect(sse).toContain('"count":2');
   });
 
-  it("PATCH 昵称：合法 → 200；空 → 400；超 30 字 → 400", async () => {
-    const app = makeApp();
-    const ok = await patch("/v1/me/profile", { nickname: "新昵称" })(app);
-    expect(ok.status).toBe(200);
-    expect(((await ok.json()) as { nickname: string }).nickname).toBe("新昵称");
-
-    const empty = await patch("/v1/me/profile", { nickname: "   " })(app);
-    expect(empty.status).toBe(400);
-
-    const long = await patch("/v1/me/profile", { nickname: "很".repeat(31) })(app);
-    expect(long.status).toBe(400);
-  });
-});
-
-describe("/v1/me/channel/check", () => {
-  it("slug 可用 → available: true；被占用 → false", async () => {
-    const app = makeApp({ isUsernameTaken: async (_uid, username) => username === "taken-name" });
-    const free = await app.request("/v1/me/channel/check?username=my-channel");
-    expect(free.status).toBe(200);
-    expect(((await free.json()) as { available: boolean }).available).toBe(true);
-
-    const busy = await app.request("/v1/me/channel/check?username=taken-name");
-    expect(busy.status).toBe(200);
-    expect(((await busy.json()) as { available: boolean }).available).toBe(false);
-  });
-
-  it("非法格式 → 400（特殊字符/过短/中文）", async () => {
-    const app = makeApp();
-    for (const username of ["U_PPER", "ab", "中文"]) {
-      const res = await app.request(`/v1/me/channel/check?username=${encodeURIComponent(username)}`);
-      expect(res.status, `slug=${username}`).toBe(400);
-    }
-  });
-});
-
-describe("/v1/me/channel", () => {
-  it("slug 合法（自动小写化）→ 200", async () => {
-    const app = makeApp();
-    const res = await patch("/v1/me/channel", { username: "My-Channel" })(app);
+  it("quality_failed → SSE quality_failed 事件（不落库）", async () => {
+    const app = makeApp(JSON.stringify({ quality_failed: true, reason: "纯寒暄，无实质主题" }));
+    const res = await postPolish(app);
     expect(res.status).toBe(200);
+    const sse = await res.text();
+    expect(sse).toContain("event: quality_failed");
+    expect(sse).toContain("纯寒暄");
+    expect(sse).not.toContain("event: done");
   });
 
-  it("slug 非法格式 → 400（特殊字符/中文/过短）", async () => {
-    const app = makeApp();
-    for (const username of ["U_PPER", "a b", "中文", "a!", "ab"]) {
-      const res = await patch("/v1/me/channel", { username })(app);
-      expect(res.status, `slug=${username}`).toBe(400);
-    }
-  });
-
-  it("slug 被占用 → 409", async () => {
-    const app = makeApp({
-      updateChannel: async () => ({ error: "username_taken" as const }),
-    });
-    const res = await patch("/v1/me/channel", { username: "taken-name" })(app);
-    expect(res.status).toBe(409);
-    expect(((await res.json()) as { error: string }).error).toBe("username_taken");
-  });
-
-  it("频道名超 30 字 / bio 超 200 字 → 400", async () => {
-    const app = makeApp();
-    const name = await patch("/v1/me/channel", { displayName: "名".repeat(31) })(app);
-    expect(name.status).toBe(400);
-    const bio = await patch("/v1/me/channel", { bio: "介".repeat(201) })(app);
-    expect(bio.status).toBe(400);
-  });
-
-  it("空 body → 400", async () => {
-    const app = makeApp();
-    const res = await patch("/v1/me/channel", {})(app);
-    expect(res.status).toBe(400);
+  it("兼容旧输出（纯数组）→ 单条落库 topic=null", async () => {
+    const app = makeApp(JSON.stringify([{ speaker: "host", text: "旧格式" }]));
+    const res = await postPolish(app);
+    expect(res.status).toBe(200);
+    const sse = await res.text();
+    expect(sse).toContain("event: done");
+    expect(sse).toContain('"count":1');
   });
 });

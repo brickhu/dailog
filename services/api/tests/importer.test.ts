@@ -17,6 +17,7 @@ function fakeRepo(): AppDeps["repo"] {
     },
     polishes: {
       findByUserSnapshot: async () => null,
+      updateHostName: async () => {},
       create: async () => ({ id: "polish-1" }),
       getOwned: async () => null,
       getPolishDetail: async () => null,
@@ -74,7 +75,7 @@ function fakeImportDeps(): AppDeps["importDeps"] {
   };
 }
 function fakePolishesDeps(): AppDeps["polishesDeps"] {
-  return { getChannelActivatedAt: async () => new Date(), findPolishByUserSnapshot: async () => null, createPolish: async () => ({ id: "polish-1" }), getPolishDetail: async () => null, listByUser: async () => [] };
+  return { getChannelActivatedAt: async () => new Date(), findPolishByUserSnapshot: async () => null, updateHostName: async () => {}, createPolish: async () => ({ id: "polish-1" }), getPolishDetail: async () => null, listByUser: async () => [] };
 }
 function fakeTranscriptsDeps(): AppDeps["transcriptsDeps"] {
   return { getDialogueForPolish: async () => null, getTranscriptCount: async () => 0, getPolishLimit: async () => 5, createTranscript: async () => ({ id: "transcript-1" }), getOwnedTranscript: async () => null, updateTranscriptSegments: async () => {}, llm: { complete: async () => "", stream: async () => "" } };

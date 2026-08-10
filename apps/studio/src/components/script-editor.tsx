@@ -11,6 +11,9 @@ import { useI18n } from "@dailogues/i18n";
 
 export interface ScriptEditorProps {
   polishId: string;
+  /** host（用户）节目称呼——生成脚本前设置（存 polish.host_name） */
+  hostName?: string | null;
+  onHostNameChange?: (name: string) => void;
   /** 编辑已有 transcript（null = 未生成，显示生成入口） */
   transcriptId?: string | null;
   /** 已有 transcript 的脚本（transcriptId 存在时直接进入编辑态） */
@@ -77,6 +80,10 @@ export default function ScriptEditor(props: ScriptEditorProps) {
       });
       await consumeSse(res, {
         onEvent: (ev) => {
+          if (ev.event === "quality_failed") {
+            setState({ kind: "error", message: t("studio.scriptEditor.qualityFailed") });
+            return;
+          }
           if (ev.event !== "segment") return;
           raw += ev.data;
           // 增量尝试解析：JSON 数组逐渐成形，段落实时浮现
@@ -88,11 +95,12 @@ export default function ScriptEditor(props: ScriptEditorProps) {
           }
         },
         onDone: async (data) => {
-          const { transcriptId } = JSON.parse(data) as { transcriptId?: string };
+          // 多主题切分：后端一次生成多条（各带 topic）；选第一条进入编辑，列表刷新后用户可换选
+          const { transcriptIds } = JSON.parse(data) as { transcriptIds?: string[] };
           const final = normalize(tryParseSegments(raw) ?? []);
           setState({ kind: "editing", segments: final, version: null });
           setSavedSegments(final);
-          props.onDone?.(transcriptId ?? "");
+          props.onDone?.(transcriptIds?.[0] ?? "");
         },
         onError: (data) => {
           const parsed = JSON.parse(data) as { error?: string };
@@ -157,6 +165,25 @@ export default function ScriptEditor(props: ScriptEditorProps) {
     <div>
       <Show when={cur().kind === "loading"}>
         <div {...stylex.props(styles.status)}>{t("common.loading")}</div>
+      </Show>
+
+      <Show when={cur().kind === "empty"}>
+        <div {...stylex.props(styles.directionBox)}>
+          <input
+            {...stylex.props(styles.directionInput)}
+            placeholder={t("studio.scriptEditor.hostNamePlaceholder")}
+            value={props.hostName ?? ""}
+            onInput={(e) => props.onHostNameChange?.(e.currentTarget.value)}
+          />
+          <Button
+            block
+            disabled={!props.hostName?.trim()}
+            onClick={() => startPolish(direction().trim() || null)}
+          >
+            {t("studio.scriptEditor.generate")}
+          </Button>
+          <div {...stylex.props(styles.status)}>{t("studio.scriptEditor.hostNameHint")}</div>
+        </div>
       </Show>
 
       <Show when={polishing()}>

@@ -145,6 +145,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     const polishesDeps: PolishesDeps = {
       getChannelActivatedAt: (userId) => repo.episodes.getChannelActivatedAt(userId),
       findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
+      updateHostName: (id, userId, hostName) => repo.polishes.updateHostName(id, userId, hostName),
       createPolish: (row) => repo.polishes.create(row),
       getPolishDetail: (id, userId) => repo.polishes.getPolishDetail(id, userId),
       listByUser: (userId) => repo.polishes.listByUser(userId),
@@ -156,7 +157,11 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
         if (!polish) return null;
         const snapshot = await repo.snapshots.getById(polish.snapshotId);
         if (!snapshot?.parsedDialogue) return null;
-        return (snapshot.parsedDialogue as { role: string; content: string }[]).map((m) => ({ role: m.role, content: m.content }));
+        return {
+          messages: (snapshot.parsedDialogue as { role: string; content: string }[]).map((m) => ({ role: m.role, content: m.content })),
+          hostName: polish.hostName ?? null,
+          platform: snapshot.platform,
+        };
       },
       getTranscriptCount: async (polishId) => (await repo.transcripts.listByPolish(polishId)).length,
       getPolishLimit: async () => 5,

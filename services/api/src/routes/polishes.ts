@@ -19,6 +19,7 @@ export interface PolishesDeps {
     createdAt: Date;
   }[]>;
   /** 编辑页详情：polish + 快照 meta（标题/质量）+ transcripts 列表 */
+  updateHostName(id: string, userId: string, hostName: string): Promise<void>;
   getPolishDetail(id: string, userId: string): Promise<{
     id: string;
     title: string | null;
@@ -65,6 +66,16 @@ export function polishesRoutes(deps: PolishesDeps) {
     const detail = await deps.getPolishDetail(c.req.param("id"), userId);
     if (!detail) return c.json({ error: "not_found" }, 404);
     return c.json(detail);
+  });
+
+  /** 更新 host 节目称呼（生成脚本前设置；≤20 字） */
+  app.patch("/v1/polishes/:id/host-name", async (c) => {
+    const userId = c.get("userId") as string;
+    const body = (await c.req.json().catch(() => null)) as { hostName?: unknown } | null;
+    const hostName = typeof body?.hostName === "string" ? body.hostName.trim() : "";
+    if (!hostName || hostName.length > 20) return c.json({ error: "invalid_host_name" }, 400);
+    await deps.updateHostName(c.req.param("id"), userId, hostName);
+    return c.json({ ok: true });
   });
 
   return app;

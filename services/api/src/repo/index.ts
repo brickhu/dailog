@@ -36,7 +36,7 @@ export interface SnapshotRow {
 export interface SnapshotsRepo {
   /** 快照查询（URL 唯一）——命中即复用，不重复采集 */
   /** 按 id 查（polish → snapshot 对话用） */
-  getById(id: string): Promise<{ parsedDialogue: unknown; sourceTitle: string | null } | null>;
+  getById(id: string): Promise<{ parsedDialogue: unknown; sourceTitle: string | null; platform: string } | null>;
   getByUrl(url: string): Promise<{
     id: string;
     platform: string;
@@ -67,9 +67,11 @@ export interface PolishRow {
 export interface PolishesRepo {
   /** 用户 × 快照唯一：已存在 → 跳转编辑页（继续创作） */
   findByUserSnapshot(userId: string, snapshotId: string): Promise<{ id: string; title: string | null; status: string } | null>;
+  /** 更新 host 节目称呼（生成脚本前设置） */
+  updateHostName(id: string, userId: string, hostName: string): Promise<void>;
   create(row: PolishRow): Promise<{ id: string }>;
   /** 归属校验（防 IDOR）+ 快照关联 */
-  getOwned(id: string, userId: string): Promise<{ id: string; snapshotId: string; title: string | null; status: string } | null>;
+  getOwned(id: string, userId: string): Promise<{ id: string; snapshotId: string; title: string | null; hostName: string | null; status: string } | null>;
   /** 编辑页详情：polish + 快照 meta + transcripts */
   getPolishDetail(id: string, userId: string): Promise<{
     id: string;
@@ -77,7 +79,8 @@ export interface PolishesRepo {
     snapshotTitle: string | null;
     snapshotUrl: string | null;
     quality: schema.QualityResult | null;
-    transcripts: { id: string; segments: schema.ScriptSegment[]; language: string | null; createdAt: Date }[];
+    hostName: string | null;
+    transcripts: { id: string; segments: schema.ScriptSegment[]; topic: string | null; language: string | null; createdAt: Date }[];
   } | null>;
   /** 工作台列表：polish + 快照标题 + 节目状态 */
   listByUser(userId: string): Promise<{
@@ -92,10 +95,10 @@ export interface PolishesRepo {
 }
 
 export interface TranscriptsRepo {
-  create(polishId: string, segments: ScriptSegment[], language: string | null): Promise<{ id: string }>;
+  create(polishId: string, segments: ScriptSegment[], language: string | null, topic?: string | null): Promise<{ id: string }>;
   listByPolish(polishId: string): Promise<{ id: string; segments: ScriptSegment[]; language: string | null; createdAt: Date }[]>;
   /** 归属校验（join polish.user_id） */
-  getOwned(id: string, userId: string): Promise<{ id: string; polishId: string; segments: ScriptSegment[]; language: string | null } | null>;
+  getOwned(id: string, userId: string): Promise<{ id: string; polishId: string; segments: ScriptSegment[]; topic: string | null; language: string | null } | null>;
   updateSegments(id: string, segments: ScriptSegment[]): Promise<void>;
 }
 
@@ -185,7 +188,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
     snapshots: {
       async getById(id) {
         const rows = await db
-          .select({ parsedDialogue: schema.snapshots.parsedDialogue, sourceTitle: schema.snapshots.sourceTitle })
+          .select({ parsedDialogue: schema.snapshots.parsedDialogue, sourceTitle: schema.snapshots.sourceTitle, platform: schema.snapshots.platform })
           .from(schema.snapshots)
           .where(eq(schema.snapshots.id, id))
           .limit(1);
@@ -264,6 +267,9 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .limit(1);
         return rows[0] ?? null;
       },
+      async updateHostName(id, userId, hostName) {
+        await db.update(schema.polishes).set({ hostName }).where(and(eq(schema.polishes.id, id), eq(schema.polishes.userId, userId)));
+      },
       async create(row) {
         try {
           const rows = await db.insert(schema.polishes).values(row).returning({ id: schema.polishes.id });
@@ -279,6 +285,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             id: schema.polishes.id,
             snapshotId: schema.polishes.snapshotId,
             title: schema.polishes.title,
+            hostName: schema.polishes.hostName,
             status: schema.polishes.status,
           })
           .from(schema.polishes)
@@ -291,6 +298,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .select({
             id: schema.polishes.id,
             title: schema.polishes.title,
+            hostName: schema.polishes.hostName,
             snapshotTitle: schema.snapshots.sourceTitle,
             snapshotUrl: schema.snapshots.url,
             quality: schema.snapshots.quality,
@@ -302,13 +310,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         const row = rows[0];
         if (!row) return null;
         const transcripts = await db
-          .select({ id: schema.transcripts.id, segments: schema.transcripts.segments, language: schema.transcripts.language, createdAt: schema.transcripts.createdAt })
+          .select({ id: schema.transcripts.id, segments: schema.transcripts.segments, topic: schema.transcripts.topic, language: schema.transcripts.language, createdAt: schema.transcripts.createdAt })
           .from(schema.transcripts)
           .where(eq(schema.transcripts.polishId, id))
           .orderBy(desc(schema.transcripts.createdAt));
         return {
           id: row.id,
           title: row.title,
+          hostName: row.hostName ?? null,
           snapshotTitle: row.snapshotTitle,
           snapshotUrl: row.snapshotUrl,
           quality: row.quality ?? null,
@@ -356,14 +365,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
     },
 
     transcripts: {
-      async create(polishId, segments, language) {
-        const rows = await db.insert(schema.transcripts).values({ polishId, segments, language })
+      async create(polishId, segments, language, topic = null) {
+        const rows = await db.insert(schema.transcripts).values({ polishId, segments, language, topic })
           .returning({ id: schema.transcripts.id });
         return { id: rows[0].id };
       },
       async listByPolish(polishId) {
         return db
-          .select({ id: schema.transcripts.id, segments: schema.transcripts.segments, language: schema.transcripts.language, createdAt: schema.transcripts.createdAt })
+          .select({ id: schema.transcripts.id, segments: schema.transcripts.segments, topic: schema.transcripts.topic, language: schema.transcripts.language, createdAt: schema.transcripts.createdAt })
           .from(schema.transcripts)
           .where(eq(schema.transcripts.polishId, polishId))
           .orderBy(desc(schema.transcripts.createdAt));
@@ -374,6 +383,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             id: schema.transcripts.id,
             polishId: schema.transcripts.polishId,
             segments: schema.transcripts.segments,
+            topic: schema.transcripts.topic,
             language: schema.transcripts.language,
           })
           .from(schema.transcripts)
