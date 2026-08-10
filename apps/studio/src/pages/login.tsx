@@ -22,11 +22,11 @@ export default function LoginPage() {
   return (
     <LoginForm
       config={{
-        loginOrOtpEndpoint: `${env.apiBaseUrl}/api/auth/login-or-otp`,
-        otpCompleteEndpoint: `${env.apiBaseUrl}/api/auth/otp-complete`,
+        loginOrOtpEndpoint: `/v1/auth/login-or-otp`,
+        otpCompleteEndpoint: `/v1/auth/otp-complete`,
         forgotPasswordUrl: env.siteBaseUrl ? `${env.siteBaseUrl}/forgot-password` : undefined,
         github: env.siteBaseUrl
-          ? { signInSocialEndpoint: `${env.apiBaseUrl}/api/auth/sign-in/social`, callbackURL: `${env.siteBaseUrl}/account` }
+          ? { signInSocialEndpoint: `/v1/auth/sign-in/social`, callbackURL: `${env.siteBaseUrl}/account` }
           : undefined,
       }}
       onSuccess={onSuccess}

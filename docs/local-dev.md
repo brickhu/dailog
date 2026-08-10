@@ -24,6 +24,10 @@
 
 ## 快速开始
 
+> **本地开发唯一路径 = orb**。本机直跑（pnpm dev 单起进程）已禁用：
+> studio dev 缺 `VITE_PROXY_TARGET/VITE_PROXY_ORIGIN` 会直接报错提示；
+> site 非 orb 启动 dev 会打印警告。日常请用 orb。
+
 ```bash
 pnpm dev:orb              # 构建 + 启动全家桶（首次构建几分钟；含代理例外自动配置）
 docker compose logs -f   # 看日志

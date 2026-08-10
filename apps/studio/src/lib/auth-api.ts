@@ -131,7 +131,12 @@ export const authApi = {
   async signOut(token: string | null): Promise<void> {
     await request("/v1/auth/sign-out", {
       method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      // 空 POST 必须带 Content-Type（Hono 对"有 Content-Length 无 Content-Type"的 POST 返回 415）
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: "{}",
     }).catch(() => {});
     clearToken();
   },

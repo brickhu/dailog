@@ -1,6 +1,5 @@
 import { createContext, createSignal, onMount, useContext, type JSX } from "solid-js";
 import { authApi, loadToken, clearToken, type AuthUser } from "./auth-api";
-import { env } from "./env";
 import { api, setTokenGetter } from "./client";
 
 // 认证上下文（M5：better-auth bearer 模式——token 内存 signal + localStorage 持久化）
@@ -60,7 +59,7 @@ export function AuthProvider(props: { children: JSX.Element }) {
     // 注意：better-auth 未登录时 get-session 返回 JSON null（而非 {user:null}），
     // 必须整体走可选链——历史上 sessionUser.user 在 null 上抛 TypeError，
     // onMount 中断导致 auth.loading 永久 true（守卫卡"加载中"）。
-    const loggedUser = await fetch(`${env.apiBaseUrl}/api/auth/get-session`, {
+    const loggedUser = await fetch(`/v1/auth/get-session`, {
       credentials: "include",
       // 恢复会话不无限等待：10s 超时后按未登录处理（否则 fetch 挂起 → 永久"加载中"）
       signal: AbortSignal.timeout(10_000),

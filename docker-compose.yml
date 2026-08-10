@@ -83,6 +83,8 @@ services:
     environment:
       # 浏览器经 app.dailog.orb.local → vite proxy → api:8787（容器内转发）
       VITE_PROXY_TARGET: http://api:8787
+      # vite proxy 补 Origin 头（better-auth CSRF 走白名单校验，见 vite.config.ts）
+      VITE_PROXY_ORIGIN: http://app.dailog.orb.local
       VITE_SITE_BASE_URL: http://dailog.orb.local
     volumes:
       - .:/app

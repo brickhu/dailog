@@ -20,7 +20,7 @@ describe("createApiClient", () => {
 
   it("GET sends bearer token and parses json", async () => {
     const spy = mockFetchOnce(async (url, init) => {
-      expect(String(url)).toBe("http://localhost:8787/api/me");
+      expect(String(url)).toBe("http://localhost:8787/v1/me");
       expect(new Headers(init?.headers).get("Authorization")).toBe(`Bearer ${TOKEN}`);
       return jsonResponse(200, { userId: "u-1" });
     });
