@@ -73,6 +73,7 @@ function fakeRepo(): AppDeps["repo"] {
       getChannelActivatedAt: async () => null,
       getProfile: async () => null,
       updateUserNickname: async () => {},
+      updatePersona: async () => {},
       updateChannel: async () => ({ ok: true } as const),
       isUsernameTaken: async () => false,
     },

@@ -8,6 +8,7 @@ import { ApiError } from "../lib/api";
 import ScriptEditor from "../components/script-editor";
 import GenerateProgress from "../components/generate-progress";
 import type { ScriptSegment } from "../lib/scriptOps";
+import type { HostPersona } from "../lib/persona";
 import { useI18n } from "@dailogues/i18n";
 
 // /polish/:id 编辑页：创作容器（polish）→ 润色生成 transcripts（可多条）→ 选定一条生成节目 → 发布。
@@ -131,23 +132,25 @@ export default function PolishPage() {
   const [published, setPublished] = createSignal(false);
   const [title, setTitle] = createSignal("");
   const [publishBusy, setPublishBusy] = createSignal(false);
-  const [hostName, setHostName] = createSignal("");
+  const [persona, setPersona] = createSignal<HostPersona | null>(null);
   /** 生成节目时的提示（如缺该语种采样 → 已用兜底音色） */
   const [warning, setWarning] = createSignal<string | null>(null);
   // /polishes 页点击脚本行进入：?script=<id> 直达该脚本
   const [searchParams, setSearchParams] = useSearchParams();
 
-  /** 更新 host 节目称呼（本地状态；生成脚本时随 transcripts/new 请求提交固化） */
-  const saveHostName = (name: string) => {
-    setHostName(name);
-  };
+
 
   const load = async (wantedScriptId?: string | null) => {
     if (!polishId) return;
     setLoading(true);
     try {
-      const d = await api.get<PolishDetail>(`/v1/polishes/${polishId}`);
+      // 默认人设（设置页维护；本次修改仅本地，不写回）
+      const [d, prof] = await Promise.all([
+        api.get<PolishDetail>(`/v1/polishes/${polishId}`),
+        api.get<{ persona: HostPersona | null }>("/v1/me/profile").catch(() => ({ persona: null })),
+      ]);
       setDetail(d);
+      setPersona(prof.persona);
       if (d.transcripts.length > 0) {
         // 深链指定脚本优先；否则默认最新一条
         const target = wantedScriptId ? d.transcripts.find((x) => x.id === wantedScriptId) : undefined;
@@ -316,8 +319,8 @@ export default function PolishPage() {
             title={activeTranscript()?.title ?? null}
             creationNote={activeTranscript()?.creationNote ?? null}
             topic={activeTranscript()?.topic ?? null}
-            hostName={hostName()}
-            onHostNameChange={(name) => void saveHostName(name)}
+            persona={persona()}
+            onPersonaChange={(p) => setPersona(p)}
             onDone={() => {
               void load(); // 新脚本生成完成：刷新列表（多主题多条）
             }}

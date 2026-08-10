@@ -60,6 +60,7 @@ function fakeRepo(): Repos {
       getChannelActivatedAt: async () => new Date(),
       getProfile: async () => null,
       updateUserNickname: async () => {},
+      updatePersona: async () => {},
       updateChannel: async () => ({ ok: true }),
       isUsernameTaken: async () => false,
     },

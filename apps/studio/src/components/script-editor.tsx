@@ -8,12 +8,14 @@ import { consumeSse } from "../lib/sse";
 import { tryParseSegments } from "../lib/parseJsonLoose";
 import { applyScriptOp, totalCharCount, type ScriptSegment } from "../lib/scriptOps";
 import { useI18n } from "@dailogues/i18n";
+import { EMPTY_PERSONA, textToHobbies, hobbiesToText, type HostPersona } from "../lib/persona";
 
 export interface ScriptEditorProps {
   polishId: string;
-  /** host（用户）节目称呼——生成脚本时随请求提交，固化到 transcript */
-  hostName?: string | null;
-  onHostNameChange?: (name: string) => void;
+  /** host 结构化人设（称呼/职业/年龄/爱好…）——生成脚本时随请求提交（仅本次生效）；
+   *  修改只改本地状态，不写回 profile 默认档案 */
+  persona?: HostPersona | null;
+  onPersonaChange?: (persona: HostPersona) => void;
   /** 编辑已有 transcript（null = 未生成，显示生成入口） */
   transcriptId?: string | null;
   /** 已有 transcript 的脚本（transcriptId 存在时直接进入编辑态） */
@@ -40,6 +42,8 @@ export default function ScriptEditor(props: ScriptEditorProps) {
   const [saving, setSaving] = createSignal(false);
   // 未保存改动快照（覆盖确认用）：加载/保存成功/润色完成时更新
   const [savedSegments, setSavedSegments] = createSignal<ScriptSegment[]>([]);
+  // 人设"更多资料"展开态
+  const [moreOpen, setMoreOpen] = createSignal(false);
   // 重新润色方向输入（展开态 + 值）
   const [directionOpen, setDirectionOpen] = createSignal(false);
   const [direction, setDirection] = createSignal("");
@@ -47,6 +51,16 @@ export default function ScriptEditor(props: ScriptEditorProps) {
   const [scriptMeta, setScriptMeta] = createSignal<{
     id: string; title: string | null; creationNote: string | null; topic: string | null;
   } | null>(null);
+
+  // 本次会话的人设（初始值来自 profile 默认档案；修改仅本地，不写回）
+  const [persona, setPersona] = createSignal<HostPersona>(props.persona ?? EMPTY_PERSONA);
+  const setField = (key: keyof HostPersona, value: string | string[] | null) => {
+    setPersona((p) => {
+      const next = { ...p, [key]: value };
+      props.onPersonaChange?.(next);
+      return next;
+    });
+  };
 
   const update = (op: Parameters<typeof applyScriptOp>[1]) => {
     setState((s) => {
@@ -84,7 +98,7 @@ export default function ScriptEditor(props: ScriptEditorProps) {
         method: "POST",
         body: JSON.stringify({
           polishId: props.polishId,
-          ...(props.hostName?.trim() ? { hostName: props.hostName.trim() } : {}),
+          persona,
           ...(instruction ? { instruction } : {}),
         }),
         // SSE 长连接（润色流式输出可能 1-3 分钟）：跳过默认 30s 超时
@@ -197,16 +211,58 @@ export default function ScriptEditor(props: ScriptEditorProps) {
       </Show>
 
       <Show when={cur().kind === "empty"}>
-        <div {...stylex.props(styles.directionBox)}>
-          <input
-            {...stylex.props(styles.directionInput)}
-            placeholder={t("studio.scriptEditor.hostNamePlaceholder")}
-            value={props.hostName ?? ""}
-            onInput={(e) => props.onHostNameChange?.(e.currentTarget.value)}
-          />
+        <div {...stylex.props(styles.personaCard)}>
+          <div {...stylex.props(styles.personaRow)}>
+            <input
+              {...stylex.props(styles.directionInput)}
+              placeholder={t("persona.callName")}
+              value={persona().callName ?? ""}
+              onInput={(e) => setField("callName", e.currentTarget.value)}
+            />
+            <Button
+              appear="ghost"
+              onClick={() => setMoreOpen(!moreOpen())}
+            >
+              {moreOpen() ? t("common.cancel") : t("persona.more")}
+            </Button>
+          </div>
+          <Show when={moreOpen()}>
+            <div {...stylex.props(styles.personaGrid)}>
+              <input
+                {...stylex.props(styles.directionInput)}
+                placeholder={t("persona.profession")}
+                value={persona().profession ?? ""}
+                onInput={(e) => setField("profession", e.currentTarget.value)}
+              />
+              <input
+                {...stylex.props(styles.directionInput)}
+                placeholder={t("persona.gender")}
+                value={persona().gender ?? ""}
+                onInput={(e) => setField("gender", e.currentTarget.value)}
+              />
+              <input
+                {...stylex.props(styles.directionInput)}
+                placeholder={t("persona.age")}
+                value={persona().age ?? ""}
+                onInput={(e) => setField("age", e.currentTarget.value)}
+              />
+              <input
+                {...stylex.props(styles.directionInput)}
+                placeholder={t("persona.hobbies")}
+                value={hobbiesToText(persona().hobbies)}
+                onInput={(e) => setField("hobbies", textToHobbies(e.currentTarget.value))}
+              />
+              <textarea
+                {...stylex.props(styles.directionInput, styles.personaExtra)}
+                placeholder={t("persona.extra")}
+                value={persona().extra ?? ""}
+                onInput={(e) => setField("extra", e.currentTarget.value)}
+              />
+            </div>
+          </Show>
           <Button
             block
-            disabled={!props.hostName?.trim()}
+            disabled={!persona().callName?.trim()}
             onClick={() => startPolish(direction().trim() || null)}
           >
             {t("studio.scriptEditor.generate")}
@@ -435,6 +491,31 @@ const styles = stylex.create({
     borderRadius: dimensions.radiusMd,
     background: colors.background,
     border: `1px solid ${colors.ink}`,
+  },
+  personaCard: {
+    display: "flex",
+    flexDirection: "column",
+    gap: dimensions.spacing2,
+    padding: dimensions.spacing3,
+    borderRadius: dimensions.radiusMd,
+    background: colors.background,
+    border: `1px solid ${colors.ink}`,
+    marginBottom: dimensions.spacing3,
+  },
+  personaRow: {
+    display: "flex",
+    gap: dimensions.spacing2,
+    alignItems: "center",
+  },
+  personaGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: dimensions.spacing2,
+  },
+  personaExtra: {
+    gridColumn: "1 / -1",
+    minHeight: "56px",
+    fontFamily: "inherit",
   },
   directionInput: {
     flex: 1,

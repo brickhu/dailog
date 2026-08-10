@@ -19,6 +19,22 @@ describe("polishPrompt 嘉宾信息注入", () => {
     expect(sys.content).toContain("背景：" + "很长的背景介绍".repeat(25));
   });
 
+  it("hostPersona：注入主持人信息段（称呼/职业等事实层）", () => {
+    const [sys] = polishPrompt(msgs, null, {
+      hostName: "小明",
+      aiName: "Claude",
+      hostPersona: "称呼：小明；职业：程序员；年龄：28；爱好：跑步、播客",
+    });
+    expect(sys.content).toContain("5.6 主持人信息");
+    expect(sys.content).toContain("称呼：小明；职业：程序员");
+    expect(sys.content).toContain("不得编造档案外的细节");
+  });
+
+  it("无 hostPersona：不注入主持人信息段", () => {
+    const [sys] = polishPrompt(msgs, null, { hostName: "小明" });
+    expect(sys.content).not.toContain("5.6 主持人信息");
+  });
+
   it("无 intro（未映射平台）：不注入嘉宾信息段（降级）", () => {
     const [sys] = polishPrompt(msgs, null, { hostName: "小明", aiName: "AI 嘉宾" });
     expect(sys.content).not.toContain("5.5 嘉宾信息");

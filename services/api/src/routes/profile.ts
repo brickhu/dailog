@@ -34,6 +34,36 @@ export function profileRoutes(deps: ProfileDeps) {
     return c.json({ ok: true, nickname });
   });
 
+  /** 主持人默认人设（设置页维护；生成脚本前的初始值，改后仅本次生效） */
+  app.patch("/v1/me/persona", async (c) => {
+    const userId = c.get("userId") as string;
+    const body = (await c.req.json().catch(() => null)) as {
+      persona?: unknown | null;
+    } | null;
+    if (!body || !("persona" in body)) return c.json({ error: "invalid_input" }, 400);
+    const raw = body.persona;
+    if (raw === null) {
+      await deps.repo.episodes.updatePersona(userId, null);
+      return c.json({ ok: true });
+    }
+    if (typeof raw !== "object" || Array.isArray(raw)) return c.json({ error: "invalid_persona" }, 400);
+    const o = raw as Record<string, unknown>;
+    const str = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
+    const hobbies = Array.isArray(o.hobbies)
+      ? o.hobbies.map((h) => String(h).trim().slice(0, 20)).filter(Boolean).slice(0, 5)
+      : null;
+    const persona = {
+      callName: str(o.callName, 20),
+      gender: str(o.gender, 10),
+      profession: str(o.profession, 30),
+      age: str(o.age, 10),
+      hobbies: hobbies && hobbies.length > 0 ? hobbies : null,
+      extra: str(o.extra, 100),
+    };
+    await deps.repo.episodes.updatePersona(userId, persona);
+    return c.json({ ok: true, persona });
+  });
+
   /** slug 占用检测（输入时实时校验；排除自己；保存时后端仍兜底 409） */
   app.get("/v1/me/channel/check", async (c) => {
     const userId = c.get("userId") as string;

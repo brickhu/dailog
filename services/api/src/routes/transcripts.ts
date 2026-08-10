@@ -39,7 +39,10 @@ export function transcriptsRoutes(deps: TranscriptsDeps) {
 
   app.post("/v1/transcripts/new", async (c) => {
     const userId = c.get("userId") as string;
-    const body = (await c.req.json().catch(() => null)) as { polishId?: unknown; instruction?: unknown; hostName?: unknown } | null;
+    const body = (await c.req.json().catch(() => null)) as {
+      polishId?: unknown; instruction?: unknown; hostName?: unknown;
+      persona?: { callName?: unknown; gender?: unknown; profession?: unknown; age?: unknown; hobbies?: unknown; extra?: unknown } | null;
+    } | null;
     if (!body || typeof body.polishId !== "string") {
       return c.json({ error: "invalid_polish" }, 400);
     }
@@ -63,8 +66,23 @@ export function transcriptsRoutes(deps: TranscriptsDeps) {
     const dialogue = await deps.getDialogueForPolish(body.polishId, userId).catch(() => null);
     if (!dialogue || dialogue.messages.length === 0) return c.json({ error: "no_dialogue" }, 404);
 
-    // 称呼：host 由前端生成时输入（s3）；AI 从 guests 表按平台取（id 引用 + name 快照）
-    const hostName = typeof body.hostName === "string" && body.hostName.trim() ? body.hostName.trim().slice(0, 20) : null;
+    // 称呼：persona.callName 优先（前端人设卡）；旧 hostName 字段兜底。AI 从 guests 表按平台取（id 引用 + name 快照）
+    const p = body.persona;
+    const callName = p && typeof p.callName === "string" && p.callName.trim() ? p.callName.trim().slice(0, 20) : null;
+    const hostName = callName ?? (typeof body.hostName === "string" && body.hostName.trim() ? body.hostName.trim().slice(0, 20) : null);
+    // 人设拼成事实文本注入提示词（仅本次生效；未提供字段不注入）
+    const personaText = p
+      ? [
+          callName ? `称呼：${callName}` : null,
+          typeof p.gender === "string" && p.gender.trim() ? `性别：${p.gender.trim().slice(0, 10)}` : null,
+          typeof p.profession === "string" && p.profession.trim() ? `职业：${p.profession.trim().slice(0, 30)}` : null,
+          typeof p.age === "string" && p.age.trim() ? `年龄：${p.age.trim().slice(0, 10)}` : null,
+          Array.isArray(p.hobbies) && p.hobbies.length > 0
+            ? `爱好：${p.hobbies.map((h) => String(h).trim().slice(0, 20)).filter(Boolean).slice(0, 5).join("、")}`
+            : null,
+          typeof p.extra === "string" && p.extra.trim() ? `补充：${p.extra.trim().slice(0, 100)}` : null,
+        ].filter(Boolean).join("；")
+      : "";
     const aiGuest = deps.guestsByPlatform?.[dialogue.platform];
 
     // 语言由 LLM 随润色识别（跟随原对话语言）；多主题切分 → 每条脚本一个 transcript
@@ -72,7 +90,7 @@ export function transcriptsRoutes(deps: TranscriptsDeps) {
       let full = "";
       try {
         const result = await deps.llm.stream(
-          polishPrompt(dialogue.messages, instruction, { hostName, aiName: aiGuest?.name ?? null, aiIntro: aiGuest?.intro ?? null }),
+          polishPrompt(dialogue.messages, instruction, { hostName, aiName: aiGuest?.name ?? null, aiIntro: aiGuest?.intro ?? null, hostPersona: personaText || null }),
           (delta: string) => {
             full += delta;
             void stream.writeSSE({ event: "segment", data: delta });

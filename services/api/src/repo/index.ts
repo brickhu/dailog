@@ -231,8 +231,12 @@ export interface EpisodesRepo {
     displayName: string | null;
     bio: string | null;
     channelActivatedAt: Date | null;
+    /** 主持人默认人设（生成脚本前展示/修改的初始值） */
+    persona: schema.HostPersona | null;
   } | null>;
   updateUserNickname(userId: string, nickname: string): Promise<void>;
+  /** 保存默认人设（覆盖整体；null = 清除） */
+  updatePersona(userId: string, persona: schema.HostPersona | null): Promise<void>;
   /** 频道设置（slug/频道名/简介）；返回冲突：username 被占用 */
   updateChannel(userId: string, row: { username?: string; displayName?: string; bio?: string | null }): Promise<{ ok: true } | { error: "username_taken" }>;
   /** slug 占用检测（排除自己；PATCH /api/me/channel 内部同样复用） */
@@ -927,7 +931,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             .where(eq(schema.authUsers.id, userId))
             .limit(1),
           db
-            .select({ username: schema.profiles.username, displayName: schema.profiles.displayName, bio: schema.profiles.bio, channelActivatedAt: schema.profiles.channelActivatedAt })
+            .select({ username: schema.profiles.username, displayName: schema.profiles.displayName, bio: schema.profiles.bio, channelActivatedAt: schema.profiles.channelActivatedAt, persona: schema.profiles.persona })
             .from(schema.profiles)
             .where(eq(schema.profiles.id, userId))
             .limit(1),
@@ -950,7 +954,11 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           displayName: profile.displayName,
           bio: profile.bio,
           channelActivatedAt: profile.channelActivatedAt,
+          persona: profile.persona ?? null,
         };
+      },
+      async updatePersona(userId, persona) {
+        await db.update(schema.profiles).set({ persona }).where(eq(schema.profiles.id, userId));
       },
       async updateUserNickname(userId, nickname) {
         await db.update(schema.authUsers).set({ name: nickname, updatedAt: new Date() }).where(eq(schema.authUsers.id, userId));

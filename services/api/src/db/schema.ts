@@ -3,6 +3,19 @@ import {
 } from "drizzle-orm/pg-core";
 
 export interface ScriptSegment { speaker: "host" | "guest"; text: string; }
+
+/** 主持人结构化人设（profiles.persona；生成脚本前展示/修改，注入润色提示词的事实层） */
+export interface HostPersona {
+  /** 节目中的称呼（优先级高于 transcripts/new 的 hostName 字段） */
+  callName?: string | null;
+  gender?: string | null;
+  profession?: string | null;
+  age?: string | null;
+  /** 爱好（多项） */
+  hobbies?: string[] | null;
+  /** 其他自由描述（兜底） */
+  extra?: string | null;
+}
 export interface QualityResult { pass: boolean; reason?: string; language?: string; }
 
 // ---------------------------------------------------------------------------
@@ -71,6 +84,8 @@ export const profiles = pgTable("profiles", {
   creditBalance: integer("credit_balance").notNull().default(0),
   /** 频道开通时间（授权码激活；null = 未开通，不能生成/发布） */
   channelActivatedAt: timestamp("channel_activated_at", { withTimezone: true }),
+  /** 主持人默认人设（生成脚本前展示可改，仅本次生效；null = 未设置） */
+  persona: jsonb("persona").$type<HostPersona>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

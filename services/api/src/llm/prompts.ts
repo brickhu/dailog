@@ -26,6 +26,8 @@ export interface PolishCallMeta {
   aiName?: string | null;
   /** AI 平台背景简介（guests 表 intro，如"Anthropic 的 AI 助手"）；缺省不注入 */
   aiIntro?: string | null;
+  /** 主持人结构化人设（称呼/性别/职业/年龄/爱好/补充）——事实层注入，缺省不注入 */
+  hostPersona?: string | null;
 }
 
 export function polishPrompt(
@@ -38,6 +40,13 @@ export function polishPrompt(
     : "";
   const hostCall = meta?.hostName?.trim() || "主持人";
   const aiCall = meta?.aiName?.trim() || "AI 嘉宾";
+  // 主持人信息注入（事实层）：结构化人设（称呼/性别/职业/年龄/爱好/补充）；风格由对话内容提炼
+  const hostBlock = meta?.hostPersona?.trim()
+    ? `5.6 主持人信息（用户人设档案）：
+   ${meta.hostPersona.trim().slice(0, 300)}
+   开场时主持人的自我介绍自然融入档案信息（称呼/职业/爱好等，如"我是${hostCall}，从事…工作"）；
+   人设仅作事实背景——只使用档案中已提供的内容，说话风格仍从原始对话中用户的说话方式提炼，不得编造档案外的细节。`
+    : "";
   // 嘉宾信息注入（事实层）：背景简介（guests 表 intro，截断防超长）；风格由对话内容提炼，不硬编码人设
   const guestBlock = meta?.aiIntro?.trim()
     ? `5.5 嘉宾信息（对话中的 AI 平台）：
@@ -60,6 +69,7 @@ export function polishPrompt(
    - 穿插：自然融入"对""当然""嗯""确实"等反馈接话，像真实对谈一样有来有回（可嵌入自己话里，也可作对方长段后的简短回应）
    - 比喻：复杂概念用听众熟悉的生活化比喻解释，把抽象变具体
 5. 开场结构（像真实访谈节目）：主持人先向听众打招呼，再介绍自己（自称「${hostCall}」，如"大家好，欢迎收听…，我是${hostCall}"），接着介绍今天的嘉宾（自称「${aiCall}」，身份与话题），最后嘉宾打招呼回应；开场约 2-4 段，用 [happy]/[excited] 等积极情绪开场，切忌直接进入正题
+${hostBlock}
 ${guestBlock}
 6. 多主题切分：长对话可能包含多个独立主题——识别并切分为多个脚本（每个主题一个脚本，各自独立成期）
 7. 每个脚本附带：title（简洁有吸引力的脚本标题）、creationNote（创作说明——给创作者看：这段脚本讲什么、为什么值得做成一期）

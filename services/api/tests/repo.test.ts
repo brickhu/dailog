@@ -242,6 +242,19 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
     });
   });
 
+  describe("profile persona", () => {
+    it("updatePersona 保存/读取（JSONB 往返；null 清除）", async () => {
+      const persona = { callName: "小明", gender: "男", profession: "程序员", age: "28", hobbies: ["跑步", "播客"], extra: "喜欢深夜思考" };
+      await repo.episodes.updatePersona(REPO_USER, persona);
+      const p1 = await repo.episodes.getProfile(REPO_USER);
+      expect(p1?.persona).toEqual(persona);
+      // null 清除
+      await repo.episodes.updatePersona(REPO_USER, null);
+      const p2 = await repo.episodes.getProfile(REPO_USER);
+      expect(p2?.persona).toBeNull();
+    });
+  });
+
   describe("guest voice samples repo", () => {
     // 共享 dev DB：测试数据跑完即清，避免污染管线（假 referenceId/缺失音频会打到生产生成）
     afterEach(async () => {
