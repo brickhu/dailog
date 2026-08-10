@@ -16,6 +16,7 @@ function fakeDeps(overrides: Partial<EpisodesDeps> = {}): EpisodesDeps {
       id === "t-1" && userId === "user-1"
         ? { id: "t-1", polishId: "p-1", segments: [{ speaker: "host", text: "你好" }] }
         : null,
+    getEpisodeByTranscript: async () => null,
     createEpisode: async () => ({ id: "ep-1" }),
     safetyCheck: async () => ({ pass: true }),
     getChannelActive: async () => true,
@@ -91,6 +92,24 @@ describe("episodes routes", () => {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ transcriptId: "t-nope" }),
     });
     expect(unknown.status).toBe(404);
+  });
+
+  it("episodes/new 409 when script already generated an episode", async () => {
+    const app = episodesRoutes(
+      fakeDeps({
+        getEpisodeByTranscript: async () => ({ id: "ep-existing" }),
+      }),
+      () => "user-1",
+    );
+    const res = await app.request("/episodes/new", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ transcriptId: "t-1" }),
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string; episodeId?: string };
+    expect(body.error).toBe("script_used");
+    expect(body.episodeId).toBe("ep-existing");
   });
 
   it("episodes/new returns 422 when safety check rejects", async () => {

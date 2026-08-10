@@ -269,6 +269,8 @@ export const zh = {
   "studio.editor.published": "节目已发布 ✓",
   "studio.editor.publishing": "发布中…",
   "studio.editor.contentUnsafe": "内容可能不适合制作节目",
+  "studio.editor.generated": "已生成节目",
+  "studio.editor.scriptUsed": "此脚本已生成过节目（一个脚本只能生成一期）",
 
   // ---- studio 脚本编辑器 ----
   "studio.scriptEditor.polishing": "AI 正在打磨你的对话为播客脚本…（可稍等片刻）",
@@ -591,6 +593,8 @@ export const en: Dictionary = {
   "studio.editor.published": "Episode published ✓",
   "studio.editor.publishing": "Publishing…",
   "studio.editor.contentUnsafe": "Content may not be suitable for an episode",
+  "studio.editor.generated": "Episode generated",
+  "studio.editor.scriptUsed": "This script already generated an episode（one script = one episode）",
 
   // ---- studio 脚本编辑器 ----
   "studio.scriptEditor.polishing": "AI is polishing your conversation into a podcast script…（may take a moment）",

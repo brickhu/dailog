@@ -508,6 +508,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       getOwned: (id, userId) => repo.episodes.getOwned(id, userId),
       getEpisodeAudio: (id, userId) => repo.episodes.getEpisodeAudio(id, userId),
       getOwnedTranscript: (id, userId) => repo.transcripts.getOwned(id, userId),
+      getEpisodeByTranscript: (transcriptId) => repo.episodes.getByTranscript(transcriptId),
       createEpisode: (row) => repo.episodes.create(row),
       safetyCheck: async () => ({ pass: true }),
       getChannelActive: async (userId) => (await repo.episodes.getChannelActivatedAt(userId)) !== null,

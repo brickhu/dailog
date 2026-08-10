@@ -11,6 +11,10 @@ export interface EpisodesDeps {
   getEpisodeAudio(id: string, userId: string): Promise<string | null>;
   // ---- 创建（由 transcript 生成） ----
   getOwnedTranscript(transcriptId: string, userId: string): Promise<{ id: string; polishId: string; segments: ScriptSegment[] } | null>;
+  /** 一个脚本只能生成一期节目：查该脚本是否已生成过（唯一约束兜底，主动检查给友好错误） */
+  getEpisodeByTranscript(transcriptId: string): Promise<{ id: string } | null>;
+  /** 一个脚本只能生成一期节目：查该脚本是否已生成过（唯一约束兜底，主动检查给友好错误） */
+  getEpisodeByTranscript(transcriptId: string): Promise<{ id: string } | null>;
   createEpisode(row: { userId: string; transcriptId: string; polishId: string; title: string | null; description?: string | null }): Promise<{ id: string }>;
   // ---- 生成 ----
   safetyCheck(segments: ScriptSegment[]): Promise<{ pass: boolean; reason?: string }>;
@@ -70,6 +74,9 @@ export function episodesRoutes(
     }
     const transcript = await deps.getOwnedTranscript(body.transcriptId, userId);
     if (!transcript) return c.json({ error: "not_found" }, 404);
+    // 一个脚本只能生成一期节目
+    const usedBy = await deps.getEpisodeByTranscript(body.transcriptId);
+    if (usedBy) return c.json({ error: "script_used", detail: "该脚本已生成过节目", episodeId: usedBy.id }, 409);
     // 生成前内容安全审核（编辑后脚本）：拒绝不建 job 不扣配额（PRD §4.4）
     const safety = await deps.safetyCheck(transcript.segments);
     if (!safety.pass) return c.json({ error: "safety_rejected", reason: safety.reason }, 422);

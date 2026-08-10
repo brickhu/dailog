@@ -18,6 +18,8 @@ interface Transcript {
   language: string | null;
   createdAt: string;
   segments?: ScriptSegment[];
+  /** 该脚本已生成过的节目（一个脚本只能生成一期；null = 未生成） */
+  episodeId?: string | null;
 }
 
 interface PolishDetail {
@@ -155,6 +157,12 @@ export default function PolishPage() {
 
   onMount(load);
 
+  /** 当前选中的脚本是否已生成过节目（一个脚本只能生成一期） */
+  const activeTranscriptUsed = () => {
+    const tr = detail()?.transcripts.find((x) => x.id === activeTranscriptId());
+    return Boolean(tr?.episodeId);
+  };
+
   const selectTranscript = (tr: Transcript) => {
     setActiveTranscriptId(tr.id);
     setActiveSegments(tr.segments ?? null);
@@ -253,7 +261,9 @@ export default function PolishPage() {
                       {new Date(tr.createdAt).toLocaleString(locale() === "zh" ? "zh-CN" : "en-US")}
                     </div>
                   </div>
-                  <span {...stylex.props(styles.transcriptMeta)}>{tr.id === activeTranscriptId() ? t("studio.editor.editing") : t("studio.editor.select")}</span>
+                  <span {...stylex.props(styles.transcriptMeta)}>
+                    {tr.episodeId ? t("studio.editor.generated") : tr.id === activeTranscriptId() ? t("studio.editor.editing") : t("studio.editor.select")}
+                  </span>
                 </div>
               )}
             </For>
@@ -274,11 +284,14 @@ export default function PolishPage() {
           />
           <div {...stylex.props(styles.actions)}>
             <Button
-              disabled={!activeTranscriptId() || generating()}
+              disabled={!activeTranscriptId() || generating() || activeTranscriptUsed()}
               onClick={generateEpisode}
             >
               {generating() ? t("studio.editor.generating") : t("studio.editor.generateEpisode")}
             </Button>
+            <Show when={activeTranscriptUsed()}>
+              <div {...stylex.props(styles.error)}>{t("studio.editor.scriptUsed")}</div>
+            </Show>
           </div>
         </div>
 

@@ -34,6 +34,7 @@ function fakeRepo(): AppDeps["repo"] {
       listByUser: async () => [],
       getOwned: async () => null,
       getEpisodeAudio: async () => null,
+      getByTranscript: async () => null,
       getEpisodeScript: async () => null,
       getPublishedDialogue: async () => null,
       setPublished: async () => {},
@@ -83,7 +84,7 @@ function fakeTranscriptsDeps(): AppDeps["transcriptsDeps"] {
 function fakeEpisodesDeps(): AppDeps["episodesDeps"] {
   return {
     listByUser: async () => [], getOwned: async () => null, getEpisodeAudio: async () => null,
-    getOwnedTranscript: async () => null, createEpisode: async () => ({ id: "ep-1" }),
+    getOwnedTranscript: async () => null, getEpisodeByTranscript: async () => null, createEpisode: async () => ({ id: "ep-1" }),
     safetyCheck: async () => ({ pass: true }), getChannelActive: async () => true,
     getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }), consumeQuota: async () => {},
     createJob: async (episodeId: string) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }), enqueueJob: async () => {},
