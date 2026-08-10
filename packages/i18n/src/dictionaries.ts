@@ -250,7 +250,7 @@ export const zh = {
   "importer.reason": "失败原因",
   "importer.ack": "我知道了",
   "importer.successTitle": "成功导入对话",
-  "importer.generate": "生成脚本",
+  "importer.generate": "确认导入",
   "importer.field.title": "标题",
   "importer.field.turns": "问答轮次",
   "importer.field.messages": "消息数量",
@@ -273,6 +273,7 @@ export const zh = {
   "studio.editor.contentUnsafe": "内容可能不适合制作节目",
   "studio.editor.generated": "已生成节目",
   "studio.editor.scriptUsed": "此脚本已生成过节目（一个脚本只能生成一期）",
+  "studio.editor.missingVoiceSample": "缺少该语种录音采样，已使用兜底音色（建议录制该语种采样）",
 
   // ---- studio 脚本编辑器 ----
   "studio.scriptEditor.polishing": "AI 正在打磨你的对话为播客脚本…（可稍等片刻）",
@@ -576,7 +577,7 @@ export const en: Dictionary = {
   "importer.reason": "Reason",
   "importer.ack": "Got it",
   "importer.successTitle": "Conversation imported",
-  "importer.generate": "Generate script",
+  "importer.generate": "Confirm import",
   "importer.field.title": "Title",
   "importer.field.turns": "Q&A turns",
   "importer.field.messages": "Messages",
@@ -599,6 +600,7 @@ export const en: Dictionary = {
   "studio.editor.contentUnsafe": "Content may not be suitable for an episode",
   "studio.editor.generated": "Episode generated",
   "studio.editor.scriptUsed": "This script already generated an episode（one script = one episode）",
+  "studio.editor.missingVoiceSample": "Missing a voice sample for this language — using a fallback voice (consider recording one)",
 
   // ---- studio 脚本编辑器 ----
   "studio.scriptEditor.polishing": "AI is polishing your conversation into a podcast script…（may take a moment）",

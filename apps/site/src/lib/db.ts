@@ -58,11 +58,16 @@ export async function listLatestEpisodes(limit = 20): Promise<EpisodeSummary[]> 
       SELECT e.id, e.slug, e.title, e.description,
              e.duration_seconds AS "durationSeconds",
              e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
-             t.language, e.audio_url AS "audioUrl",
+             t.language, tr.audio_url AS "audioUrl",
              p.username, p.display_name AS "displayName"
       FROM episodes e
       JOIN transcripts t ON t.id = e.transcript_id
       JOIN profiles p ON p.id = e.user_id
+      LEFT JOIN LATERAL (
+        SELECT tr.audio_url FROM tracks tr
+        WHERE tr.episode_id = e.id
+        ORDER BY tr.created_at DESC LIMIT 1
+      ) tr ON true
       WHERE e.status = 'published' AND e.is_public = true
       ORDER BY e.published_at DESC
       LIMIT ${limit}
@@ -75,11 +80,16 @@ export async function getEpisode(id: string): Promise<EpisodeSummary | null> {
       SELECT e.id, e.slug, e.title, e.description,
              e.duration_seconds AS "durationSeconds",
              e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
-             t.language, e.audio_url AS "audioUrl",
+             t.language, tr.audio_url AS "audioUrl",
              p.username, p.display_name AS "displayName"
       FROM episodes e
       JOIN transcripts t ON t.id = e.transcript_id
       JOIN profiles p ON p.id = e.user_id
+      LEFT JOIN LATERAL (
+        SELECT tr.audio_url FROM tracks tr
+        WHERE tr.episode_id = e.id
+        ORDER BY tr.created_at DESC LIMIT 1
+      ) tr ON true
       WHERE e.id = ${id} AND e.status = 'published' AND e.is_public = true
       LIMIT 1
     `);
@@ -110,11 +120,16 @@ export async function getChannel(username: string): Promise<{ channel: ChannelSu
       SELECT e.id, e.slug, e.title, e.description,
              e.duration_seconds AS "durationSeconds",
              e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
-             t.language, e.audio_url AS "audioUrl",
+             t.language, tr.audio_url AS "audioUrl",
              p.username, p.display_name AS "displayName"
       FROM episodes e
       JOIN transcripts t ON t.id = e.transcript_id
       JOIN profiles p ON p.id = e.user_id
+      LEFT JOIN LATERAL (
+        SELECT tr.audio_url FROM tracks tr
+        WHERE tr.episode_id = e.id
+        ORDER BY tr.created_at DESC LIMIT 1
+      ) tr ON true
       WHERE p.username = ${username} AND e.status = 'published' AND e.is_public = true
       ORDER BY e.published_at DESC
     `;

@@ -25,7 +25,7 @@ function fakePolishesDeps(): AppDeps["polishesDeps"] {
   return {
     getChannelActivatedAt: async () => new Date(),
     findPolishByUserSnapshot: async () => null,
-    updateHostName: async () => {},
+
     createPolish: async () => ({ id: "polish-1" }),
     getPolishDetail: async () => null,
       listByUser: async () => [],
@@ -36,7 +36,8 @@ function fakeTranscriptsDeps(): AppDeps["transcriptsDeps"] {
     getDialogueForPolish: async () => null,
     getTranscriptCount: async () => 0,
     getPolishLimit: async () => 5,
-    createTranscript: async () => ({ id: "transcript-1" }),
+          guestNames: {},
+createTranscript: async () => ({ id: "transcript-1" }),
     getOwnedTranscript: async () => null,
     updateTranscriptSegments: async () => {},
     llm: { complete: async () => "", stream: async () => "" },
@@ -61,12 +62,15 @@ function fakeEpisodesDeps(): AppDeps["episodesDeps"] {
     getHostModelId: async () => null,
     getVoiceSampleKey: async () => null,
     getVoiceSample: async () => null,
+    getVoiceSampleByLanguage: async () => null,
+    markUsed: async () => {},
     saveVoiceSample: async () => {},
   };
 }
 
 function fakeRepo(): AppDeps["repo"] {
   return {
+    guests: { getByPlatform: async () => null, list: async () => [] },
     snapshots: {
       getByUrl: async () => null,
       getById: async () => null,
@@ -78,7 +82,7 @@ function fakeRepo(): AppDeps["repo"] {
     },
     polishes: {
       findByUserSnapshot: async () => null,
-      updateHostName: async () => {},
+
       create: async () => ({ id: "polish-1" }),
       getOwned: async () => null,
       getPolishDetail: async () => null,
@@ -89,6 +93,7 @@ function fakeRepo(): AppDeps["repo"] {
       listByPolish: async () => [],
       getOwned: async () => null,
       updateSegments: async () => {},
+      markUsed: async () => {},
     },
     episodes: {
       create: async () => ({ id: "ep-1" }),
@@ -104,7 +109,9 @@ function fakeRepo(): AppDeps["repo"] {
       getHostModelId: async () => null,
       getVoiceSampleKey: async () => null,
       getVoiceSample: async () => null,
+      getVoiceSampleByLanguage: async () => null,
       saveVoiceSample: async () => {},
+      insertTrack: async () => {},
       getChannelActivatedAt: async () => new Date(),
       getProfile: async () => null,
       updateUserNickname: async () => {},
@@ -120,7 +127,7 @@ function fakeRepo(): AppDeps["repo"] {
       listRecoverableJobs: async () => [],
       markJobProgress: async () => {},
       markJobDone: async () => {},
-      updateEpisodeAudio: async () => {},
+
       markJobFailed: async () => {},
     },
   };
@@ -293,7 +300,7 @@ describe.skipIf(!hasDb)("channel activation (授权码开通频道, real local P
 describe("channel gates (generate/publish 403 when not active)", () => {
   it("episodes/new returns 403 channel_not_active when channel inactive", async () => {
     const deps = fakeEpisodesDeps();
-    deps.getOwnedTranscript = async () => ({ id: "t-1", polishId: "p-1", segments: [{ speaker: "host", text: "h" }] });
+    deps.getOwnedTranscript = async () => ({ id: "t-1", polishId: "p-1", segments: [{ speaker: "host", text: "h" }], topic: null, language: null, guestId: null, snapshotId: null });
     deps.getChannelActive = async () => false;
     const app = episodesRoutes(deps, () => "u-1");
     const res = await app.request("/episodes/new", {

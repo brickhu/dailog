@@ -33,7 +33,7 @@ import { createDb } from "../src/db/client";
 import * as schema from "../src/db/schema";
 import { createRepo } from "../src/repo";
 import { createLlmClient } from "../src/llm/client";
-import { parseJsonLoose, safetyCheckPrompt } from "../src/llm/prompts";
+import { parseJsonLoose, safetyMetaPrompt } from "../src/llm/prompts";
 import { createTtsClient } from "../src/tts/client";
 import { createStorage } from "../src/storage";
 import { createLocalAssetStore } from "../src/pipeline/assets";
@@ -120,11 +120,12 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
         getEpisodeUserId: repo.episodes.getEpisodeUserId,
         getEpisodeLanguage: repo.episodes.getEpisodeLanguage,
         getEpisodeScript: repo.episodes.getEpisodeScript,
+        getVoiceSampleByLanguage: repo.episodes.getVoiceSampleByLanguage,
         getVoiceSample: repo.episodes.getVoiceSample,
         getGuestModelId: async () => null, // 嘉宾固定音色 id 未提供（Task 10 音色体系），走零样本/默认音色 fallback
         markJobProgress: repo.jobs.markJobProgress,
         markJobDone: repo.jobs.markJobDone,
-        updateEpisodeAudio: repo.jobs.updateEpisodeAudio,
+        insertTrack: repo.episodes.insertTrack,
       },
       tts,
       storage,
@@ -145,7 +146,6 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     const polishesDeps: PolishesDeps = {
       getChannelActivatedAt: (userId) => repo.episodes.getChannelActivatedAt(userId),
       findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
-      updateHostName: (id, userId, hostName) => repo.polishes.updateHostName(id, userId, hostName),
       createPolish: (row) => repo.polishes.create(row),
       getPolishDetail: (id, userId) => repo.polishes.getPolishDetail(id, userId),
       listByUser: (userId) => repo.polishes.listByUser(userId),
@@ -159,7 +159,6 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
         if (!snapshot?.parsedDialogue) return null;
         return {
           messages: (snapshot.parsedDialogue as { role: string; content: string }[]).map((m) => ({ role: m.role, content: m.content })),
-          hostName: polish.hostName ?? null,
           platform: snapshot.platform,
         };
       },
@@ -167,6 +166,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       getPolishLimit: async () => 5,
       createTranscript: (polishId, segments, language) => repo.transcripts.create(polishId, segments, language),
       getOwnedTranscript: (id, userId) => repo.transcripts.getOwned(id, userId),
+      guestNames: {},
       updateTranscriptSegments: (id, segments) => repo.transcripts.updateSegments(id, segments),
       llm,
     };
@@ -178,8 +178,9 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       getOwnedTranscript: (id, userId) => repo.transcripts.getOwned(id, userId),
       getEpisodeByTranscript: (transcriptId) => repo.episodes.getByTranscript(transcriptId),
       createEpisode: (row) => repo.episodes.create(row),
+      markUsed: (transcriptId) => repo.transcripts.markUsed(transcriptId),
       safetyCheck: async (segments) =>
-        parseJsonLoose(await llm.complete(safetyCheckPrompt(segments))) as { pass: boolean; reason?: string },
+        parseJsonLoose(await llm.complete(safetyMetaPrompt(segments))) as { pass: boolean; reason?: string; title?: string; description?: string; tags?: string[] },
       getChannelActive: async (userId) => (await repo.episodes.getChannelActivatedAt(userId)) !== null,
       getQuota: (userId) => repo.jobs.getQuotaInfo(userId),
       consumeQuota: (userId, credit) => repo.jobs.consumeQuota(userId, credit),
@@ -196,6 +197,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       getHostModelId: (userId) => repo.episodes.getHostModelId(userId),
       getVoiceSampleKey: (userId) => repo.episodes.getVoiceSampleKey(userId),
       getVoiceSample: (userId) => repo.episodes.getVoiceSample(userId),
+      getVoiceSampleByLanguage: (userId, language) => repo.episodes.getVoiceSampleByLanguage(userId, language),
       saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row),
     };
 
@@ -351,9 +353,9 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
 
     // 6. 产物断言：episode.audio_url 已更新 + 存储文件存在且 > 1KB（真实 TTS + ffmpeg 拼接产物）
     const rows = await dbClient.db
-      .select({ audioUrl: schema.episodes.audioUrl, durationSeconds: schema.episodes.durationSeconds })
-      .from(schema.episodes)
-      .where(eq(schema.episodes.id, episodeId));
+      .select({ audioUrl: schema.tracks.audioUrl, durationSeconds: schema.tracks.durationSeconds })
+      .from(schema.tracks)
+      .where(eq(schema.tracks.episodeId, episodeId));
     expect(rows[0]?.audioUrl).toMatch(/^episodes\//);
     expect(rows[0]?.durationSeconds ?? 0).toBeGreaterThan(0); // ffmpeg Duration 探测成功
     const audio = await readFile(join(storageDir, rows[0]!.audioUrl!));

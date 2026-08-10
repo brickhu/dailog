@@ -68,10 +68,9 @@ export interface PolishesRepo {
   /** 用户 × 快照唯一：已存在 → 跳转编辑页（继续创作） */
   findByUserSnapshot(userId: string, snapshotId: string): Promise<{ id: string; title: string | null; status: string } | null>;
   /** 更新 host 节目称呼（生成脚本前设置） */
-  updateHostName(id: string, userId: string, hostName: string): Promise<void>;
   create(row: PolishRow): Promise<{ id: string }>;
   /** 归属校验（防 IDOR）+ 快照关联 */
-  getOwned(id: string, userId: string): Promise<{ id: string; snapshotId: string; title: string | null; hostName: string | null; status: string } | null>;
+  getOwned(id: string, userId: string): Promise<{ id: string; snapshotId: string; title: string | null; status: string } | null>;
   /** 编辑页详情：polish + 快照 meta + transcripts */
   getPolishDetail(id: string, userId: string): Promise<{
     id: string;
@@ -79,8 +78,20 @@ export interface PolishesRepo {
     snapshotTitle: string | null;
     snapshotUrl: string | null;
     quality: schema.QualityResult | null;
-    hostName: string | null;
-    transcripts: { id: string; segments: schema.ScriptSegment[]; topic: string | null; language: string | null; createdAt: Date; episodeId: string | null }[];
+    transcripts: {
+      id: string;
+      /** 有效脚本（编辑保存后的 updated_segments ?? 原始 segments） */
+      segments: schema.ScriptSegment[];
+      topic: string | null;
+      /** 脚本标题 + 创作说明（大模型生成） */
+      title: string | null;
+      creationNote: string | null;
+      /** 是否已生成节目 */
+      status: string | null;
+      language: string | null;
+      createdAt: Date;
+      episodeId: string | null;
+    }[];
   } | null>;
   /** 工作台列表：polish + 快照标题 + 节目状态 */
   listByUser(userId: string): Promise<{
@@ -95,10 +106,25 @@ export interface PolishesRepo {
 }
 
 export interface TranscriptsRepo {
-  create(polishId: string, segments: ScriptSegment[], language: string | null, topic?: string | null): Promise<{ id: string }>;
+  create(
+    polishId: string,
+    segments: ScriptSegment[],
+    language: string | null,
+    opts?: { topic?: string | null; title?: string | null; creationNote?: string | null; hostName?: string | null; guestId?: string | null; guestName?: string | null },
+  ): Promise<{ id: string }>;
+  /** 标记脚本已生成节目（一脚本一期） */
+  markUsed(id: string): Promise<void>;
   listByPolish(polishId: string): Promise<{ id: string; segments: ScriptSegment[]; language: string | null; createdAt: Date }[]>;
   /** 归属校验（join polish.user_id） */
-  getOwned(id: string, userId: string): Promise<{ id: string; polishId: string; segments: ScriptSegment[]; topic: string | null; language: string | null } | null>;
+  getOwned(id: string, userId: string): Promise<{
+    id: string;
+    polishId: string;
+    segments: ScriptSegment[];
+    topic: string | null;
+    language: string | null;
+    guestId: string | null;
+    snapshotId: string | null;
+  } | null>;
   updateSegments(id: string, segments: ScriptSegment[]): Promise<void>;
 }
 
@@ -108,6 +134,17 @@ export interface EpisodeRow {
   polishId: string;
   title: string | null;
   description?: string | null;
+  /** 来源快照（transcript→polish→snapshot 直接关联） */
+  snapshotId?: string | null;
+  /** 主题（脚本 topic 继承） */
+  topic?: string | null;
+  /** 标签（大模型生成） */
+  tags?: string[] | null;
+  /** 字幕（程序化：脚本去情绪标签后的纯文本） */
+  subtitle?: string | null;
+  /** 主持人（频道主人）+ 嘉宾（脚本引用） */
+  hostId?: string | null;
+  guestId?: string | null;
 }
 
 export interface EpisodesRepo {
@@ -119,6 +156,9 @@ export interface EpisodesRepo {
     status: string;
     polishId: string;
     durationSeconds: number | null;
+    /** 主题（脚本 topic 继承）+ 标签（大模型生成） */
+    topic: string | null;
+    tags: string[] | null;
     createdAt: Date;
   }[]>;
   getOwned(id: string, userId: string): Promise<{ id: string; transcriptId: string; polishId: string; title: string | null; status: string } | null>;
@@ -145,7 +185,11 @@ export interface EpisodesRepo {
   getHostModelId(userId: string): Promise<string | null>;
   getVoiceSampleKey(userId: string): Promise<string | null>;
   getVoiceSample(userId: string): Promise<VoiceSampleRow | null>;
+  /** 按语种取采样（生成时注入同语种）；无该语种 → null（调用方用兜底） */
+  getVoiceSampleByLanguage(userId: string, language: string): Promise<VoiceSampleRow | null>;
   saveVoiceSample(row: VoiceSampleRow): Promise<void>;
+  /** 写入音轨（多语言）：episode 音频在 tracks */
+  insertTrack(episodeId: string, language: string, audioKey: string, durationSeconds: number): Promise<void>;
   getChannelActivatedAt(userId: string): Promise<Date | null>;
   // ---- 账号/频道（/api/me/profile、/api/me/channel） ----
   /** 账号 + 频道档案（hasGithub = account 表有 github 绑定）——昵称对外叫 nickname（列 user.name） */
@@ -167,6 +211,11 @@ export interface EpisodesRepo {
   isUsernameTaken(userId: string, username: string): Promise<boolean>;
 }
 
+export interface GuestsRepo {
+  getByPlatform(platform: string): Promise<{ id: string; name: string } | null>;
+  list(): Promise<{ id: string; platform: string; name: string; avatar: string | null; intro: string | null; url: string | null }[]>;
+}
+
 export interface JobsRepo {
   getQuotaInfo(userId: string): Promise<{ plan: "free" | "pro"; generatedCount: number; creditBalance: number }>;
   consumeQuota(userId: string, credit: number): Promise<void>;
@@ -176,11 +225,11 @@ export interface JobsRepo {
   listRecoverableJobs(): Promise<{ id: string; episodeId: string }[]>;
   markJobProgress(jobId: string, status: JobStatus, progress: number): Promise<void>;
   markJobDone(jobId: string): Promise<void>;
-  updateEpisodeAudio(episodeId: string, audioKey: string, durationSeconds: number): Promise<void>;
   markJobFailed(jobId: string, error: string): Promise<void>;
 }
 
 export type Repos = {
+  guests: GuestsRepo;
   snapshots: SnapshotsRepo;
   polishes: PolishesRepo;
   transcripts: TranscriptsRepo;
@@ -190,6 +239,22 @@ export type Repos = {
 
 export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
   return {
+    guests: {
+      async getByPlatform(platform) {
+        const rows = await db
+          .select({ id: schema.guests.id, name: schema.guests.name })
+          .from(schema.guests)
+          .where(eq(schema.guests.platform, platform as typeof schema.guests.platform.enumValues[number]))
+          .limit(1);
+        return rows[0] ?? null;
+      },
+      async list() {
+        return db
+          .select({ id: schema.guests.id, platform: schema.guests.platform, name: schema.guests.name, avatar: schema.guests.avatar, intro: schema.guests.intro, url: schema.guests.url })
+          .from(schema.guests)
+          .orderBy(schema.guests.platform);
+      },
+    },
     snapshots: {
       async getById(id) {
         const rows = await db
@@ -272,9 +337,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .limit(1);
         return rows[0] ?? null;
       },
-      async updateHostName(id, userId, hostName) {
-        await db.update(schema.polishes).set({ hostName }).where(and(eq(schema.polishes.id, id), eq(schema.polishes.userId, userId)));
-      },
+
       async create(row) {
         try {
           const rows = await db.insert(schema.polishes).values(row).returning({ id: schema.polishes.id });
@@ -290,7 +353,6 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             id: schema.polishes.id,
             snapshotId: schema.polishes.snapshotId,
             title: schema.polishes.title,
-            hostName: schema.polishes.hostName,
             status: schema.polishes.status,
           })
           .from(schema.polishes)
@@ -304,7 +366,6 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .select({
             id: schema.polishes.id,
             title: schema.polishes.title,
-            hostName: schema.polishes.hostName,
             snapshotTitle: schema.snapshots.sourceTitle,
             snapshotUrl: schema.snapshots.url,
             quality: schema.snapshots.quality,
@@ -319,7 +380,11 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .select({
             id: schema.transcripts.id,
             segments: schema.transcripts.segments,
+            updatedSegments: schema.transcripts.updatedSegments,
             topic: schema.transcripts.topic,
+            title: schema.transcripts.title,
+            creationNote: schema.transcripts.creationNote,
+            status: schema.transcripts.status,
             language: schema.transcripts.language,
             createdAt: schema.transcripts.createdAt,
             // 一个脚本只能生成一期节目：join 出该脚本的节目（无 = 未生成）
@@ -332,11 +397,20 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return {
           id: row.id,
           title: row.title,
-          hostName: row.hostName ?? null,
           snapshotTitle: row.snapshotTitle,
           snapshotUrl: row.snapshotUrl,
           quality: row.quality ?? null,
-          transcripts,
+          transcripts: transcripts.map((t) => ({
+            id: t.id,
+            segments: (t.updatedSegments ?? t.segments) as schema.ScriptSegment[],
+            topic: t.topic,
+            title: t.title,
+            creationNote: t.creationNote,
+            status: t.status,
+            language: t.language,
+            createdAt: t.createdAt,
+            episodeId: t.episodeId,
+          })),
         };
       },
       async listByUser(userId) {
@@ -380,10 +454,22 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
     },
 
     transcripts: {
-      async create(polishId, segments, language, topic = null) {
-        const rows = await db.insert(schema.transcripts).values({ polishId, segments, language, topic })
-          .returning({ id: schema.transcripts.id });
+      async create(polishId, segments, language, opts = {}) {
+        const rows = await db.insert(schema.transcripts).values({
+          polishId,
+          segments,
+          language,
+          topic: opts.topic ?? null,
+          title: opts.title ?? null,
+          creationNote: opts.creationNote ?? null,
+          hostName: opts.hostName ?? null,
+          guestId: opts.guestId ?? null,
+          guestName: opts.guestName ?? null,
+        }).returning({ id: schema.transcripts.id });
         return { id: rows[0].id };
+      },
+      async markUsed(id) {
+        await db.update(schema.transcripts).set({ status: "used" }).where(eq(schema.transcripts.id, id));
       },
       async listByPolish(polishId) {
         return db
@@ -398,17 +484,31 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             id: schema.transcripts.id,
             polishId: schema.transcripts.polishId,
             segments: schema.transcripts.segments,
+            updatedSegments: schema.transcripts.updatedSegments,
             topic: schema.transcripts.topic,
             language: schema.transcripts.language,
+            guestId: schema.transcripts.guestId,
+            snapshotId: schema.polishes.snapshotId,
           })
           .from(schema.transcripts)
           .innerJoin(schema.polishes, eq(schema.transcripts.polishId, schema.polishes.id))
           .where(and(eq(schema.transcripts.id, id), eq(schema.polishes.userId, userId)))
           .limit(1);
-        return rows[0] ?? null;
+        const row = rows[0];
+        if (!row) return null;
+        return {
+          id: row.id,
+          polishId: row.polishId,
+          segments: (row.updatedSegments ?? row.segments) as ScriptSegment[],
+          topic: row.topic,
+          language: row.language,
+          guestId: row.guestId,
+          snapshotId: row.snapshotId,
+        };
       },
       async updateSegments(id, segments) {
-        await db.update(schema.transcripts).set({ segments }).where(eq(schema.transcripts.id, id));
+        // 编辑草稿写 updated_segments：原始 segments（LLM 生成）保留对比/恢复
+        await db.update(schema.transcripts).set({ updatedSegments: segments }).where(eq(schema.transcripts.id, id));
       },
     },
 
@@ -421,6 +521,12 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           slug: randomSlug(),
           title: row.title,
           description: row.description ?? null,
+          snapshotId: row.snapshotId ?? null,
+          topic: row.topic ?? null,
+          tags: row.tags ?? null,
+          subtitle: row.subtitle ?? null,
+          hostId: row.hostId ?? null,
+          guestId: row.guestId ?? null,
         }).returning({ id: schema.episodes.id });
         return { id: rows[0].id };
       },
@@ -440,6 +546,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             status: schema.episodes.status,
             polishId: schema.episodes.polishId,
             durationSeconds: schema.episodes.durationSeconds,
+            topic: schema.episodes.topic,
+            tags: schema.episodes.tags,
             createdAt: schema.episodes.createdAt,
           })
           .from(schema.episodes)
@@ -461,22 +569,26 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return rows[0] ?? null;
       },
       async getEpisodeAudio(id, userId) {
+        // 音频在 tracks（多语言音轨；默认取最新一条 = 主语言）
         const rows = await db
-          .select({ audioUrl: schema.episodes.audioUrl })
+          .select({ audioUrl: schema.tracks.audioUrl })
           .from(schema.episodes)
+          .innerJoin(schema.tracks, eq(schema.tracks.episodeId, schema.episodes.id))
           .where(and(eq(schema.episodes.id, id), eq(schema.episodes.userId, userId)))
+          .orderBy(desc(schema.tracks.createdAt))
           .limit(1);
         return rows[0]?.audioUrl ?? null;
       },
       async getEpisodeScript(episodeId) {
         const rows = await db
-          .select({ segments: schema.transcripts.segments })
+          .select({ segments: schema.transcripts.segments, updatedSegments: schema.transcripts.updatedSegments })
           .from(schema.episodes)
           .innerJoin(schema.transcripts, eq(schema.episodes.transcriptId, schema.transcripts.id))
           .where(eq(schema.episodes.id, episodeId))
           .limit(1);
         const row = rows[0];
-        return row ? { segments: row.segments as ScriptSegment[] } : null;
+        if (!row) return null;
+        return { segments: (row.updatedSegments ?? row.segments) as ScriptSegment[] };
       },
       async getPublishedDialogue(episodeId) {
         const rows = await db
@@ -538,6 +650,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         const rows = await db
           .select({
             id: schema.voiceSamples.id,
+            language: schema.voiceSamples.language,
             userId: schema.voiceSamples.userId,
             status: schema.voiceSamples.status,
             referenceId: schema.voiceSamples.referenceId,
@@ -561,16 +674,50 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return rows[0]?.channelActivatedAt ?? null;
       },
       async saveVoiceSample(row: VoiceSampleRow) {
-        await db.transaction(async (tx) => {
-          await tx.delete(schema.voiceSamples).where(eq(schema.voiceSamples.userId, row.userId));
-          await tx.insert(schema.voiceSamples).values({
-            userId: row.userId,
+        // 一人多语种各一条（upsert by user+language）
+        await db.insert(schema.voiceSamples).values({
+          userId: row.userId,
+          language: row.language,
+          audioUrl: row.audioUrl,
+          referenceId: row.referenceId,
+          transcript: row.transcript,
+          duration: row.duration,
+          status: row.status,
+        }).onConflictDoUpdate({
+          target: [schema.voiceSamples.userId, schema.voiceSamples.language],
+          set: {
             audioUrl: row.audioUrl,
             referenceId: row.referenceId,
             transcript: row.transcript,
             duration: row.duration,
             status: row.status,
-          });
+          },
+        });
+      },
+      async getVoiceSampleByLanguage(userId, language) {
+        const rows = await db
+          .select({
+            id: schema.voiceSamples.id,
+            language: schema.voiceSamples.language,
+            userId: schema.voiceSamples.userId,
+            status: schema.voiceSamples.status,
+            referenceId: schema.voiceSamples.referenceId,
+            transcript: schema.voiceSamples.transcript,
+            audioUrl: schema.voiceSamples.audioUrl,
+            duration: schema.voiceSamples.duration,
+            createdAt: schema.voiceSamples.createdAt,
+          })
+          .from(schema.voiceSamples)
+          .where(and(eq(schema.voiceSamples.userId, userId), eq(schema.voiceSamples.language, language)))
+          .limit(1);
+        return rows[0] ?? null;
+      },
+      async insertTrack(episodeId, language, audioKey, durationSeconds) {
+        await db.insert(schema.tracks).values({
+          episodeId,
+          language: language as "zh",
+          audioUrl: audioKey,
+          durationSeconds,
         });
       },
 
@@ -712,11 +859,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .set({ status: "done", progress: 100, error: null, updatedAt: new Date() })
           .where(eq(schema.generationJobs.id, jobId));
       },
-      async updateEpisodeAudio(episodeId, audioKey, durationSeconds) {
-        await db.update(schema.episodes)
-          .set({ audioUrl: audioKey, durationSeconds: Math.round(durationSeconds) })
-          .where(eq(schema.episodes.id, episodeId));
-      },
+      
     },
   };
 }

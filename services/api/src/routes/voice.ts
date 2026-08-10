@@ -3,6 +3,7 @@ import type { AudioStorage } from "../storage";
 
 export interface VoiceSampleRow {
   id?: string;          // 仅 GET 回读填充（前端 sampleId）
+  language: string;     // 采样语种（一人多语种各一条）
   userId: string;
   audioUrl: string;   // storage key
   referenceId: string | null;  // 已废弃（不再训练音色模型），保留列兼容
@@ -61,10 +62,14 @@ export function voiceRoutes(deps: VoiceDeps) {
     // 转录文本（用户朗读的固定文案，前端随上传提交；零样本克隆质量依赖它）
     const transcript = typeof form?.get("transcript") === "string" ? (form.get("transcript") as string).trim() || null : null;
     const bytes = new Uint8Array(await file.arrayBuffer());
-    // R2 目录规划：voices/{userId}.webm（MediaRecorder 实际输出 webm，命名一并修正）
-    const key = `voices/${userId}.webm`;
+    // 采样语种（form 字段；缺省 zh）——一人多语种各一条
+    const language = typeof form?.get("language") === "string" && /^[a-z]{2,3}$/i.test(form.get("language") as string)
+      ? (form.get("language") as string).toLowerCase()
+      : "zh";
+    // R2 目录规划：voices/{userId}/{language}.webm
+    const key = `voices/${userId}/${language}.webm`;
     await deps.storage.put(key, bytes);
-    await deps.saveVoiceSample({ userId, audioUrl: key, referenceId: null, transcript, duration: 0, status: "ready" });
+    await deps.saveVoiceSample({ userId, language, audioUrl: key, referenceId: null, transcript, duration: 0, status: "ready" });
     return c.json({ ok: true });
   });
   return app;

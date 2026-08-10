@@ -11,13 +11,17 @@ import { useI18n } from "@dailogues/i18n";
 
 export interface ScriptEditorProps {
   polishId: string;
-  /** host（用户）节目称呼——生成脚本前设置（存 polish.host_name） */
+  /** host（用户）节目称呼——生成脚本时随请求提交，固化到 transcript */
   hostName?: string | null;
   onHostNameChange?: (name: string) => void;
   /** 编辑已有 transcript（null = 未生成，显示生成入口） */
   transcriptId?: string | null;
   /** 已有 transcript 的脚本（transcriptId 存在时直接进入编辑态） */
   initialSegments?: ScriptSegment[];
+  /** 当前 transcript 元数据（列表传给编辑器展示：脚本标题/创作说明/主题） */
+  title?: string | null;
+  creationNote?: string | null;
+  topic?: string | null;
   /** 润色完成回调（新建 transcript 时带 transcriptId） */
   onDone?: (transcriptId: string) => void;
 }
@@ -39,6 +43,10 @@ export default function ScriptEditor(props: ScriptEditorProps) {
   // 重新润色方向输入（展开态 + 值）
   const [directionOpen, setDirectionOpen] = createSignal(false);
   const [direction, setDirection] = createSignal("");
+  // 刚生成的脚本元数据（done 事件带回 title/creationNote/topic；切换 transcript 后回落 props）
+  const [scriptMeta, setScriptMeta] = createSignal<{
+    id: string; title: string | null; creationNote: string | null; topic: string | null;
+  } | null>(null);
 
   const update = (op: Parameters<typeof applyScriptOp>[1]) => {
     setState((s) => {
@@ -74,7 +82,11 @@ export default function ScriptEditor(props: ScriptEditorProps) {
     try {
       const res = await api.request(`/v1/transcripts/new`, {
         method: "POST",
-        body: JSON.stringify({ polishId: props.polishId, ...(instruction ? { instruction } : {}) }),
+        body: JSON.stringify({
+          polishId: props.polishId,
+          ...(props.hostName?.trim() ? { hostName: props.hostName.trim() } : {}),
+          ...(instruction ? { instruction } : {}),
+        }),
         // SSE 长连接（润色流式输出可能 1-3 分钟）：跳过默认 30s 超时
         timeoutMs: 0,
       });
@@ -96,11 +108,18 @@ export default function ScriptEditor(props: ScriptEditorProps) {
         },
         onDone: async (data) => {
           // 多主题切分：后端一次生成多条（各带 topic）；选第一条进入编辑，列表刷新后用户可换选
-          const { transcriptIds } = JSON.parse(data) as { transcriptIds?: string[] };
+          const done = JSON.parse(data) as {
+            transcriptId?: string;
+            transcriptIds?: string[];
+            transcripts?: { id: string; title: string | null; creationNote: string | null; topic: string | null }[];
+          };
+          // 生成完成即可展示脚本元数据（title/创作说明）——无需等父级刷新列表
+          const meta = done.transcripts?.[0];
+          if (meta) setScriptMeta({ id: meta.id, title: meta.title, creationNote: meta.creationNote, topic: meta.topic });
           const final = normalize(tryParseSegments(raw) ?? []);
           setState({ kind: "editing", segments: final, version: null });
           setSavedSegments(final);
-          props.onDone?.(transcriptIds?.[0] ?? "");
+          props.onDone?.(done.transcriptId ?? done.transcriptIds?.[0] ?? "");
         },
         onError: (data) => {
           const parsed = JSON.parse(data) as { error?: string };
@@ -161,6 +180,16 @@ export default function ScriptEditor(props: ScriptEditorProps) {
     return s.kind === "error" ? s : null;
   };
 
+  /** 当前脚本元数据：刚生成时用 done 事件数据，列表刷新后以 props（列表）为准 */
+  const scriptMetaDisplay = () => {
+    const m = scriptMeta();
+    if (m && props.transcriptId && m.id === props.transcriptId) return m;
+    if (props.title || props.creationNote || props.topic) {
+      return { id: props.transcriptId ?? "", title: props.title ?? null, creationNote: props.creationNote ?? null, topic: props.topic ?? null };
+    }
+    return null;
+  };
+
   return (
     <div>
       <Show when={cur().kind === "loading"}>
@@ -199,6 +228,17 @@ export default function ScriptEditor(props: ScriptEditorProps) {
         <div {...stylex.props(styles.errorBox)}>
           <div {...stylex.props(styles.errorText)}>{failed()!.message}</div>
           <Button onClick={loadOrPolish}>{t("common.retry")}</Button>
+        </div>
+      </Show>
+
+      <Show when={editing() && scriptMetaDisplay()}>
+        <div {...stylex.props(styles.scriptMeta)}>
+          <Show when={scriptMetaDisplay()!.title}>
+            <div {...stylex.props(styles.scriptTitle)}>{scriptMetaDisplay()!.title}</div>
+          </Show>
+          <Show when={scriptMetaDisplay()!.creationNote}>
+            <div {...stylex.props(styles.scriptNote)}>{scriptMetaDisplay()!.creationNote}</div>
+          </Show>
         </div>
       </Show>
 
@@ -350,6 +390,23 @@ const styles = stylex.create({
   errorText: {
     color: colors.danger,
     marginBottom: dimensions.spacing3,
+  },
+  scriptMeta: {
+    border: `1px solid ${colors.ink}`,
+    borderRadius: dimensions.radiusMd,
+    background: colors.surface,
+    padding: dimensions.spacing3,
+    marginBottom: dimensions.spacing3,
+  },
+  scriptTitle: {
+    fontWeight: dimensions.fontWeightBold,
+    fontSize: dimensions.fontSizeMd,
+    marginBottom: dimensions.spacing1,
+  },
+  scriptNote: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    lineHeight: "1.6",
   },
   toolbar: {
     display: "flex",

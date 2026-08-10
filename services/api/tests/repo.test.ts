@@ -6,7 +6,7 @@ import { createDb } from "../src/db/client";
 import { createRepo } from "../src/repo";
 import type { Env } from "../src/config/env";
 import {
-  authUsers, episodes, generationJobs, polishes, profiles, snapshots, transcripts, voiceSamples,
+  authUsers, episodes, generationJobs, polishes, profiles, snapshots, tracks, transcripts, voiceSamples,
 } from "../src/db/schema";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
@@ -272,7 +272,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       const { episodeId } = await makeEpisode(REPO_USER, "试听", "zh");
       expect(await repo.episodes.getEpisodeAudio(episodeId, REPO_USER)).toBeNull();
       expect(await repo.episodes.getEpisodeAudio(episodeId, API_USER)).toBeNull();
-      await repo.jobs.updateEpisodeAudio(episodeId, "episodes/u/ep.mp3", 123);
+      await repo.episodes.insertTrack(episodeId, "zh", "episodes/u/ep.mp3", 123);
       expect(await repo.episodes.getEpisodeAudio(episodeId, REPO_USER)).toBe("episodes/u/ep.mp3");
     });
 
@@ -391,11 +391,11 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
 
     it("updateEpisodeAudio writes audio_url and duration_seconds", async () => {
       const { episodeId } = await makeEpisode(QUOTA_USER, "音频落库", "zh");
-      await repo.jobs.updateEpisodeAudio(episodeId, "audio/ep-1.mp3", 123);
+      await repo.episodes.insertTrack(episodeId, "zh", "audio/ep-1.mp3", 123);
       const row = await db
-        .select({ audioUrl: episodes.audioUrl, durationSeconds: episodes.durationSeconds })
-        .from(episodes)
-        .where(eq(episodes.id, episodeId));
+        .select({ audioUrl: tracks.audioUrl, durationSeconds: tracks.durationSeconds })
+        .from(tracks)
+        .where(eq(tracks.episodeId, episodeId));
       expect(row[0]).toEqual({ audioUrl: "audio/ep-1.mp3", durationSeconds: 123 });
     });
   });
@@ -433,10 +433,10 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       // 幂等：清掉可能残留的样本行
       await db.delete(voiceSamples).where(eq(voiceSamples.userId, REPO_USER));
       await repo.episodes.saveVoiceSample({
-        userId: REPO_USER, audioUrl: "voice/one.wav", referenceId: "m-one", transcript: null, duration: 3, status: "ready",
+        userId: REPO_USER, language: "zh", audioUrl: "voice/one.wav", referenceId: "m-one", transcript: null, duration: 3, status: "ready",
       });
       await repo.episodes.saveVoiceSample({
-        userId: REPO_USER, audioUrl: "voice/two.wav", referenceId: "m-two", transcript: null, duration: 4, status: "ready",
+        userId: REPO_USER, language: "zh", audioUrl: "voice/two.wav", referenceId: "m-two", transcript: null, duration: 4, status: "ready",
       });
       const rows = await db.select().from(voiceSamples).where(eq(voiceSamples.userId, REPO_USER));
       expect(rows).toHaveLength(1);
@@ -445,14 +445,14 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       });
       // failed 覆盖也生效（status 可写失败态）
       await repo.episodes.saveVoiceSample({
-        userId: REPO_USER, audioUrl: "voice/broken.wav", referenceId: null, transcript: null, duration: 0, status: "failed",
+        userId: REPO_USER, language: "zh", audioUrl: "voice/broken.wav", referenceId: null, transcript: null, duration: 0, status: "failed",
       });
       const failed = await db.select().from(voiceSamples).where(eq(voiceSamples.userId, REPO_USER));
       expect(failed).toHaveLength(1);
       expect(failed[0]).toMatchObject({ audioUrl: "voice/broken.wav", referenceId: null, status: "failed" });
       // 其他用户不受影响
       await repo.episodes.saveVoiceSample({
-        userId: API_USER, audioUrl: "voice/other.wav", referenceId: "m-other", transcript: null, duration: 1, status: "ready",
+        userId: API_USER, language: "zh", audioUrl: "voice/other.wav", referenceId: "m-other", transcript: null, duration: 1, status: "ready",
       });
       expect(await db.select().from(voiceSamples).where(eq(voiceSamples.userId, API_USER))).toHaveLength(1);
       expect(await db.select().from(voiceSamples).where(eq(voiceSamples.userId, REPO_USER))).toHaveLength(1);
@@ -470,7 +470,6 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
     };
     const polishesDeps: AppDeps["polishesDeps"] = {
-      updateHostName: (id, userId, hostName) => repo.polishes.updateHostName(id, userId, hostName),
       getChannelActivatedAt: (userId) => repo.episodes.getChannelActivatedAt(userId),
       findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
       createPolish: (row) => repo.polishes.create(row),
@@ -485,7 +484,6 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
         if (!snapshot?.parsedDialogue) return null;
         return {
           messages: (snapshot.parsedDialogue as { role: string; content: string }[]).map((m) => ({ role: m.role, content: m.content })),
-          hostName: polish.hostName ?? null,
           platform: snapshot.platform,
         };
       },
@@ -493,6 +491,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       getPolishLimit: async () => 5,
       createTranscript: (polishId, segments, language) => repo.transcripts.create(polishId, segments, language),
       getOwnedTranscript: (id, userId) => repo.transcripts.getOwned(id, userId),
+      guestNames: {},
       updateTranscriptSegments: (id, segments) => repo.transcripts.updateSegments(id, segments),
       llm: {
         complete: async () => "",
@@ -521,6 +520,8 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       getHostModelId: (userId) => repo.episodes.getHostModelId(userId),
       getVoiceSampleKey: (userId) => repo.episodes.getVoiceSampleKey(userId),
       getVoiceSample: (userId) => repo.episodes.getVoiceSample(userId),
+      getVoiceSampleByLanguage: (userId, language) => repo.episodes.getVoiceSampleByLanguage(userId, language),
+      markUsed: (transcriptId) => repo.transcripts.markUsed(transcriptId),
       saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row),
     };
     const job: AppDeps["job"] = {

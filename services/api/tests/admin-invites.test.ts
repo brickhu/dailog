@@ -19,6 +19,7 @@ function fakeAuth(session: { user: { id: string } } | null = { user: { id: "user
 
 function fakeRepo(): AppDeps["repo"] {
   return {
+    guests: { getByPlatform: async () => null, list: async () => [] },
     snapshots: {
       getByUrl: async () => null,
       getById: async () => null,
@@ -30,7 +31,7 @@ function fakeRepo(): AppDeps["repo"] {
     },
     polishes: {
       findByUserSnapshot: async () => null,
-      updateHostName: async () => {},
+
       create: async () => ({ id: "polish-1" }),
       getOwned: async () => null,
       getPolishDetail: async () => null,
@@ -41,6 +42,7 @@ function fakeRepo(): AppDeps["repo"] {
       listByPolish: async () => [],
       getOwned: async () => null,
       updateSegments: async () => {},
+      markUsed: async () => {},
     },
     episodes: {
       create: async () => ({ id: "ep-1" }),
@@ -56,7 +58,9 @@ function fakeRepo(): AppDeps["repo"] {
       getHostModelId: async () => null,
       getVoiceSampleKey: async () => null,
       getVoiceSample: async () => null,
+      getVoiceSampleByLanguage: async () => null,
       saveVoiceSample: async () => {},
+      insertTrack: async () => {},
       getChannelActivatedAt: async () => null,
       getProfile: async () => null,
       updateUserNickname: async () => {},
@@ -72,7 +76,7 @@ function fakeRepo(): AppDeps["repo"] {
       listRecoverableJobs: async () => [],
       markJobProgress: async () => {},
       markJobDone: async () => {},
-      updateEpisodeAudio: async () => {},
+
       markJobFailed: async () => {},
     },
   };
@@ -92,7 +96,7 @@ function fakePolishesDeps(): AppDeps["polishesDeps"] {
   return {
     getChannelActivatedAt: async () => new Date(),
     findPolishByUserSnapshot: async () => null,
-    updateHostName: async () => {},
+
     createPolish: async () => ({ id: "polish-1" }),
     getPolishDetail: async () => null,
       listByUser: async () => [],
@@ -103,7 +107,8 @@ function fakeTranscriptsDeps(): AppDeps["transcriptsDeps"] {
     getDialogueForPolish: async () => null,
     getTranscriptCount: async () => 0,
     getPolishLimit: async () => 5,
-    createTranscript: async () => ({ id: "transcript-1" }),
+          guestNames: {},
+createTranscript: async () => ({ id: "transcript-1" }),
     getOwnedTranscript: async () => null,
     updateTranscriptSegments: async () => {},
     llm: { complete: async () => "", stream: async () => "" },
@@ -128,6 +133,8 @@ function fakeEpisodesDeps(): AppDeps["episodesDeps"] {
     getHostModelId: async () => null,
     getVoiceSampleKey: async () => null,
     getVoiceSample: async () => null,
+    getVoiceSampleByLanguage: async () => null,
+    markUsed: async () => {},
     saveVoiceSample: async () => {},
   };
 }

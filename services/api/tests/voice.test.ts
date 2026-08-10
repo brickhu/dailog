@@ -29,6 +29,7 @@ describe("GET /api/me/voice-sample", () => {
     const app = makeVoice({
       getVoiceSample: async () => ({
         userId: "user-1",
+        language: "zh",
         audioUrl: "voices/user-1.webm",
         referenceId: null,
         transcript: "大家好，我是测试录音。",
@@ -60,10 +61,10 @@ describe("POST /api/me/voice-sample（样本直传：只保存，不训练）", 
     const json = await res.json();
     expect(json).toEqual({ ok: true });
     const call = storagePut.mock.calls[0];
-    expect(call[0]).toBe("voices/user-1.webm");
+    expect(call[0]).toBe("voices/user-1/zh.webm");
     expect(call[1]).toEqual(new Uint8Array([1, 2, 3])); // Uint8Array 按值深度比较
     expect(saveVoiceSample).toHaveBeenCalledWith(
-      expect.objectContaining({ audioUrl: "voices/user-1.webm", referenceId: null, transcript: null, status: "ready" }),
+      expect.objectContaining({ audioUrl: "voices/user-1/zh.webm", language: "zh", referenceId: null, transcript: null, status: "ready" }),
     );
   });
 

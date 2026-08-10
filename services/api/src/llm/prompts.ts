@@ -50,7 +50,8 @@ export function polishPrompt(
    - 比喻：复杂概念用听众熟悉的生活化比喻解释，把抽象变具体
 5. 开场结构（像真实访谈节目）：主持人先向听众打招呼，再介绍自己（自称「${hostCall}」，如"大家好，欢迎收听…，我是${hostCall}"），接着介绍今天的嘉宾（自称「${aiCall}」，身份与话题），最后嘉宾打招呼回应；开场约 2-4 段，用 [happy]/[excited] 等积极情绪开场，切忌直接进入正题
 6. 多主题切分：长对话可能包含多个独立主题——识别并切分为多个脚本（每个主题一个脚本，各自独立成期）
-7. 输出 JSON：{"language": "zh"|"en"|..., "scripts": [{"topic": "简短主题名", "segments": [{"speaker": "host"|"guest", "text": "..."}]}]}，不要输出其他内容
+7. 每个脚本附带：title（简洁有吸引力的脚本标题）、creationNote（创作说明——给创作者看：这段脚本讲什么、为什么值得做成一期）
+8. 输出 JSON：{"language": "zh"|"en"|..., "scripts": [{"topic": "简短主题名", "title": "脚本标题", "creationNote": "创作说明", "segments": [{"speaker": "host"|"guest", "text": "..."}]}]}，不要输出其他内容
 8. 若对话内容不足以拆分为有意义的主题（纯寒暄/无实质内容/主题无法独立成期），输出 {"quality_failed": true, "reason": "简短原因"}，不要输出脚本
 ${EMOTION_GUIDE}
 ${direction}`,
@@ -60,12 +61,15 @@ ${direction}`,
   }];
 }
 
-/** 安全门 prompt：输出 JSON { pass, reason? }——色情/违法/仇恨/诈骗等违规内容 */
-export function safetyCheckPrompt(segments: { speaker: string; text: string }[]): LlmMessage[] {
+/** 安全门 + 节目元数据 prompt（s4）：安全检测 + 生成节目 title/desc/tags/topic。
+ *  输出 { pass, reason?, title, description, tags[], topic }——pass=false 时不生成元数据 */
+export function safetyMetaPrompt(segments: { speaker: string; text: string }[]): LlmMessage[] {
   return [{
     role: "system",
-    content: `你是 dailog 播客平台的内容安全审核员。审核一段播客脚本（用户=host，AI=guest）是否包含违规内容：色情、违法、仇恨言论、诈骗、暴力煽动等。
-只输出 JSON：{"pass": true|false, "reason": "违规说明（仅 pass=false 时）"}`,
+    content: `你是 dailog 播客平台的内容安全审核员与节目编辑。审核一段播客脚本（用户=host，AI=guest）：
+1. 违规内容（色情、违法、仇恨言论、诈骗、暴力煽动等）→ 拒绝
+2. 通过时生成节目元数据：title（简洁有吸引力的节目标题）、description（2-3 句节目简介）、tags（3-5 个话题标签）、topic（一句话主题）
+只输出 JSON：{"pass": true|false, "reason": "违规说明（仅 pass=false 时）", "title": "…", "description": "…", "tags": ["…"], "topic": "…"}`,
   }, {
     role: "user",
     content: segments.map((s) => `${s.speaker}: ${s.text}`).join("\n"),

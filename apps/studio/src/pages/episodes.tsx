@@ -12,6 +12,9 @@ export interface Episode {
   title: string | null;
   status: "draft" | "generating" | "published" | "failed";
   durationSeconds: number | null;
+  /** 主题（脚本 topic 继承）+ 标签（大模型生成） */
+  topic: string | null;
+  tags: string[] | null;
   createdAt: string;
 }
 
@@ -72,6 +75,20 @@ const styles = stylex.create({
     color: colors.neutral,
     fontSize: dimensions.fontSizeSm,
     marginTop: dimensions.spacing1,
+  },
+  tags: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: dimensions.spacing1,
+    marginTop: dimensions.spacing2,
+  },
+  tag: {
+    fontSize: "12px",
+    color: colors.primary,
+    background: `${colors.primary}14`,
+    border: `1px solid ${colors.primary}33`,
+    borderRadius: "999px",
+    padding: "2px 10px",
   },
   cardActions: {
     display: "flex",
@@ -183,6 +200,16 @@ export default function Dashboard() {
                     {new Date(ep.createdAt).toLocaleDateString(locale() === "zh" ? "zh-CN" : "en-US")}
                     {ep.durationSeconds ? ` · ${t("studio.episodeDuration", { minutes: Math.max(1, Math.round(ep.durationSeconds / 60)) })}` : ""}
                   </div>
+                  <Show when={ep.topic || (ep.tags && ep.tags.length > 0)}>
+                    <div {...stylex.props(styles.tags)}>
+                      <Show when={ep.topic}>
+                        <span {...stylex.props(styles.tag)}>{ep.topic}</span>
+                      </Show>
+                      <For each={ep.tags ?? []}>
+                        {(tag) => <span {...stylex.props(styles.tag)}>{tag}</span>}
+                      </For>
+                    </div>
+                  </Show>
                 </div>
                 <div {...stylex.props(styles.cardActions)}>
                   <span

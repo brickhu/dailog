@@ -15,6 +15,11 @@ import { useI18n } from "@dailogues/i18n";
 interface Transcript {
   id: string;
   topic: string | null;
+  /** 脚本标题 + 创作说明（大模型生成，脚本列表展示） */
+  title: string | null;
+  creationNote: string | null;
+  /** 是否已生成节目（used = 已生成，一脚本一期） */
+  status: string | null;
   language: string | null;
   createdAt: string;
   segments?: ScriptSegment[];
@@ -27,7 +32,6 @@ interface PolishDetail {
   title: string | null;
   snapshotTitle: string | null;
   snapshotUrl: string | null;
-  hostName: string | null;
   quality: { pass: boolean; reason?: string; language?: string } | null;
   transcripts: Transcript[];
 }
@@ -127,12 +131,12 @@ export default function PolishPage() {
   const [title, setTitle] = createSignal("");
   const [publishBusy, setPublishBusy] = createSignal(false);
   const [hostName, setHostName] = createSignal("");
+  /** 生成节目时的提示（如缺该语种采样 → 已用兜底音色） */
+  const [warning, setWarning] = createSignal<string | null>(null);
 
-  /** 保存 host 节目称呼（防抖由输入触发；直接 PATCH） */
-  const saveHostName = async (name: string) => {
+  /** 更新 host 节目称呼（本地状态；生成脚本时随 transcripts/new 请求提交固化） */
+  const saveHostName = (name: string) => {
     setHostName(name);
-    if (!polishId) return;
-    await api.patch(`/v1/polishes/${polishId}/host-name`, { hostName: name }).catch(() => {});
   };
 
   const load = async () => {
@@ -147,7 +151,6 @@ export default function PolishPage() {
         setActiveSegments(latest.segments ?? null);
       }
       setTitle(d.title ?? d.snapshotTitle ?? "");
-      setHostName(d.hostName ?? "");
     } catch (e) {
       setError(e instanceof Error ? e.message : t("studio.loadFailed"));
     } finally {
@@ -163,11 +166,15 @@ export default function PolishPage() {
     return Boolean(tr?.episodeId);
   };
 
+  /** 当前选中的脚本（列表/编辑器展示元数据用） */
+  const activeTranscript = () => detail()?.transcripts.find((x) => x.id === activeTranscriptId()) ?? null;
+
   const selectTranscript = (tr: Transcript) => {
     setActiveTranscriptId(tr.id);
     setActiveSegments(tr.segments ?? null);
     setGenerated(false);
     setEpisodeId(null);
+    setWarning(null);
   };
 
   /** 生成节目（选定 transcript） */
@@ -183,9 +190,11 @@ export default function PolishPage() {
           title: title() || undefined,
         }),
       });
-      const body = (await res.json().catch(() => null)) as { episodeId?: string; error?: string; reason?: string } | null;
+      const body = (await res.json().catch(() => null)) as { episodeId?: string; error?: string; reason?: string; warning?: string } | null;
       if (res.ok && body?.episodeId) {
         setEpisodeId(body.episodeId);
+        // 缺该语种录音采样：生成用兜底音色，提示（不强求）
+        setWarning(body.warning === "missing_voice_language" ? t("studio.editor.missingVoiceSample") : null);
         return;
       }
       if (res.status === 422) setError(`审核未通过：${body?.reason ?? body?.error}`);
@@ -241,6 +250,10 @@ export default function PolishPage() {
             ⚠️ 质量检测未通过：{detail()!.quality!.reason ?? t("studio.editor.contentUnsafe")}。仍可继续。
           </div>
         </Show>
+        {/* 生成提示（如缺语种采样兜底） */}
+        <Show when={warning()}>
+          <div {...stylex.props(styles.warn)}>{warning()}</div>
+        </Show>
 
         {/* 润色脚本列表 */}
         <div {...stylex.props(styles.section)}>
@@ -256,7 +269,10 @@ export default function PolishPage() {
                   onClick={() => selectTranscript(tr)}
                 >
                   <div>
-                    <div>{tr.topic || t("studio.editor.scriptNum", { num: detail()!.transcripts.indexOf(tr) + 1 })}</div>
+                    <div>{tr.title || tr.topic || t("studio.editor.scriptNum", { num: detail()!.transcripts.indexOf(tr) + 1 })}</div>
+                    <Show when={tr.creationNote}>
+                      <div {...stylex.props(styles.transcriptMeta)}>{tr.creationNote}</div>
+                    </Show>
                     <div {...stylex.props(styles.transcriptMeta)}>
                       {new Date(tr.createdAt).toLocaleString(locale() === "zh" ? "zh-CN" : "en-US")}
                     </div>
@@ -276,6 +292,9 @@ export default function PolishPage() {
             polishId={polishId!}
             transcriptId={activeTranscriptId()}
             initialSegments={activeSegments() ?? undefined}
+            title={activeTranscript()?.title ?? null}
+            creationNote={activeTranscript()?.creationNote ?? null}
+            topic={activeTranscript()?.topic ?? null}
             hostName={hostName()}
             onHostNameChange={(name) => void saveHostName(name)}
             onDone={() => {

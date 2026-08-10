@@ -5,7 +5,7 @@ import { createAuth } from "./auth/better-auth";
 import { createDb } from "./db/client";
 import { createRepo } from "./repo";
 import { createLlmClient } from "./llm/client";
-import { safetyCheckPrompt, parseJsonLoose } from "./llm/prompts";
+import { safetyMetaPrompt, parseJsonLoose } from "./llm/prompts";
 import { createJobQueue } from "./pipeline/queue";
 import { createPipelineRunner } from "./pipeline/runner";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
@@ -61,11 +61,13 @@ const queue = createJobQueue(createPipelineRunner({
     getEpisodeLanguage: repo.episodes.getEpisodeLanguage,
     getEpisodeScript: repo.episodes.getEpisodeScript,
     getVoiceSample: repo.episodes.getVoiceSample,
+    // 按语种取采样（生成管线用：同语种优先，缺失 → getVoiceSample 兜底）
+    getVoiceSampleByLanguage: repo.episodes.getVoiceSampleByLanguage,
     // 嘉宾固定音色 id（逐段降级路径用；2D 主路径用 guest-voice.mp3 资产）
     getGuestModelId: async () => env.FISH_GUEST_REFERENCE_ID ?? null,
     markJobProgress: repo.jobs.markJobProgress,
     markJobDone: repo.jobs.markJobDone,
-    updateEpisodeAudio: repo.jobs.updateEpisodeAudio,
+    insertTrack: repo.episodes.insertTrack,
   },
   tts: tts ?? createTtsClient({ apiKey: "", fetchImpl: createProxyFetch(env.FISH_PROXY_URL) }),
   storage,
@@ -94,7 +96,6 @@ const polishesDeps: PolishesDeps = {
   getChannelActivatedAt: (userId) => repo.episodes.getChannelActivatedAt(userId),
   findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
   createPolish: (row) => repo.polishes.create(row),
-  updateHostName: (id, userId, hostName) => repo.polishes.updateHostName(id, userId, hostName),
   getPolishDetail: (id, userId) => repo.polishes.getPolishDetail(id, userId),
   listByUser: (userId) => repo.polishes.listByUser(userId),
 };
@@ -108,7 +109,6 @@ const transcriptsDeps: TranscriptsDeps = {
     if (!snapshot?.parsedDialogue) return null;
     return {
       messages: (snapshot.parsedDialogue as { role: string; content: string }[]).map((m) => ({ role: m.role, content: m.content })),
-      hostName: polish.hostName ?? null,
       platform: snapshot.platform,
     };
   },
@@ -117,7 +117,8 @@ const transcriptsDeps: TranscriptsDeps = {
     const quota = await repo.jobs.getQuotaInfo(userId);
     return quota.plan === "pro" ? null : env.POLISH_MAX_VERSIONS;
   },
-  createTranscript: (polishId, segments, language) => repo.transcripts.create(polishId, segments, language),
+  createTranscript: (polishId, segments, language, opts) => repo.transcripts.create(polishId, segments, language, opts),
+  guestNames: Object.fromEntries((await repo.guests.list()).map((g) => [g.platform, g.name])),
   getOwnedTranscript: (id, userId) => repo.transcripts.getOwned(id, userId),
   updateTranscriptSegments: (id, segments) => repo.transcripts.updateSegments(id, segments),
   llm,
@@ -141,7 +142,8 @@ const episodesDeps: EpisodesDeps = {
   getOwnedTranscript: (id, userId) => repo.transcripts.getOwned(id, userId),
   getEpisodeByTranscript: (transcriptId) => repo.episodes.getByTranscript(transcriptId),
   createEpisode: (row) => repo.episodes.create(row),
-  safetyCheck: async (segments) => parseJsonLoose(await llm.complete(safetyCheckPrompt(segments))) as { pass: boolean; reason?: string },
+  markUsed: (transcriptId) => repo.transcripts.markUsed(transcriptId),
+  safetyCheck: async (segments) => parseJsonLoose(await llm.complete(safetyMetaPrompt(segments))) as { pass: boolean; reason?: string; title?: string; description?: string; tags?: string[]; topic?: string },
   getChannelActive: async (userId) => (await repo.episodes.getChannelActivatedAt(userId)) !== null,
   getQuota: (userId) => repo.jobs.getQuotaInfo(userId),
   consumeQuota: (userId, credit) => repo.jobs.consumeQuota(userId, credit),
@@ -161,6 +163,7 @@ const episodesDeps: EpisodesDeps = {
   getHostModelId: (userId) => repo.episodes.getHostModelId(userId),
   getVoiceSampleKey: (userId) => repo.episodes.getVoiceSampleKey(userId),
   getVoiceSample: (userId) => repo.episodes.getVoiceSample(userId),
+  getVoiceSampleByLanguage: (userId, language) => repo.episodes.getVoiceSampleByLanguage(userId, language),
   saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row),
 };
 

@@ -11,11 +11,13 @@ export interface RunnerDeps {
     /** 生成来源脚本：经 episodes.transcript_id → transcripts.segments */
     getEpisodeScript(episodeId: string): Promise<{ segments: { speaker: "host" | "guest"; text: string }[] } | null>;
     getGuestModelId(): Promise<string | null>;
-    /** 读最新录音样本整行（audioUrl + transcript）；无记录返回 null */
+    /** 按语种读录音样本（同语种注入 TTS）；无该语种 → null */
+    getVoiceSampleByLanguage(userId: string, language: string): Promise<{ audioUrl: string; transcript: string | null } | null>;
+    /** 兜底：最新录音样本（任意语种）——缺语种时不强求，用兜底样本 */
     getVoiceSample(userId: string): Promise<{ audioUrl: string; transcript: string | null } | null>;
     markJobProgress(jobId: string, status: string, progress: number): Promise<void>;
     markJobDone(jobId: string): Promise<void>;
-    updateEpisodeAudio(episodeId: string, audioKey: string, durationSeconds: number): Promise<void>;
+    insertTrack(episodeId: string, language: string, audioKey: string, durationSeconds: number): Promise<void>;
   };
   tts: TtsClient;
   storage: AudioStorage;
@@ -40,10 +42,11 @@ export function createPipelineRunner(deps: RunnerDeps): JobHandler {
     const script = await deps.repo.getEpisodeScript(job.episodeId);
     if (!script || script.segments.length === 0) throw new Error("script not found");
 
-    // 2. 加载音色：主持人录音样本（整行：audioUrl + 转录文本）+ 嘉宾参考音频（资产，references 2D 主路径用）
+    // 2. 加载音色：主持人录音样本（同语种优先；无该语种 → 最新样本兜底）+ 嘉宾参考音频（资产，references 2D 主路径用）
     await progress("tts", 20);
     const guestModelId = await deps.repo.getGuestModelId();
-    const sample = await deps.repo.getVoiceSample(userId);
+    let sample = language ? await deps.repo.getVoiceSampleByLanguage(userId, language) : null;
+    if (!sample) sample = await deps.repo.getVoiceSample(userId); // 兜底：缺该语种采样用最新样本（前端已在创建时提醒）
     const hostReferenceAudio = sample ? await deps.storage.get(sample.audioUrl) : null;
     const hostTranscript = sample?.transcript ?? null;
     const guestReferenceAudio = await deps.assets.get("assets/guest-voice-zh.mp3");
@@ -70,7 +73,7 @@ export function createPipelineRunner(deps: RunnerDeps): JobHandler {
     const audioKey = `episodes/${userId}/${job.episodeId}.mp3`;
     await deps.storage.put(audioKey, audio);
     await progress("upload", 90);
-    await deps.repo.updateEpisodeAudio(job.episodeId, audioKey, durationSeconds);
+    await deps.repo.insertTrack(job.episodeId, language, audioKey, durationSeconds);
     await deps.repo.markJobDone(job.id);
     return { status: "done" };
   };

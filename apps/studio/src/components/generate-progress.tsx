@@ -3,7 +3,6 @@ import * as stylex from "@stylexjs/stylex";
 import { Button } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { api } from "../lib/client";
-import { ApiError } from "../lib/api";
 import { useI18n } from "@dailogues/i18n";
 
 export interface JobInfo {
@@ -38,24 +37,11 @@ export default function GenerateProgress(props: GenerateProgressProps) {
   const [audioUrl, setAudioUrl] = createSignal<string | null>(null);
   const [quotaDenied, setQuotaDenied] = createSignal(false);
 
+  // 生成任务在 episodes/new 创建时已入队（202 返回 jobId）；这里直接轮询进度
   const trigger = async () => {
     setStarted(true);
     setError(null);
     setQuotaDenied(false);
-    try {
-      await api.post(`/v1/episodes/${props.episodeId}/generate`);
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 403) {
-        setQuotaDenied(true);
-        return;
-      }
-      if (e instanceof ApiError && e.status === 422) {
-        setError(`内容安全审核未通过：${e.detail ?? t("studio.generate.fixScript")}`);
-        return;
-      }
-      setError(e instanceof Error ? e.message : t("studio.generate.triggerFailed"));
-      return;
-    }
     poll();
   };
 

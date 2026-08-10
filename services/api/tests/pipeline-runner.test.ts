@@ -19,10 +19,11 @@ function makeDeps(overrides: Partial<RunnerDeps> = {}): RunnerDeps {
     getEpisodeLanguage: vi.fn(async () => "zh"),
     getEpisodeScript: vi.fn(async () => ({ version: 1, segments: SEGMENTS })),
     getGuestModelId: vi.fn(async () => null),
+    getVoiceSampleByLanguage: vi.fn(async () => null),
     getVoiceSample: vi.fn(async () => null),
     markJobProgress: vi.fn(async (_jobId: string, _status: string, _progress: number) => {}),
     markJobDone: vi.fn(async (_jobId: string) => {}),
-    updateEpisodeAudio: vi.fn(async (_episodeId: string, _audioKey: string, _durationSeconds: number) => {}),
+    insertTrack: vi.fn(async (_episodeId: string, _language: string, _audioKey: string, _durationSeconds: number) => {}),
   };
   return {
     repo,

@@ -14,7 +14,7 @@ function fakeDeps(overrides: Partial<EpisodesDeps> = {}): EpisodesDeps {
     getEpisodeAudio: async () => null,
     getOwnedTranscript: async (id, userId) =>
       id === "t-1" && userId === "user-1"
-        ? { id: "t-1", polishId: "p-1", segments: [{ speaker: "host", text: "你好" }] }
+        ? { id: "t-1", polishId: "p-1", segments: [{ speaker: "host", text: "你好" }], topic: null, language: null, guestId: null, snapshotId: null }
         : null,
     getEpisodeByTranscript: async () => null,
     createEpisode: async () => ({ id: "ep-1" }),
@@ -29,6 +29,8 @@ function fakeDeps(overrides: Partial<EpisodesDeps> = {}): EpisodesDeps {
     getHostModelId: async () => null,
     getVoiceSampleKey: async () => null,
     getVoiceSample: async () => null,
+      getVoiceSampleByLanguage: async () => null,
+      markUsed: async () => {},
     saveVoiceSample: async () => {},
   };
   return { ...deps, ...overrides };
@@ -77,7 +79,20 @@ describe("episodes routes", () => {
     });
     expect(res.status).toBe(202);
     expect(await res.json()).toEqual({ episodeId: "ep-1", jobId: "job-1", status: "queued" });
-    expect(created).toEqual([{ userId: "user-1", transcriptId: "t-1", polishId: "p-1", title: "新节目", description: null }]);
+    // 节目元数据落库：hostId=频道主人、subtitle=脚本去标签纯文本、topic/tags/snapshotId/guestId 继承
+    expect(created).toEqual([{
+      userId: "user-1",
+      transcriptId: "t-1",
+      polishId: "p-1",
+      title: "新节目",
+      description: null,
+      snapshotId: null,
+      topic: null,
+      tags: null,
+      subtitle: "你好",
+      hostId: "user-1",
+      guestId: null,
+    }]);
     expect(enqueued).toEqual([{ id: "job-1", episodeId: "ep-1" }]);
   });
 

@@ -7,6 +7,7 @@ import type { Repos } from "../src/repo";
 
 function fakeRepo(): Repos {
   return {
+    guests: { getByPlatform: async () => null, list: async () => [] },
     snapshots: {
       getByUrl: async () => null,
       getById: async () => null,
@@ -22,13 +23,13 @@ function fakeRepo(): Repos {
       getOwned: async () => null,
       getPolishDetail: async () => null,
       listByUser: async () => [],
-      updateHostName: async () => {},
     },
     transcripts: {
-      create: vi.fn(async (_polishId, _segments, _language, _topic) => ({ id: `tr-${Math.random().toString(36).slice(2, 8)}` })),
+      create: vi.fn(async (_polishId, _segments, _language, _opts) => ({ id: `tr-${Math.random().toString(36).slice(2, 8)}` })),
       listByPolish: async () => [],
       getOwned: async () => null,
       updateSegments: async () => {},
+      markUsed: async () => {},
     },
     episodes: {
       create: async () => ({ id: "ep-1" }),
@@ -44,7 +45,9 @@ function fakeRepo(): Repos {
       getHostModelId: async () => null,
       getVoiceSampleKey: async () => null,
       getVoiceSample: async () => null,
+      getVoiceSampleByLanguage: async () => null,
       saveVoiceSample: async () => {},
+      insertTrack: async () => {},
       getChannelActivatedAt: async () => new Date(),
       getProfile: async () => null,
       updateUserNickname: async () => {},
@@ -60,7 +63,6 @@ function fakeRepo(): Repos {
       listRecoverableJobs: async () => [],
       markJobProgress: async () => {},
       markJobDone: async () => {},
-      updateEpisodeAudio: async () => {},
       markJobFailed: async () => {},
     },
   };
@@ -116,7 +118,6 @@ function makeApp(llmOutput: string) {
     polishesDeps: {
       getChannelActivatedAt: async () => new Date(),
       findPolishByUserSnapshot: async () => null,
-      updateHostName: async () => {},
       createPolish: async () => ({ id: "polish-1" }),
       getPolishDetail: async () => null,
       listByUser: async () => [],
@@ -124,13 +125,13 @@ function makeApp(llmOutput: string) {
     transcriptsDeps: {
       getDialogueForPolish: async () => ({
         messages: [{ role: "user", content: "问1" }, { role: "assistant", content: "答1" }],
-        hostName: "小明",
         platform: "claude",
       }),
       getTranscriptCount: async () => 0,
       getPolishLimit: async () => 5,
-      createTranscript: (polishId, segments, language, topic) => repo.transcripts.create(polishId, segments, language, topic),
+      createTranscript: (polishId, segments, language, opts) => repo.transcripts.create(polishId, segments, language, opts),
       getOwnedTranscript: async () => null,
+      guestNames: {},
       updateTranscriptSegments: async () => {},
       llm: {
         complete: async () => "",
@@ -158,6 +159,8 @@ function makeApp(llmOutput: string) {
       getHostModelId: async () => null,
       getVoiceSampleKey: async () => null,
       getVoiceSample: async () => null,
+      getVoiceSampleByLanguage: async () => null,
+      markUsed: async () => {},
       saveVoiceSample: async () => {},
     },
   });

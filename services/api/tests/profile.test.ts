@@ -7,6 +7,7 @@ import type { Repos } from "../src/repo";
 
 function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
   return {
+    guests: { getByPlatform: async () => null, list: async () => [] },
     snapshots: {
       getByUrl: async () => null,
       getById: async () => null,
@@ -18,7 +19,7 @@ function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
     },
     polishes: {
       findByUserSnapshot: async () => null,
-      updateHostName: async () => {},
+
       create: async () => ({ id: "polish-1" }),
       getOwned: async () => null,
       getPolishDetail: async () => null,
@@ -29,6 +30,7 @@ function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
       listByPolish: async () => [],
       getOwned: async () => null,
       updateSegments: async () => {},
+      markUsed: async () => {},
     },
     episodes: {
       create: async () => ({ id: "ep-1" }),
@@ -44,7 +46,9 @@ function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
       getHostModelId: async () => null,
       getVoiceSampleKey: async () => null,
       getVoiceSample: async () => null,
+      getVoiceSampleByLanguage: async () => null,
       saveVoiceSample: async () => {},
+      insertTrack: async () => {},
       getChannelActivatedAt: async () => new Date(),
       getProfile: async () => ({
         email: "tester@test.dev",
@@ -71,7 +75,7 @@ function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
       listRecoverableJobs: async () => [],
       markJobProgress: async () => {},
       markJobDone: async () => {},
-      updateEpisodeAudio: async () => {},
+
       markJobFailed: async () => {},
     },
   };
@@ -126,7 +130,7 @@ function makeApp(episodesOverrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
     shareCollectUrl: () => null,
     polishesDeps: {
       getChannelActivatedAt: async () => new Date(),
-      updateHostName: async () => {},
+
       findPolishByUserSnapshot: async () => null,
       createPolish: async () => ({ id: "polish-1" }),
       getPolishDetail: async () => null,
@@ -138,6 +142,7 @@ function makeApp(episodesOverrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
       getPolishLimit: async () => 5,
       createTranscript: async () => ({ id: "transcript-1" }),
       getOwnedTranscript: async () => null,
+      guestNames: {},
       updateTranscriptSegments: async () => {},
       llm: { complete: async () => "", stream: async () => "" },
     },
@@ -159,6 +164,8 @@ function makeApp(episodesOverrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
       getHostModelId: async () => null,
       getVoiceSampleKey: async () => null,
       getVoiceSample: async () => null,
+      getVoiceSampleByLanguage: async () => null,
+      markUsed: async () => {},
       saveVoiceSample: async () => {},
     },
   });
