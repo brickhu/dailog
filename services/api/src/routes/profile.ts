@@ -49,16 +49,9 @@ export function profileRoutes(deps: ProfileDeps) {
     if (typeof raw !== "object" || Array.isArray(raw)) return c.json({ error: "invalid_persona" }, 400);
     const o = raw as Record<string, unknown>;
     const str = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
-    const hobbies = Array.isArray(o.hobbies)
-      ? o.hobbies.map((h) => String(h).trim().slice(0, 20)).filter(Boolean).slice(0, 5)
-      : null;
     const persona = {
       callName: str(o.callName, 20),
-      gender: str(o.gender, 10),
-      profession: str(o.profession, 30),
-      age: str(o.age, 10),
-      hobbies: hobbies && hobbies.length > 0 ? hobbies : null,
-      extra: str(o.extra, 100),
+      traits: str(o.traits, 100),
     };
     await deps.repo.episodes.updatePersona(userId, persona);
     return c.json({ ok: true, persona });

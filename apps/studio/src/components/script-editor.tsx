@@ -8,7 +8,7 @@ import { consumeSse } from "../lib/sse";
 import { tryParseSegments } from "../lib/parseJsonLoose";
 import { applyScriptOp, totalCharCount, type ScriptSegment } from "../lib/scriptOps";
 import { useI18n } from "@dailogues/i18n";
-import { EMPTY_PERSONA, textToHobbies, hobbiesToText, type HostPersona } from "../lib/persona";
+import { EMPTY_PERSONA, type HostPersona } from "../lib/persona";
 
 export interface ScriptEditorProps {
   polishId: string;
@@ -42,8 +42,6 @@ export default function ScriptEditor(props: ScriptEditorProps) {
   const [saving, setSaving] = createSignal(false);
   // 未保存改动快照（覆盖确认用）：加载/保存成功/润色完成时更新
   const [savedSegments, setSavedSegments] = createSignal<ScriptSegment[]>([]);
-  // 人设"更多资料"展开态
-  const [moreOpen, setMoreOpen] = createSignal(false);
   // 重新润色方向输入（展开态 + 值）
   const [directionOpen, setDirectionOpen] = createSignal(false);
   const [direction, setDirection] = createSignal("");
@@ -212,54 +210,18 @@ export default function ScriptEditor(props: ScriptEditorProps) {
 
       <Show when={cur().kind === "empty"}>
         <div {...stylex.props(styles.personaCard)}>
-          <div {...stylex.props(styles.personaRow)}>
-            <input
-              {...stylex.props(styles.directionInput)}
-              placeholder={t("persona.callName")}
-              value={persona().callName ?? ""}
-              onInput={(e) => setField("callName", e.currentTarget.value)}
-            />
-            <Button
-              appear="ghost"
-              onClick={() => setMoreOpen(!moreOpen())}
-            >
-              {moreOpen() ? t("common.cancel") : t("persona.more")}
-            </Button>
-          </div>
-          <Show when={moreOpen()}>
-            <div {...stylex.props(styles.personaGrid)}>
-              <input
-                {...stylex.props(styles.directionInput)}
-                placeholder={t("persona.profession")}
-                value={persona().profession ?? ""}
-                onInput={(e) => setField("profession", e.currentTarget.value)}
-              />
-              <input
-                {...stylex.props(styles.directionInput)}
-                placeholder={t("persona.gender")}
-                value={persona().gender ?? ""}
-                onInput={(e) => setField("gender", e.currentTarget.value)}
-              />
-              <input
-                {...stylex.props(styles.directionInput)}
-                placeholder={t("persona.age")}
-                value={persona().age ?? ""}
-                onInput={(e) => setField("age", e.currentTarget.value)}
-              />
-              <input
-                {...stylex.props(styles.directionInput)}
-                placeholder={t("persona.hobbies")}
-                value={hobbiesToText(persona().hobbies)}
-                onInput={(e) => setField("hobbies", textToHobbies(e.currentTarget.value))}
-              />
-              <textarea
-                {...stylex.props(styles.directionInput, styles.personaExtra)}
-                placeholder={t("persona.extra")}
-                value={persona().extra ?? ""}
-                onInput={(e) => setField("extra", e.currentTarget.value)}
-              />
-            </div>
-          </Show>
+          <input
+            {...stylex.props(styles.directionInput)}
+            placeholder={t("persona.callName")}
+            value={persona().callName ?? ""}
+            onInput={(e) => setField("callName", e.currentTarget.value)}
+          />
+          <textarea
+            {...stylex.props(styles.directionInput, styles.personaTraits)}
+            placeholder={t("persona.traits")}
+            value={persona().traits ?? ""}
+            onInput={(e) => setField("traits", e.currentTarget.value)}
+          />
           <Button
             block
             disabled={!persona().callName?.trim()}
@@ -502,18 +464,7 @@ const styles = stylex.create({
     border: `1px solid ${colors.ink}`,
     marginBottom: dimensions.spacing3,
   },
-  personaRow: {
-    display: "flex",
-    gap: dimensions.spacing2,
-    alignItems: "center",
-  },
-  personaGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: dimensions.spacing2,
-  },
-  personaExtra: {
-    gridColumn: "1 / -1",
+  personaTraits: {
     minHeight: "56px",
     fontFamily: "inherit",
   },

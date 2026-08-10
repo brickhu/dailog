@@ -4,17 +4,14 @@ import {
 
 export interface ScriptSegment { speaker: "host" | "guest"; text: string; }
 
-/** 主持人结构化人设（profiles.persona；生成脚本前展示/修改，注入润色提示词的事实层） */
+/** 主持人结构化人设（profiles.persona；生成脚本前展示/修改，注入润色提示词）。
+ *  核心是性格画像（traits，如"风趣幽默、雷厉风行"）——用户指定的风格，生成时遵循；
+ *  旧版细碎字段（gender/profession/age/hobbies/extra）并入 traits 自由描述，不再单列。 */
 export interface HostPersona {
   /** 节目中的称呼（优先级高于 transcripts/new 的 hostName 字段） */
   callName?: string | null;
-  gender?: string | null;
-  profession?: string | null;
-  age?: string | null;
-  /** 爱好（多项） */
-  hobbies?: string[] | null;
-  /** 其他自由描述（兜底） */
-  extra?: string | null;
+  /** 性格/风格描述（自由文本；如"风趣幽默，雷厉风行，说话直来直去"） */
+  traits?: string | null;
 }
 export interface QualityResult { pass: boolean; reason?: string; language?: string; }
 

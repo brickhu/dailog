@@ -41,7 +41,7 @@ export function transcriptsRoutes(deps: TranscriptsDeps) {
     const userId = c.get("userId") as string;
     const body = (await c.req.json().catch(() => null)) as {
       polishId?: unknown; instruction?: unknown; hostName?: unknown;
-      persona?: { callName?: unknown; gender?: unknown; profession?: unknown; age?: unknown; hobbies?: unknown; extra?: unknown } | null;
+      persona?: { callName?: unknown; traits?: unknown } | null;
     } | null;
     if (!body || typeof body.polishId !== "string") {
       return c.json({ error: "invalid_polish" }, 400);
@@ -70,18 +70,10 @@ export function transcriptsRoutes(deps: TranscriptsDeps) {
     const p = body.persona;
     const callName = p && typeof p.callName === "string" && p.callName.trim() ? p.callName.trim().slice(0, 20) : null;
     const hostName = callName ?? (typeof body.hostName === "string" && body.hostName.trim() ? body.hostName.trim().slice(0, 20) : null);
-    // 人设拼成事实文本注入提示词（仅本次生效；未提供字段不注入）
-    const personaText = p
-      ? [
-          callName ? `称呼：${callName}` : null,
-          typeof p.gender === "string" && p.gender.trim() ? `性别：${p.gender.trim().slice(0, 10)}` : null,
-          typeof p.profession === "string" && p.profession.trim() ? `职业：${p.profession.trim().slice(0, 30)}` : null,
-          typeof p.age === "string" && p.age.trim() ? `年龄：${p.age.trim().slice(0, 10)}` : null,
-          Array.isArray(p.hobbies) && p.hobbies.length > 0
-            ? `爱好：${p.hobbies.map((h) => String(h).trim().slice(0, 20)).filter(Boolean).slice(0, 5).join("、")}`
-            : null,
-          typeof p.extra === "string" && p.extra.trim() ? `补充：${p.extra.trim().slice(0, 100)}` : null,
-        ].filter(Boolean).join("；")
+    // 人设拼文本注入提示词（仅本次生效）：称呼 + 性格画像（用户指定风格，生成时遵循）
+    const traits = p && typeof p.traits === "string" && p.traits.trim() ? p.traits.trim().slice(0, 100) : null;
+    const personaText = callName || traits
+      ? [callName ? `称呼：${callName}` : null, traits ? `性格：${traits}` : null].filter(Boolean).join("；")
       : "";
     const aiGuest = deps.guestsByPlatform?.[dialogue.platform];
 
