@@ -20,6 +20,7 @@ import { tokenRoutes } from "./routes/token";
 import { adminRoutes, type AdminDeps } from "./routes/admin";
 import { editorRoutes, type EditorDeps } from "./routes/editor";
 import { sendEmail } from "./email/resend";
+import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import type { Repos } from "./repo";
 
 export type { AuthLike };
@@ -65,6 +66,19 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   app.on(["POST", "GET"], "/v1/auth/*", (c) => deps.auth.handler(c.req.raw));
 
   // 主站公开端点（免鉴权）：仅已发布公开节目可读——必须在鉴权中间件之前注册
+  app.get("/v1/public/episodes/:id/cover", async (c) => {
+    const cover = await deps.repo.episodes.getPublicCoverKey(c.req.param("id"));
+    if (!cover) return c.json({ error: "not_found" }, 404);
+    try {
+      const data = await deps.voice.storage.get(cover);
+      if (!data) return c.json({ error: "not_found" }, 404);
+      return new Response(data as unknown as BodyInit, {
+        headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" },
+      });
+    } catch {
+      return c.json({ error: "not_found" }, 404);
+    }
+  });
   app.get("/v1/public/episodes/:id/audio", async (c) => {
     const audio = await deps.repo.episodes.getPublicAudioKey(c.req.param("id"));
     if (!audio) return c.json({ error: "not_found" }, 404);
@@ -120,6 +134,8 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
     getLatestJob: deps.episodesDeps.getLatestJob,
     pexelsApiKey: deps.env.PEXELS_API_KEY || null,
     notifyEmail: (input) => sendEmail(deps.env, input),
+    storage: deps.voice.storage,
+    ffmpegPath: ffmpegInstaller.path,
   } satisfies EditorDeps));
 
   app.notFound((c) => c.json({ error: "not_found" }, 404));

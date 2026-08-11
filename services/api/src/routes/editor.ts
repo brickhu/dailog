@@ -4,6 +4,7 @@
 // 状态机：polishes: submitted → accepted / rejected；episodes: generating → ready → published
 
 import { Hono } from "hono";
+import { spawn } from "node:child_process";
 import type { LlmClient } from "../llm/client";
 import { polishPrompt, safetyMetaPrompt, parseJsonLoose } from "../llm/prompts";
 import { requireRole, type AuthEnv } from "../middleware/auth";
@@ -25,6 +26,9 @@ export interface EditorDeps {
   pexelsApiKey?: string | null;
   /** 通知邮件发送（RESEND_API_KEY 未配置时静默跳过）——收录/拒绝/上线三类 */
   notifyEmail?(input: { to: string; subject: string; html: string }): Promise<void>;
+  /** 封面存储（R2/fs）：publish 时把外链封面下载 resize 后落库 */
+  storage?: { get(key: string): Promise<Uint8Array>; put(key: string, bytes: Uint8Array): Promise<void> };
+  ffmpegPath?: string;
 }
 
 /** 从 profiles.persona 组装润色提示词人设文本（与投稿人端 transcripts 组装一致） */
@@ -39,6 +43,31 @@ function personaTextFrom(p: { callName?: string | null; gender?: string | null; 
   return { hostName: callName, text: parts.join("；") };
 }
 
+
+/**
+ * 封面标准化（Apple 指南 1400–3000px 正方形）：下载外链图 → ffmpeg 裁剪缩放 1400×1400 JPEG。
+ * 失败返回 null（publish 回退无封面/模板）。
+ */
+async function resizeCover(ffmpegPath: string, bytes: Uint8Array): Promise<Uint8Array | null> {
+  return new Promise((resolve) => {
+    const child = spawn(ffmpegPath, [
+      "-i", "pipe:0",
+      "-vf", "scale=1400:1400:force_original_aspect_ratio=increase,crop=1400:1400",
+      "-f", "mjpeg", "-q:v", "3", "pipe:1",
+    ], { stdio: ["pipe", "pipe", "pipe"] });
+    const chunks: Buffer[] = [];
+    child.stdout.on("data", (d: Buffer) => chunks.push(d));
+    child.stderr.on("data", () => {});
+    child.on("error", () => resolve(null));
+    child.stdin.on("error", () => resolve(null));
+    child.on("close", (code: number) => {
+      if (code !== 0 || chunks.length === 0) return resolve(null);
+      resolve(new Uint8Array(Buffer.concat(chunks)));
+    });
+    child.stdin.write(bytes);
+    child.stdin.end();
+  });
+}
 
 /** 投稿状态变化：站内通知 + 邮件（RESEND 未配静默） */
 async function notifySubmission(
@@ -342,7 +371,21 @@ export function editorRoutes(deps: EditorDeps) {
     const tags = Array.isArray(body.tags)
       ? body.tags.map((t) => String(t).trim()).filter(Boolean).slice(0, 8)
       : null;
-    const coverUrl = typeof body.coverUrl === "string" && body.coverUrl.trim() ? body.coverUrl.trim().slice(0, 500) : null;
+    const rawCover = typeof body.coverUrl === "string" && body.coverUrl.trim() ? body.coverUrl.trim().slice(0, 500) : null;
+    // 封面标准化：外链（Pexels）→ 下载 → 1400×1400 → R2（失败回退 null，发布不阻塞）
+    let coverUrl: string | null = null;
+    if (rawCover && /^https?:\/\//.test(rawCover) && deps.storage && deps.ffmpegPath) {
+      try {
+        const res = await fetch(rawCover, { signal: AbortSignal.timeout(15000) });
+        if (res.ok) {
+          const resized = await resizeCover(deps.ffmpegPath, new Uint8Array(await res.arrayBuffer()));
+          if (resized) {
+            await deps.storage.put(`covers/${ep.id}.jpg`, resized);
+            coverUrl = `covers/${ep.id}.jpg`;
+          }
+        }
+      } catch { coverUrl = null; }
+    }
     const result = await deps.repo.episodes.publish(ep.id, {
       title: body.title.trim().slice(0, 200),
       description: typeof body.description === "string" && body.description.trim() ? body.description.trim().slice(0, 2000) : null,

@@ -245,6 +245,7 @@ export interface EpisodesRepo {
   getEpisodeGuest(episodeId: string): Promise<{ guestId: string | null } | null>;
   /** 公开读音频（主站免鉴权端点用）：仅已发布且公开的节目，取最新音轨；
    *  version = 音轨创建时间（ETag 用——重试重新生成后内容变化，浏览器据此重新拉取） */
+  getPublicCoverKey(episodeId: string): Promise<string | null>;
   getPublicAudioKey(episodeId: string): Promise<{ audioKey: string; version: string } | null>;
   /** 内容站公开读：仅已发布可见；对话内容在 snapshots.parsedDialogue（join 链） */
   getPublishedDialogue(episodeId: string): Promise<{
@@ -265,7 +266,7 @@ export interface EpisodesRepo {
   getVoiceSampleByLanguage(userId: string, language: string): Promise<VoiceSampleRow | null>;
   saveVoiceSample(row: VoiceSampleRow): Promise<void>;
   /** 写入音轨（多语言）：episode 音频在 tracks */
-  insertTrack(episodeId: string, language: string, audioKey: string, durationSeconds: number): Promise<void>;
+  insertTrack(episodeId: string, language: string, audioKey: string, durationSeconds: number, size?: number | null): Promise<void>;
   getChannelActivatedAt(userId: string): Promise<Date | null>;
   // ---- 账号/频道（/api/me/profile、/api/me/channel） ----
   /** 账号 + 频道档案（hasGithub = account 表有 github 绑定）——昵称对外叫 nickname（列 user.name） */
@@ -1037,6 +1038,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .limit(1);
         return rows[0] ?? null;
       },
+      async getPublicCoverKey(episodeId) {
+        const rows = await db
+          .select({ coverUrl: schema.episodes.coverUrl })
+          .from(schema.episodes)
+          .where(and(eq(schema.episodes.id, episodeId), eq(schema.episodes.status, "published"), eq(schema.episodes.isPublic, true)))
+          .limit(1);
+        return rows[0]?.coverUrl ?? null;
+      },
       async getPublicAudioKey(episodeId) {
         const rows = await db
           .select({ audioUrl: schema.tracks.audioUrl, createdAt: schema.tracks.createdAt })
@@ -1174,7 +1183,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .limit(1);
         return rows[0] ?? null;
       },
-      async insertTrack(episodeId, language, audioKey, durationSeconds) {
+      async insertTrack(episodeId, language, audioKey, durationSeconds, size) {
         await db.insert(schema.tracks).values({
           episodeId,
           language: language as "zh",

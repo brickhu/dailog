@@ -255,6 +255,8 @@ export const tracks = pgTable("tracks", {
   language: text("language", { enum: ["zh", "en", "ja"] }).notNull(),
   audioUrl: text("audio_url"),
   durationSeconds: integer("duration_seconds"),
+  /** 音频字节数（RSS enclosure length——Apple 要求） */
+  size: integer("size"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

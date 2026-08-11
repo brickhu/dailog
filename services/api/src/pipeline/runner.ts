@@ -31,7 +31,7 @@ export interface RunnerDeps {
     getVoiceSample(userId: string): Promise<{ audioUrl: string; transcript: string | null } | null>;
     markJobProgress(jobId: string, status: string, progress: number): Promise<void>;
     markJobDone(jobId: string): Promise<void>;
-    insertTrack(episodeId: string, language: string, audioKey: string, durationSeconds: number): Promise<void>;
+    insertTrack(episodeId: string, language: string, audioKey: string, durationSeconds: number, size?: number | null): Promise<void>;
   };
   tts: TtsClient;
   storage: AudioStorage;
@@ -149,7 +149,8 @@ export function createPipelineRunner(deps: RunnerDeps): JobHandler {
     const audioKey = `episodes/${userId}/${job.episodeId}.mp3`;
     await deps.storage.put(audioKey, audio);
     await progress("upload", 90);
-    await deps.repo.insertTrack(job.episodeId, language, audioKey, durationSeconds);
+    // size = 音频字节数（RSS enclosure length）
+    await deps.repo.insertTrack(job.episodeId, language, audioKey, durationSeconds, audio.length);
     await deps.repo.markJobDone(job.id);
     return { status: "done" };
   };

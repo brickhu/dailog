@@ -74,6 +74,38 @@ export async function listLatestEpisodes(limit = 20): Promise<EpisodeSummary[]> 
     ` as unknown as Promise<EpisodeSummary[]>);
 }
 
+/** 单 feed 用（dailog 频道全部已发布节目 + 音频 size + 封面） */
+export interface FeedEpisode {
+  id: string;
+  title: string | null;
+  description: string | null;
+  durationSeconds: number | null;
+  publishedAt: Date | null;
+  audioSize: number | null;
+  coverUrl: string | null;
+  episodeNumber: number | null;
+}
+
+export async function listFeedEpisodes(limit = 200): Promise<FeedEpisode[]> {
+  return withDb((db) => db`
+    SELECT e.id, e.title, e.description,
+           e.duration_seconds AS "durationSeconds",
+           e.published_at AS "publishedAt",
+           e.cover_url AS "coverUrl",
+           e.number AS "episodeNumber",
+           tr.size AS "audioSize"
+    FROM episodes e
+    LEFT JOIN LATERAL (
+      SELECT tr.size FROM tracks tr
+      WHERE tr.episode_id = e.id
+      ORDER BY tr.created_at DESC LIMIT 1
+    ) tr ON true
+    WHERE e.status = 'published' AND e.is_public = true
+    ORDER BY e.published_at DESC
+    LIMIT ${limit}
+  ` as unknown as Promise<FeedEpisode[]>);
+}
+
 /** 单集详情（仅 published 公开） */
 export async function getEpisode(id: string): Promise<EpisodeSummary | null> {
     const rows = await withDb((db) => db`
