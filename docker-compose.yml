@@ -91,9 +91,12 @@ services:
   admin:
     build: .
     container_name: admin
-    command: pnpm --filter @dailogues/admin dev --host 0.0.0.0
+    # 与 site 同构：容器内监听 80（OrbStack 域名路由 80 最稳；5174 的非 80 路由曾落到 site）
+    labels:
+      - "dev.orbstack.http-port=80"
+    command: pnpm --filter @dailogues/admin dev --host 0.0.0.0 --port 80
     ports:
-      - "5174:5174"
+      - "5174:80"
     environment:
       VITE_PROXY_TARGET: http://api:8787
       VITE_PROXY_ORIGIN: http://admin.dailog.orb.local
