@@ -7,7 +7,7 @@
 
 | 层 | 选型 | 部署位置 |
 |---|---|---|
-| 工作台 SPA（app.dailog.fm） | SolidJS + Solid Router + StyleX | Cloudflare Pages（静态，免费） |
+| 管理员工作台（admin.dailog.fm） | SolidJS + Solid Router + StyleX | Cloudflare Pages（静态，免费） |
 | 内容站 SSR（dailog.fm） | SolidStart（SSR）+ StyleX | Cloudflare Pages/Workers（免费） |
 | 分享采集服务（importer.dailog.fm） | Node.js + TypeScript + Hono + undici（解析器 + 多通道重试） | **Railway**（独立 service；平台规则变化只更新此服务） |
 | 统一后端（api.dailog.fm） | Node.js + TypeScript + Hono + Drizzle ORM + fluent-ffmpeg | **Railway**（Git 集成自动部署，Docker，按用量约 $5–10/月） |
@@ -16,11 +16,11 @@
 | 对象存储 | Cloudflare R2（音频/封面/录音样本） | R2 免费 10GB + 流量永久免费 |
 | LLM（质量审核 + 润色 + 语言检测） | **DeepSeek**（OpenAI 兼容接口，配置化可切换） | 外部按量（成本低） |
 | 语音合成 | Fish Audio TTS（多说话人 + 声音克隆） | 外部按量 |
-| 支付 | Stripe Checkout / Portal / Webhook | 外部，费率 2.9% + $0.30/笔 |
+| 支付（v1 无） | 无收款点——投稿制下投稿人/入选者均免费；v2 听众侧用 Apple/小宇宙平台原生 | — |
 
 ## 2. 部署拓扑
 
-> **双环境**（2026-08-03）：`dev` 分支集成部署到开发环境（Railway Development 环境 + CF Pages project `dailog-studio-dev`），`master` 部署到生产。开发环境域名：`gracious-caring-development.up.railway.app`（API，Railway 默认 URL）/ `app.candelbot.app` / `candelbot.app`（SSR，预留）；生产域名待定（`dailog.fm` 或 `dailog.fm`）。拓扑图按生产形态绘制，开发环境结构相同、域名与实例不同。
+> **双环境**（2026-08-03）：`dev` 分支集成部署到开发环境（Railway Development 环境 + CF Pages project `dailog-admin-dev`），`master` 部署到生产。开发环境域名：`gracious-caring-development.up.railway.app`（API，Railway 默认 URL）/ `admin.candelbot.app` / `candelbot.app`（SSR，预留）；生产域名待定（`dailog.fm` 或 `dailog.fm`）。拓扑图按生产形态绘制，开发环境结构相同、域名与实例不同。
 
 ```
          ┌──────────────────────── 用户（浏览器） ────────────────────────┐
@@ -34,10 +34,10 @@
                         ┌─────────────────────────────────────────┐
                         │            dailog.fm                 │
                         │   Cloudflare Pages/Workers (SSR, 免费)  │
-                        │   首页浏览 / 频道页 / 节目页 / RSS / 搜索  │
+                        │   首页 / 投稿人主页 / 节目页 / RSS / 搜索  │
                         └──────────────┬──────────────────────────┘
                                        │
-app.dailog.fm (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
+admin.dailog.fm (SPA, SolidJS+StyleX) │     R2 (音频/封面/样本)
   Solid Router, 静态部署在 CF Pages     │         ┌──────────────┐
   接收采集 → 润色编辑 → 生成 → 发布      └────────►│  *.mp3 / png │
                                        │         └──────────────┘
@@ -47,14 +47,14 @@ app.dailog.fm (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
                               │  · imports 接收（采集确认后入库）   │
                               │  · LLM 润色(SSE 流式)             │
                               │  · 生成管线(TTS→ffmpeg→R2)        │
-                              │  · 配额 / Stripe / 邀请码          │
+                              │  · 成本预算 / 投稿资格     │
                               └────────┬─────────────────────────┘
                                        │
                         ┌──────────────▼──────────────┐
                         ┌──────────────▼──────────────┐
                         │ Railway Postgres（~$5–15/月） │
                         │  Postgres + better-auth 用户   │
-                        │  用户/邀请码/节目/脚本/任务/订阅 │
+                        │  用户/投稿审核/节目/脚本/任务/状态 │
                         └─────────────────────────────┘
 ```
 
@@ -76,24 +76,33 @@ app.dailog.fm (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 | 方法/路径 | 认证 | 作用 |
 |---|---|---|
 | `GET /health` | — | 健康检查（Railway healthcheckPath） |
-| `POST /api/auth/*` | — | **better-auth 会话路由**（注册/登录/登出/会话；注册含邀请码校验） |
+| `POST /api/auth/*` | — | **better-auth 会话路由**（注册/登录/登出/会话；注册含邮箱验证） |
 | `GET /api/me` | ✓ | 当前用户（认证中间件验证） |
 | `POST /api/import` | ✓ | **分享链接导入**：① 查 `snapshots`（URL 唯一）——未命中调 importer；**快照写入分层**：`platform_unreachable` 写快照（10 分钟 TTL 重试）；`parse_failed`/内容为空**不写库**（importer 解析器问题，修复后重试才有意义——写库会永久污染缓存）② 查 `polishes`（user × snapshot）——已存在返回 `{ existing: true, polishId }`（前端跳编辑页）③ 未创建则质量分析（LLM，结果写快照）→ 返回 `{ dialogue, quality }` 供预览确认 |
 | `POST /api/polishes/new` | ✓ | **确认创建容器**：提交快照 → 创建 `polishes`（user × snapshot 唯一；频道未开通 403）→ 返回 `{ polishId }` |
 | `GET /api/polishes/:id` | ✓ | 编辑页详情：polish + 快照 meta（标题/质量）+ transcripts 列表 |
 | `POST /api/transcripts/new` | ✓ | SSE 流式润色：基于快照对话生成一条 transcript（请求体含 polishId；润色上限 free 5 条）→ 流式返回脚本段落，done 事件带 `transcriptId` |
 | `PUT /api/transcripts/:id` | ✓ | 编辑保存 transcript 脚本（归属校验） |
-| `POST /api/episodes/new` | ✓ | **生成节目**：请求体含 transcriptId → 脚本内容安全审核（DeepSeek，拒绝 422 + 原因且不扣配额）→ 频道/配额校验 → 建 job → 后台执行 |
+| `POST /api/episodes/new` | ✓ | **生成节目**（编辑触发）：请求体含 transcriptId → 脚本内容安全审核（DeepSeek，拒绝 422 + 原因且不进入制作）→ 建 job → 后台执行 |
 | `GET /api/episodes/:id/job` | ✓ | 轮询生成进度（阶段 + 百分比） |
-| `POST /api/episodes/:id/publish` | ✓ | 发布（`is_public=true`）→ 触发邀请码发放 |
+| `POST /api/episodes/:id/publish` | editor | 发布（`is_public=true`，收录）→ 投稿人作品集更新 |
+| `POST /api/editor/reviews/:id/process` | editor | 触发大模型审核 + 润色（按话题切分 1–N 版脚本；审核不通过 → 标记 rejected + reason） |
+| `POST /api/editor/reviews/:id/reject` | editor | 拒绝（任何阶段可用，reason 必填，投稿人可见） |
+| `GET /api/editor/queue` | editor | 投稿队列（inbox：submitted 按提交时间升序；可筛 accepted/rejected） |
+| `GET /api/editor/reviews/:id` | editor | 审核详情（对话全文 + 脚本列表 + 节目列表） |
+| `PUT /api/editor/transcripts/:id` | editor | 编辑修改脚本（改文本/情绪标签/插删段落） |
+| `POST /api/editor/episodes/new` | editor | 生成（选脚本 → 安全审核 → job；完成后 status=ready 待发布确认） |
+| `GET /api/editor/episodes/:id/publish-form` | editor | 发布预填（LLM 生成 title/description/tags/coverKeywords，预填为主） |
+| `POST /api/editor/episodes/:id/publish` | editor | 发布确认（元数据落库 + 期号分配 max+1 + published） |
+| `PUT /api/editor/episodes/:id` | editor | 已发布节目编辑（tags / is_picked 精选；未来清单入口） |
+| `POST /api/editor/reviews/:id/cover-search` | editor | 封面候选（LLM 关键词 → Pexels 搜索 4 张；未配 key 503） |
+| `GET /api/editor/guests` | editor | 嘉宾列表 + 采样（guest 管理，迁移自 admin 白名单） |
 | `GET /api/importer/platforms` | ✓ | 转发 importer 校验规则（前端预检用，规则单一来源） |
 
 **路由挂载约定**：import/polishes/transcripts 路由内部自带 `/api` 前缀（挂根 `app.route("/", ...)`）；importer 路由无前缀（挂 `app.route("/api", ...)`）。
 | `POST /api/me/voice-sample` | ✓ | 上传/重录录音样本（R2 + 基础质量校验） |
 | ~~`GET /api/public/episodes/:id/dialogue`~~ | 预留 | 节目页"查看原文"（未来）：对话全文 + 来源元数据。内容站 SSR 直连读库（`repo.episodes.getPublishedDialogue`，仅 `is_public=true`、草稿不可见）；如需 HTTP 公开端点再按此形态暴露（无鉴权） |
-| `POST /api/billing/checkout` | ✓ | 创建 Stripe Checkout 会话 |
-| `POST /api/billing/portal` | ✓ | 创建 Stripe 管理门户会话 |
-| `POST /api/stripe/webhook` | 签名 | 订阅状态同步（`customer.subscription.*`） |
+| ~~billing / stripe-webhook~~ | — | **v1 不实现**（投稿制无创作者收费，MRD §5）；v2 听众侧用 Apple/小宇宙平台原生收款 |
 
 ### 3.3 生成管线
 
@@ -101,7 +110,7 @@ app.dailog.fm (SPA, SolidJS+StyleX) │         R2 (音频/封面/样本)
 queued → tts → merge → upload → done（failed 可重试）
 ```
 
-**生成前内容安全审核**：`generate` 入口先对最新脚本版本做 DeepSeek 安全审核（色情/违法/仇恨/诈骗等）——拒绝则返回 422 + 原因、**不创建 job、不扣配额**。质量门/安全门的审核结果当前仅以 422 + reason 返回、不落库（`episodes.quality_status/quality_reason` 字段已在 schema 预留，语义 = 最近一次审核结果，待前端展示时启用）。
+**生成前内容安全审核**：`generate` 入口先对最新脚本版本做 DeepSeek 安全审核（色情/违法/仇恨/诈骗等）——拒绝则返回 422 + 原因、**不创建 job、不进入制作**。质量门/安全门的审核结果当前仅以 422 + reason 返回、不落库（`episodes.quality_status/quality_reason` 字段已在 schema 预留，语义 = 最近一次审核结果，待前端展示时启用）。
 
 1. **TTS = Fish Audio（决策定稿，`docs/spikes/tts-comparison.md`；集成形态已实测，`docs/spikes/fish-audio.md`）**：核心刚需 = 即时克隆（录音样本上传后即时可用：fast 音色模型 5–8s，或零样本按需——参考音频随请求携带；重录即时生效，**实测通过**）——
    - **多说话人一次调用（实测可用）**：`text` 内嵌 `<|speaker:0|>` / `<|speaker:1|>` 标签 + `reference_id` 数组（下标对应 speaker 序号）——**不是 text/chunks 数组**（旧计划假设有误）；仅 S2-Pro 系模型支持（`s2-pro` / `s2.1-pro*`，`s1` 不行）；单次调用返回一条 mp3（实测 6 段对话 = 27.6s 单文件）
@@ -117,14 +126,16 @@ queued → tts → merge → upload → done（failed 可重试）
 2. **合并**：ffmpeg 拼接 `intro.{lang}.mp3 + 主对话 + outro.{lang}.mp3`（中/英两套固定片头片尾，按对话语言选择），段间 300ms 自然间隔
 3. **上传**：后端持 CF 凭证直传 R2 → 更新 `episodes.audio_url` / `duration_seconds` → job `done`
 
-### 3.4 配额与邀请码发放
+### 3.4 投稿成本预算（v1 无创作者收费，编辑驱动）
 
-- **计费单位 = 脚本字数**（与 LLM/TTS 成本线性对齐）：`generate` 入口先做脚本内容安全审核（422 不扣配额）→ **脚本字数校验（硬上限 5000 字，超限 400/422 提示精简）** → 配额判定（服务端）：
-  - 免费用户**首期 0 扣费**；之后按 `credit_balance` **按脚本字数扣减**（余额不足 → 403 + 购买/订阅引导）
-  - 按期付费用户按 `credit_balance` 扣减；订阅用户无限
-  - 扣减字数 = 最新脚本版本总字符数（generate 时读库统计，无需额外 LLM 调用）
-- **润色免费（获客漏斗）**：质量门（低质对话 422）过滤垃圾输入；**对话级润色上限：每对话最多 5 个脚本版本**（=5 次润色调用，`episodes.polish_count` 计数，仅计 LLM 润色、手动保存不计；pro 不限；超限 429；配置化）+ 单次输入对话量上限，防规模化白嫖；单次润色成本约 ¥0.04；重新润色支持**方向指示**（instruction 拼入 prompt），有未保存手动改动时先确认
-- 发布时发放邀请码：已发布期数 > 3 起，每发布一期 +1 码（`source=reward`，**前 3 期不补发**），见 PRD §4.1
+**v1 无任何收费点**——投稿免费、收录免费（MRD §5）；成本控制 = **编辑决策（用稿率）** + 硬上限：
+
+- **编辑驱动**：大模型审核 + 润色由编辑对具体投稿触发（`POST /api/editor/reviews/:id/process`）——被拒投稿只产生审核成本（~¥0.1），只有通过者产生制作成本（~¥1/期）
+- **generate 校验**：脚本内容安全审核（422 不进入制作）→ **脚本字数校验（硬上限 5000 字，超限 400/422 提示精简）** → 建 job（无投稿资格校验——注册 + 邮箱验证即获资格）
+- **成本上限（配置化）**：单次输入对话量上限；**免费层 TTS 模型 = `s2.1-pro-free`（$0）**（音质待人工试听确认，见 docs/spikes/fish-audio.md）；付费音色模型为 v2 选项——**无润色次数限制**（润色仅编辑触发，成本由编辑决策兜底）
+- **预算核算**：审核 ~¥0.1/投稿 + 制作 ~¥1/期（润色 + TTS 实测费率）——**编辑用稿率 = 成本总开关**（MRD §5；例：100 投稿/天 ≈ ¥30/天 ≈ ¥900/月）
+- 润色支持**方向指示**（instruction 拼入 prompt），有未保存手动改动时先确认
+- **邀请码机制已移除**（2026-08-11 定稿）：注册 + 邮箱验证即获投稿资格；`invite_codes` 表废弃
 
 ### 3.5 采集与导入（importer 纯解析 + API 编排）
 
@@ -169,15 +180,16 @@ queued → tts → merge → upload → done（failed 可重试）
 | 表 | 关键字段 | 说明 |
 |---|---|---|
 | `snapshots` | `url`(唯一), `platform`, `source_title`, `source_conversation_id`, `parsed_dialogue`(JSONB), `quality`(JSONB: `{pass, reason?, language?}`), `status`(ok/unreachable), `last_error`, `created_at`, `updated_at` | **分享快照**：对分享 URL 的内容提取（全局资源，与用户无耦合；URL 唯一）。分享页是原对话的快照——内容固定、永久有效；关闭后重开 = 新 URL。`status=unreachable` 时 10 分钟内不重试 importer |
-| `polishes` | `id`, `user_id`, `snapshot_id`, `title`, `status`(editing/generating/published/failed), `created_at`, `updated_at` | **创作容器**：用户 × 快照的工作区（**唯一约束 `(user_id, snapshot_id)`**——同一用户对同一分享链接只有一个 polish，重复粘贴跳转已有）。**纯容器**——不含脚本内容；质量门/语言随快照（内容固定 → 质量固定） |
+| `polishes` | `id`, `user_id`, `snapshot_id`, `title`, `status`(editing/generating/published/failed/submitted/accepted/rejected), `rejected_reason`, `reviewed_at`, `created_at`, `updated_at` | **创作容器 + 投稿单元**：用户 × 快照的工作区（**唯一约束 `(user_id, snapshot_id)`**——重复提交同一对话返回已有）。**纯容器**——不含脚本内容；质量门/语言随快照。**投稿状态机承载于此**（submitted→accepted/rejected；editing 等为旧自助模型残留，新流程不再产生） |
 | `transcripts` | `id`, `polish_id`, `segments`(JSONB: `[{speaker: host\|guest, text}]`), `language`, `created_at` | **润色脚本**：polish 可包含多个（多次润色各生成一条独立 transcript，无版本概念）；节目由其中一条生成 |
-| `episodes` | `id`, `user_id`, `transcript_id`, `polish_id`, `slug`, `title`, `description`, `cover_url`, `audio_url`, `duration_seconds`, `status`(generating/published/failed), `is_public`, `created_at`, `published_at` | **节目**：由一条润色脚本（`transcript_id`）生成。**无 draft 状态**（创作态归 polishes；`status=generating` 表示生成中） |
-| `tracks` | `episode_id`, `language`(zh/en/ja), `audio_url`, `duration_seconds`, `created_at` | **音轨**（预留）：一期节目可生成多语言音轨 |
-| `profiles` | `id`(=auth.users), `username`(唯一), `display_name`, `bio`, `plan`(free/pro), `credit_balance`, `created_at` | 用户 |
-| `voice_samples` | `user_id`, `audio_url`(R2), `duration`, `status`, `created_at` | 录音样本（可重录覆盖） |
-| `invite_codes` | `code`(唯一), `created_by`, `used_by`, `used_at`, `expires_at`, `source` | 邀请码 |
+| `episodes` | `id`, `user_id`, `transcript_id`, `polish_id`, `slug`, `title`, `description`, `cover_url`, `audio_url`, `duration_seconds`, `status`(generating/ready/published/failed), `number`(期号), `is_picked`(精选), `created_at`, `published_at` | **节目**：仅生成后才创建（transcriptId NOT NULL——投稿状态在 polishes）；**generating → ready（管线 done，待编辑确认）→ published（编辑确认 + 期号分配 max+1）** |
+| `tracks` | `episode_id`, `language`(zh/en/ja), `audio_url`, `duration_seconds`, `created_at` | **音轨**：节目音频，单语言（跟随对话语言，`language` 列保留扩展性）；**不做单节目多语言**——翻译版 = 基于同一快照的新节目（PRD §4.3） |
+| `profiles` | `id`(=auth.users), `username`(唯一), `display_name`, `bio`, `role`(user/editor), `created_at` | 用户（投稿人/编辑） |
+| `personas` | `user_id`, `display_name`, `bio`, `voice_sample_id`, `created_at` | **人设**（主持人配置）：信息 + 声音采样；投稿确认时配置、已有自动填充（PRD §4.2） |
+| `voice_samples` | `user_id`, `audio_url`(R2), `duration`, `status`, `created_at` | 录音样本（人设内，可重录覆盖） |
+| ~~`invite_codes`~~ | （废弃 2026-08-11：注册 + 邮箱验证即获投稿资格） | — |
 | `generation_jobs` | `episode_id`(或 polish_id), `status`(queued/tts/merge/upload/done/failed), `progress`, `error`, `attempts` | 生成任务 |
-| `payments` / `subscriptions` | （沿用） | 计费 |
+| `payments` / `subscriptions` | （v2 预留，v1 不建） | 计费（v2 听众侧） |
 
 **废弃表**：`imports`（由 snapshots + polishes 替代）、`scripts`（由 transcripts 替代）、`conversations`（不存在该概念——容器直接叫 polish）；`episodes.status=draft` 移除（创作态归 polishes）。
 **迁移策略**：**清空重建**（内测期数据量小，不做存量迁移；`imports`/`scripts` 表删除，`episodes` 重建去掉 draft/quality 字段——质量归 snapshots）。
@@ -196,25 +208,27 @@ assets/guest-voice-zh.mp3 等                 ← 平台资产
 
 ## 5. 前端
 
-### 5.1 工作台 SPA（apps/studio）
+### 5.1 管理员工作台（apps/admin，仅 admin/editor 登录）
 
-**路由规划**：
+**admin.dailog.fm = 编辑部后台**（独立工程，新建于 P3；旧 apps/studio 保留不再演进；投稿人端在 site §5.2）：
+
 ```
-/                     导入页（粘贴分享链接 → 采集预览 → 确认创建容器）
-/polish/:id           编辑页（polish → 润色生成脚本版本 → 生成节目）
-/episodes             节目列表
-/settings             设置
+/login               编辑/管理员登录（普通用户无权限）
+/queue               投稿队列（待审核/已收录/已发布）
+/reviews/:id         审核详情：触发审核 + 润色 → 选脚本（可手工编辑）→ 生成 → 发布 / 拒绝
+/settings            嘉宾音色管理、账号
 ```
 
 
 - Vite + SolidJS + Solid Router + StyleX（Babel/Oxc 插件接入）
-- 页面：auth / onboarding-voice / dashboard / episodes-new（四步向导）/ settings
-- 封面 v1：服务端代码模板生成（标题文字 + 渐变 SVG→PNG，零成本），用户可上传自定义图
+- 复用：润色编辑器（script-editor）、生成进度组件
+- **封面（图库匹配，非 AI 生成）**：润色 LLM 输出封面关键词 → Pexels API 搜索（`PEXELS_API_KEY`，免费额度）→ 编辑工作台 4 张候选选择 → 下载存 R2 → `cover_url`；跳过/未配置 key → 渐变模板兜底（服务端 SVG→PNG 生成，零成本）
 
-### 5.2 内容站 SSR（apps/site）
+### 5.2 内容站 + 投稿人端 SSR（apps/site）
 
-- SolidStart + Cloudflare adapter，SSR 部署于 CF Pages/Workers
-- 路由：`/`（最新/热门/搜索）、`/@username`（频道页）、`/episode/:id`（单集页，id = 节目短 ID）、`/@username/feed.xml`（RSS）
+- SolidStart + Cloudflare adapter，SSR 部署于 CF Pages/Workers；**无任何编辑路由**（编辑在 apps/admin §5.1）
+- 路由：`/`（landing：左 tagline+CTA / 右精选播放器）、`/discover/<new|hot|picked|top>`（新热精荐）、`/tags`（标签聚合）、`/episodes?params=`（搜索）、`/submit`（投稿流程：导入 + 人设配置 + 提交）、`/me/*`（submits/episodes/favorites/likes）、`/account/*`（账户/设置/重置密码）、`/login`、`/@<username>`（投稿人主页，默认邮箱前缀）、`/episode/<id>`（播放页）、`/hosts`·`/guests`（主持人/嘉宾展示）、`/feed.xml`（单 feed RSS，进 Apple/Spotify/小宇宙）
+- 注：投稿流程的录音组件（人设声音采样）在 site 内实现（SSR 安全：浏览器 API 只在客户端 effect 内使用），或按 packages/ui 约束抽取
 - RSS：itunes 元数据 + 封面 + 节目列表；feed 响应加 CF 短 TTL 缓存（防高频拉取）
 - 直连 Railway Postgres 读公开数据（只读查询 + 服务端只暴露公开字段）
 
@@ -222,11 +236,10 @@ assets/guest-voice-zh.mp3 等                 ← 平台资产
 
 - `packages/shared`：领域类型 + 设计 token（颜色/间距/字体），StyleX 编译时 CSS 两站共用
 
-## 6. 计费集成
+## 6. 计费（v1 无；v2 听众侧）
 
-1. **按期付费**：SPA → `POST /api/billing/checkout`（one-time price）→ Stripe Checkout → webhook `checkout.session.completed` → 写 `payments` + `credit_balance` 增加
-2. **包月订阅**：SPA → `POST /api/billing/checkout`（recurring price）→ webhook `customer.subscription.created/updated/deleted` → 同步 `subscriptions` → 更新 `profiles.plan`
-3. 订阅取消/过期 → 自动降级 `free`；已购买额度与已发布内容保留
+- **v1：无计费系统**——投稿制下无创作者收费（MRD §5）；`billing`/`stripe-webhook` 路由不实现，`payments`/`subscriptions` 表不建（v2 预留）
+- **v2 听众侧（频道资产验证后）**：Apple Podcasts Subscriptions / 小宇宙会员（平台原生收款 + 抽成 15–30%）→ 打赏与入选投稿人分成（Medium Partner Program 式）——收款主体/通道方案见 docs/market-payments.md
 
 ## 7. 成本模型（MVP 月度）
 
@@ -236,8 +249,8 @@ assets/guest-voice-zh.mp3 等                 ← 平台资产
 | Railway Postgres（统一后端 + 数据库 + Auth） | DB ~$5–15/月；Auth（better-auth 自托管）$0 |
 | Railway（统一后端） | 按用量约 $5–10/月（小规格常驻服务；Git 集成自动部署） |
 | LLM 润色 | 按量，每期约几美分 |
-| Fish Audio | 按量（$15/百万 UTF-8 字节，中文 1 字 3 字节；10 分钟期 ≈ ¥0.97，实测见 `docs/spikes/fish-audio.md`） |
-| Stripe | 2.9% + $0.30/笔 |
+| Fish Audio | 按量（官方 $15/百万字节；实测账单 ≈$9.7/M 字节 → 10 分钟期 ≈ ¥0.63，见 `docs/spikes/fish-audio.md` §7） |
+| 支付（v1 无） | — |
 
 超出免费额度的触发点：R2 >10GB；Railway（API+DB）随用量线性增长（可设用量上限告警）。
 
@@ -245,7 +258,7 @@ assets/guest-voice-zh.mp3 等                 ← 平台资产
 
 - **采集服务解析器（`services/importer`）**：每平台解析器纯函数单测（值表解码/多层转义/BigInt 清洗/双格式流式响应等，10 用例）
 - **管线**：mock LLM / mock Fish Audio 集成测试；ffmpeg 拼接 golden 文件对比（时长/字节）
-- **规则单测**：配额判定、邀请码发放（>3 期规则）、订阅状态机
+- **规则单测**：收录标准判定（四类价值）、角色权限（admin/editor）、成本预算核算
 - **API 契约**：Vitest + Hono app 直测
 - **前端**：Vitest 组件测试（编辑器为重点）+ 1 条 Playwright E2E 主流程（注册→录音→导入→润色→生成→发布→播放）
 
@@ -254,7 +267,7 @@ assets/guest-voice-zh.mp3 等                 ← 平台资产
 | 风险 | 缓解 |
 |---|---|
 | 多说话人混合模式受限（实测：一次调用不能混用「主持人内联零样本 + 嘉宾固定 `reference_id`」） | 设计定型：**按段 fallback**（host 段 msgpack 内联零样本 + guest 段固定音色逐段合成），ffmpeg 拼接（管线本就有）；需单次混排时先建主持人音色模型（`POST /model`，fast 5–8s，免费）走全 `reference_id` 数组 |
-| Fish 免费/付费模型差异（spike 全程在 `s2.1-pro-free` 完成，0 额度账号无法直接观察扣费） | 计费口径 $15/百万 UTF-8 字节已由官方定价页确认；上线前用付费账号以 `GET /wallet/self/api-credit` 差值核对账单；克隆一致性默认波动 ~12%，长节目可调低 temperature |
+| Fish 免费/付费模型差异（spike 全程在 `s2.1-pro-free` 完成，0 额度账号无法直接观察扣费） | 已实测一例真实账单（$1.89/195KB → ≈$9.7/M 字节，约为官方价 65%，见 spike §7）；上线前多模型复核费率；克隆一致性默认波动 ~12%，长节目可调低 temperature |
 | 平台分享页数据结构变化 | 采集服务解析器每平台一文件（`services/importer/src/platforms/`），改版时定点修复重新部署（实测案例：claude content[] blocks 结构迁移、chatgpt RSC） |
 | Cloudflare/Turnstile 风控 | 数据中心 IP 直连 claude.ai 被 CF 拦（新加坡/美区/Workers 三路实测 403）；采集服务多通道重试兜底（ScraperAPI 实测全通，免费额度内） |
 | 平台分享页改版 | 采集服务解析器需随平台数据结构变化维护（每平台一文件）；改版时只更新采集服务，主站不受影响 |

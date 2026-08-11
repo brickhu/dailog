@@ -7,25 +7,25 @@
 
 ```
 浏览器 ── http://dailog.orb.local ──────────┐
-       ── http://app.dailog.orb.local ──────┤
+       ── http://admin.dailog.orb.local ──────┤
        ── http://api.dailog.orb.local ──────┤
                                             ▼
 ┌──────────────── OrbStack（docker compose，项目名 dailog）────────────────┐
-│  dailog 容器（site，vinxi，:80/:3001）     app 容器（studio，vite，:5173）  │
+│  dailog 容器（site，vinxi，:80）         admin 容器（vite，:5174）        │
 │  api 容器（:8787）  importer 容器（:8798）  dailog-pg（postgres，:5432）    │
 │                                                                            │
 │  容器间调用走 compose 服务名（api/postgres/importer），不经宿主机           │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- 容器名/服务名 = 域名：`dailog`（site）、`app`（studio）、`api`、`importer`（服务名.项目名.orb.local）
+- 容器名/服务名 = 域名：`dailog`（site）、`admin`、`api`、`importer`（服务名.项目名.orb.local）
 - 宿主机 `localhost:3000/5173/8787/8798/5432` 同样可达（ports publish，otp.sh 等本机工具兼容）
 - 数据：postgres 数据在 `dailog-dev_pgdata` 卷（`docker compose down` 不丢；`down -v` 会删）
 
 ## 快速开始
 
 > **本地开发唯一路径 = orb**。本机直跑（pnpm dev 单起进程）已禁用：
-> studio dev 缺 `VITE_PROXY_TARGET/VITE_PROXY_ORIGIN` 会直接报错提示；
+> admin dev 缺 `VITE_PROXY_TARGET/VITE_PROXY_ORIGIN` 会直接报错提示；
 > site 非 orb 启动 dev 会打印警告。日常请用 orb。
 
 ```bash
@@ -41,7 +41,7 @@ docker compose down      # 停止（数据保留）
 | 域名 | 服务 | 容器内端口 | 宿主映射 |
 |---|---|---|---|
 | `http://dailog.orb.local` | site（vinxi dev） | 80（HTTP）+ 3001（HMR） | localhost:3000 → 80 |
-| `http://app.dailog.orb.local` | studio（vite dev） | 5173 | localhost:5173 |
+| `http://admin.dailog.orb.local` | admin（vite dev） | 5174 | localhost:5174 |
 | `http://api.dailog.orb.local` | API（tsx watch） | 8787 | localhost:8787 |
 | `http://importer.dailog.orb.local` | importer | 8798 | localhost:8798 |
 | `dailog-pg` | postgres | 5432 | localhost:5432 |
@@ -58,11 +58,11 @@ docker compose down      # 停止（数据保留）
 - 公开：`/health`（无前缀，免鉴权）
 - 鉴权：`app.use("/v1/*", authMiddleware)` 一条中间件覆盖全部业务端点；`/v1/auth/*` 挂在中间件之前免鉴权
 
-前端（site/studio）统一用相对路径 `/v1/...` 调用——三条代理链按前缀整体转发：
+前端（site/admin）统一用相对路径 `/v1/...` 调用——三条代理链按前缀整体转发：
 
 | 代理点 | 转发目标 | 说明 |
 |---|---|---|
-| studio `vite.config.ts` proxy | `{ "/v1": VITE_PROXY_TARGET ?? "http://localhost:8787" }` | orb 容器内经 `http://api:8787` |
+| admin `vite.config.ts` proxy | `{ "/v1": VITE_PROXY_TARGET ?? "http://localhost:8787" }` | orb 容器内经 `http://api:8787` |
 | site `routes/v1/**` 站内代理 | `proxyApi/proxyAuth` → `API_BASE_URL` | orb 容器内 `http://api:8787` |
 | api `IMPORTER_URL` | `http://importer:8798` | 采集服务转发 |
 
@@ -71,10 +71,10 @@ docker compose down      # 停止（数据保留）
 | 变量 | 值 | 说明 |
 |---|---|---|
 | `BETTER_AUTH_URL` | `http://api.dailog.orb.local` | 回调/重定向基址 |
-| `BETTER_AUTH_COOKIE_DOMAIN` | `.dailog.orb.local` | SSO 跨子域 cookie（site/studio 共享） |
-| `APP_ORIGINS` | `http://app.dailog.orb.local,http://dailog.orb.local` | CORS/CSRF 白名单 |
+| `BETTER_AUTH_COOKIE_DOMAIN` | `.dailog.orb.local` | SSO 跨子域 cookie（site/admin 共享） |
+| `APP_ORIGINS` | `http://admin.dailog.orb.local,http://dailog.orb.local` | CORS/CSRF 白名单 |
 | `DATABASE_URL`（api/site） | `postgres://dailogues:dailogues@postgres:5432/dailogues` | 容器内服务名 |
-| `VITE_PROXY_TARGET`（studio） | `http://api:8787` | vite proxy 目标 |
+| `VITE_PROXY_TARGET`（admin） | `http://api:8787` | vite proxy 目标 |
 | `PORT=80`（site） | 容器内监听 80 | OrbStack 域名 80 → 容器 80 |
 
 代码内条件：`ORB=1`（site app.config）才启用 HMR 固定端口 3001 与跳过 ws token 校验；
@@ -85,7 +85,7 @@ docker compose down      # 停止（数据保留）
 ```bash
 pnpm dev:orb              # 启动全家桶
 pnpm otp [邮箱前缀]        # 查注册/重置验证码（docker exec dailog-pg）
-pnpm invite <code> [--expires N]   # 创建邀请码
+# 邀请码 CLI 已移除（2026-08-11：注册开放 + 邮箱验证即获投稿资格）
 docker compose ps         # 状态
 docker compose logs -f api # 单服务日志
 docker exec dailog-pg psql -U dailogues -d dailogues  # 直连数据库
