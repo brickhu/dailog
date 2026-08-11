@@ -11,6 +11,8 @@ export interface RunnerDeps {
     getEpisodeLanguage(episodeId: string): Promise<string | null>;
     /** 生成来源脚本：经 episodes.transcript_id → transcripts.segments */
     getEpisodeScript(episodeId: string): Promise<{ segments: { speaker: "host" | "guest"; text: string }[] } | null>;
+    /** 节目元数据（ID3 标签用）：标题 + 期号 */
+    getEpisodeMeta(episodeId: string): Promise<{ title: string | null; number: number | null } | null>;
     /** 生成来源嘉宾：经 episodes.transcript_id → transcripts.guest_id（无引用 → null） */
     getEpisodeGuest(episodeId: string): Promise<{ guestId: string | null } | null>;
     /** 嘉宾音频采样：按语种取（同语种优先）；无该语种 → null（用 voiceSampleAny 兜底） */
@@ -132,9 +134,11 @@ export function createPipelineRunner(deps: RunnerDeps): JobHandler {
 
     // 4. ffmpeg 拼接 + 时长探测：intro + 主对话 + outro（资产缺失自动降级），产物留内存供 upload
     await progress("tts", 40);
+    const epMeta = await deps.repo.getEpisodeMeta(job.episodeId);
     const { audio, durationSeconds } = await mergeEpisodeAudio({
       language,
       result: ttsResult,
+      meta: epMeta ?? undefined,
       deps: { ffmpegPath: deps.ffmpegPath, assets: deps.assets },
     });
 

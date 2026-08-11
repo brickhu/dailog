@@ -18,6 +18,7 @@ function makeDeps(overrides: Partial<RunnerDeps> = {}): RunnerDeps {
     getEpisodeUserId: vi.fn(async () => "user-1"),
     getEpisodeLanguage: vi.fn(async () => "zh"),
     getEpisodeScript: vi.fn(async () => ({ version: 1, segments: SEGMENTS })),
+    getEpisodeMeta: async () => ({ title: "test-ep", number: 1 }),
     getEpisodeGuest: vi.fn(async () => ({ guestId: null })),
     getGuestVoiceSample: vi.fn(async () => null),
     getGuestVoiceSampleAny: vi.fn(async () => null),

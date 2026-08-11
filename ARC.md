@@ -123,7 +123,7 @@ queued → tts → merge → upload → done（failed 可重试）
    - 超长保护：润色以**单期 5–10 分钟**（约 1200–3000 字）为目标压缩；脚本上限 80 段
    - 失败：每批重试 2 次（指数退避）
    - **备选切换预案**（触发条件：成本超标/音质/合规）：讯飞一句话复刻（¥2.3 训练 + ¥1.15/万字符）、火山声音复刻（5 秒级）、MiniMax、自部署 CosyVoice2（Apache-2.0，规模后迁移路径）——TTS 层保持供应商抽象
-2. **合并**：ffmpeg 拼接 `intro.{lang}.mp3 + 主对话 + outro.{lang}.mp3`（中/英两套固定片头片尾，按对话语言选择），段间 300ms 自然间隔
+2. **合并**：ffmpeg 拼接 `intro.{lang}.mp3 + 主对话 + outro.{lang}.mp3`（中/英两套固定片头片尾，按对话语言选择），段间 300ms 自然间隔；**输出按行业标准**（Apple Podcasts 指南）：MP3 128k mono 44.1kHz + `loudnorm I=-16:TP=-1.0` 响度归一 + ID3 标签（title/album=dailog/genre=Podcast/期号）
 3. **上传**：后端持 CF 凭证直传 R2 → 更新 `episodes.audio_url` / `duration_seconds` → job `done`
 
 ### 3.4 投稿成本预算（v1 无创作者收费，编辑驱动）

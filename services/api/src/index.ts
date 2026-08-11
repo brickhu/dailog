@@ -60,6 +60,7 @@ const queue = createJobQueue(createPipelineRunner({
     getEpisodeUserId: repo.episodes.getEpisodeUserId,
     getEpisodeLanguage: repo.episodes.getEpisodeLanguage,
     getEpisodeScript: repo.episodes.getEpisodeScript,
+    getEpisodeMeta: (episodeId) => repo.episodes.getById(episodeId).then((e) => (e ? { title: e.title, number: e.number } : null)),
     getEpisodeGuest: repo.episodes.getEpisodeGuest,
     getGuestVoiceSample: (guestId, language) => repo.guests.voiceSampleByLanguage(guestId, language),
     getGuestVoiceSampleAny: (guestId) => repo.guests.voiceSampleAny(guestId),

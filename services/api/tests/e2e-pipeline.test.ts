@@ -120,6 +120,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
         getEpisodeUserId: repo.episodes.getEpisodeUserId,
         getEpisodeLanguage: repo.episodes.getEpisodeLanguage,
         getEpisodeScript: repo.episodes.getEpisodeScript,
+        getEpisodeMeta: async () => ({ title: "test-ep", number: 1 }),
         getEpisodeGuest: repo.episodes.getEpisodeGuest,
         getGuestVoiceSample: (guestId, language) => repo.guests.voiceSampleByLanguage(guestId, language),
         getGuestVoiceSampleAny: (guestId) => repo.guests.voiceSampleAny(guestId),

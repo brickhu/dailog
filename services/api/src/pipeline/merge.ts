@@ -35,6 +35,8 @@ export interface MergeDeps {
 export interface MergeInput {
   language: string;
   deps: MergeDeps;
+  /** ID3 元数据（节目标题/期号）——发布标准：title/album=dailog/episode/genre=Podcast */
+  meta?: { title?: string | null; episodeNumber?: number | null };
   /** runner 传入：tts 阶段产物（single 或 segments） */
   result?: SynthesizeResult;
   /** 直接传入音频（测试/独立调用）：单段主音频 */
@@ -99,10 +101,27 @@ export async function mergeEpisodeAudio(args: MergeInput): Promise<MergeOutput> 
     await writeFile(listFile, parts.map((p) => `file '${p}'`).join("\n"));
     const outFile = join(dir, "out.mp3");
     await new Promise<void>((resolve, reject) => {
+      // 输出标准（Apple Podcasts 指南）：128k mono 44.1kHz + 响度 -16 LUFS（TP≤-1.0）
+      // + ID3 标签（title/album=dailog/episode number/genre=Podcast）
+      const meta = args.meta;
+      const metadataOpts: string[] = [
+        "-metadata", `title=${meta?.title?.slice(0, 200) ?? "dailog"}`,
+        "-metadata", "artist=dailog",
+        "-metadata", "album=dailog",
+        "-metadata", "genre=Podcast",
+        ...(meta?.episodeNumber ? ["-metadata", `track=${meta.episodeNumber}`] : []),
+      ];
       ffmpeg()
         .input(listFile)
         .inputOptions(["-f", "concat", "-safe", "0"])
-        .outputOptions(["-c:a", "libmp3lame", "-b:a", "128k"])
+        .outputOptions([
+          "-c:a", "libmp3lame",
+          "-b:a", "128k",
+          "-ar", "44100",
+          "-ac", "1",
+          "-af", "loudnorm=I=-16:TP=-1.0:LRA=11",
+          ...metadataOpts,
+        ])
         .output(outFile)
         .on("end", () => resolve())
         .on("error", (err) => reject(err))
