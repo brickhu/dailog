@@ -7,6 +7,13 @@ import type { Env } from "../src/config/env";
 
 function fakeRepo(): AppDeps["repo"] {
   return {
+        notifications: {
+          create: async () => {},
+          listByUser: async () => [],
+          unreadCount: async () => 0,
+          markAllRead: async () => {},
+          getEmailByUserId: async () => null,
+        },
         guests: {
       getByPlatform: async () => null,
       list: async () => [],
@@ -28,6 +35,11 @@ function fakeRepo(): AppDeps["repo"] {
       findByUserSnapshot: async () => null,
 
       create: async () => ({ id: "polish-1" }),
+      createSubmission: async () => ({ id: "sub-1" }),
+      listSubmissionsByUser: async () => [],
+      listQueue: async () => [],
+      getById: async () => null,
+      setStatus: async () => {},
       getOwned: async () => null,
       getPolishDetail: async () => null,
       listByUser: async () => [],
@@ -38,6 +50,7 @@ function fakeRepo(): AppDeps["repo"] {
       getOwned: async () => null,
       updateSegments: async () => {},
       markUsed: async () => {},
+      getById: async () => null,
     },
     episodes: {
       create: async () => ({ id: "ep-1" }),
@@ -45,11 +58,15 @@ function fakeRepo(): AppDeps["repo"] {
       getOwned: async () => null,
       getEpisodeAudio: async () => null,
       getByTranscript: async () => null,
+      listByPolish: async () => [],
       getEpisodeScript: async () => null,
       getEpisodeGuest: async () => null,
       getPublicAudioKey: async () => null,
       getPublishedDialogue: async () => null,
       setPublished: async () => {},
+      getById: async () => null,
+      publish: async () => ({ number: 1 }),
+      updatePublished: async () => {},
       getEpisodeUserId: async () => null,
       getEpisodeLanguage: async () => null,
       getHostModelId: async () => null,
@@ -88,6 +105,12 @@ function fakeImportDeps(): AppDeps["importDeps"] {
     markSnapshotUnreachable: async () => {},
     markSnapshotParseFailed: async () => {},
     findPolishByUserSnapshot: async () => null,
+    getPlatformRules: async () => [
+      { id: "claude", label: "Claude", sharePattern: "^https?:\\/\\/(www\\.)?claude\\.ai\\/share\\/[0-9a-f-]{36}" },
+      { id: "deepseek", label: "DeepSeek", sharePattern: "^https?:\\/\\/chat\\.deepseek\\.com\\/share\\/[A-Za-z0-9]+" },
+      { id: "chatgpt", label: "ChatGPT", sharePattern: "^https?:\\/\\/(www\\.)?chatgpt\\.com\\/share\\/[A-Za-z0-9-]+" },
+      { id: "kimi", label: "Kimi", sharePattern: "^https?:\\/\\/(www\\.)?kimi\\.com\\/share\\/[0-9a-f-]{36}" },
+    ],
   };
 }
 function fakePolishesDeps(): AppDeps["polishesDeps"] {
@@ -127,6 +150,7 @@ function fakeEnv(): Env {
     RESEND_API_KEY: "",
     EMAIL_FROM: "dailog <no-reply@dailog.fm>",
     ADMIN_EMAILS: "",
+    PEXELS_API_KEY: "",
     SITE_BASE_URL: "https://site.dailog.fm",
 
   };
@@ -180,7 +204,7 @@ describe("importer 转发路由", () => {
       platform: "claude",
       conversationId: "conv-1",
       title: "测试对话",
-      url: "https://claude.ai/share/abc",
+      url: "https://claude.ai/share/01234567-89ab-cdef-0123-456789abcdef",
       messages: [{ role: "user", content: "问" }, { role: "assistant", content: "答" }],
     };
     const fetchMock = vi.fn().mockResolvedValue({
@@ -194,7 +218,7 @@ describe("importer 转发路由", () => {
       const res = await app.request("/v1/importer/collect", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url: "https://claude.ai/share/abc" }),
+        body: JSON.stringify({ url: "https://claude.ai/share/01234567-89ab-cdef-0123-456789abcdef" }),
       });
       expect(res.status).toBe(200);
       const body = (await res.json()) as typeof dialogue;
@@ -203,7 +227,7 @@ describe("importer 转发路由", () => {
       // 转发目标：importer /collect + 请求体透传
       const [url, init] = fetchMock.mock.calls[0];
       expect(String(url)).toBe("https://importer.internal/collect");
-      expect(JSON.parse((init as RequestInit).body as string)).toEqual({ url: "https://claude.ai/share/abc" });
+      expect(JSON.parse((init as RequestInit).body as string)).toEqual({ url: "https://claude.ai/share/01234567-89ab-cdef-0123-456789abcdef" });
     } finally {
       vi.unstubAllGlobals();
     }
@@ -223,7 +247,7 @@ describe("importer 转发路由", () => {
       const res = await app.request("/v1/importer/collect", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url: "https://claude.ai/share/abc" }),
+        body: JSON.stringify({ url: "https://claude.ai/share/01234567-89ab-cdef-0123-456789abcdef" }),
       });
       expect(res.status).toBe(502);
       const body = (await res.json()) as { error: string };
@@ -239,7 +263,7 @@ describe("importer 转发路由", () => {
     const res = await app.request("/v1/importer/collect", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: "https://claude.ai/share/abc" }),
+      body: JSON.stringify({ url: "https://claude.ai/share/01234567-89ab-cdef-0123-456789abcdef" }),
     });
     expect(res.status).toBe(503);
   });
@@ -277,7 +301,7 @@ describe("importer 转发路由", () => {
           platform: "claude",
           conversationId: "c1",
           title: "t",
-          url: "https://claude.ai/share/abc",
+          url: "https://claude.ai/share/01234567-89ab-cdef-0123-456789abcdef",
           messages: [
             { role: "user", content: "" },
             { role: "assistant", content: "" },
@@ -358,7 +382,7 @@ describe("/v1/import 规则检查（内容门槛）", () => {
     app.request("/v1/import", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: "https://claude.ai/share/abc" }),
+      body: JSON.stringify({ url: "https://claude.ai/share/01234567-89ab-cdef-0123-456789abcdef" }),
     });
 
   it("少于 3 轮问答 → 422 too_short", async () => {

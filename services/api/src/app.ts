@@ -8,6 +8,8 @@ import { importRoutes, type ImportDeps } from "./routes/import";
 import { polishesRoutes, type PolishesDeps } from "./routes/polishes";
 import { transcriptsRoutes, type TranscriptsDeps } from "./routes/transcripts";
 import { profileRoutes } from "./routes/profile";
+import { submissionsRoutes } from "./routes/submissions";
+import { notificationsRoutes } from "./routes/notifications";
 import { importerRoutes } from "./routes/importer";
 import { authExtRoutes } from "./routes/auth-ext";
 import { jobRoutes, type JobDeps } from "./routes/job";
@@ -16,6 +18,8 @@ import { channelRoutes, type ChannelDeps } from "./routes/channel";
 import { favoritesRoutes, type FavoritesRepo } from "./routes/favorites";
 import { tokenRoutes } from "./routes/token";
 import { adminRoutes, type AdminDeps } from "./routes/admin";
+import { editorRoutes, type EditorDeps } from "./routes/editor";
+import { sendEmail } from "./email/resend";
 import type { Repos } from "./repo";
 
 export type { AuthLike };
@@ -79,13 +83,14 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
     }
   });
 
-  app.use("/v1/*", createAuthMiddleware(deps.auth));
+  app.use("/v1/*", createAuthMiddleware(deps.auth, async (userId) => (await deps.repo.episodes.getRole?.(userId)) ?? null));
 
   app.get("/v1/me", async (c) => {
     const userId = c.get("userId");
     const activated = await deps.repo.episodes.getChannelActivatedAt(userId);
     const sample = await deps.repo.episodes.getVoiceSample(userId);
-    return c.json({ userId, channelActive: activated !== null, hasVoiceSample: sample !== null });
+    const role = (await deps.repo.episodes.getRole?.(userId)) ?? "user";
+    return c.json({ userId, role, channelActive: activated !== null, hasVoiceSample: sample !== null });
   });
 
   // import/polishes/transcripts 路由内部自带 /api 前缀（挂根）；importer 路由无前缀（挂 /api）
@@ -93,6 +98,8 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   app.route("/", polishesRoutes(deps.polishesDeps));
   app.route("/", transcriptsRoutes(deps.transcriptsDeps));
   app.route("/", profileRoutes({ repo: deps.repo }));
+  app.route("/", submissionsRoutes(deps.repo));
+  app.route("/", notificationsRoutes(deps.repo));
   app.route("/v1", importerRoutes(() => deps.shareCollectUrl?.() ?? process.env.IMPORTER_URL ?? null));
   app.route("/v1", episodesRoutes(deps.episodesDeps, (c) => (c as Context<AuthEnv>).get("userId"), deps.voice.storage));
   // polish/generate/job/voice 路由自带 /api 前缀（与各自 test.ts 直接对裸 app 请求 /api/... 一致），故挂载在根路径；
@@ -102,6 +109,18 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   app.route("/", channelRoutes(deps.channel));
   app.route("/", favoritesRoutes(deps.favorites));
   app.route("/", adminRoutes(deps.admin));
+  // 编辑端（P2）：requireRole(editor|admin) 守卫在 editorRoutes 内部施加
+  app.route("/", editorRoutes({
+    repo: deps.repo,
+    llm: deps.transcriptsDeps.llm,
+    guestsByPlatform: deps.transcriptsDeps.guestsByPlatform,
+    safetyCheck: deps.episodesDeps.safetyCheck,
+    createJob: deps.episodesDeps.createJob,
+    enqueueJob: deps.episodesDeps.enqueueJob,
+    getLatestJob: deps.episodesDeps.getLatestJob,
+    pexelsApiKey: deps.env.PEXELS_API_KEY || null,
+    notifyEmail: (input) => sendEmail(deps.env, input),
+  } satisfies EditorDeps));
 
   app.notFound((c) => c.json({ error: "not_found" }, 404));
   app.onError((err, c) => {

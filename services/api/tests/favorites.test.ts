@@ -24,6 +24,12 @@ function fakeImportDeps(): AppDeps["importDeps"] {
     markSnapshotUnreachable: async () => {},
     markSnapshotParseFailed: async () => {},
     findPolishByUserSnapshot: async () => null,
+    getPlatformRules: async () => [
+      { id: "claude", label: "Claude", sharePattern: "^https?:\\/\\/(www\\.)?claude\\.ai\\/share\\/[0-9a-f-]{36}" },
+      { id: "deepseek", label: "DeepSeek", sharePattern: "^https?:\\/\\/chat\\.deepseek\\.com\\/share\\/[A-Za-z0-9]+" },
+      { id: "chatgpt", label: "ChatGPT", sharePattern: "^https?:\\/\\/(www\\.)?chatgpt\\.com\\/share\\/[A-Za-z0-9-]+" },
+      { id: "kimi", label: "Kimi", sharePattern: "^https?:\\/\\/(www\\.)?kimi\\.com\\/share\\/[0-9a-f-]{36}" },
+    ],
   };
 }
 function fakePolishesDeps(): AppDeps["polishesDeps"] {
@@ -76,6 +82,13 @@ function fakeEpisodesDeps(): AppDeps["episodesDeps"] {
 
 function fakeRepo(): AppDeps["repo"] {
   return {
+        notifications: {
+          create: async () => {},
+          listByUser: async () => [],
+          unreadCount: async () => 0,
+          markAllRead: async () => {},
+          getEmailByUserId: async () => null,
+        },
         guests: {
       getByPlatform: async () => null,
       list: async () => [],
@@ -97,6 +110,11 @@ function fakeRepo(): AppDeps["repo"] {
       findByUserSnapshot: async () => null,
 
       create: async () => ({ id: "polish-1" }),
+      createSubmission: async () => ({ id: "sub-1" }),
+      listSubmissionsByUser: async () => [],
+      listQueue: async () => [],
+      getById: async () => null,
+      setStatus: async () => {},
       getOwned: async () => null,
       getPolishDetail: async () => null,
       listByUser: async () => [],
@@ -107,6 +125,7 @@ function fakeRepo(): AppDeps["repo"] {
       getOwned: async () => null,
       updateSegments: async () => {},
       markUsed: async () => {},
+      getById: async () => null,
     },
     episodes: {
       create: async () => ({ id: "ep-1" }),
@@ -114,11 +133,15 @@ function fakeRepo(): AppDeps["repo"] {
       getOwned: async () => null,
       getEpisodeAudio: async () => null,
       getByTranscript: async () => null,
+      listByPolish: async () => [],
       getEpisodeScript: async () => null,
       getEpisodeGuest: async () => null,
       getPublicAudioKey: async () => null,
       getPublishedDialogue: async () => null,
       setPublished: async () => {},
+      getById: async () => null,
+      publish: async () => ({ number: 1 }),
+      updatePublished: async () => {},
       getEpisodeUserId: async () => null,
       getEpisodeLanguage: async () => null,
       getHostModelId: async () => null,
@@ -189,6 +212,7 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
       RESEND_API_KEY: "",
       EMAIL_FROM: "dailog <no-reply@dailog.fm>",
       ADMIN_EMAILS: "",
+      PEXELS_API_KEY: "",
     SITE_BASE_URL: "https://site.dailog.fm",
 
     };

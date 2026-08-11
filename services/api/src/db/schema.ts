@@ -1,5 +1,5 @@
 import {
-  boolean, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
+  boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
 } from "drizzle-orm/pg-core";
 
 export interface ScriptSegment { speaker: "host" | "guest"; text: string; }
@@ -82,6 +82,8 @@ export const profiles = pgTable("profiles", {
   bio: text("bio"),
   plan: text("plan", { enum: ["free", "pro"] }).notNull().default("free"),
   creditBalance: integer("credit_balance").notNull().default(0),
+  /** 角色：user（投稿人）/ editor（编辑）/ admin（管理员）——studio 管理员工作台仅 admin/editor 可登录 */
+  role: text("role", { enum: ["user", "editor", "admin"] }).notNull().default("user"),
   /** 频道开通时间（授权码激活；null = 未开通，不能生成/发布） */
   channelActivatedAt: timestamp("channel_activated_at", { withTimezone: true }),
   /** 主持人默认人设（生成脚本前展示可改，仅本次生效；null = 未设置） */
@@ -145,7 +147,9 @@ export const snapshots = pgTable("snapshots", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-/** 创作容器：用户 × 快照的工作区（纯容器，不含脚本内容；重复粘贴跳转已有） */
+/** 创作容器：用户 × 快照的工作区（纯容器，不含脚本内容；重复粘贴跳转已有）。
+ *  投稿制：status 同时承载投稿状态机——submitted（已投稿待审核）/ accepted（已收录）/ rejected（投稿失败）；
+ *  editing/generating/published/failed 为旧自助创作模型残留（未迁移数据兼容，新流程不再产生）。 */
 export const polishes = pgTable(
   "polishes",
   {
@@ -153,7 +157,11 @@ export const polishes = pgTable(
     userId: text("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
     snapshotId: uuid("snapshot_id").notNull().references(() => snapshots.id),
     title: text("title"),
-    status: text("status", { enum: ["editing", "generating", "published", "failed"] }).notNull().default("editing"),
+    status: text("status", { enum: ["editing", "generating", "published", "failed", "submitted", "accepted", "rejected"] }).notNull().default("editing"),
+    /** 拒绝原因（rejected 时必填，投稿人 /me/submits 可见） */
+    rejectedReason: text("rejected_reason"),
+    /** 编辑处理时间（process/reject 落库） */
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -205,8 +213,12 @@ export const episodes = pgTable("episodes", {
   topic: text("topic"),
   hostId: text("host_id").references(() => profiles.id),
   guestId: text("guest_id").references(() => guests.id),
-  /** 无 draft 状态：创作态归 polishes；generating = 生成中 */
-  status: text("status", { enum: ["generating", "published", "failed"] }).notNull().default("generating"),
+  /** 数字期号：发布确认时分配（max+1，唯一；未发布无编号，无空洞）——"dailog 第 N 期" */
+  number: integer("number"),
+  /** 精选标记（首页播放器 / discover/picked） */
+  isPicked: boolean("is_picked").notNull().default(false),
+  /** 生成完成待编辑确认（ready）→ 编辑确认发布（published） */
+  status: text("status", { enum: ["generating", "ready", "published", "failed"] }).notNull().default("generating"),
   isPublic: boolean("is_public").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   publishedAt: timestamp("published_at", { withTimezone: true }),
@@ -267,6 +279,24 @@ export const likes = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("likes_user_episode").on(t.userId, t.episodeId)],
+);
+
+/** 站内通知（投稿状态变化：收录/拒绝/上线）——site /me/notifications 展示 */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+    /** 通知类型：accepted（已收录）/ rejected（未收录）/ published（节目上线） */
+    type: text("type", { enum: ["accepted", "rejected", "published"] }).notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    /** 关联链接（节目页/投稿状态页） */
+    link: text("link"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("notifications_user_created_idx").on(t.userId, t.createdAt)],
 );
 
 export const generationJobs = pgTable("generation_jobs", {

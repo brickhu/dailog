@@ -30,9 +30,11 @@ const OTP_TTL_MS = 10 * 60 * 1000; // 10 分钟
 
 // 认证接口 IP 限流（内存，单实例够用——防注册接口刷邮件通道）。
 // better-auth 的 rateLimit 只作用于其自身端点，auth-ext 是自定义路由需自己限。
+// 参数可配置：AUTH_RATE_MAX / AUTH_RATE_WINDOW_MS（本地开发放宽——容器内所有请求共享
+// "local" 桶（无 x-forwarded-for），默认 5 次/分钟会被浏览器重试+探测误伤）
 const rateMap = new Map<string, number[]>(); // ip → 最近请求时间戳
-const RATE_WINDOW_MS = 60_000;
-const RATE_MAX = 5; // 60 秒最多 5 次认证请求
+const RATE_WINDOW_MS = Number(process.env.AUTH_RATE_WINDOW_MS ?? 60_000);
+const RATE_MAX = Number(process.env.AUTH_RATE_MAX ?? 5);
 
 function checkRate(ip: string): boolean {
   const now = Date.now();

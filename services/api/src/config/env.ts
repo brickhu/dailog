@@ -39,6 +39,8 @@ const schema = z.object({
   R2_BUCKET: z.string().optional(),
   // 管理端点管理员白名单（逗号分隔邮箱；空 = 无管理员，/api/admin/* 一律 403）
   ADMIN_EMAILS: z.string().default(""),
+  // 封面图库（Pexels）搜索 key：未配置 → cover-search 503，发布用模板/占位封面
+  PEXELS_API_KEY: z.string().default(""),
 });
 
 export type Env = z.infer<typeof schema>;

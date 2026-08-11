@@ -34,6 +34,7 @@ function makeEnv(): Env {
       RESEND_API_KEY: "",
       EMAIL_FROM: "dailog <no-reply@dailog.fm>",
       ADMIN_EMAILS: "",
+      PEXELS_API_KEY: "",
       SITE_BASE_URL: "https://site.dailog.fm",
   };
 }
@@ -568,6 +569,12 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       markSnapshotUnreachable: (id, error) => repo.snapshots.markUnreachable(id, error),
       markSnapshotParseFailed: (id, error) => repo.snapshots.markParseFailed(id, error),
       findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
+      getPlatformRules: async () => [
+        { id: "claude", label: "Claude", sharePattern: "^https?:\\/\\/(www\\.)?claude\\.ai\\/share\\/[0-9a-f-]{36}" },
+        { id: "deepseek", label: "DeepSeek", sharePattern: "^https?:\\/\\/chat\\.deepseek\\.com\\/share\\/[A-Za-z0-9]+" },
+        { id: "chatgpt", label: "ChatGPT", sharePattern: "^https?:\\/\\/(www\\.)?chatgpt\\.com\\/share\\/[A-Za-z0-9-]+" },
+        { id: "kimi", label: "Kimi", sharePattern: "^https?:\\/\\/(www\\.)?kimi\\.com\\/share\\/[0-9a-f-]{36}" },
+      ],
     };
     const polishesDeps: AppDeps["polishesDeps"] = {
       getChannelActivatedAt: (userId) => repo.episodes.getChannelActivatedAt(userId),

@@ -23,6 +23,9 @@ export interface ImportDeps {
   markSnapshotUnreachable(id: string, error: string): Promise<void>;
   markSnapshotParseFailed(id: string, error: string): Promise<void>;
   findPolishByUserSnapshot(userId: string, snapshotId: string): Promise<{ id: string; title: string | null } | null>;
+  /** 平台分享页规则（importer /platforms 转发——规则单一来源在 importer；sharePattern 含域名+路径+ID 三级校验）。
+   *  null = importer 不可达（调用方 503，勿误判为"无规则"） */
+  getPlatformRules(): Promise<Array<{ id: string; label: string; sharePattern: string }> | null>;
 }
 
 /** 平台分享页的占位标题（用户未命名对话时的默认值）——不能当节目标题用 */
@@ -89,6 +92,25 @@ export function importRoutes(deps: ImportDeps) {
       return c.json({ error: "invalid_url" }, 400);
     }
     const url = body.url;
+
+    // ④ 平台预检（采集前零成本拦截）：URL 必须匹配受支持平台的分享页结构
+    // （sharePattern = 域名 + 路径前缀 + ID 格式三级校验，规则单一来源在 importer）
+    // ——非支持链接直接 400，不浪费 importer 调用；平台规则变化只改 importer
+    const rules = await deps.getPlatformRules();
+    if (rules === null) return c.json({ error: "share_collect_not_configured" }, 503);
+    const matched = rules.find((r) => {
+      try {
+        return new RegExp(r.sharePattern).test(url);
+      } catch {
+        return false;
+      }
+    });
+    if (!matched) {
+      return c.json({
+        error: "unsupported_platform",
+        detail: { message: "链接不是受支持的 AI 对话分享页（支持：Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包）" },
+      }, 400);
+    }
 
     // ① 快照缓存
     let snapshot = await deps.getSnapshotByUrl(url);

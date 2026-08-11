@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { randomBytes } from "node:crypto";
 import * as schema from "../db/schema";
@@ -70,6 +70,41 @@ export interface PolishesRepo {
   findByUserSnapshot(userId: string, snapshotId: string): Promise<{ id: string; title: string | null; status: string } | null>;
   /** 更新 host 节目称呼（生成脚本前设置） */
   create(row: PolishRow): Promise<{ id: string }>;
+  /** 投稿提交：创建 submitted 容器（唯一约束 user×snapshot 兜底） */
+  createSubmission(userId: string, snapshotId: string, title: string | null): Promise<{ id: string }>;
+  /** 我的投稿列表（submitted/accepted/rejected + 最新节目状态） */
+  listSubmissionsByUser(userId: string): Promise<Array<{
+    id: string;
+    title: string | null;
+    status: string;
+    snapshotTitle: string | null;
+    platform: string | null;
+    episodeStatus: string | null;
+    rejectedReason: string | null;
+    createdAt: Date;
+  }>>;
+  // ---- 编辑端（P2，权限由路由层 requireRole 保证） ----
+  /** 编辑队列：按状态筛选，submitted 按提交时间升序（inbox 先到先审） */
+  listQueue(status: "submitted" | "accepted" | "rejected"): Promise<Array<{
+    id: string;
+    title: string | null;
+    snapshotTitle: string | null;
+    platform: string | null;
+    status: string;
+    createdAt: Date;
+  }>>;
+  /** 编辑详情（无归属校验） */
+  getById(id: string): Promise<{
+    id: string;
+    userId: string;
+    snapshotId: string;
+    title: string | null;
+    status: string;
+    rejectedReason: string | null;
+    createdAt: Date;
+  } | null>;
+  /** 编辑状态流转：accepted（已收录）/ rejected（投稿失败，reason 必填） */
+  setStatus(id: string, status: "accepted" | "rejected", opts?: { rejectedReason?: string | null }): Promise<void>;
   /** 归属校验（防 IDOR）+ 快照关联 */
   getOwned(id: string, userId: string): Promise<{ id: string; snapshotId: string; title: string | null; status: string } | null>;
   /** 编辑页详情：polish + 快照 meta + transcripts */
@@ -120,6 +155,18 @@ export interface TranscriptsRepo {
   ): Promise<{ id: string }>;
   /** 标记脚本已生成节目（一脚本一期） */
   markUsed(id: string): Promise<void>;
+  /** 脚本详情（无归属校验——编辑端用，P2） */
+  getById(id: string): Promise<{
+    id: string;
+    polishId: string;
+    segments: ScriptSegment[];
+    updatedSegments: ScriptSegment[] | null;
+    topic: string | null;
+    title: string | null;
+    language: string | null;
+    guestId: string | null;
+    status: string;
+  } | null>;
   listByPolish(polishId: string): Promise<{ id: string; segments: ScriptSegment[]; language: string | null; createdAt: Date }[]>;
   /** 归属校验（join polish.user_id） */
   getOwned(id: string, userId: string): Promise<{
@@ -242,6 +289,37 @@ export interface EpisodesRepo {
   updateChannel(userId: string, row: { username?: string; displayName?: string; bio?: string | null }): Promise<{ ok: true } | { error: "username_taken" }>;
   /** slug 占用检测（排除自己；PATCH /api/me/channel 内部同样复用） */
   isUsernameTaken(userId: string, username: string): Promise<boolean>;
+  // ---- 编辑端（P2，权限由路由层 requireRole 保证） ----
+  /** 节目详情（无归属校验） */
+  getById(id: string): Promise<{
+    id: string;
+    polishId: string;
+    transcriptId: string;
+    title: string | null;
+    description: string | null;
+    coverUrl: string | null;
+    tags: string[] | null;
+    status: string;
+    number: number | null;
+    isPicked: boolean;
+    createdAt: Date;
+    publishedAt: Date | null;
+  } | null>;
+  /** 发布确认：更新元数据 + 分配期号（max+1，事务）+ published */
+  publish(id: string, row: { title: string | null; description: string | null; tags: string[] | null; coverUrl: string | null; isPicked: boolean }): Promise<{ number: number }>;
+  /** 已发布节目编辑：tags / 精选标记（未来清单入口） */
+  updatePublished(id: string, row: { tags?: string[] | null; isPicked?: boolean }): Promise<void>;
+  /** 按投稿容器列节目（编辑端详情用，无归属校验） */
+  listByPolish(polishId: string): Promise<Array<{
+    id: string;
+    title: string | null;
+    status: string;
+    number: number | null;
+    isPicked: boolean;
+    createdAt: Date;
+  }>>;
+  /** 角色读取（认证中间件注入用）；无 profile 行 → null（按 user 处理）。可选——旧测试 fake 不实现时按 user */
+  getRole?(userId: string): Promise<"user" | "editor" | "admin" | null>;
 }
 
 export interface GuestVoiceSampleRow {
@@ -251,6 +329,22 @@ export interface GuestVoiceSampleRow {
   audioKey: string;
   referenceId: string | null;
   transcript: string | null;
+}
+
+export interface NotificationsRepo {
+  /** 创建站内通知 */
+  create(row: { userId: string; type: "accepted" | "rejected" | "published"; title: string; body?: string | null; link?: string | null }): Promise<void>;
+  /** 我的通知（新→旧，limit 50） */
+  listByUser(userId: string): Promise<Array<{
+    id: string; type: string; title: string; body: string | null; link: string | null;
+    readAt: Date | null; createdAt: Date;
+  }>>;
+  /** 未读数 */
+  unreadCount(userId: string): Promise<number>;
+  /** 全部标记已读 */
+  markAllRead(userId: string): Promise<void>;
+  /** 用户邮箱（通知邮件收件人） */
+  getEmailByUserId(userId: string): Promise<string | null>;
 }
 
 export interface GuestsRepo {
@@ -293,10 +387,59 @@ export type Repos = {
   transcripts: TranscriptsRepo;
   episodes: EpisodesRepo;
   jobs: JobsRepo;
+  notifications: NotificationsRepo;
 };
 
 export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
   return {
+    notifications: {
+      async create(row) {
+        await db.insert(schema.notifications).values({
+          userId: row.userId,
+          type: row.type,
+          title: row.title,
+          body: row.body ?? null,
+          link: row.link ?? null,
+        });
+      },
+      async listByUser(userId) {
+        return db
+          .select({
+            id: schema.notifications.id,
+            type: schema.notifications.type,
+            title: schema.notifications.title,
+            body: schema.notifications.body,
+            link: schema.notifications.link,
+            readAt: schema.notifications.readAt,
+            createdAt: schema.notifications.createdAt,
+          })
+          .from(schema.notifications)
+          .where(eq(schema.notifications.userId, userId))
+          .orderBy(desc(schema.notifications.createdAt))
+          .limit(50);
+      },
+      async unreadCount(userId) {
+        const rows = await db
+          .select({ n: count() })
+          .from(schema.notifications)
+          .where(and(eq(schema.notifications.userId, userId), isNull(schema.notifications.readAt)));
+        return rows[0]?.n ?? 0;
+      },
+      async markAllRead(userId) {
+        await db.update(schema.notifications)
+          .set({ readAt: new Date() })
+          .where(and(eq(schema.notifications.userId, userId), isNull(schema.notifications.readAt)));
+      },
+      async getEmailByUserId(userId) {
+        const rows = await db
+          .select({ email: schema.authUsers.email })
+          .from(schema.authUsers)
+          .where(eq(schema.authUsers.id, userId))
+          .limit(1);
+        return rows[0]?.email ?? null;
+      },
+    },
+
     guests: {
       async getByPlatform(platform) {
         const rows = await db
@@ -470,6 +613,102 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           throw err;
         }
       },
+      /** 投稿提交：创建 submitted 容器（唯一约束 user×snapshot 兜底；重复提交由路由层查 existing） */
+      async createSubmission(userId, snapshotId, title) {
+        try {
+          const rows = await db.insert(schema.polishes).values({
+            userId,
+            snapshotId,
+            title: title ?? null,
+            status: "submitted",
+          }).returning({ id: schema.polishes.id });
+          return { id: rows[0].id };
+        } catch (err) {
+          if (isUniqueViolation(err)) return { id: "" };
+          throw err;
+        }
+      },
+      /** 我的投稿列表（submitted/accepted/rejected + 最新节目状态）；按投稿时间倒序 */
+      async listSubmissionsByUser(userId) {
+        const polishRows = await db
+          .select({
+            id: schema.polishes.id,
+            title: schema.polishes.title,
+            status: schema.polishes.status,
+            snapshotTitle: schema.snapshots.sourceTitle,
+            platform: schema.snapshots.platform,
+            rejectedReason: schema.polishes.rejectedReason,
+            createdAt: schema.polishes.createdAt,
+          })
+          .from(schema.polishes)
+          .innerJoin(schema.snapshots, eq(schema.polishes.snapshotId, schema.snapshots.id))
+          .where(and(
+            eq(schema.polishes.userId, userId),
+            inArray(schema.polishes.status, ["submitted", "accepted", "rejected"]),
+          ))
+          .orderBy(desc(schema.polishes.createdAt));
+        const epRows = await db
+          .select({ polishId: schema.episodes.polishId, status: schema.episodes.status, createdAt: schema.episodes.createdAt })
+          .from(schema.episodes)
+          .where(inArray(schema.episodes.polishId, polishRows.map((p) => p.id)));
+        // 每投稿最新节目状态（一投稿可多期——编辑多脚本多次生成，取最新）
+        const latestByPolish = new Map<string, { status: string; createdAt: Date }>();
+        for (const ep of epRows) {
+          const cur = latestByPolish.get(ep.polishId);
+          if (!cur || ep.createdAt > cur.createdAt) latestByPolish.set(ep.polishId, { status: ep.status, createdAt: ep.createdAt });
+        }
+        return polishRows.map((p) => ({
+          id: p.id,
+          title: p.title,
+          status: p.status,
+          snapshotTitle: p.snapshotTitle,
+          platform: p.platform,
+          episodeStatus: latestByPolish.get(p.id)?.status ?? null,
+          rejectedReason: p.rejectedReason,
+          createdAt: p.createdAt,
+        }));
+      },
+      async listQueue(status) {
+        const rows = await db
+          .select({
+            id: schema.polishes.id,
+            title: schema.polishes.title,
+            snapshotTitle: schema.snapshots.sourceTitle,
+            platform: schema.snapshots.platform,
+            status: schema.polishes.status,
+            createdAt: schema.polishes.createdAt,
+          })
+          .from(schema.polishes)
+          .innerJoin(schema.snapshots, eq(schema.polishes.snapshotId, schema.snapshots.id))
+          .where(eq(schema.polishes.status, status))
+          .orderBy(asc(schema.polishes.createdAt)); // inbox：先到先审
+        return rows;
+      },
+      async getById(id) {
+        const rows = await db
+          .select({
+            id: schema.polishes.id,
+            userId: schema.polishes.userId,
+            snapshotId: schema.polishes.snapshotId,
+            title: schema.polishes.title,
+            status: schema.polishes.status,
+            rejectedReason: schema.polishes.rejectedReason,
+            createdAt: schema.polishes.createdAt,
+          })
+          .from(schema.polishes)
+          .where(eq(schema.polishes.id, id))
+          .limit(1);
+        return rows[0] ?? null;
+      },
+      async setStatus(id, status, opts = {}) {
+        await db.update(schema.polishes)
+          .set({
+            status,
+            rejectedReason: opts.rejectedReason ?? null,
+            reviewedAt: new Date(),
+          })
+          .where(eq(schema.polishes.id, id));
+      },
       async getOwned(id, userId) {
         const rows = await db
           .select({
@@ -628,6 +867,24 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .from(schema.transcripts)
           .where(eq(schema.transcripts.polishId, polishId))
           .orderBy(desc(schema.transcripts.createdAt));
+      },
+      async getById(id) {
+        const rows = await db
+          .select({
+            id: schema.transcripts.id,
+            polishId: schema.transcripts.polishId,
+            segments: schema.transcripts.segments,
+            updatedSegments: schema.transcripts.updatedSegments,
+            topic: schema.transcripts.topic,
+            title: schema.transcripts.title,
+            language: schema.transcripts.language,
+            guestId: schema.transcripts.guestId,
+            status: schema.transcripts.status,
+          })
+          .from(schema.transcripts)
+          .where(eq(schema.transcripts.id, id))
+          .limit(1);
+        return rows[0] ?? null;
       },
       async getOwned(id, userId) {
         const rows = await db
@@ -926,6 +1183,80 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       },
 
       // ---- 账号/频道（/api/me/profile、/api/me/channel） ----
+      async getRole(userId) {
+        const rows = await db
+          .select({ role: schema.profiles.role })
+          .from(schema.profiles)
+          .where(eq(schema.profiles.id, userId))
+          .limit(1);
+        return (rows[0]?.role as "user" | "editor" | "admin" | undefined) ?? null;
+      },
+      async getById(id) {
+        const rows = await db
+          .select({
+            id: schema.episodes.id,
+            polishId: schema.episodes.polishId,
+            transcriptId: schema.episodes.transcriptId,
+            title: schema.episodes.title,
+            description: schema.episodes.description,
+            coverUrl: schema.episodes.coverUrl,
+            tags: schema.episodes.tags,
+            status: schema.episodes.status,
+            number: schema.episodes.number,
+            isPicked: schema.episodes.isPicked,
+            createdAt: schema.episodes.createdAt,
+            publishedAt: schema.episodes.publishedAt,
+          })
+          .from(schema.episodes)
+          .where(eq(schema.episodes.id, id))
+          .limit(1);
+        return rows[0] ?? null;
+      },
+      async publish(id, row) {
+        // 期号分配（max+1，无空洞——未发布无编号）+ 元数据 + published，单事务
+        return db.transaction(async (tx) => {
+          const [maxRow] = await tx
+            .select({ max: sql<number>`COALESCE(MAX(${schema.episodes.number}), 0)` })
+            .from(schema.episodes);
+          const number = (maxRow?.max ?? 0) + 1;
+          await tx.update(schema.episodes)
+            .set({
+              title: row.title,
+              description: row.description,
+              tags: row.tags,
+              coverUrl: row.coverUrl,
+              isPicked: row.isPicked,
+              number,
+              status: "published",
+              isPublic: true, // 发布即公开（公开音频端点/RSS/首页依赖此标志）
+              publishedAt: new Date(),
+            })
+            .where(eq(schema.episodes.id, id));
+          return { number };
+        });
+      },
+      async updatePublished(id, row) {
+        await db.update(schema.episodes)
+          .set({
+            ...(row.tags !== undefined ? { tags: row.tags } : {}),
+            ...(row.isPicked !== undefined ? { isPicked: row.isPicked } : {}),
+          })
+          .where(eq(schema.episodes.id, id));
+      },
+      async listByPolish(polishId) {
+        return db
+          .select({
+            id: schema.episodes.id,
+            title: schema.episodes.title,
+            status: schema.episodes.status,
+            number: schema.episodes.number,
+            isPicked: schema.episodes.isPicked,
+            createdAt: schema.episodes.createdAt,
+          })
+          .from(schema.episodes)
+          .where(eq(schema.episodes.polishId, polishId))
+          .orderBy(desc(schema.episodes.createdAt));
+      },
       async getProfile(userId) {
         const [userRows, profileRows, accountRows] = await Promise.all([
           db
@@ -1063,9 +1394,18 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .where(eq(schema.generationJobs.id, jobId));
       },
       async markJobDone(jobId) {
-        await db.update(schema.generationJobs)
-          .set({ status: "done", progress: 100, error: null, updatedAt: new Date() })
-          .where(eq(schema.generationJobs.id, jobId));
+        // job done + 节目进入"待发布"（ready）——编辑确认后才 published（P2）
+        await db.transaction(async (tx) => {
+          const rows = await tx.update(schema.generationJobs)
+            .set({ status: "done", progress: 100, error: null, updatedAt: new Date() })
+            .where(eq(schema.generationJobs.id, jobId))
+            .returning({ episodeId: schema.generationJobs.episodeId });
+          if (rows[0]) {
+            await tx.update(schema.episodes)
+              .set({ status: "ready" })
+              .where(and(eq(schema.episodes.id, rows[0].episodeId), eq(schema.episodes.status, "generating")));
+          }
+        });
       },
       
     },

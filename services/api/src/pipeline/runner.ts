@@ -1,6 +1,7 @@
 import type { JobHandler } from "./queue";
 import { synthesizeEpisode, type SynthesizeResult, GUEST_TRANSCRIPTS } from "./tts";
 import { mergeEpisodeAudio, type MergeDeps } from "./merge";
+import { spawn } from "node:child_process";
 import type { TtsClient } from "../tts/client";
 import type { AudioStorage } from "../storage";
 
@@ -37,6 +38,37 @@ export interface RunnerDeps {
 }
 
 /** 生成管线执行器：queued → tts → merge → upload → done/failed */
+/**
+ * Fish 零样本参考音频格式要求（wav/mp3/flac/m4a）——浏览器录音产物是 webm/opus，
+ * 直接传给 Fish 会 400 "Reference Audio is not valid"。按扩展名判断，webm/opus/ogg → ffmpeg 转 wav。
+ */
+async function toFishReferenceAudio(
+  bytes: Uint8Array,
+  audioUrl: string,
+  ffmpegPath: string,
+): Promise<Uint8Array> {
+  const ext = audioUrl.split(".").pop()?.toLowerCase() ?? "";
+  if (ext !== "webm" && ext !== "opus" && ext !== "ogg") return bytes;
+  return new Promise((resolve, reject) => {
+    const child = spawn(ffmpegPath, ["-i", "pipe:0", "-f", "wav", "pipe:1"], { stdio: ["pipe", "pipe", "pipe"] });
+    const chunks: Buffer[] = [];
+    let err = "";
+    child.stdout.on("data", (d) => chunks.push(d));
+    child.stderr.on("data", (d) => { err += d; });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) return reject(new Error(`ffmpeg transcode failed (${code}): ${err.slice(-200)}`));
+      resolve(new Uint8Array(Buffer.concat(chunks)));
+    });
+    // stdin 必须监听 error——ffmpeg 提前退出时 EPIPE 会变成未捕获异常导致进程崩溃
+    child.stdin.on("error", (e) => {
+      if ((e as NodeJS.ErrnoException).code !== "EPIPE") reject(e);
+    });
+    child.stdin.write(bytes);
+    child.stdin.end();
+  });
+}
+
 export function createPipelineRunner(deps: RunnerDeps): JobHandler {
   return async (job, update) => {
     const progress = async (status: string, p: number) => {
@@ -58,7 +90,9 @@ export function createPipelineRunner(deps: RunnerDeps): JobHandler {
     await progress("tts", 20);
     let sample = language ? await deps.repo.getVoiceSampleByLanguage(userId, language) : null;
     if (!sample) sample = await deps.repo.getVoiceSample(userId); // 兜底：缺该语种采样用最新样本（前端已在创建时提醒）
-    const hostReferenceAudio = sample ? await deps.storage.get(sample.audioUrl) : null;
+    const hostBytes = sample ? await deps.storage.get(sample.audioUrl).catch(() => null) : null;
+    // webm（浏览器录音）→ ffmpeg 转 wav；Fish 不接受 webm 参考音频
+    const hostReferenceAudio = hostBytes ? await toFishReferenceAudio(hostBytes, sample?.audioUrl ?? "", deps.ffmpegPath) : null;
     const hostTranscript = sample?.transcript ?? null;
 
     const episodeGuest = await deps.repo.getEpisodeGuest(job.episodeId);
@@ -73,8 +107,9 @@ export function createPipelineRunner(deps: RunnerDeps): JobHandler {
       // 表采样：音频 + 转录文本 + 音色 id 都随记录。
       // 采样音频读不到（文件缺失/失效记录）→ 整条采样视为无效，走资产兜底——
       // 否则失效的 referenceId 会打到 Fish 400（Reference not found）
-      guestReferenceAudio = await deps.storage.get(guestSample.audioKey).catch(() => null);
-      if (guestReferenceAudio) {
+      const guestBytes = await deps.storage.get(guestSample.audioKey).catch(() => null);
+      if (guestBytes) {
+        guestReferenceAudio = await toFishReferenceAudio(guestBytes, guestSample.audioKey, deps.ffmpegPath);
         guestTranscript = guestSample.transcript ?? guestTranscript;
         guestModelId = guestSample.referenceId ?? null;
       } else {

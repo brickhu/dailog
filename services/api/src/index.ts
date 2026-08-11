@@ -93,6 +93,20 @@ const importDeps: ImportDeps = {
   markSnapshotUnreachable: (id, error) => repo.snapshots.markUnreachable(id, error),
   markSnapshotParseFailed: (id, error) => repo.snapshots.markParseFailed(id, error),
   findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
+  // 平台规则单一来源在 importer（/platforms 下发 { platforms: [{id,label,sharePattern}] }）；不可达 → null（调用方 503）
+  getPlatformRules: async () => {
+    const base = process.env.IMPORTER_URL;
+    if (!base) return null;
+    try {
+      const res = await fetch(`${base.replace(/\/$/, "")}/platforms`, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) return null;
+      const data = (await res.json().catch(() => null)) as { platforms?: Array<{ id: string; label: string; sharePattern: string }> } | Array<{ id: string; label: string; sharePattern: string }> | null;
+      if (Array.isArray(data)) return data;
+      return Array.isArray(data?.platforms) ? data.platforms : null;
+    } catch {
+      return null;
+    }
+  },
 };
 
 const polishesDeps: PolishesDeps = {

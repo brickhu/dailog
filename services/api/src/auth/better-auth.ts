@@ -55,8 +55,9 @@ export function createAuth(opts: CreateAuthOptions) {
     }),
     secret: opts.secret,
     emailAndPassword: { enabled: true, minPasswordLength: 8 },
-    // 全局限流（IP 维度）：防注册接口刷邮件通道（60 秒窗口最多 5 次认证请求）
-    rateLimit: { enabled: true, window: 60, max: 5 },
+    // 全局限流（IP 维度）：防注册接口刷邮件通道。max=30——get-session 等只读会话查询
+    // 会被页面多组件并发调用（login/site-nav/auth-gate），5 次/分钟太低会误伤正常登录
+    rateLimit: { enabled: true, window: 60, max: 30 },
     // 注册邮箱验证：OTP 验证码（6 位，10 分钟有效）——注册必须输码才能完成；
     // 登录保持邮箱+密码。OTP 由 auth-ext 自定义流程实现（生成/存储 verification 表/校验），
     // 不依赖 emailOTP 插件的存储行为（默认内存存储——重启丢失、多实例失效）。
@@ -87,9 +88,14 @@ export function createAuth(opts: CreateAuthOptions) {
       }),
     ],
     socialProviders,
-    advanced: opts.cookieDomain
-      ? { crossSubDomainCookies: { enabled: true, domain: opts.cookieDomain } }
-      : {},
+    advanced: {
+      // cookie 前缀 = dailog：换名一次性清掉所有历史同名 cookie（better-auth.session_token 曾经历
+      // Secure/host-only/Domain 多个版本，浏览器残留同名冲突导致登录态错乱——换名后旧 cookie 全部失效）
+      cookiePrefix: "dailog",
+      ...(opts.cookieDomain
+        ? { crossSubDomainCookies: { enabled: true, domain: opts.cookieDomain } }
+        : {}),
+    },
     databaseHooks: {
       user: {
         create: {

@@ -6,7 +6,7 @@ const msgs = [{ role: "user", content: "你好" }, { role: "assistant", content:
 describe("polishPrompt 嘉宾信息注入", () => {
   it("有 intro：注入嘉宾信息段（名称/背景/开场引导）", () => {
     const [sys] = polishPrompt(msgs, null, { hostName: "小明", aiName: "Claude", aiIntro: "Anthropic 的 AI 助手" });
-    expect(sys.content).toContain("5.5 嘉宾信息");
+    expect(sys.content).toContain("5.2 嘉宾信息");
     expect(sys.content).toContain("名称：Claude");
     expect(sys.content).toContain("背景：Anthropic 的 AI 助手");
     expect(sys.content).toContain("我是 Claude，Anthropic 的 AI 助手…");
@@ -25,7 +25,7 @@ describe("polishPrompt 嘉宾信息注入", () => {
       aiName: "Claude",
       hostPersona: "称呼：小明；性别：男；职业：程序员；年龄：28；性格：风趣幽默，雷厉风行",
     });
-    expect(sys.content).toContain("5.6 主持人档案");
+    expect(sys.content).toContain("5.1 主持人档案");
     expect(sys.content).toContain("职业：程序员");
     expect(sys.content).toContain("性格：风趣幽默，雷厉风行");
     expect(sys.content).toContain("性格描述是用户明确指定的风格要求");
@@ -33,18 +33,18 @@ describe("polishPrompt 嘉宾信息注入", () => {
 
   it("无 hostPersona：不注入主持人档案段", () => {
     const [sys] = polishPrompt(msgs, null, { hostName: "小明" });
-    expect(sys.content).not.toContain("5.6 主持人档案");
+    expect(sys.content).not.toContain("5.1 主持人档案");
   });
 
   it("无 intro（未映射平台）：不注入嘉宾信息段（降级）", () => {
     const [sys] = polishPrompt(msgs, null, { hostName: "小明", aiName: "AI 嘉宾" });
-    expect(sys.content).not.toContain("5.5 嘉宾信息");
+    expect(sys.content).not.toContain("5.2 嘉宾信息");
     expect(sys.content).not.toContain("嘉宾信息（对话中的 AI 平台）");
   });
 
   it("完全缺省 meta：与旧行为一致", () => {
     const [sys] = polishPrompt(msgs);
-    expect(sys.content).not.toContain("5.5");
+    expect(sys.content).not.toContain("5.2");
     expect(sys.content).toContain("主持人");
   });
 });

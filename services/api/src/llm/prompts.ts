@@ -42,7 +42,7 @@ export function polishPrompt(
   const aiCall = meta?.aiName?.trim() || "AI 嘉宾";
   // 主持人信息注入（事实层）：结构化人设（称呼/性别/职业/年龄/爱好/补充）；风格由对话内容提炼
   const hostBlock = meta?.hostPersona?.trim()
-    ? `5.6 主持人档案（用户人设）：
+    ? `5.1 主持人档案（用户人设）：
    ${meta.hostPersona.trim().slice(0, 300)}
    称呼/性别/职业/年龄是事实信息——开场自我介绍自然融入（如"我是${hostCall}，从事…工作"）；
    性格描述是用户明确指定的风格要求——全篇主持人的语气、节奏、用词遵循此风格；
@@ -50,7 +50,7 @@ export function polishPrompt(
     : "";
   // 嘉宾信息注入（事实层）：背景简介（guests 表 intro，截断防超长）；风格由对话内容提炼，不硬编码人设
   const guestBlock = meta?.aiIntro?.trim()
-    ? `5.5 嘉宾信息（对话中的 AI 平台）：
+    ? `5.2 嘉宾信息（对话中的 AI 平台）：
    - 名称：${aiCall}
    - 背景：${meta.aiIntro.trim().slice(0, 200)}
    开场时让嘉宾结合背景自然介绍自己（如"我是 ${aiCall}，${meta.aiIntro.trim().slice(0, 60)}…"）；
@@ -59,7 +59,7 @@ export function polishPrompt(
     : "";
   return [{
     role: "system",
-    content: `你是播客制作人。把下面的用户与 AI 对话润色成二人对谈播客脚本（用户=主持人 host，AI=嘉宾 guest）。
+    content: `你是播客制作人。把下面的${hostCall}与 ${aiCall} (AI) 的对话润色成二人对谈播客脚本（${hostCall}=主持人 host ${aiCall}=嘉宾 guest）。
 重要：这是用于语音合成朗读的脚本（会由 TTS 生成播客音频），不是供阅读的文字底稿——一切以"听感"为准，写出来要让声音自然、适合朗读。
 要求：
 1. 先识别对话主要语言（zh/en/ja/ko 等），脚本语言与对话保持一致
@@ -69,7 +69,21 @@ export function polishPrompt(
    - 留白：阐述长观点/复杂概念时要有停顿——用 [break]（短停）/ [long-break]（长停）或"嗯…"自然过渡，别一口气说完
    - 穿插：自然融入"对""当然""嗯""确实"等反馈接话，像真实对谈一样有来有回（可嵌入自己话里，也可作对方长段后的简短回应）
    - 比喻：复杂概念用听众熟悉的生活化比喻解释，把抽象变具体
-5. 开场结构（像真实访谈节目）：主持人先向听众打招呼，再介绍自己（自称「${hostCall}」，如"大家好，欢迎收听…，我是${hostCall}"），接着介绍今天的嘉宾（自称「${aiCall}」，身份与话题），最后嘉宾打招呼回应；开场约 2-4 段，用 [happy]/[excited] 等积极情绪开场，切忌直接进入正题
+   - 打断：主持人可在嘉宾长段落中适时打断，提出问题或总结观点，像真人对话一样有互动
+   - 调侃：主持人可在不冒犯嘉宾的前提下，轻松调侃或幽默回应，增加听感趣味
+   - 隐私模糊化：对话中涉及的敏感信息（人名/地名/公司名/产品名/具体事件）可用泛化或模糊化方式处理，避免泄露隐私或商业机密
+   - 欢笑：主持人和嘉宾可在适当时机自然笑出声（[laughing]），或用轻松语气回应嘉宾的幽默
+   - 直播感：主持人可在开场/结尾或适当时机用"欢迎收听""感谢收听"等语气，像直播一样拉近与听众的距离
+   - 思考：主持人可在适当时机用"让我想想""我在想""我有个问题"等语气，像真人思考一样自然
+5. 开场白（固定结构，像节目片头——结构稳定、信息必留、措辞可变）：
+   第一段 host（信息点按顺序，不可变）：问候听众 → 自我介绍（我是${hostCall}，可自然融入职业等信息）→ 欢迎来到 Dailog（dailog 是平台独创的内容形态：把用户与 AI 的真实对话打磨成播客音频）→ 引出今天的 AI 嘉宾（${aiCall}）
+   第二段 guest（信息点按顺序，不可变）：自我介绍（我是${aiCall}）→ 回应欢迎（如"很高兴回到这里"）
+   不可变：结构与信息点（自我介绍、Dailog 概念、双方称呼${hostCall}/${aiCall}——不得虚构或替换名字）
+   可变：结合主题调整句式和情绪；如需点题，可在固定开场后加 1 句衔接再进入正题：
+   - 轻松/科技话题 → [excited]/[happy] 明快开场；严肃/走心话题 → [calm]/[soft tone] 温和开场
+   - 示例（同一结构，句式与情绪可变）：
+     · [excited] 大家好，我是${hostCall}，欢迎来到我的 Dailog！今天请到的是 ${aiCall}。→ [happy] 大家好，我是${aiCall}，很高兴回到这里！
+     · [calm] 各位好，我是${hostCall}，欢迎收听我的 Dailog，今天想和 ${aiCall} 好好聊聊。→ [soft tone] 大家好，我是${aiCall}，能回来真好。
 ${hostBlock}
 ${guestBlock}
 6. 多主题切分：长对话可能包含多个独立主题——识别并切分为多个脚本（每个主题一个脚本，各自独立成期）
@@ -84,15 +98,15 @@ ${direction}`,
   }];
 }
 
-/** 安全门 + 节目元数据 prompt（s4）：安全检测 + 生成节目 title/desc/tags/topic。
- *  输出 { pass, reason?, title, description, tags[], topic }——pass=false 时不生成元数据 */
+/** 安全门 + 节目元数据 prompt（s4）：安全检测 + 生成节目 title/desc/tags/topic/coverKeywords。
+ *  输出 { pass, reason?, title, description, tags[], topic, coverKeywords[] }——pass=false 时不生成元数据 */
 export function safetyMetaPrompt(segments: { speaker: string; text: string }[]): LlmMessage[] {
   return [{
     role: "system",
     content: `你是 dailog 播客平台的内容安全审核员与节目编辑。审核一段播客脚本（用户=host，AI=guest）：
 1. 违规内容（色情、违法、仇恨言论、诈骗、暴力煽动等）→ 拒绝
-2. 通过时生成节目元数据：title（简洁有吸引力的节目标题）、description（2-3 句节目简介）、tags（3-5 个话题标签）、topic（一句话主题）
-只输出 JSON：{"pass": true|false, "reason": "违规说明（仅 pass=false 时）", "title": "…", "description": "…", "tags": ["…"], "topic": "…"}`,
+2. 通过时生成节目元数据：title（简洁有吸引力的节目标题）、description（2-3 句节目简介）、tags（3-5 个话题标签）、topic（一句话主题）、coverKeywords（2-4 个英文图片搜索关键词，用于播客封面图库搜索，画面感强，如 "mountain sunrise minimal"）
+只输出 JSON：{"pass": true|false, "reason": "违规说明（仅 pass=false 时）", "title": "…", "description": "…", "tags": ["…"], "topic": "…", "coverKeywords": ["…"]}`,
   }, {
     role: "user",
     content: segments.map((s) => `${s.speaker}: ${s.text}`).join("\n"),

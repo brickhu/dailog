@@ -10,6 +10,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=.env.local node_modules/tsx/dist/cli.mjs src/db/migrate.ts",
     "invites:create": "node --env-file-if-exists=.env.local node_modules/tsx/dist/cli.mjs src/cli/invites.ts",
+    "role:set": "node --env-file-if-exists=.env.local node_modules/tsx/dist/cli.mjs src/cli/role.ts",
     "prompt:dev": "node --env-file-if-exists=.env.local node_modules/tsx/dist/cli.mjs scripts/prompt-dev.ts"
   },
   "dependencies": {
