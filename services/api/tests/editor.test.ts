@@ -76,6 +76,7 @@ function fakeRepo(overrides: {
       updatePersona: async () => {},
       updateChannel: async () => ({ ok: true }),
       isUsernameTaken: async () => false,
+      syncAdminRoles: async () => 0,
       ...overrides.episodes,
     },
     notifications: {

@@ -320,6 +320,8 @@ export interface EpisodesRepo {
   }>>;
   /** 角色读取（认证中间件注入用）；无 profile 行 → null（按 user 处理）。可选——旧测试 fake 不实现时按 user */
   getRole?(userId: string): Promise<"user" | "editor" | "admin" | null>;
+  /** 管理员同步（部署自动预留）：把 ADMIN_EMAILS 列出的邮箱提升为 admin；返回更新数 */
+  syncAdminRoles(emails: string[]): Promise<number>;
 }
 
 export interface GuestVoiceSampleRow {
@@ -1190,6 +1192,18 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .where(eq(schema.profiles.id, userId))
           .limit(1);
         return (rows[0]?.role as "user" | "editor" | "admin" | undefined) ?? null;
+      },
+      async syncAdminRoles(emails) {
+        if (emails.length === 0) return 0;
+        const rows = await db
+          .update(schema.profiles)
+          .set({ role: "admin" })
+          .where(and(
+            inArray(schema.profiles.id, db.select({ id: schema.authUsers.id }).from(schema.authUsers).where(inArray(schema.authUsers.email, emails))),
+            ne(schema.profiles.role, "admin"),
+          ))
+          .returning({ id: schema.profiles.id });
+        return rows.length;
       },
       async getById(id) {
         const rows = await db

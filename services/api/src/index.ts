@@ -81,6 +81,13 @@ const queue = createJobQueue(createPipelineRunner({
   ffmpegPath: ffmpegInstaller.path,
 }), { concurrency: 1, maxAttempts: 2, backoffMs: 1000 });
 
+// 部署自动预留管理员：ADMIN_EMAILS（逗号分隔邮箱）列出的账号启动时提升为 admin（幂等，静默）
+void repo.episodes.syncAdminRoles?.(
+  env.ADMIN_EMAILS.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
+)
+  .then((n) => { if (n > 0) console.log(`[admin] 已同步 ${n} 个管理员角色（ADMIN_EMAILS）`); })
+  .catch((e) => console.error("[admin] 管理员同步失败", e));
+
 // 启动恢复：把上次未完成（queued/tts/merge/upload）的 job 重新入队（不阻塞 serve）
 void recoverQueuedJobs(repo.jobs, (job) => queue.enqueue(job, () => {}).then(() => {})).then((n) => {
   console.log(`[queue] boot recovery: re-enqueued ${n} uncompleted job(s)`);

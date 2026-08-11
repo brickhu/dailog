@@ -23,6 +23,7 @@
 |---|---|---|
 | `DATABASE_URL` | 本环境 Postgres | 本环境 Postgres |
 | `APP_ORIGINS` | `https://admin.candelbot.app,https://candelbot.app,https://dailog.pages.dev,http://localhost:5174,http://localhost:3000`（每次新增前端域名都要补） | `https://admin.dailog.fm,https://dailog.fm` |
+| `ADMIN_EMAILS` | 逗号分隔邮箱——**部署自动预留管理员**（api 启动时提升、新注册即时提升；无需手动 role:set） | 同左（生产填你的邮箱） |
 | `DEEPSEEK_API_KEY` / `BASE_URL` / `MODEL` | ✓ | ✓ |
 | `FISH_API_KEY` / `FISH_PROXY_URL` / `FISH_GUEST_REFERENCE_ID` | ✓ | ✓ |
 | `STORAGE_DRIVER` | `fs`（或 r2） | `r2` + `R2_ACCOUNT_ID/ACCESS_KEY/SECRET_KEY/BUCKET` |

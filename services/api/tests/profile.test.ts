@@ -92,6 +92,7 @@ function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
       updatePersona: async () => {},
       updateChannel: async () => ({ ok: true }),
       isUsernameTaken: async () => false,
+      syncAdminRoles: async () => 0,
       ...overrides,
     },
     jobs: {

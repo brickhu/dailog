@@ -155,6 +155,21 @@ export function authExtRoutes(deps: AuthExtDeps) {
       // 验证码通过 = 邮箱已验证：标记 email_verified（否则 AppLayout 一直显示
       // "邮箱尚未验证"横幅——signUpEmail 默认 emailVerified=false）
       await deps.db.update(schema.authUsers).set({ emailVerified: true }).where(eq(schema.authUsers.email, email)).catch(() => null);
+      // ADMIN_EMAILS 中的邮箱注册后即时提升为 admin（部署自动预留，无需手动 role:set）
+      if (deps.env.ADMIN_EMAILS.split(",").map((e) => e.trim().toLowerCase()).includes(email)) {
+        const adminUser = await deps.db
+          .select({ id: schema.authUsers.id })
+          .from(schema.authUsers)
+          .where(eq(schema.authUsers.email, email))
+          .limit(1);
+        if (adminUser[0]) {
+          await deps.db
+            .update(schema.profiles)
+            .set({ role: "admin" })
+            .where(eq(schema.profiles.id, adminUser[0].id))
+            .catch(() => null);
+        }
+      }
       const result = await deps.auth.api.signInEmail({ body: { email, password: body.password }, asResponse: true });
       return new Response(result.body, { status: result.status, headers: result.headers });
     } catch {

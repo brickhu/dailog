@@ -93,6 +93,7 @@ function fakeRepo(): AppDeps["repo"] {
       updatePersona: async () => {},
       updateChannel: async () => ({ ok: true } as const),
       isUsernameTaken: async () => false,
+      syncAdminRoles: async () => 0,
     },
     jobs: {
       getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
