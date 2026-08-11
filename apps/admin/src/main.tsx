@@ -7,6 +7,7 @@ import LoginPage from "./pages/login";
 import QueuePage from "./pages/queue";
 import ReviewPage from "./pages/review";
 import SettingsPage from "./pages/settings";
+import ForbiddenPage from "./pages/forbidden";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import "./main.css";
@@ -44,7 +45,7 @@ function AdminShell(props: RouteSectionProps) {
       <Show when={auth.user()} fallback={<LoginPage />}>
         <Show
           when={auth.role() === "editor" || auth.role() === "admin"}
-          fallback={<div {...stylex.props(styles.denied)}>{t("admin.denied")}</div>}
+          fallback={<ForbiddenPage />}
         >
           {props.children}
         </Show>

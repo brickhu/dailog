@@ -19,6 +19,7 @@ export const zh = {
   "nav.account": "账号",
   "nav.login": "登录",
   "nav.logout": "登出",
+  "nav.home": "返回首页",
   "nav.language": "语言",
   "nav.import": "导入",
   "nav.scripts": "脚本",
@@ -194,7 +195,8 @@ export const zh = {
   "home.hero.playerFallback": "暂无已发布节目",
 
   // ---- 管理员工作台（admin） ----
-  "admin.denied": "无权限访问——仅编辑/管理员可登录工作台",
+  "admin.denied": "无权限访问",
+  "admin.deniedDesc": "dailog 管理端仅对编辑（editor）和管理员（admin）开放。如需投稿，请前往 dailog.fm 主站。",
   "admin.queue": "投稿队列",
   "admin.queueEmpty": "队列为空",
   "admin.guests": "嘉宾管理",
@@ -473,6 +475,7 @@ export const en: Dictionary = {
   "nav.account": "Account",
   "nav.login": "Log in",
   "nav.logout": "Log out",
+  "nav.home": "Back to home",
   "nav.language": "Language",
   "nav.import": "Import",
   "nav.scripts": "Scripts",
@@ -648,7 +651,8 @@ export const en: Dictionary = {
   "home.hero.playerFallback": "No published episodes yet",
 
   // ---- Admin workbench ----
-  "admin.denied": "Access denied — editor/admin only",
+  "admin.denied": "Access denied",
+  "admin.deniedDesc": "The dailog admin workbench is only available to editors and admins. To submit a conversation, go to dailog.fm.",
   "admin.queue": "Submission queue",
   "admin.queueEmpty": "Queue is empty",
   "admin.guests": "Guests",
