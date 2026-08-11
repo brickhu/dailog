@@ -18,7 +18,7 @@ export default function LoginPage() {
         const data = (await res.json()) as { user?: unknown } | null;
         if (data?.user) {
           window.location.href = getLoginRedirect({
-            allowedOrigins: [env.siteBaseUrl, env.studioBaseUrl],
+            allowedOrigins: [env.siteBaseUrl, env.adminBaseUrl],
             fallback: "/account",
           });
           return;
@@ -39,7 +39,7 @@ export default function LoginPage() {
         // GitHub 登录直连 api 域名（better-auth 端点是 /sign-in/social，斜杠；跨域带 Origin + CORS 白名单）
         github: { signInSocialEndpoint: `${env.apiBaseUrl}/v1/auth/sign-in/social`, callbackURL: `${env.siteBaseUrl}/account` },
       }}
-      redirect={{ allowedOrigins: [env.siteBaseUrl, env.studioBaseUrl] }}
+      redirect={{ allowedOrigins: [env.siteBaseUrl, env.adminBaseUrl] }}
     />
   );
 }

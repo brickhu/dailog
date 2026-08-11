@@ -1,6 +1,6 @@
 #!/bin/bash
-# orb 调试全家桶：docker compose 起全部服务（postgres/api/site/studio/importer）
-# 访问：app.orb.local:5173 / site.orb.local:3000 / api.orb.local:8787
+# orb 调试全家桶：docker compose 起全部服务（postgres/api/site/admin/importer）
+# 访问：https://app.orb.local / https://site.orb.local / https://api.orb.local（OrbStack 自动 TLS）
 # 首次启动会构建镜像（pnpm install 全量依赖，约几分钟）。
 # 迁移由 api 容器启动时自动执行（幂等）；停止：docker compose down（数据保留在 pgdata 卷）
 
@@ -19,9 +19,13 @@ docker compose up -d --build
 
 echo ""
 echo "✅ orb 全家桶已启动："
-echo "   site     http://dailog.orb.local"
-echo "   studio   http://app.dailog.orb.local"
-echo "   api      http://api.dailog.orb.local/health"
-echo "   importer http://importer.dailog.orb.local"
+echo "   site     https://dailog.orb.local"
+echo "   admin    https://admin.dailog.orb.local"
+echo "   api      https://api.dailog.orb.local/health"
+echo "   importer https://importer.dailog.orb.local"
 echo "   日志      docker compose logs -f"
 echo "   停止      docker compose down"
+echo "   提示      录音/麦克风需安全上下文："
+echo "            · 推荐 http://localhost:3000（localhost 天然安全上下文，登录+录音全可用）"
+echo "            · 或 https://dailog.orb.local（首次需绕过 OrbStack 自签证书警告）"
+echo "            · http://dailog.orb.local 仅浏览/登录，录音不可用"

@@ -8,14 +8,27 @@ export async function proxyApi(path: string, request: Request, method?: string):
   if (cookie) headers["Cookie"] = cookie;
   if (contentType) headers["Content-Type"] = contentType;
   const finalMethod = method ?? request.method;
+  // multipart（录音采样上传）必须按二进制转发——request.text() 会把二进制按 UTF-8 解码，
+  // 无效字节被替换成 U+FFFD（efbfbd），R2 里存下损坏文件（TTS 参考音频解析失败）
+  const isMultipart = (contentType ?? "").includes("multipart/form-data");
+  const body = finalMethod === "GET"
+    ? undefined
+    : isMultipart
+      ? await request.arrayBuffer()
+      : await request.text().catch(() => "");
   const res = await fetch(`${env.apiBaseUrl}${path}`, {
     method: finalMethod,
     headers,
-    // 登录态业务请求（PATCH /api/me/profile 等）需要 body；GET 不带 body（undici 拒绝 GET 带 body）
-    body: finalMethod === "GET" ? undefined : await request.text().catch(() => ""),
+    body,
   });
-  return new Response(await res.text(), {
+  // 响应侧同样防二进制损坏：音频（采样试听）必须 arrayBuffer 透传——res.text()
+  // 会把无效 UTF-8 字节替换成 U+FFFD（与上传侧 multipart 同坑）
+  const resContentType = res.headers.get("content-type") ?? "";
+  const resBody = resContentType.includes("audio/")
+    ? await res.arrayBuffer()
+    : await res.text();
+  return new Response(resBody, {
     status: res.status,
-    headers: { "Content-Type": res.headers.get("content-type") ?? "application/json" },
+    headers: { "Content-Type": resContentType || "application/json" },
   });
 }

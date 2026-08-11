@@ -1,9 +1,10 @@
 import { createAsync } from "@solidjs/router";
-import { createEffect, createSignal, For, onMount, Show } from "solid-js";
+import { For, Show } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
+import { AuthGate } from "../../components/auth-gate";
 
 // 消费端个人页：dailog.fm/me（收藏列表；登录态经 cookie 判定，未登录跳统一登录）
 interface FavoriteRow {
@@ -57,61 +58,48 @@ const styles = stylex.create({
   },
 });
 
-export default function MePage() {
+// 收藏列表组件：仅在 AuthGate 放行后渲染（挂载时才 fetch）——
+// createAsync 在页面组件顶层执行会在登录判定前发起请求（401 → [] 缓存，放行后不再重取）
+function FavoritesList() {
   const { t } = useI18n();
-  // 会话判定（server 端转发）：仅 client 执行（SSR 无 cookie；createAsync 序列化结果
-  // 会被 hydration 复用不再重取，用 onMount + signal 保证挂载后必然重新判定）
-  const [session, setSession] = createSignal<{ id: string } | null>(null);
-  const [checked, setChecked] = createSignal(false);
-  onMount(async () => {
-    const res = await fetch("/v1/auth/get-session");
-    if (res.ok) {
-      // better-auth 未登录返回 JSON null（代理透传）——必须整体可选链
-      const data = (await res.json()) as { user?: { id: string } | null } | null;
-      setSession(data?.user ?? null);
-    }
-    setChecked(true);
-  });
-
   const favorites = createAsync<FavoriteRow[] | null>(async () => {
-    const user = session();
-    if (!user) return null;
+    if (typeof window === "undefined") return null;
     const res = await fetch("/v1/me/favorites");
     if (!res.ok) return [];
     return (await res.json()) as FavoriteRow[];
   });
 
-  // 未登录：客户端跳统一登录页（redirect 回 /me）；等会话判定完成后才跳
-  createEffect(() => {
-    if (checked() && session() === null) {
-      window.location.href = `/login?redirect=${encodeURIComponent("/me")}`;
-    }
-  });
+  return (
+    <div {...stylex.props(styles.content)}>
+      <div {...stylex.props(styles.title)}>{t("me.title")}</div>
+      <Show
+        when={favorites()?.length}
+        fallback={<div {...stylex.props(styles.empty)}>{t("me.empty")}</div>}
+      >
+        <For each={favorites()}>
+          {(fav) => (
+            <a href={`/episode/${fav.episodeId}`} {...stylex.props(styles.card)}>
+              <div {...stylex.props(styles.epTitle)}>{fav.title || t("common.unnamed")}</div>
+              <div {...stylex.props(styles.meta)}>
+                {fav.publishedAt ? new Date(fav.publishedAt).toLocaleDateString("zh-CN") : ""} ·{" "}
+                {fav.durationSeconds ? `${Math.floor(fav.durationSeconds / 60)} 分钟` : ""}
+              </div>
+            </a>
+          )}
+        </For>
+      </Show>
+    </div>
+  );
+}
 
+export default function MePage() {
+  const { t } = useI18n();
   return (
     <div {...stylex.props(styles.page)}>
       <Title>{t("me.title")} · dailog</Title>
-      <div {...stylex.props(styles.content)}>
-        <Show when={session()}>
-          <div {...stylex.props(styles.title)}>{t("me.title")}</div>
-          <Show
-            when={favorites()?.length}
-            fallback={<div {...stylex.props(styles.empty)}>{t("me.empty")}</div>}
-          >
-            <For each={favorites()}>
-              {(fav) => (
-                <a href={`/episode/${fav.episodeId}`} {...stylex.props(styles.card)}>
-                  <div {...stylex.props(styles.epTitle)}>{fav.title || t("common.unnamed")}</div>
-                  <div {...stylex.props(styles.meta)}>
-                    {fav.publishedAt ? new Date(fav.publishedAt).toLocaleDateString("zh-CN") : ""} ·{" "}
-                    {fav.durationSeconds ? `${Math.floor(fav.durationSeconds / 60)} 分钟` : ""}
-                  </div>
-                </a>
-              )}
-            </For>
-          </Show>
-        </Show>
-      </div>
+      <AuthGate redirect="/me">
+        <FavoritesList />
+      </AuthGate>
     </div>
   );
 }

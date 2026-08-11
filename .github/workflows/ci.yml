@@ -16,8 +16,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r typecheck
       - run: pnpm -r test
-      # 构建校验（三站 + 扩展；M5 后 studio 无需 supabase 占位）
+      # 构建校验（site/admin + 扩展；studio 已移出集成，仅保留源码）
       - run: pnpm --filter @dailogues/extension build
       - run: pnpm --filter @dailogues/extension build:dev
-      - run: pnpm --filter @dailogues/studio build
+      - run: pnpm --filter @dailogues/admin build
       - run: pnpm --filter @dailogues/site build

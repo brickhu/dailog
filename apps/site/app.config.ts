@@ -33,9 +33,9 @@ export default defineConfig({
       allowedHosts: [".orb.local", ".dailog.local", ".127.0.0.1.sslip.io"],
   ...(inOrb
     ? {
-        // HMR WebSocket 固定端口 3001（容器内监听；OrbStack 的 80 域名路由到
-        // 最低监听端口 → 3000 正常服务，HMR 经 dailog.orb.local:3001 直连）
-        hmr: { port: 3001 },
+        // HMR 用 vite 默认（dev server 同端口 80）：页面 https://dailog.orb.local →
+        // OrbStack 443 TLS → 80 → dev server ws upgrade ✓。
+        // 之前固定 3001 端口是错的——3001 无 TLS，https 页面 wss 必失败刷屏
       }
     : {}),
     },

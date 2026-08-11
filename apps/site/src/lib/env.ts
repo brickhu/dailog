@@ -2,7 +2,7 @@
 //  - 客户端：import.meta.env.VITE_*（vite 注入）
 //  - 服务端（代理转发）：import.meta.env.VITE_*（构建期替换成字面量，workerd 运行时无需 env）
 //  - 兼容：process.env.API_BASE_URL 等旧部署变量仍可兜底（新部署统一 VITE_）
-// studio（纯 SPA）同样用 VITE_API_BASE_URL / VITE_SITE_BASE_URL——两端变量名完全一致。
+// admin（纯 SPA）同样用 VITE_API_BASE_URL / VITE_SITE_BASE_URL——两端变量名完全一致。
 //
 // ⚠️ 本模块同时被客户端 import——禁止 import 任何 node: 模块（vite externalize 在
 // import 时即抛错）；客户端（isServer=false）不访问 process。
@@ -21,16 +21,22 @@ export const env = {
     viteEnv("VITE_API_BASE_URL") ??
     serverEnv.API_BASE_URL ??
     (import.meta.env.DEV ? "http://localhost:8787" : "https://api.dailog.fm"),
+  /** 浏览器端音频/公开资源基址：本地容器内 node fetch 用 http（自签证书不可信）、浏览器音频用 https（mixed content 拦截）；
+   *  未配置时与 apiBaseUrl 一致（宿主直跑/生产） */
+  apiBaseUrlPublic:
+    viteEnv("VITE_PUBLIC_API_BASE_URL") ??
+    serverEnv.PUBLIC_API_BASE_URL ??
+    null,
   /** 站点基址（登录回跳/绝对链接/代理 Origin）：本地 dev 3000 */
   siteBaseUrl:
     viteEnv("VITE_SITE_BASE_URL") ??
     serverEnv.SITE_BASE_URL ??
     (import.meta.env.DEV ? "http://localhost:3000" : "https://dailog.fm"),
-  /** studio 基址（备用登录页/回跳）：本地 dev 5173 */
-  studioBaseUrl:
-    viteEnv("VITE_STUDIO_BASE_URL") ??
-    serverEnv.STUDIO_BASE_URL ??
-    (import.meta.env.DEV ? "http://localhost:5173" : "https://app.dailog.fm"),
+  /** admin 工作台基址（导航/回跳白名单）：本地 dev 5174 */
+  adminBaseUrl:
+    viteEnv("VITE_ADMIN_BASE_URL") ??
+    serverEnv.ADMIN_BASE_URL ??
+    (import.meta.env.DEV ? "http://localhost:5174" : "https://admin.dailog.fm"),
 };
 
 export type SiteEnv = typeof env;

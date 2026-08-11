@@ -122,8 +122,9 @@ export default function EpisodePage() {
   const params = useParams<{ id: string }>();
   const ep = createAsync(() => getEpisode(params.id));
   // 公开音频端点（免鉴权）：音频在 tracks（storage key 不是 API 路径，不能直接拼 baseUrl）
+  // 浏览器端用 apiBaseUrlPublic（https 页面加载 http 音频 = mixed content 被拦；未配置时回退 apiBaseUrl）
   const audioUrl = () =>
-    ep() ? `${env.apiBaseUrl}/v1/public/episodes/${params.id}/audio` : null;
+    ep() ? `${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/episodes/${params.id}/audio` : null;
 
   return (
     <div {...stylex.props(styles.page)}>

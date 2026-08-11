@@ -29,6 +29,8 @@ export default defineConfig(({ command }) => {
     ],
     server: {
       port: 5173,
+      // 关闭 HMR：https 页面下 wss 连不上（容器 HMR 端口无 TLS），避免控制台刷屏
+      hmr: false,
       // 本地域名绑定（SSO 测试）：orb 容器访问 app.dailog.orb.local
       allowedHosts: [".orb.local", ".dailog.local", ".127.0.0.1.sslip.io"],
       proxy: {
