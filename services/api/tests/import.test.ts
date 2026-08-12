@@ -266,8 +266,18 @@ ChatGPT:
     expect(await res.json()).toMatchObject({ error: "invalid_text" });
   });
 
-  it("无法解析出对话结构 → 422 parse_failed", async () => {
+  it("无法解析出对话结构 → 400 invalid_text（import-paste 直建需有效 messages）", async () => {
     const res = await appRequest(makeApp(makeDeps()), "/v1/import-paste", "这是一段很长的普通文本，没有任何对话结构，只是单纯的一堆文字而已，凑够长度。");
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_text" });
+  });
+
+  it("/parse 端点：无法解析 → 422 parse_failed", async () => {
+    const res = await makeApp(makeDeps()).request("/v1/import-paste/parse", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "这是一段很长的普通文本，没有任何对话结构，只是单纯的一堆文字而已，凑够长度。" }),
+    });
     expect(res.status).toBe(422);
     expect(await res.json()).toMatchObject({ error: "parse_failed" });
   });
@@ -280,3 +290,69 @@ function appRequest(app: ReturnType<typeof makeApp>, path: string, text: string)
     body: JSON.stringify({ text }),
   });
 }
+
+describe("POST /v1/import-paste/parse（解析不建库）+ 校对 messages 直建", () => {
+  const TEXT = `You:
+帮我翻译这句话：Hello world，这是一段足够长的测试文本，用来验证粘贴导入的完整流程，同时确保内容超过一百字的最低门槛要求，让整个流程可以顺畅地跑通。
+
+ChatGPT:
+你好，世界。这是一句简单的英文问候语，祝你一天愉快。翻译时要保持原文的语气和风格，不要添加额外的解释。`;
+
+  it("parse 端点：解析返回 messages，不建快照", async () => {
+    let created = 0;
+    const deps = makeDeps({
+      createSnapshot: async () => { created++; return { id: "snap-x" }; },
+    });
+    const app = makeApp(deps);
+    const res = await app.request("/v1/import-paste/parse", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: TEXT }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.messages).toHaveLength(2);
+    expect(body.messages[0]).toMatchObject({ role: "user" });
+    expect(created).toBe(0);
+  });
+
+  it("import-paste：接收校对后的 messages（无标记内容也能正确建快照）", async () => {
+    const createdRows: Array<{ parsedDialogue?: unknown }> = [];
+    const deps = makeDeps({
+      createSnapshot: async (row) => { createdRows.push(row); return { id: "snap-paste-2" }; },
+      listTraceableSnapshots: async () => [],
+      setSnapshotSourceTrace: async () => {},
+    });
+    const res = await appRequest(makeApp(deps), "/v1/import-paste", "");
+    // 用 messages 直建（模拟前端校对后提交）
+    const res2 = await makeApp(deps).request("/v1/import-paste", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        messages: [
+          { role: "user", content: "第一段：没有标记的文本，用户手动校对为 user 角色，内容足够长以通过门槛校验。" },
+          { role: "assistant", content: "第二段：用户手动校对为 assistant 角色，AI 的回答内容也要足够长才能通过检查。" },
+          { role: "user", content: "第三段：继续提问，这段内容同样需要足够的长度来满足最低字数要求。" },
+          { role: "assistant", content: "第四段：最后的回答，内容完整，这样整个对话就符合播客制作的基本要求了。" },
+        ],
+      }),
+    });
+    expect(res2.status).toBe(200);
+    const body2 = await res2.json();
+    expect(body2.snapshotId).toBe("snap-paste-2");
+    expect(body2.dialogue.messages).toHaveLength(4);
+    expect(body2.dialogue.messages[1]).toMatchObject({ role: "assistant" });
+    expect((createdRows[0]?.parsedDialogue as { role: string }[])?.[3]?.role).toBe("assistant");
+    void res;
+  });
+
+  it("messages 非法（角色错误/内容空）→ 400", async () => {
+    const res = await makeApp(makeDeps()).request("/v1/import-paste", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "system", content: "x" }] }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_text" });
+  });
+});
