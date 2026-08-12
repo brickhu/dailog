@@ -4,7 +4,6 @@ import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { api } from "../lib/client";
-import { useAuth } from "../lib/auth";
 
 // 投稿队列（inbox）：待审批（默认，先到先审）/ 已收录 / 已拒绝
 interface QueueItem {
@@ -21,16 +20,7 @@ type Tab = (typeof TABS)[number];
 
 const styles = stylex.create({
   page: { maxWidth: "860px", margin: "0 auto", padding: dimensions.spacing8 },
-  header: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: dimensions.spacing4 },
   title: { fontSize: dimensions.fontSize2xl, fontWeight: dimensions.fontWeightBold, margin: 0 },
-  signOut: {
-    background: "none",
-    border: "none",
-    color: colors.neutral,
-    fontSize: dimensions.fontSizeSm,
-    cursor: "pointer",
-    textDecoration: "underline",
-  },
   tabs: { display: "flex", gap: dimensions.spacing2, marginBottom: dimensions.spacing5, borderBottom: `1px solid ${colors.ink}` },
   tab: {
     padding: `${dimensions.spacing2} ${dimensions.spacing4}`,
@@ -59,7 +49,6 @@ const styles = stylex.create({
 
 export default function QueuePage() {
   const { t } = useI18n();
-  const auth = useAuth();
   const [tab, setTab] = createSignal<Tab>("submitted");
   const items = createAsync<QueueItem[]>(async () => {
     try {
@@ -72,10 +61,7 @@ export default function QueuePage() {
 
   return (
     <div {...stylex.props(styles.page)}>
-      <div {...stylex.props(styles.header)}>
-        <h1 {...stylex.props(styles.title)}>{t("admin.queue")}</h1>
-        <button {...stylex.props(styles.signOut)} onClick={() => auth.signOut()}>{t("nav.logout")}</button>
-      </div>
+      <h1 {...stylex.props(styles.title)}>{t("admin.queue")}</h1>
       <div {...stylex.props(styles.tabs)}>
         <For each={TABS}>
           {(key) => (

@@ -310,6 +310,16 @@ export interface EpisodesRepo {
   publish(id: string, row: { title: string | null; description: string | null; tags: string[] | null; coverUrl: string | null; isPicked: boolean }): Promise<{ number: number }>;
   /** 已发布节目编辑：tags / 精选标记（未来清单入口） */
   updatePublished(id: string, row: { tags?: string[] | null; isPicked?: boolean }): Promise<void>;
+  /** 已发布节目清单（编辑端）：按期号倒序，供 tags/精选 管理 */
+  listPublished(): Promise<Array<{
+    id: string;
+    title: string | null;
+    number: number | null;
+    isPicked: boolean;
+    tags: string[] | null;
+    durationSeconds: number | null;
+    publishedAt: Date | null;
+  }>>;
   /** 按投稿容器列节目（编辑端详情用，无归属校验） */
   listByPolish(polishId: string): Promise<Array<{
     id: string;
@@ -1265,6 +1275,21 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             ...(row.isPicked !== undefined ? { isPicked: row.isPicked } : {}),
           })
           .where(eq(schema.episodes.id, id));
+      },
+      async listPublished() {
+        return db
+          .select({
+            id: schema.episodes.id,
+            title: schema.episodes.title,
+            number: schema.episodes.number,
+            isPicked: schema.episodes.isPicked,
+            tags: schema.episodes.tags,
+            durationSeconds: schema.episodes.durationSeconds,
+            publishedAt: schema.episodes.publishedAt,
+          })
+          .from(schema.episodes)
+          .where(eq(schema.episodes.status, "published"))
+          .orderBy(desc(schema.episodes.number));
       },
       async listByPolish(polishId) {
         return db

@@ -57,6 +57,7 @@ function fakeRepo(overrides: {
       listByPolish: async () => [],
       publish: async () => ({ number: 1 }),
       updatePublished: async () => {},
+      listPublished: async () => [],
       getEpisodeScript: async () => null,
       getEpisodeGuest: async () => null,
       getPublicAudioKey: async () => null,
@@ -294,5 +295,72 @@ describe("封面候选（cover-search）", () => {
       body: JSON.stringify({ keywords: ["mountain"] }),
     });
     expect(res.status).toBe(503);
+  });
+});
+
+describe("已发布节目（list / edit）", () => {
+  it("GET /v1/editor/episodes → 已发布列表（按期号倒序由 repo 保证）", async () => {
+    let called = false;
+    const deps = makeDeps({
+      repo: fakeRepo({
+        episodes: {
+          listPublished: async () => {
+            called = true;
+            return [
+              { id: "ep-2", title: "第二期", number: 2, isPicked: true, tags: ["AI"], durationSeconds: 300, publishedAt: new Date() },
+              { id: "ep-1", title: "第一期", number: 1, isPicked: false, tags: null, durationSeconds: 240, publishedAt: new Date() },
+            ];
+          },
+        },
+      }),
+    });
+    const res = await makeApp(deps).request("/v1/editor/episodes");
+    expect(res.status).toBe(200);
+    expect(called).toBe(true);
+    const body = await res.json();
+    expect(body.items).toHaveLength(2);
+    expect(body.items[0]).toMatchObject({ id: "ep-2", number: 2, isPicked: true });
+  });
+
+  it("PUT /v1/editor/episodes/:id → 更新 tags + 精选标记", async () => {
+    let updated: { tags?: string[] | null; isPicked?: boolean } | null = null;
+    const deps = makeDeps({
+      repo: fakeRepo({
+        episodes: {
+          getById: async () => ({ id: "ep-1", polishId: "rev-1", transcriptId: "tr-1", title: null, description: null, coverUrl: null, tags: null, status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
+          updatePublished: async (_id, row) => { updated = row; },
+        },
+      }),
+    });
+    const res = await makeApp(deps).request("/v1/editor/episodes/ep-1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ tags: ["AI", " 创作 "], isPicked: true }),
+    });
+    expect(res.status).toBe(200);
+    expect(updated).toEqual({ tags: ["AI", "创作"], isPicked: true });
+  });
+
+  it("PUT 空 body → 400 invalid_input", async () => {
+    const res = await makeApp(makeDeps()).request("/v1/editor/episodes/ep-1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_input" });
+  });
+
+  it("PUT 不存在节目 → 404 not_found", async () => {
+    const deps = makeDeps({
+      repo: fakeRepo({ episodes: { getById: async () => null } }),
+    });
+    const res = await makeApp(deps).request("/v1/editor/episodes/missing", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ isPicked: true }),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: "not_found" });
   });
 });

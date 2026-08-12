@@ -399,6 +399,12 @@ export function editorRoutes(deps: EditorDeps) {
     return c.json({ ok: true, number: result.number });
   });
 
+  // ---- 已发布节目清单（清单入口：tags / 精选管理） ----
+  app.get("/v1/editor/episodes", async (c) => {
+    const items = await deps.repo.episodes.listPublished();
+    return c.json({ items });
+  });
+
   // ---- 已发布节目编辑：tags / 精选（未来清单入口） ----
   app.put("/v1/editor/episodes/:id", async (c) => {
     const ep = await deps.repo.episodes.getById(c.req.param("id"));
