@@ -188,7 +188,7 @@ export const zh = {
 
   // ---- 首页 hero ----
   "home.hero.tagline": "让世界听见你和AI的思想交锋",
-  "home.hero.what": "dailog 是一档基于 AI 对话剪辑的访谈式播客——模拟真人采访 AI，5-10分钟呈现AI对话里的精华：交锋、新知、情感及经验。",
+  "home.hero.what": "dailog 是一档基于 AI 对话剪辑的访谈式播客——模拟真人采访 AI，5-10分钟呈现原始对话里的精华：交锋、新知、情感及经验。",
   "home.hero.submit": "立即投稿",
   "home.hero.ctaHint": "提交你的AI对话（例如chatGPT...），人人都能成为主播",
   "home.hero.browse": "浏览节目",
