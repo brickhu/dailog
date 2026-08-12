@@ -39,7 +39,7 @@
 | 角色体系 | `middleware/auth.ts` + `profiles.role` | **新增** admin/editor/user + 鉴权中间件 | M |
 | 投稿状态机 | `episodes.status` | submitted/accepted/generating/published/failed + 提交端点 | M |
 | 编辑路由 | 无 | **新增** `/editor/reviews/:id/process`、`reject`；publish 加 editor 鉴权；`is_picked` 标记 | M |
-| 润色/审核 prompt | `llm/prompts.ts` | 四类价值（交锋/新知/情感/实用）+ 访谈式结构 | S |
+| 润色/审核 prompt | `llm/prompts.ts` | 四类价值（交锋/新知/情感/经验）+ 访谈式结构 | S |
 | site 首页 | `routes/index.tsx` | landing 首屏（左 tagline+CTA / 右精选播放器，过渡期取最新节目） | S |
 | site 投稿流程 | 无 | **新增** `/submit`（导入→人设→提交）+ `/me/submits` | L |
 | site 探索系 | 无 | `/discover`（新热精荐）、`/tags`、`/episodes` 搜索 | M |

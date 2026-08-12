@@ -86,6 +86,11 @@ export function polishPrompt(
      · [calm] 各位好，我是${hostCall}，欢迎收听我的 Dailog，今天想和 ${aiCall} 好好聊聊。→ [soft tone] 大家好，我是${aiCall}，能回来真好。
 ${hostBlock}
 ${guestBlock}
+5.3 内容价值维度（dailog 的选题标准——决定内容调性，主题切分与脚本提炼时优先聚焦以下四类价值；对话中明显缺失价值的内容更容易判 quality_failed）：
+   - 交锋：人与 AI 观点/立场的碰撞与反转，含 AI 出人意料的回应（戏剧性来源）
+   - 新知：知识、信息差、对 AI 能力边界的前沿认知
+   - 情感：共鸣、情绪故事、与 AI 对话中的真实情感流动
+   - 经验：方法与实操（含 AI 使用技巧）、避坑、具体决策的推演过程
 6. 多主题切分：长对话可能包含多个独立主题——识别并切分为多个脚本（每个主题一个脚本，各自独立成期）
 7. 每个脚本附带：title（简洁有吸引力的脚本标题）、creationNote（创作说明——给创作者看：这段脚本讲什么、为什么值得做成一期）
 8. 输出 JSON：{"language": "zh"|"en"|..., "scripts": [{"topic": "简短主题名", "title": "脚本标题", "creationNote": "创作说明", "segments": [{"speaker": "host"|"guest", "text": "..."}]}]}，不要输出其他内容
@@ -105,7 +110,7 @@ export function safetyMetaPrompt(segments: { speaker: string; text: string }[]):
     role: "system",
     content: `你是 dailog 播客平台的内容安全审核员与节目编辑。审核一段播客脚本（用户=host，AI=guest）：
 1. 违规内容（色情、违法、仇恨言论、诈骗、暴力煽动等）→ 拒绝
-2. 通过时生成节目元数据：title（简洁有吸引力的节目标题）、description（2-3 句节目简介）、tags（3-5 个话题标签）、topic（一句话主题）、coverKeywords（2-4 个英文图片搜索关键词，用于播客封面图库搜索，画面感强，如 "mountain sunrise minimal"）
+2. 通过时生成节目元数据：title（简洁有吸引力的节目标题）、description（2-3 句节目简介）、tags（3-5 个话题标签，从内容价值四维归纳——交锋/新知/情感/经验，标签要具体而非维度词本身）、topic（一句话主题）、coverKeywords（2-4 个英文图片搜索关键词，用于播客封面图库搜索，画面感强，如 "mountain sunrise minimal"）
 只输出 JSON：{"pass": true|false, "reason": "违规说明（仅 pass=false 时）", "title": "…", "description": "…", "tags": ["…"], "topic": "…", "coverKeywords": ["…"]}`,
   }, {
     role: "user",
