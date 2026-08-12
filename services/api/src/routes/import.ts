@@ -10,7 +10,8 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { detectPrefixSource, sequenceFingerprint, type TraceMessage } from "../lib/content-trace";
-import { parsePasteText, type PasteMsg } from "../lib/paste-parser";
+// 粘贴消息（源码解析后归一化；与 importer dialogue 消息同构）
+interface PasteMsg { role: "user" | "assistant"; content: string }
 
 export interface ImportDeps {
   getSnapshotByUrl(url: string): Promise<{
@@ -260,15 +261,10 @@ export function importRoutes(deps: ImportDeps) {
     });
   });
 
-  // ---- 手动粘贴兜底：分享页被 CF 拦截时，用户复制对话内容粘贴导入 ----
-  // 两段式：① /parse 解析纯文本（尽力推断角色，不建库）→ 前端可视化校对（用户切换角色/删段）
-  //       ② /import-paste 接收校对后的 messages 建快照（platform=plain）→ 溯源检测，与 /v1/import 同构返回
-  const validMessages = (msgs: unknown): msgs is PasteMsg[] =>
-    Array.isArray(msgs) && msgs.length >= 2
-    && msgs.every((m) => m && typeof m === "object" && (m as PasteMsg).role === "user" || (m as PasteMsg).role === "assistant")
-    && msgs.every((m) => typeof (m as PasteMsg).content === "string" && (m as PasteMsg).content.trim().length > 0);
+  // ---- 源码粘贴兜底：分享页被 CF 拦截时，用户复制分享页源码（view-source/outerHTML）粘贴导入 ----
+  // 内容来自用户浏览器（天然绕过 CF），importer 按 URL 平台解析（结构完整，无需校对）
 
-  /** 建粘贴快照 + 溯源检测（text 与 messages 两路径共用） */
+  /** 建粘贴快照 + 溯源检测 */
   const buildPasteSnapshot = async (messages: PasteMsg[]) => {
     const created = await deps.createSnapshot({
       url: `paste:${randomUUID()}`,
@@ -289,62 +285,7 @@ export function importRoutes(deps: ImportDeps) {
     return { created, suspectedSource };
   };
 
-  /** 解析粘贴文本（尽力推断，不建库）——前端校对态的数据源 */
-  app.post("/v1/import-paste/parse", async (c) => {
-    const body = (await c.req.json().catch(() => null)) as { text?: unknown } | null;
-    const text = typeof body?.text === "string" ? body.text.trim() : "";
-    if (!text || text.length < 20) {
-      return c.json({ error: "invalid_text", detail: { message: "请粘贴对话内容（至少 20 字）" } }, 400);
-    }
-    const messages = parsePasteText(text);
-    if (!messages) {
-      return c.json({ error: "parse_failed", detail: { message: "无法识别出对话结构——请确认包含双方的问答，稍后可在校对界面手动调整" } }, 422);
-    }
-    // 放宽门槛：至少 2 条消息（角色可在前端校对），仅内容长度下限
-    const totalChars = messages.reduce((n, m) => n + m.content.length, 0);
-    if (totalChars < 100) {
-      return c.json({ error: "too_short", detail: { message: `粘贴内容过短（约 ${totalChars} 字），无法制作播客单集` } }, 422);
-    }
-    return c.json({ messages });
-  });
-
-  /** 接收（校对后的）对话消息建快照——用户在校对界面确认角色后提交 */
-  app.post("/v1/import-paste", async (c) => {
-    const body = (await c.req.json().catch(() => null)) as { text?: unknown; messages?: unknown } | null;
-    let messages: PasteMsg[] | null = null;
-
-    // ① 优先：前端校对后的 messages（角色已由用户确认）
-    if (validMessages(body?.messages)) {
-      messages = (body.messages as PasteMsg[]).map((m) => ({ role: m.role, content: m.content.trim() }));
-    } else if (typeof body?.text === "string" && body.text.trim().length >= 20) {
-      // ② 兼容：纯文本（服务端解析；旧流程/测试）
-      messages = parsePasteText(body.text.trim());
-    }
-    if (!messages) {
-      return c.json({ error: "invalid_text", detail: { message: "请粘贴对话内容（至少 20 字），或提供有效的对话消息" } }, 400);
-    }
-    // 宽松内容门槛（手动粘贴场景）：至少 1 轮问答且 100 字
-    const userTurns = messages.filter((m) => m.role === "user").length;
-    const totalChars = messages.reduce((n, m) => n + m.content.length, 0);
-    if (userTurns < 1 || totalChars < 100) {
-      return c.json({ error: "too_short", detail: { message: `粘贴内容过短（${userTurns} 轮问答 / 约 ${totalChars} 字），无法制作播客单集` } }, 422);
-    }
-    const { created, suspectedSource } = await buildPasteSnapshot(messages);
-    return c.json({
-      dialogue: {
-        platform: "plain",
-        conversationId: null,
-        title: messages.find((m) => m.role === "user")?.content.slice(0, 40) ?? "粘贴对话",
-        url: null,
-        messages,
-      },
-      snapshotId: created.id,
-      ...(suspectedSource ? { suspectedSource } : {}),
-    });
-  });
-
-  /** 源码粘贴：用户复制分享页源码（view-source/outerHTML）→ importer 按平台解析 →
-   *  建快照（结构完整，无需校对；解析失败返回 null 由前端回退校对态） */
+  /** 源码粘贴：用户复制分享页源码（view-source/outerHTML）→ importer 按平台解析 → 建快照 */
   app.post("/v1/import-paste/html", async (c) => {
     const body = (await c.req.json().catch(() => null)) as { html?: unknown; url?: unknown } | null;
     const html = typeof body?.html === "string" ? body.html.trim() : "";

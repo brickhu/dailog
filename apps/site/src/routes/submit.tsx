@@ -1,4 +1,4 @@
-import { createSignal, createEffect, For, onMount, Show } from "solid-js";
+import { createSignal, createEffect, onMount, Show } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
@@ -16,7 +16,7 @@ import Recorder from "../components/recorder";
 //   done      提交成功
 // 端点在 site 站内代理（/v1/*），会话经 cookie；未登录跳统一登录页
 
-type Step = "input" | "confirm" | "error" | "paste-review" | "published" | "done";
+type Step = "input" | "confirm" | "error" | "published" | "done";
 
 interface ImportPreview {
   snapshotId: string;
@@ -193,51 +193,6 @@ const styles = stylex.create({
     fontFamily: "inherit",
     resize: "vertical",
   },
-  pasteRow: {
-    display: "flex",
-    gap: dimensions.spacing2,
-    alignItems: "flex-start",
-  },
-  pasteRole: {
-    flexShrink: 0,
-    minWidth: "56px",
-    padding: `${dimensions.spacing1} ${dimensions.spacing2}`,
-    borderRadius: dimensions.radiusSm,
-    border: `1px solid ${colors.ink}`,
-    backgroundColor: "transparent",
-    color: colors.neutral,
-    fontSize: dimensions.fontSizeSm,
-    cursor: "pointer",
-  },
-  pasteRoleUser: {
-    backgroundColor: colors.brand,
-    color: colors.foreground,
-    fontWeight: dimensions.fontWeightMedium,
-  },
-  pasteMsgText: {
-    flex: 1,
-    minHeight: "48px",
-    boxSizing: "border-box",
-    padding: `${dimensions.spacing2} ${dimensions.spacing3}`,
-    borderRadius: dimensions.radiusSm,
-    border: `1px solid ${colors.ink}`,
-    backgroundColor: colors.background,
-    color: colors.foreground,
-    fontSize: dimensions.fontSizeSm,
-    fontFamily: "inherit",
-    resize: "vertical",
-    lineHeight: 1.6,
-  },
-  pasteDel: {
-    flexShrink: 0,
-    background: "none",
-    border: "none",
-    color: colors.neutral,
-    cursor: "pointer",
-    fontSize: dimensions.fontSizeSm,
-    padding: dimensions.spacing2,
-    textDecoration: "underline",
-  },
 });
 
 export default function SubmitPage() {
@@ -248,12 +203,9 @@ export default function SubmitPage() {
   const [importError, setImportError] = createSignal<string | null>(null);
   /** 导入失败态：importer 明确拦截/无法获取的具体原因 */
   const [errorReason, setErrorReason] = createSignal<string | null>(null);
-  /** 手动粘贴兜底：分享页被 CF 拦截时用户复制内容粘贴 */
+  /** 手动粘贴兜底：分享页被 CF 拦截时用户复制分享页源码（view-source/outerHTML）粘贴 */
   const [pasteText, setPasteText] = createSignal("");
   const [pasteParsing, setPasteParsing] = createSignal(false);
-  /** 校对态：解析结果 → 用户可视化确认角色（切换/删段/添加）后提交 */
-  const [pasteMsgs, setPasteMsgs] = createSignal<{ role: "user" | "assistant"; content: string }[]>([]);
-  const [pasteConfirming, setPasteConfirming] = createSignal(false);
   const [preview, setPreview] = createSignal<ImportPreview | null>(null);
   const [existing, setExisting] = createSignal<string | null>(null);
   const [publishedPreview, setPublishedPreview] = createSignal<PublishedPreview | null>(null);
@@ -322,89 +274,22 @@ export default function SubmitPage() {
     })();
   });
 
-  /** 粘贴内容是否为分享页源码（HTML）：自动检测，走 importer 平台解析（结构完整无需校对） */
-  const looksLikeHtml = (text: string) => /<html|<div|<script|<!doctype/i.test(text) && text.length > 80;
-
-  /** 手动粘贴兜底①：源码 → importer 解析直进确认；文本 → 校对态 */
+  /** 手动粘贴兜底：用户复制分享页源码（view-source/outerHTML）→ importer 按平台解析（结构完整无需校对） */
   const doPasteImport = async () => {
     const text = pasteText().trim();
     if (!text) return;
     const sourceUrl = url().trim();
+    if (!sourceUrl) {
+      setErrorReason(t("submit.importFailed", { error: "url" }));
+      return;
+    }
     setPasteParsing(true);
     setErrorReason(null);
     try {
-      if (looksLikeHtml(text) && sourceUrl) {
-        // 源码模式：用户复制分享页源码（view-source/outerHTML）→ 按平台解析
-        const res = await fetch("/v1/import-paste/html", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ html: text, url: sourceUrl }),
-        });
-        const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-        if (!res.ok) {
-          const code = String(data?.error ?? res.status);
-          const detail = (data as { detail?: { message?: string } })?.detail?.message;
-          const mapped = t(`submit.error.${code}` as never);
-          setErrorReason(detail ?? (mapped.startsWith("submit.error.") ? code : mapped));
-          return;
-        }
-        const dialogue = data?.dialogue as { title?: string; platform?: string; messages?: unknown[] } | null;
-        setPreview({
-          snapshotId: String(data?.snapshotId ?? ""),
-          title: String(dialogue?.title ?? "分享对话"),
-          platform: String(dialogue?.platform ?? "paste"),
-          count: Array.isArray(dialogue?.messages) ? dialogue.messages.length : 0,
-        });
-        const src = (data as { suspectedSource?: { snapshotId?: string; sourceTitle?: string | null } | null }).suspectedSource;
-        if (src?.snapshotId) {
-          setSuspectedSource({ snapshotId: src.snapshotId, sourceTitle: src.sourceTitle ?? null });
-        }
-        setStep("confirm");
-        return;
-      }
-      // 文本模式 → 解析 → 校对态（用户可视化确认角色）
-      const res = await fetch("/v1/import-paste/parse", {
+      const res = await fetch("/v1/import-paste/html", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-      if (!res.ok) {
-        const code = String(data?.error ?? res.status);
-        const detail = (data as { detail?: { message?: string } })?.detail?.message;
-        const mapped = t(`submit.error.${code}` as never);
-        setErrorReason(detail ?? (mapped.startsWith("submit.error.") ? code : mapped));
-        return;
-      }
-      const msgs = (data as { messages?: { role?: string; content?: string }[] }).messages;
-      if (!Array.isArray(msgs) || msgs.length < 2) {
-        setErrorReason(t("submit.error.parse_failed"));
-        return;
-      }
-      // 进入校对态：每条消息可由用户切换角色/编辑/删除
-      setPasteMsgs(msgs.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content ?? "") })));
-      setStep("paste-review");
-    } catch {
-      setErrorReason(t("submit.importFailed", { error: "network" }));
-    } finally {
-      setPasteParsing(false);
-    }
-  };
-
-  /** 手动粘贴兜底②：校对完成 → 提交校对后的 messages 建快照 → 确认投稿态 */
-  const doPasteConfirm = async () => {
-    const msgs = pasteMsgs().filter((m) => m.content.trim());
-    if (msgs.length < 2) {
-      setErrorReason(t("submit.error.parse_failed"));
-      return;
-    }
-    setPasteConfirming(true);
-    setErrorReason(null);
-    try {
-      const res = await fetch("/v1/import-paste", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messages: msgs.map((m) => ({ role: m.role, content: m.content.trim() })) }),
+        body: JSON.stringify({ html: text, url: sourceUrl }),
       });
       const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
       if (!res.ok) {
@@ -417,11 +302,10 @@ export default function SubmitPage() {
       const dialogue = data?.dialogue as { title?: string; platform?: string; messages?: unknown[] } | null;
       setPreview({
         snapshotId: String(data?.snapshotId ?? ""),
-        title: String(dialogue?.title ?? "粘贴对话"),
-        platform: "paste",
+        title: String(dialogue?.title ?? "分享对话"),
+        platform: String(dialogue?.platform ?? "paste"),
         count: Array.isArray(dialogue?.messages) ? dialogue.messages.length : 0,
       });
-      // 内容溯源提示（粘贴内容疑似衍生自库内对话）
       const src = (data as { suspectedSource?: { snapshotId?: string; sourceTitle?: string | null } | null }).suspectedSource;
       if (src?.snapshotId) {
         setSuspectedSource({ snapshotId: src.snapshotId, sourceTitle: src.sourceTitle ?? null });
@@ -430,7 +314,7 @@ export default function SubmitPage() {
     } catch {
       setErrorReason(t("submit.importFailed", { error: "network" }));
     } finally {
-      setPasteConfirming(false);
+      setPasteParsing(false);
     }
   };
 
@@ -685,9 +569,9 @@ export default function SubmitPage() {
           <div {...stylex.props(styles.card)}>
             <p {...stylex.props(styles.stepTitle)}>{t("submit.failedTitle")}</p>
             <p {...stylex.props(styles.stepDesc)}>{errorReason()}</p>
-            {/* 手动粘贴兜底（免扩展）：分享页被 CF 拦截时复制内容粘贴（文本/源码双模式） */}
+            {/* 手动粘贴兜底（免扩展）：分享页被 CF 拦截时复制分享页源码粘贴（结构完整，按平台解析） */}
             <p {...stylex.props(styles.traceHint)}>{t("submit.pasteFallbackTitle")}</p>
-            <p {...stylex.props(styles.hint)} style={{ "white-space": "pre-line" }}>{t("submit.pasteFallbackModes")}</p>
+            <p {...stylex.props(styles.hint)}>{t("submit.pasteFallbackModes")}</p>
             <textarea
               {...stylex.props(styles.pasteInput)}
               placeholder={t("submit.pasteHint")}
@@ -739,49 +623,6 @@ export default function SubmitPage() {
               {t("submit.continueOriginalTail")}
             </p>
             <div {...stylex.props(styles.actions)}>
-              <Button appear="ghost" onClick={backToInput}>{t("common.cancel")}</Button>
-            </div>
-          </div>
-        </Show>
-
-        {/* 3.5 粘贴校对态：解析结果可视化确认（切换角色/编辑/删除/添加） */}
-        <Show when={step() === "paste-review"}>
-          <div {...stylex.props(styles.card)}>
-            <p {...stylex.props(styles.stepTitle)}>{t("submit.pasteReviewTitle")}</p>
-            <p {...stylex.props(styles.stepDesc)}>{t("submit.pasteReviewDesc")}</p>
-            <For each={pasteMsgs()}>
-              {(m, i) => (
-                <div {...stylex.props(styles.pasteRow)}>
-                  <button
-                    type="button"
-                    {...stylex.props(styles.pasteRole, m.role === "user" && styles.pasteRoleUser)}
-                    onClick={() => setPasteMsgs((list) => list.map((x, idx) => idx === i() ? { ...x, role: x.role === "user" ? "assistant" : "user" } : x))}
-                  >
-                    {m.role === "user" ? t("submit.pasteUser") : t("submit.pasteAi")}
-                  </button>
-                  <textarea
-                    {...stylex.props(styles.pasteMsgText)}
-                    value={m.content}
-                    onInput={(e) => setPasteMsgs((list) => list.map((x, idx) => idx === i() ? { ...x, content: e.currentTarget.value } : x))}
-                  />
-                  <button type="button" {...stylex.props(styles.pasteDel)} onClick={() => setPasteMsgs((list) => list.filter((_, idx) => idx !== i()))}>
-                    ✕
-                  </button>
-                </div>
-              )}
-            </For>
-            <div {...stylex.props(styles.actions)}>
-              <Button appear="ghost" onClick={() => setPasteMsgs((list) => [...list, { role: "user", content: "" }])}>
-                {t("submit.pasteAdd")}
-              </Button>
-            </div>
-            <Show when={errorReason()}>
-              <p {...stylex.props(styles.error)}>{errorReason()}</p>
-            </Show>
-            <div {...stylex.props(styles.actions)}>
-              <Button onClick={doPasteConfirm} disabled={pasteConfirming() || pasteMsgs().filter((x) => x.content.trim()).length < 2}>
-                {pasteConfirming() ? t("submit.importing") : t("submit.pasteConfirm")}
-              </Button>
               <Button appear="ghost" onClick={backToInput}>{t("common.cancel")}</Button>
             </div>
           </div>
