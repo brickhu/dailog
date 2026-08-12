@@ -83,10 +83,14 @@ function extractNextDataThread(html: string): { thread: ThreadLike; title: strin
 
 /* ---------- DOM 兜底路径 ---------- */
 
-/** 按 data-testid 提取第一个匹配标签的平衡 div 内容（处理嵌套 div） */
+/** 按 data-testid 提取（兼容旧路径；perplexity 当前无这些 testid，保留防御） */
 function extractByTestId(html: string, testid: string): string[] {
-  const out: string[] = [];
-  const openRe = new RegExp(`<div[^>]*data-testid=["']${testid}["'][^>]*>`, "g");
+  return extractBalancedDivs(html, new RegExp(`<div[^>]*data-testid=["']${testid}["'][^>]*>`, "g")).map((x) => x.text);
+}
+
+/** 平衡 div 提取（按 open 正则匹配开标签，配对闭合）——通用版（class/testid 均可） */
+function extractBalancedDivs(html: string, openRe: RegExp): Array<{ text: string; start: number }> {
+  const out: Array<{ text: string; start: number }> = [];
   let m: RegExpExecArray | null;
   while ((m = openRe.exec(html)) !== null) {
     const start = m.index + m[0].length;
@@ -112,37 +116,47 @@ function extractByTestId(html: string, testid: string): string[] {
       .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&nbsp;/g, " ")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
-    if (text) out.push(text);
+    if (text) out.push({ text, start });
   }
   return out;
 }
 
-/** DOM 兜底：chat-turn-query（用户）+ answer-content（回答）按文档序交替 */
+/** UI 噪音词（问题提取时排除） */
+const UI_NOISE = new Set([
+  "新建", "搜索", "下载", "折叠", "展开", "复制", "分享", "相关", "来源", "查看更多新闻", "搜索网页",
+  "Computer", "整理并分享您的工作", "将文件、记忆和上下文在多个会话中保持集中统一。", "下载 Comet",
+  "Steve Jobs: Visionary CEO", "搜狐网",
+]);
+
+/**
+ * DOM 兜底（实测 2026-08 结构）：回答 = class="prose…" 块（可靠特征）；
+ * 用户问题 = 回答块之前最近的短文本（perplexity 无 testid 标记问题，问题紧邻其回答渲染）。
+ * 组装：q0,a0,q1,a1…；无 prose 块 → null。
+ */
 function extractDomMessages(html: string): { role: "user" | "assistant"; content: string }[] | null {
-  const queries = extractByTestId(html, "chat-turn-query");
-  const answers = extractByTestId(html, "answer-content");
-  if (queries.length === 0 && answers.length === 0) return null;
-  const messages: { role: "user" | "assistant"; content: string }[] = [];
-  let qi = 0;
-  let ai = 0;
-  // 按出现顺序合并：取第一个 testid 出现位置决定交替起点
-  const qPos = html.indexOf('data-testid="chat-turn-query"');
-  const aPos = html.indexOf('data-testid="answer-content"');
-  const firstIsQuery = qPos !== -1 && (aPos === -1 || qPos < aPos);
-  let userTurn = firstIsQuery;
-  while (qi < queries.length || ai < answers.length) {
-    if (userTurn && qi < queries.length) {
-      messages.push({ role: "user", content: queries[qi++] });
-    } else if (!userTurn && ai < answers.length) {
-      messages.push({ role: "assistant", content: answers[ai++] });
-    } else if (qi < queries.length) {
-      messages.push({ role: "user", content: queries[qi++] });
-    } else if (ai < answers.length) {
-      messages.push({ role: "assistant", content: answers[ai++] });
-    }
-    userTurn = !userTurn;
+  // ① 回答：prose 块（perplexity 回答容器）
+  const answers = extractBalancedDivs(html, /<div[^>]*class="prose[^"]*"[^>]*>/g);
+  if (answers.length === 0) return null;
+  // ② 问题：每个回答前 8000 字符窗口内——
+  //    先剔除 <button> 块（"查看更多新闻/搜索网页/续自"等按钮文本），
+  //    优先取最后一个带问号的文本（真实问题最强特征，如"乔布斯为什么伟大？"）；
+  //    无问号时取最后一个（真实问题紧邻回答渲染，如"翻译成中文"）
+  const questions: string[] = [];
+  for (const a of answers) {
+    const seg = html.slice(Math.max(0, a.start - 8000), a.start).replace(/<button[\s\S]*?<\/button>/g, "");
+    const texts = [...seg.matchAll(/>([^<>{}]{2,400})</g)]
+      .map((m) => m[1].trim())
+      .filter((t) => t && !UI_NOISE.has(t));
+    const withQ = [...texts].reverse().find((t) => /[？?]$/.test(t));
+    questions.push(withQ ?? texts[texts.length - 1] ?? "");
   }
-  return messages.some((x) => x.role === "assistant") ? messages : null;
+  // ③ 交替组装（问题缺失时跳过该轮——首答无问题时接受）
+  const messages: { role: "user" | "assistant"; content: string }[] = [];
+  for (let i = 0; i < answers.length; i++) {
+    if (questions[i]) messages.push({ role: "user", content: questions[i] });
+    messages.push({ role: "assistant", content: answers[i].text });
+  }
+  return messages.length >= 2 ? messages : null;
 }
 
 /* ---------- 统一入口 ---------- */

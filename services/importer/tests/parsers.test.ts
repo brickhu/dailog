@@ -277,21 +277,31 @@ describe("perplexity 分享解析", () => {
     ]);
   });
 
-  it("DOM 兜底：chat-turn-query + answer-content 按序提取", async () => {
+  it("DOM 兜底：prose 回答块 + 问题紧邻文本（真实 2026-08 结构）", async () => {
     const { parsePerplexityShare } = await import("../src/platforms/perplexity");
+    // 模拟真实结构：问题文本紧邻回答（prose 块）之前；按钮文本（查看更多新闻）与引用区不误判
     const html = `<html><head><title>翻译成中文 - Perplexity</title></head><body>
-      <div data-testid="chat-turn-query"><div class="prose">翻译成中文：Hello world</div></div>
-      <div data-testid="answer-content"><div class="prose"><p>你好，世界</p></div></div>
-      <div data-testid="chat-turn-query"><div class="prose">再翻译：Good morning</div></div>
-      <div data-testid="answer-content"><div class="prose"><p>早上好</p></div></div>
+      <div class="w-full"><div class="msg">翻译成中文</div>
+        <div class="prose dark:prose-invert"><p>当然，下面是中文翻译：史蒂夫·乔布斯在科技界留下了不可磨灭的印记。</p></div></div>
+      <div class="related"><a>相关链接标题</a><button>查看更多新闻</button></div>
+      <div class="w-full"><div class="msg">乔布斯为什么伟大？</div>
+        <div class="prose dark:prose-invert"><p>乔布斯之所以伟大，不只是因为他发明了某一件产品。</p></div></div>
+      <button>续自</button>
+      <!-- 真实页面中轮次间隔远大于 8000 字符（引用区/渲染结构），拉开距离防窗口串扰 -->
+      ${" ".repeat(9000)}
+      <div class="w-full"><div class="msg">乔布斯管理风格与暴君争议</div>
+        <div class="prose dark:prose-invert"><p>乔布斯的管理风格可以概括为：高度集权的产品型领导。</p></div></div>
     </body></html>`;
     const d = parsePerplexityShare(html, ID, URL);
     expect(d).not.toBeNull();
-    expect(d!.title).toBe("翻译成中文 - Perplexity");
-    expect(d!.messages).toHaveLength(4);
-    expect(d!.messages[0]).toMatchObject({ role: "user", content: expect.stringContaining("Hello world") });
-    expect(d!.messages[1]).toMatchObject({ role: "assistant", content: expect.stringContaining("你好，世界") });
-    expect(d!.messages[3]).toMatchObject({ role: "assistant", content: expect.stringContaining("早上好") });
+    expect(d!.messages).toHaveLength(6);
+    expect(d!.messages[0]).toMatchObject({ role: "user", content: "翻译成中文" });
+    expect(d!.messages[1]).toMatchObject({ role: "assistant", content: expect.stringContaining("史蒂夫·乔布斯") });
+    expect(d!.messages[2]).toMatchObject({ role: "user", content: "乔布斯为什么伟大？" });
+    expect(d!.messages[4]).toMatchObject({ role: "user", content: "乔布斯管理风格与暴君争议" });
+    // 按钮文本（查看更多新闻/续自）与引用链接不混入消息
+    expect(JSON.stringify(d!.messages)).not.toContain("查看更多新闻");
+    expect(JSON.stringify(d!.messages)).not.toContain("续自");
   });
 
   it("无 assistant 消息/无结构 → null", async () => {
