@@ -188,7 +188,7 @@ export const zh = {
 
   // ---- 首页 hero ----
   "home.hero.tagline": "让世界听见你和AI的思想交锋",
-  "home.hero.what": "dailog 是一档基于 AI 对话打造的轻访谈播客——真人采访 AI，5-10分钟呈现AI对话里的精华：交锋、新知、情感及经验。",
+  "home.hero.what": "dailog 是一档基于 AI 对话剪辑的访谈式播客——真人采访 AI，5-10分钟呈现AI对话里的精华：交锋、新知、情感及经验。",
   "home.hero.submit": "立即投稿",
   "home.hero.ctaHint": "提交你的AI对话（例如chatGPT...），人人都能成为主播",
   "home.hero.browse": "浏览节目",
@@ -675,7 +675,7 @@ export const en: Dictionary = {
 
   // ---- Home hero ----
   "home.hero.tagline": "Let the world hear the clash from your AI chats",
-  "home.hero.what": "dailog is a light-interview podcast built from real AI chats — real people interview AI, serving the essence of AI chats in 5–10 minutes: clashes, insights, feelings, and experience.",
+  "home.hero.what": "dailog is an interview-style podcast edited from real AI chats — real people interview AI, serving the essence of AI chats in 5–10 minutes: clashes, insights, feelings, and experience.",
   "home.hero.submit": "Submit your chat",
   "home.hero.ctaHint": "Submit your AI chats (e.g. ChatGPT...) — everyone can be a host",
   "home.hero.browse": "Browse episodes",

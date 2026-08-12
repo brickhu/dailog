@@ -39,7 +39,7 @@
 | 角色体系 | `middleware/auth.ts` + `profiles.role` | **新增** admin/editor/user + 鉴权中间件 | M |
 | 投稿状态机 | `episodes.status` | submitted/accepted/generating/published/failed + 提交端点 | M |
 | 编辑路由 | 无 | **新增** `/editor/reviews/:id/process`、`reject`；publish 加 editor 鉴权；`is_picked` 标记 | M |
-| 润色/审核 prompt | `llm/prompts.ts` | 四类价值（交锋/新知/情感/实用）+ 轻访谈结构 | S |
+| 润色/审核 prompt | `llm/prompts.ts` | 四类价值（交锋/新知/情感/实用）+ 访谈式结构 | S |
 | site 首页 | `routes/index.tsx` | landing 首屏（左 tagline+CTA / 右精选播放器，过渡期取最新节目） | S |
 | site 投稿流程 | 无 | **新增** `/submit`（导入→人设→提交）+ `/me/submits` | L |
 | site 探索系 | 无 | `/discover`（新热精荐）、`/tags`、`/episodes` 搜索 | M |
@@ -58,7 +58,7 @@
 | **P2 后端编辑能力**（✅ 已完成 2026-08-11） | 角色体系（`profiles.role` + requireRole）；编辑路由（queue/reviews/process/reject/transcripts/episodes new/publish/cover-search/guests）；发布环节（LLM 预填 + 期号分配 + 封面候选）；管线 done → ready → 编辑确认发布 | 145 tests 全绿；容器 E2E：编辑登录 → 队列 → 详情 → reject（reason）→ 投稿人可见；普通用户 403 |
 | **P3 编辑工作台** | apps/admin：login 门禁 + /queue + /reviews/:id（复用 script-editor）+ /settings | admin/editor 登录后完整驱动一期节目上线 |
 | **P4 site 剩余** | /discover（新热精荐）、/tags、/episodes 搜索、/me 系、/account 系、/hosts、/guests、作品集 + 单 feed | 全部路由可达，SSR 冒烟 |
-| **P5 收尾** | prompt 更新（四类价值 + 轻访谈结构）；精选机制切换；平台入驻申报 | 编辑端与投稿端联调；Apple/Spotify/小宇宙提交 |
+| **P5 收尾** | prompt 更新（四类价值 + 访谈式结构）；精选机制切换；平台入驻申报 | 编辑端与投稿端联调；Apple/Spotify/小宇宙提交 |
 
 **P1 任务拆解（已完成）**：
 1. ✅ 后端：`POST /api/v1/submissions`（snapshot 查重 → polish 容器 status=submitted）+ `GET /api/v1/me/submissions`；迁移 0017（profiles.role）；**投稿状态机承载于 polishes**（episodes.transcriptId NOT NULL，投稿阶段无脚本——实现期对模型的自然修正）
@@ -72,7 +72,7 @@
 - **migrations**：已有 17 个迁移文件，新增字段（role/is_picked/submitted）继续增量迁移，不改历史
 - **SSR 安全**：site 是 SolidStart SSR——录音/播放器组件浏览器 API 只能出现在客户端 effect/事件内（packages/ui 约束 §AGENT）
 - **script-editor 复用**：编辑工作台直接复用，需剥离投稿人语境（保留方向指示/水印）
-- **质量审核内联润色**：语义复用，prompt 更新为四类价值 + 轻访谈结构（P5）
+- **质量审核内联润色**：语义复用，prompt 更新为四类价值 + 访谈式结构（P5）
 - **首屏播放器过渡**：v1 取最新已发布节目，`is_picked` 精选随 P2/P3 编辑端上线后切换
 - **历史实施计划**：`docs/superpowers/plans/` 为时间记录，不回溯修改
 
