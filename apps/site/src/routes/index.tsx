@@ -2,7 +2,7 @@ import { createAsync } from "@solidjs/router";
 import { For, Show } from "solid-js";
 import { listLatestEpisodes, type EpisodeSummary } from "../lib/db";
 import { SiteNav } from "../components/site-nav";
-import { env } from "../lib/env";
+import { env, episodeCoverUrl } from "../lib/env";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
@@ -74,6 +74,20 @@ const styles = stylex.create({
     gap: dimensions.spacing3,
     alignItems: "center",
     flexWrap: "wrap",
+  },
+  cover: {
+    width: "100%",
+    borderRadius: dimensions.radiusMd,
+    aspectRatio: "1 / 1",
+    objectFit: "cover",
+  },
+  thumb: {
+    width: "48px",
+    height: "48px",
+    borderRadius: dimensions.radiusSm,
+    objectFit: "cover",
+    float: "left",
+    marginRight: dimensions.spacing3,
   },
   playerCard: {
     borderRadius: dimensions.radiusLg,
@@ -175,6 +189,13 @@ export default function Home() {
             when={featured()}
             fallback={<div {...stylex.props(styles.empty)}>{t("home.hero.playerFallback")}</div>}
           >
+            <Show when={episodeCoverUrl(featured()!.id, featured()!.coverUrl)}>
+              <img
+                src={episodeCoverUrl(featured()!.id, featured()!.coverUrl)!}
+                alt={featured()!.title || ""}
+                {...stylex.props(styles.cover)}
+              />
+            </Show>
             <div {...stylex.props(styles.playerEpTitle)}>{featured()!.title || t("common.unnamed")}</div>
             <div {...stylex.props(styles.playerMeta)}>
               @{featured()!.username} · {fmtDate(featured()!.publishedAt)} · {fmtDuration(featured()!.durationSeconds)}
@@ -194,6 +215,9 @@ export default function Home() {
           <For each={episodes()}>
             {(ep) => (
               <a href={`/episode/${ep.id}`} {...stylex.props(styles.card)}>
+                <Show when={episodeCoverUrl(ep.id, ep.coverUrl)}>
+                  <img src={episodeCoverUrl(ep.id, ep.coverUrl)!} alt={ep.title || ""} {...stylex.props(styles.thumb)} />
+                </Show>
                 <div {...stylex.props(styles.epTitle)}>{ep.title || t("common.unnamed")}</div>
                 <div {...stylex.props(styles.meta)}>
                   @{ep.username} · {fmtDate(ep.publishedAt)} · {fmtDuration(ep.durationSeconds)}

@@ -39,4 +39,13 @@ export const env = {
     (import.meta.env.DEV ? "http://localhost:5174" : "https://admin.dailog.fm"),
 };
 
+/** 节目封面 URL：R2 key（covers/ 前缀）→ 公开端点；外链（历史 Pexels 数据）→ 直用 */
+export function episodeCoverUrl(id: string, coverUrl: string | null | undefined): string | null {
+  if (!coverUrl) return null;
+  if (coverUrl.startsWith("covers/")) {
+    return `${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/episodes/${id}/cover`;
+  }
+  return coverUrl;
+}
+
 export type SiteEnv = typeof env;

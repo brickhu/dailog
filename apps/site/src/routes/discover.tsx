@@ -1,6 +1,7 @@
 import { createAsync } from "@solidjs/router";
 import { For, Show, createSignal } from "solid-js";
 import { listLatestEpisodes, type EpisodeSummary } from "../lib/db";
+import { episodeCoverUrl } from "../lib/env";
 import { SiteNav } from "../components/site-nav";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
@@ -60,6 +61,15 @@ const styles = stylex.create({
     marginBottom: dimensions.spacing3,
     textDecoration: "none",
     color: "inherit",
+    overflow: "hidden",
+  },
+  thumb: {
+    width: "48px",
+    height: "48px",
+    borderRadius: dimensions.radiusSm,
+    objectFit: "cover",
+    float: "left",
+    marginRight: dimensions.spacing3,
   },
   epTitle: {
     fontWeight: dimensions.fontWeightMedium,
@@ -117,6 +127,9 @@ export default function DiscoverPage() {
           <For each={episodes()}>
             {(ep) => (
               <a href={`/episode/${ep.id}`} {...stylex.props(styles.card)}>
+                <Show when={episodeCoverUrl(ep.id, ep.coverUrl)}>
+                  <img src={episodeCoverUrl(ep.id, ep.coverUrl)!} alt={ep.title || ""} {...stylex.props(styles.thumb)} />
+                </Show>
                 <div {...stylex.props(styles.epTitle)}>{ep.title || t("common.unnamed")}</div>
                 <div {...stylex.props(styles.meta)}>
                   @{ep.username} · {fmtDate(ep.publishedAt)} · {fmtDuration(ep.durationSeconds)}

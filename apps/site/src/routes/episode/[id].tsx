@@ -4,7 +4,7 @@ import { useParams } from "@solidjs/router";
 import { Title } from "@solidjs/meta";
 import { getEpisode } from "../../lib/db";
 import { SiteNav } from "../../components/site-nav";
-import { env } from "../../lib/env";
+import { env, episodeCoverUrl } from "../../lib/env";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
@@ -38,6 +38,14 @@ const styles = stylex.create({
     color: colors.neutral,
     fontSize: dimensions.fontSizeSm,
     marginBottom: dimensions.spacing6,
+  },
+  cover: {
+    width: "100%",
+    maxWidth: "360px",
+    borderRadius: dimensions.radiusMd,
+    aspectRatio: "1 / 1",
+    objectFit: "cover",
+    marginBottom: dimensions.spacing4,
   },
   player: {
     width: "100%",
@@ -135,6 +143,9 @@ export default function EpisodePage() {
           <a href={`/@${ep()!.username}`} {...stylex.props(styles.back)}>
             ← @{ep()!.username} 的频道
           </a>
+          <Show when={episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
+            <img src={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} alt={ep()!.title || ""} {...stylex.props(styles.cover)} />
+          </Show>
           <div {...stylex.props(styles.title)}>{ep()!.title || t("common.unnamed")}</div>
           <div {...stylex.props(styles.meta)}>
             @{ep()!.username} · {new Date(ep()!.publishedAt ?? 0).toLocaleDateString("zh-CN")} ·{" "}
