@@ -29,7 +29,9 @@ function fakeRepo(): Repos {
       updateContent: async () => {},
       updateQuality: async () => {},
       markUnreachable: async () => {},
-      markParseFailed: async () => {},
+            markParseFailed: async () => {},
+      listTraceable: async () => [],
+      setSourceTrace: async () => {},
     },
     polishes: {
       findByUserSnapshot: async () => null,
@@ -68,6 +70,7 @@ function fakeRepo(): Repos {
       publish: async () => ({ number: 1 }),
       updatePublished: async () => {},
       listPublished: async () => [],
+      findPublishedEpisodeBySnapshot: async () => null,
       getEpisodeUserId: async () => null,
       getEpisodeLanguage: async () => null,
       getHostModelId: async () => null,
@@ -131,6 +134,9 @@ function makeApp(llmOutput: string) {
       markSnapshotUnreachable: async () => {},
       markSnapshotParseFailed: async () => {},
       findPolishByUserSnapshot: async () => null,
+      listTraceableSnapshots: async () => [],
+      setSnapshotSourceTrace: async () => {},
+      findPublishedEpisodeBySnapshot: async () => null,
       getPlatformRules: async () => [
         { id: "claude", label: "Claude", sharePattern: "^https?:\\/\\/(www\\.)?claude\\.ai\\/share\\/[0-9a-f-]{36}" },
         { id: "deepseek", label: "DeepSeek", sharePattern: "^https?:\\/\\/chat\\.deepseek\\.com\\/share\\/[A-Za-z0-9]+" },

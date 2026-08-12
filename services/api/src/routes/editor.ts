@@ -137,6 +137,10 @@ export function editorRoutes(deps: EditorDeps) {
     const polish = await deps.repo.polishes.getById(c.req.param("id"));
     if (!polish) return c.json({ error: "not_found" }, 404);
     const snapshot = await deps.repo.snapshots.getById(polish.snapshotId);
+    // 内容溯源：该快照的"前缀源"快照（衍生对话自动检测）——编辑审核时可见来源
+    const prefixSource = snapshot?.prefixSourceId
+      ? await deps.repo.snapshots.getById(snapshot.prefixSourceId).then((s) => s ? { snapshotId: snapshot.prefixSourceId, sourceTitle: s.sourceTitle } : null)
+      : null;
     const transcripts = await deps.repo.transcripts.listByPolish(polish.id);
     const episodes = await deps.repo.episodes.listByPolish(polish.id);
     return c.json({
@@ -150,6 +154,7 @@ export function editorRoutes(deps: EditorDeps) {
         sourceTitle: snapshot?.sourceTitle ?? null,
         messages: (snapshot?.parsedDialogue ?? []) as { role: string; content: string }[],
       },
+      prefixSource,
       transcripts: transcripts.map((t) => ({
         id: t.id,
         segments: t.segments,

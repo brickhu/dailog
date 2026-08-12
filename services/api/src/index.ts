@@ -101,6 +101,9 @@ const importDeps: ImportDeps = {
   markSnapshotUnreachable: (id, error) => repo.snapshots.markUnreachable(id, error),
   markSnapshotParseFailed: (id, error) => repo.snapshots.markParseFailed(id, error),
   findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
+  listTraceableSnapshots: () => repo.snapshots.listTraceable(),
+  setSnapshotSourceTrace: (id, row) => repo.snapshots.setSourceTrace(id, row),
+  findPublishedEpisodeBySnapshot: (snapshotId) => repo.episodes.findPublishedEpisodeBySnapshot(snapshotId),
   // 平台规则单一来源在 importer（/platforms 下发 { platforms: [{id,label,sharePattern}] }）；不可达 → null（调用方 503）
   getPlatformRules: async () => {
     const base = process.env.IMPORTER_URL;

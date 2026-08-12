@@ -17,6 +17,8 @@ interface ReviewDetail {
   rejectedReason: string | null;
   createdAt: string;
   dialogue: { platform: string | null; sourceTitle: string | null; messages: { role: string; content: string }[] };
+  /** 内容溯源：衍生自库内某快照（自动前缀检测） */
+  prefixSource: { snapshotId: string; sourceTitle: string | null } | null;
   transcripts: { id: string; segments: { speaker: string; text: string }[]; language: string | null; createdAt: string }[];
   episodes: { id: string; title: string | null; status: string; number: number | null; isPicked: boolean; createdAt: string }[];
 }
@@ -39,6 +41,13 @@ const styles = stylex.create({
   },
   cardTitle: { fontSize: dimensions.fontSizeLg, fontWeight: dimensions.fontWeightMedium, margin: 0 },
   meta: { color: colors.neutral, fontSize: dimensions.fontSizeSm },
+  traceHint: {
+    fontSize: dimensions.fontSizeSm,
+    color: colors.neutral,
+    margin: 0,
+    borderLeft: `3px solid ${colors.brand}`,
+    paddingLeft: dimensions.spacing3,
+  },
   msg: { fontSize: dimensions.fontSizeMd, lineHeight: 1.6, margin: 0 },
   msgUser: { color: colors.foreground },
   msgGuest: { color: colors.neutral },
@@ -203,6 +212,13 @@ export default function ReviewPage() {
           {detail()!.rejectedReason ? ` · ${detail()!.rejectedReason}` : ""}
           {detail()!.dialogue.platform ? ` · ${detail()!.dialogue.platform}` : ""}
         </div>
+
+        {/* 内容溯源提示：衍生对话（前缀源自动检测） */}
+        <Show when={detail()!.prefixSource}>
+          <p {...stylex.props(styles.traceHint)}>
+            {t("admin.prefixSource", { title: detail()!.prefixSource!.sourceTitle || t("common.unnamed") })}
+          </p>
+        </Show>
 
         {/* 审核 + 润色 */}
         <div {...stylex.props(styles.card)}>

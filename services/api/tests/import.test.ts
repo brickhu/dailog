@@ -17,6 +17,9 @@ function makeDeps(overrides: Partial<ImportDeps> = {}): ImportDeps {
     markSnapshotUnreachable: async () => {},
     markSnapshotParseFailed: async () => {},
     findPolishByUserSnapshot: async () => null,
+      listTraceableSnapshots: async () => [],
+      setSnapshotSourceTrace: async () => {},
+      findPublishedEpisodeBySnapshot: async () => null,
     getPlatformRules: async () => RULES,
     ...overrides,
   };
@@ -83,6 +86,7 @@ describe("POST /v1/import 平台预检", () => {
         ],
         status: "ok",
         retryAfter: null,
+        fingerprint: null,
         lastError: null,
       }),
     });
@@ -96,5 +100,120 @@ describe("POST /v1/import 平台预检", () => {
     const res = await post(makeApp(makeDeps({ getPlatformRules: async () => null })), "https://claude.ai/share/01234567-89ab-cdef-0123-456789abcdef");
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({ error: "share_collect_not_configured" });
+  });
+});
+
+describe("POST /v1/import 节目预览态（alreadyPublished）", () => {
+  const URL = "https://claude.ai/share/01234567-89ab-cdef-0123-456789abcdef";
+  const SOURCE = [
+    { role: "user", content: "第一问：AI 会如何改变我们的工作和生活方式？这是最近我一直在思考的问题，因为身边越来越多的朋友开始用 AI 处理日常事务，从写邮件到做方案，变化非常明显，我想知道这背后真正的逻辑是什么，也想听听你的看法。" },
+    { role: "assistant", content: "AI 会重新定义哪些工作值得人做，让重复劳动自动化，把人的时间释放给判断和创造。真正稀缺的从来不是执行，而是判断力、审美和对问题的定义能力，这是我在和不同行业的朋友交流后得到的共同结论。" },
+    { role: "user", content: "第二问：对普通人的职业选择有什么具体建议？比如我现在做内容创作，应该怎么调整方向？是应该更依赖工具，还是应该刻意保持某些不依赖工具的能力？这个问题困扰我很久了，希望你能给我一些可执行的建议。" },
+    { role: "assistant", content: "内容创作的门槛会降低，但天花板会更高——工具让平庸表达变便宜，思想和情感仍然只能来自人。建议你把 AI 当成杠杆，而不是替代品：它放大你的判断，但不会替你产生判断，关键在于你要始终清楚自己想要什么。" },
+    { role: "user", content: "第三问：听起来很抽象，你能举一个具体例子吗？比如同样写一篇文章，有 AI 和没有 AI 的区别在哪里？我应该如何把工具用在刀刃上，而不是被工具牵着走？" },
+    { role: "assistant", content: "区别在于迭代成本：没有 AI 时改一稿要半天，有 AI 时你可以在十分钟内试验十种表达，然后把精力留给最难的判断——什么值得写、写给谁看、什么观点真正属于你，这就是杠杆的正确用法。" },
+  ];
+
+  it("该快照已有任意用户的节目 → alreadyPublished + 节目信息（不进入确认导入）", async () => {
+    const deps = makeDeps({
+      getSnapshotByUrl: async () => ({
+        id: "snap-1", platform: "claude", sourceTitle: "已收录对话", sourceConversationId: "conv-1",
+        parsedDialogue: SOURCE, fingerprint: "abc", status: "ok", retryAfter: null, lastError: null,
+      }),
+      findPublishedEpisodeBySnapshot: async () => ({
+        id: "ep-9", title: "AI 会改变什么", durationSeconds: 240, hostName: "小石", guestName: "Claude",
+      }),
+    });
+    const res = await post(makeApp(deps), URL);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({
+      alreadyPublished: true,
+      episode: { id: "ep-9", title: "AI 会改变什么", durationSeconds: 240, hostName: "小石", guestName: "Claude" },
+    });
+    // 预览态不返回 dialogue/继续导入所需字段
+    expect(body.snapshotId).toBeUndefined();
+  });
+
+  it("无已生成节目 → 正常导入流程（无 alreadyPublished）", async () => {
+    const deps = makeDeps({
+      getSnapshotByUrl: async () => ({
+        id: "snap-1", platform: "claude", sourceTitle: "普通对话", sourceConversationId: "conv-1",
+        parsedDialogue: SOURCE, fingerprint: "abc", status: "ok", retryAfter: null, lastError: null,
+      }),
+      findPublishedEpisodeBySnapshot: async () => null,
+    });
+    const res = await post(makeApp(deps), URL);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.alreadyPublished).toBeUndefined();
+    expect(body.snapshotId).toBe("snap-1");
+  });
+});
+
+describe("POST /v1/import 内容溯源（前缀检测）", () => {
+  const URL = "https://claude.ai/share/01234567-89ab-cdef-0123-456789abcdef";
+  const SOURCE = [
+    { role: "user", content: "第一问：AI 会如何改变我们的工作和生活方式？这是最近我一直在思考的问题，因为身边越来越多的朋友开始用 AI 处理日常事务，从写邮件到做方案，变化非常明显，我想知道这背后真正的逻辑是什么，也想听听你的看法。" },
+    { role: "assistant", content: "AI 会重新定义哪些工作值得人做，让重复劳动自动化，把人的时间释放给判断和创造。真正稀缺的从来不是执行，而是判断力、审美和对问题的定义能力，这是我在和不同行业的朋友交流后得到的共同结论。" },
+    { role: "user", content: "第二问：对普通人的职业选择有什么具体建议？比如我现在做内容创作，应该怎么调整方向？是应该更依赖工具，还是应该刻意保持某些不依赖工具的能力？这个问题困扰我很久了，希望你能给我一些可执行的建议。" },
+    { role: "assistant", content: "内容创作的门槛会降低，但天花板会更高——工具让平庸表达变便宜，思想和情感仍然只能来自人。建议你把 AI 当成杠杆，而不是替代品：它放大你的判断，但不会替你产生判断，关键在于你要始终清楚自己想要什么。" },
+    { role: "user", content: "第三问：听起来很抽象，你能举一个具体例子吗？比如同样写一篇文章，有 AI 和没有 AI 的区别在哪里？我应该如何把工具用在刀刃上，而不是被工具牵着走？" },
+    { role: "assistant", content: "区别在于迭代成本：没有 AI 时改一稿要半天，有 AI 时你可以在十分钟内试验十种表达，然后把精力留给最难的判断——什么值得写、写给谁看、什么观点真正属于你，这就是杠杆的正确用法。" },
+  ];
+  const DERIVED = [
+    ...SOURCE,
+    { role: "user", content: "第四问：那我自己应该怎么开始？我现在是内容创作者，也想把和 AI 的对话变成节目，应该从哪里入手？" },
+    { role: "assistant", content: "从一个小问题开始，每周和 AI 深度聊一次，把有价值的对话存下来，慢慢就会形成自己的话题库和表达风格。" },
+  ];
+
+  it("新快照内容以库内快照为前缀 → 写 prefix_source_id + 响应 suspectedSource", async () => {
+    const traces: Array<{ fingerprint: string | null; prefixSourceId: string | null }> = [];
+    const deps = makeDeps({
+      getSnapshotByUrl: async () => ({
+        id: "snap-2", platform: "claude", sourceTitle: "衍生对话", sourceConversationId: "conv-2",
+        parsedDialogue: DERIVED, fingerprint: null, status: "ok", retryAfter: null, lastError: null,
+      }),
+      listTraceableSnapshots: async () => [{ id: "snap-1", sourceTitle: "原始对话", parsedDialogue: SOURCE }],
+      setSnapshotSourceTrace: async (_id, row) => { traces.push(row); },
+    });
+    const res = await post(makeApp(deps), URL);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.suspectedSource).toMatchObject({ snapshotId: "snap-1", sourceTitle: "原始对话" });
+    expect(traces[0]?.prefixSourceId).toBe("snap-1");
+    expect(traces[0]?.fingerprint).toBeTruthy();
+  });
+
+  it("无前缀匹配 → 不返回 suspectedSource，prefixSourceId 为 null", async () => {
+    const traces: Array<{ prefixSourceId: string | null }> = [];
+    const deps = makeDeps({
+      getSnapshotByUrl: async () => ({
+        id: "snap-2", platform: "claude", sourceTitle: "独立对话", sourceConversationId: "conv-2",
+        parsedDialogue: DERIVED, fingerprint: null, status: "ok", retryAfter: null, lastError: null,
+      }),
+      listTraceableSnapshots: async () => [{ id: "snap-1", sourceTitle: "无关对话", parsedDialogue: [{ role: "user", content: "完全无关的内容，没有任何消息相同，这里只是占位符。" }, { role: "assistant", content: "另一条无关回复，仅用于凑够候选数量。" }] }],
+      setSnapshotSourceTrace: async (_id, row) => { traces.push(row); },
+    });
+    const res = await post(makeApp(deps), URL);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.suspectedSource).toBeUndefined();
+    expect(traces[0]?.prefixSourceId).toBeNull();
+  });
+
+  it("已有指纹的快照（历史已计算）→ 跳过重复检测", async () => {
+    let tracedCalls = 0;
+    const deps = makeDeps({
+      getSnapshotByUrl: async () => ({
+        id: "snap-1", platform: "claude", sourceTitle: "已算过", sourceConversationId: "conv-1",
+        parsedDialogue: DERIVED, fingerprint: "existing-fp", status: "ok", retryAfter: null, lastError: null,
+      }),
+      listTraceableSnapshots: async () => [{ id: "snap-0", sourceTitle: "源", parsedDialogue: SOURCE }],
+      setSnapshotSourceTrace: async () => { tracedCalls++; },
+    });
+    const res = await post(makeApp(deps), URL);
+    expect(res.status).toBe(200);
+    expect(tracedCalls).toBe(0);
   });
 });

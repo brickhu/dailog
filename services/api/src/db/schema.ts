@@ -1,5 +1,5 @@
 import {
-  boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
+  boolean, foreignKey, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
 } from "drizzle-orm/pg-core";
 
 export interface ScriptSegment { speaker: "host" | "guest"; text: string; }
@@ -129,23 +129,32 @@ export const inviteCodes = pgTable("invite_codes", {
 /** 分享快照：分享 URL 的内容提取（全局资源，与用户无耦合；URL 唯一）。
  *  分享页是原对话的快照——内容固定、永久有效；关闭后重开 = 新 URL。
  *  status=unreachable 时 10 分钟内不重试 importer */
-export const snapshots = pgTable("snapshots", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  url: text("url").notNull().unique(),
-  platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek", "plain"] }).notNull(),
-  sourceTitle: text("source_title"),
-  sourceConversationId: text("source_conversation_id"),
-  /** 解析后的对话（JSONB 存库——快照内容固定，入库后不随平台变化） */
-  parsedDialogue: jsonb("parsed_dialogue"),
-  /** 质量分析结果：{ pass, reason?, language? }（内容固定 → 分析一次全局复用） */
-  quality: jsonb("quality").$type<QualityResult>(),
-  status: text("status", { enum: ["ok", "unreachable", "parse_failed"] }).notNull().default("ok"),
-  lastError: text("last_error"),
-  /** 触达失败时间（unreachable 后 10 分钟内不重试） */
-  retryAfter: timestamp("retry_after", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const snapshots = pgTable(
+  "snapshots",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    url: text("url").notNull().unique(),
+    platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek", "plain"] }).notNull(),
+    sourceTitle: text("source_title"),
+    sourceConversationId: text("source_conversation_id"),
+    /** 解析后的对话（JSONB 存库——快照内容固定，入库后不随平台变化） */
+    parsedDialogue: jsonb("parsed_dialogue"),
+    /** 内容指纹：归一化消息序列的 sha256（精确重复检测；import 时计算一次） */
+    fingerprint: text("fingerprint"),
+    /** 内容前缀源：消息序列以本快照为前缀（衍生对话自动检测，指向被续写的源快照） */
+    prefixSourceId: uuid("prefix_source_id"),
+    /** 质量分析结果：{ pass, reason?, language? }（内容固定 → 分析一次全局复用） */
+    quality: jsonb("quality").$type<QualityResult>(),
+    status: text("status", { enum: ["ok", "unreachable", "parse_failed"] }).notNull().default("ok"),
+    lastError: text("last_error"),
+    /** 触达失败时间（unreachable 后 10 分钟内不重试） */
+    retryAfter: timestamp("retry_after", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  // 自引用外键放表级定义（列级 references 会与表常量循环引用，TS 报 7022）
+  (t) => [foreignKey({ columns: [t.prefixSourceId], foreignColumns: [t.id] })],
+);
 
 /** 创作容器：用户 × 快照的工作区（纯容器，不含脚本内容；重复粘贴跳转已有）。
  *  投稿制：status 同时承载投稿状态机——submitted（已投稿待审核）/ accepted（已收录）/ rejected（投稿失败）；

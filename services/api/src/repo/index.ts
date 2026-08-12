@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { randomBytes } from "node:crypto";
 import * as schema from "../db/schema";
@@ -37,13 +37,14 @@ export interface SnapshotRow {
 export interface SnapshotsRepo {
   /** 快照查询（URL 唯一）——命中即复用，不重复采集 */
   /** 按 id 查（polish → snapshot 对话用） */
-  getById(id: string): Promise<{ parsedDialogue: unknown; sourceTitle: string | null; platform: string } | null>;
+  getById(id: string): Promise<{ parsedDialogue: unknown; sourceTitle: string | null; platform: string; prefixSourceId: string | null } | null>;
   getByUrl(url: string): Promise<{
     id: string;
     platform: string;
     sourceTitle: string | null;
     sourceConversationId: string | null;
     parsedDialogue: unknown;
+    fingerprint: string | null;
     quality: schema.QualityResult | null;
     status: "ok" | "unreachable" | "parse_failed";
     retryAfter: Date | null;
@@ -54,6 +55,10 @@ export interface SnapshotsRepo {
   updateContent(id: string, row: SnapshotRow): Promise<void>;
   /** 质量分析结果写快照（内容固定 → 分析一次全局复用） */
   updateQuality(id: string, quality: schema.QualityResult): Promise<void>;
+  /** 内容溯源：所有已解析快照（id/标题/指纹/消息）——前缀比对候选集 */
+  listTraceable(): Promise<Array<{ id: string; sourceTitle: string | null; fingerprint: string | null; parsedDialogue: unknown }>>;
+  /** 写内容溯源结果（指纹 + 前缀源快照；import 时计算一次） */
+  setSourceTrace(id: string, row: { fingerprint: string | null; prefixSourceId: string | null }): Promise<void>;
   /** 触达失败：status=unreachable，retryAfter=10 分钟后 */
   markUnreachable(id: string, error: string): Promise<void>;
   markParseFailed(id: string, error: string): Promise<void>;
@@ -320,6 +325,14 @@ export interface EpisodesRepo {
     durationSeconds: number | null;
     publishedAt: Date | null;
   }>>;
+  /** 快照 → 已生成节目预览（任意用户；ready/published 取最新）——同 URL 二次提交的预览态数据源 */
+  findPublishedEpisodeBySnapshot(snapshotId: string): Promise<{
+    id: string;
+    title: string | null;
+    durationSeconds: number | null;
+    hostName: string | null;
+    guestName: string | null;
+  } | null>;
   /** 按投稿容器列节目（编辑端详情用，无归属校验） */
   listByPolish(polishId: string): Promise<Array<{
     id: string;
@@ -537,7 +550,12 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
     snapshots: {
       async getById(id) {
         const rows = await db
-          .select({ parsedDialogue: schema.snapshots.parsedDialogue, sourceTitle: schema.snapshots.sourceTitle, platform: schema.snapshots.platform })
+          .select({
+            parsedDialogue: schema.snapshots.parsedDialogue,
+            sourceTitle: schema.snapshots.sourceTitle,
+            platform: schema.snapshots.platform,
+            prefixSourceId: schema.snapshots.prefixSourceId,
+          })
           .from(schema.snapshots)
           .where(eq(schema.snapshots.id, id))
           .limit(1);
@@ -551,6 +569,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             sourceTitle: schema.snapshots.sourceTitle,
             sourceConversationId: schema.snapshots.sourceConversationId,
             parsedDialogue: schema.snapshots.parsedDialogue,
+            fingerprint: schema.snapshots.fingerprint,
             quality: schema.snapshots.quality,
             status: schema.snapshots.status,
             retryAfter: schema.snapshots.retryAfter,
@@ -603,6 +622,26 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       async markParseFailed(id, error) {
         await db.update(schema.snapshots)
           .set({ status: "parse_failed", lastError: error, updatedAt: new Date() })
+          .where(eq(schema.snapshots.id, id));
+      },
+      async listTraceable() {
+        return db
+          .select({
+            id: schema.snapshots.id,
+            sourceTitle: schema.snapshots.sourceTitle,
+            fingerprint: schema.snapshots.fingerprint,
+            parsedDialogue: schema.snapshots.parsedDialogue,
+          })
+          .from(schema.snapshots)
+          .where(isNotNull(schema.snapshots.parsedDialogue));
+      },
+      async setSourceTrace(id, row) {
+        await db.update(schema.snapshots)
+          .set({
+            fingerprint: row.fingerprint,
+            prefixSourceId: row.prefixSourceId,
+            updatedAt: new Date(),
+          })
           .where(eq(schema.snapshots.id, id));
       },
     },
@@ -1290,6 +1329,27 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .from(schema.episodes)
           .where(eq(schema.episodes.status, "published"))
           .orderBy(desc(schema.episodes.number));
+      },
+      async findPublishedEpisodeBySnapshot(snapshotId) {
+        const rows = await db
+          .select({
+            id: schema.episodes.id,
+            title: schema.episodes.title,
+            durationSeconds: schema.episodes.durationSeconds,
+            // 称呼快照（生成时固化）：host/guest 均落在 transcript；旧数据为空时前端回退
+            hostName: schema.transcripts.hostName,
+            guestName: schema.transcripts.guestName,
+          })
+          .from(schema.episodes)
+          .innerJoin(schema.polishes, eq(schema.polishes.id, schema.episodes.polishId))
+          .innerJoin(schema.transcripts, eq(schema.transcripts.id, schema.episodes.transcriptId))
+          .where(and(
+            eq(schema.polishes.snapshotId, snapshotId),
+            inArray(schema.episodes.status, ["ready", "published"]),
+          ))
+          .orderBy(desc(schema.episodes.publishedAt))
+          .limit(1);
+        return rows[0] ?? null;
       },
       async listByPolish(polishId) {
         return db

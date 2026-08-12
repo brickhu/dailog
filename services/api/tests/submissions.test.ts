@@ -14,7 +14,9 @@ function makeRepo(overrides: { snapshots?: Partial<Repos["snapshots"]>; polishes
       updateContent: async () => {},
       updateQuality: async () => {},
       markUnreachable: async () => {},
-      markParseFailed: async () => {},
+            markParseFailed: async () => {},
+      listTraceable: async () => [],
+      setSourceTrace: async () => {},
       ...overrides.snapshots,
     },
     polishes: {
@@ -65,7 +67,7 @@ describe("POST /v1/submissions", () => {
 
   it("已提交过同一对话 → existing 返回已有容器", async () => {
     const repo = makeRepo({
-      snapshots: { getById: async () => ({ parsedDialogue: null, sourceTitle: null, platform: "claude" }) },
+      snapshots: { getById: async () => ({ parsedDialogue: null, sourceTitle: null, platform: "claude", prefixSourceId: null }) },
       polishes: { findByUserSnapshot: async () => ({ id: "sub-old", title: null, status: "submitted" }) },
     });
     const res = await makeApp(repo).request("/v1/submissions", {
@@ -79,7 +81,7 @@ describe("POST /v1/submissions", () => {
 
   it("提交成功 → 201 submitted", async () => {
     const repo = makeRepo({
-      snapshots: { getById: async () => ({ parsedDialogue: null, sourceTitle: "一次关于 AI 的对话", platform: "claude" }) },
+      snapshots: { getById: async () => ({ parsedDialogue: null, sourceTitle: "一次关于 AI 的对话", platform: "claude", prefixSourceId: null }) },
       polishes: { createSubmission: async () => ({ id: "sub-new" }) },
     });
     const res = await makeApp(repo).request("/v1/submissions", {
@@ -93,7 +95,7 @@ describe("POST /v1/submissions", () => {
 
   it("并发撞唯一约束 → 409 already_submitted", async () => {
     const repo = makeRepo({
-      snapshots: { getById: async () => ({ parsedDialogue: null, sourceTitle: null, platform: "claude" }) },
+      snapshots: { getById: async () => ({ parsedDialogue: null, sourceTitle: null, platform: "claude", prefixSourceId: null }) },
       polishes: { createSubmission: async () => ({ id: "" }) },
     });
     const res = await makeApp(repo).request("/v1/submissions", {

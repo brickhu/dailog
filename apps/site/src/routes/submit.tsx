@@ -20,6 +20,24 @@ interface ImportPreview {
   count: number;
 }
 
+/** 节目预览态：同 URL 已生成过节目（任意用户）——不进入确认导入 */
+interface PublishedPreview {
+  episode: {
+    id: string;
+    title: string | null;
+    durationSeconds: number | null;
+    hostName: string | null;
+    guestName: string | null;
+  };
+  sourceUrl: string;
+}
+
+/** 内容溯源提示：新对话疑似衍生自库内已收录对话 */
+interface SuspectedSource {
+  snapshotId: string;
+  sourceTitle: string | null;
+}
+
 const styles = stylex.create({
   page: {
     minHeight: "100vh",
@@ -107,6 +125,56 @@ const styles = stylex.create({
     gap: dimensions.spacing3,
     alignItems: "center",
   },
+  // 节目预览态（同 URL 已生成节目）
+  previewCard: {
+    borderRadius: dimensions.radiusMd,
+    border: `1px solid ${colors.brandStrong}`,
+    backgroundColor: colors.surface,
+    padding: dimensions.spacing5,
+    display: "flex",
+    flexDirection: "column",
+    gap: dimensions.spacing3,
+  },
+  previewTitle: {
+    fontSize: dimensions.fontSizeMd,
+    fontWeight: dimensions.fontWeightMedium,
+    margin: 0,
+  },
+  previewBlock: {
+    display: "block",
+    borderRadius: dimensions.radiusMd,
+    border: `1px solid ${colors.ink}`,
+    padding: dimensions.spacing4,
+    textDecoration: "none",
+    color: "inherit",
+    ":hover": { borderColor: colors.brandStrong },
+  },
+  previewRow: {
+    fontSize: dimensions.fontSizeSm,
+    color: colors.foreground,
+    margin: 0,
+    paddingBottom: dimensions.spacing1,
+  },
+  previewLabel: {
+    color: colors.neutral,
+  },
+  previewHint: {
+    fontSize: dimensions.fontSizeSm,
+    color: colors.neutral,
+    margin: 0,
+  },
+  previewLink: {
+    color: colors.brandStrong,
+    textDecoration: "underline",
+    cursor: "pointer",
+  },
+  traceHint: {
+    fontSize: dimensions.fontSizeSm,
+    color: colors.neutral,
+    margin: 0,
+    borderLeft: `3px solid ${colors.brand}`,
+    paddingLeft: dimensions.spacing3,
+  },
 });
 
 export default function SubmitPage() {
@@ -117,6 +185,8 @@ export default function SubmitPage() {
   const [importError, setImportError] = createSignal<string | null>(null);
   const [preview, setPreview] = createSignal<ImportPreview | null>(null);
   const [existing, setExisting] = createSignal<string | null>(null);
+  const [publishedPreview, setPublishedPreview] = createSignal<PublishedPreview | null>(null);
+  const [suspectedSource, setSuspectedSource] = createSignal<SuspectedSource | null>(null);
   // 平台规则（importer /platforms 单一来源）：实时 URL 预检用
   const [platformRules, setPlatformRules] = createSignal<Array<{ id: string; label: string; sharePattern: string }>>([]);
   /** 当前输入匹配的平台（null = 未输入/未匹配） */
@@ -181,6 +251,8 @@ export default function SubmitPage() {
     setImporting(true);
     setImportError(null);
     setExisting(null);
+    setPublishedPreview(null);
+    setSuspectedSource(null);
     try {
       const res = await fetch("/v1/import", {
         method: "POST",
@@ -191,6 +263,23 @@ export default function SubmitPage() {
       if (!res.ok) {
         setImportError(String((data as { detail?: { message?: string } })?.detail?.message ?? data?.error ?? res.status));
         return;
+      }
+      if (data?.alreadyPublished) {
+        // 节目预览态：这篇对话已生成过节目 → 展示节目信息，引导在原对话中续写再投稿
+        const ep = (data as { episode?: { id?: string; title?: string | null; durationSeconds?: number | null; hostName?: string | null; guestName?: string | null } }).episode;
+        if (ep?.id) {
+          setPublishedPreview({
+            episode: {
+              id: ep.id,
+              title: ep.title ?? null,
+              durationSeconds: ep.durationSeconds ?? null,
+              hostName: ep.hostName ?? null,
+              guestName: ep.guestName ?? null,
+            },
+            sourceUrl: raw,
+          });
+          return;
+        }
       }
       if (data?.existing) {
         // 已投过同一对话：提示并引导查看状态
@@ -204,6 +293,11 @@ export default function SubmitPage() {
         platform: String(dialogue?.platform ?? ""),
         count: Array.isArray(dialogue?.messages) ? dialogue.messages.length : 0,
       });
+      // 内容溯源提示：疑似衍生自库内已收录对话（不阻断，仅提示）
+      const src = (data as { suspectedSource?: { snapshotId?: string; sourceTitle?: string | null } | null }).suspectedSource;
+      if (src?.snapshotId) {
+        setSuspectedSource({ snapshotId: src.snapshotId, sourceTitle: src.sourceTitle ?? null });
+      }
       setStep(2);
     } catch {
       setImportError(t("submit.importFailed", { error: "network" }));
@@ -309,6 +403,42 @@ export default function SubmitPage() {
                 <a href="/me/submits"> {t("submit.viewSubmissions")}</a>
               </p>
             </Show>
+            <Show when={publishedPreview()}>
+              <div {...stylex.props(styles.previewCard)}>
+                <p {...stylex.props(styles.previewTitle)}>{t("submit.alreadyPublished")}</p>
+                {/* 节目信息块：可点击进入节目页 */}
+                <a href={`/episode/${publishedPreview()!.episode.id}`} {...stylex.props(styles.previewBlock)}>
+                  <p {...stylex.props(styles.previewRow)}>
+                    <span {...stylex.props(styles.previewLabel)}>{t("submit.epTitle")}：</span>
+                    {publishedPreview()!.episode.title || t("common.unnamed")}
+                  </p>
+                  <p {...stylex.props(styles.previewRow)}>
+                    <span {...stylex.props(styles.previewLabel)}>{t("submit.epHost")}：</span>
+                    {publishedPreview()!.episode.hostName || "—"}
+                  </p>
+                  <p {...stylex.props(styles.previewRow)}>
+                    <span {...stylex.props(styles.previewLabel)}>{t("submit.epGuest")}：</span>
+                    {publishedPreview()!.episode.guestName || "—"}
+                  </p>
+                  <p {...stylex.props(styles.previewRow)}>
+                    <span {...stylex.props(styles.previewLabel)}>{t("submit.epDuration")}：</span>
+                    {publishedPreview()!.episode.durationSeconds
+                      ? `${Math.round(publishedPreview()!.episode.durationSeconds! / 60)}m`
+                      : "—"}
+                  </p>
+                </a>
+                <p {...stylex.props(styles.previewHint)}>
+                  {t("submit.continueOriginal")}
+                  <a href={publishedPreview()!.sourceUrl} target="_blank" rel="noopener" {...stylex.props(styles.previewLink)}>
+                    {t("submit.openOriginal")}
+                  </a>
+                  {t("submit.continueOriginalTail")}
+                </p>
+                <Button appear="ghost" onClick={() => { setPublishedPreview(null); setUrl(""); }}>
+                  {t("submit.importAnother")}
+                </Button>
+              </div>
+            </Show>
             <Show when={importError()}>
               <p {...stylex.props(styles.error)}>{importError()}</p>
             </Show>
@@ -327,6 +457,11 @@ export default function SubmitPage() {
               {t("submit.previewTitle", { title: preview()!.title })} ·{" "}
               {t("submit.previewMessages", { count: preview()!.count, platform: preview()!.platform || "-" })}
             </p>
+            <Show when={suspectedSource()}>
+              <p {...stylex.props(styles.traceHint)}>
+                {t("submit.suspectedSource", { title: suspectedSource()!.sourceTitle || t("common.unnamed") })}
+              </p>
+            </Show>
             <label {...stylex.props(styles.label)}>{t("submit.callName")}</label>
             <input
               {...stylex.props(styles.input)}

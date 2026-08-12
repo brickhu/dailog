@@ -22,7 +22,9 @@ function fakeRepo(overrides: {
       updateContent: async () => {},
       updateQuality: async () => {},
       markUnreachable: async () => {},
-      markParseFailed: async () => {},
+            markParseFailed: async () => {},
+      listTraceable: async () => [],
+      setSourceTrace: async () => {},
       ...overrides.snapshots,
     },
     polishes: {
@@ -58,6 +60,7 @@ function fakeRepo(overrides: {
       publish: async () => ({ number: 1 }),
       updatePublished: async () => {},
       listPublished: async () => [],
+      findPublishedEpisodeBySnapshot: async () => null,
       getEpisodeScript: async () => null,
       getEpisodeGuest: async () => null,
       getPublicAudioKey: async () => null,

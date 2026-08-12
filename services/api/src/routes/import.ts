@@ -1,11 +1,14 @@
 // 分享链接导入：POST /api/import {url}
 //  ① snapshots 查 URL（分享内容固定 → 快照全局唯一）——未命中调 importer
 //     （成功/失败都写快照；platform_unreachable 标注 10 分钟可重试）
-//  ② polishes 查 user × snapshot——已存在返回 existing（前端跳编辑页）
-//  ③ 规则检查（非 LLM）：轮数 < 3 或总字数 < 500 → 422 too_short（内容门槛）
+//  ② 节目预览：该快照已有任意用户的节目（ready/published）→ alreadyPublished（前端进预览态，不进入确认导入）
+//  ③ 内容溯源：新/无指纹快照计算指纹 + 前缀检测（衍生自库内对话 → prefix_source_id + suspectedSource）
+//  ④ polishes 查 user × snapshot——已存在返回 existing（前端跳编辑页）
+//  ⑤ 规则检查（非 LLM）：轮数 < 3 或总字数 < 500 → 422 too_short（内容门槛）
 // 预览确认后由 POST /api/polishes/new 创建容器。
 
 import { Hono } from "hono";
+import { detectPrefixSource, sequenceFingerprint, type TraceMessage } from "../lib/content-trace";
 
 export interface ImportDeps {
   getSnapshotByUrl(url: string): Promise<{
@@ -14,6 +17,7 @@ export interface ImportDeps {
     sourceTitle: string | null;
     sourceConversationId: string | null;
     parsedDialogue: unknown;
+    fingerprint: string | null;
     status: "ok" | "unreachable" | "parse_failed";
     retryAfter: Date | null;
     lastError: string | null;
@@ -23,6 +27,18 @@ export interface ImportDeps {
   markSnapshotUnreachable(id: string, error: string): Promise<void>;
   markSnapshotParseFailed(id: string, error: string): Promise<void>;
   findPolishByUserSnapshot(userId: string, snapshotId: string): Promise<{ id: string; title: string | null } | null>;
+  /** 内容溯源候选集（全部已解析快照）——前缀检测用 */
+  listTraceableSnapshots(): Promise<Array<{ id: string; sourceTitle: string | null; parsedDialogue: unknown }>>;
+  /** 写溯源结果（指纹 + 前缀源；import 时一次） */
+  setSnapshotSourceTrace(id: string, row: { fingerprint: string | null; prefixSourceId: string | null }): Promise<void>;
+  /** 快照 → 已生成节目（ready/published 取最新；任意用户）——二次提交预览态 */
+  findPublishedEpisodeBySnapshot(snapshotId: string): Promise<{
+    id: string;
+    title: string | null;
+    durationSeconds: number | null;
+    hostName: string | null;
+    guestName: string | null;
+  } | null>;
   /** 平台分享页规则（importer /platforms 转发——规则单一来源在 importer；sharePattern 含域名+路径+ID 三级校验）。
    *  null = importer 不可达（调用方 503，勿误判为"无规则"） */
   getPlatformRules(): Promise<Array<{ id: string; label: string; sharePattern: string }> | null>;
@@ -146,7 +162,36 @@ export function importRoutes(deps: ImportDeps) {
       if (!snapshot) return c.json({ error: "parse_failed" }, 422);
     }
 
-    // ② polish 检查：用户已创建过该快照的容器 → 跳转编辑页
+    // ② 节目预览：该快照已有任意用户的节目（ready/published）→ 不进入确认导入，
+    // 返回预览态数据（标题/主持人/嘉宾/时长），前端引导"在原对话中续写再投稿"
+    const publishedEpisode = await deps.findPublishedEpisodeBySnapshot(snapshot.id);
+    if (publishedEpisode) {
+      return c.json({
+        alreadyPublished: true,
+        episode: {
+          id: publishedEpisode.id,
+          title: publishedEpisode.title,
+          durationSeconds: publishedEpisode.durationSeconds,
+          hostName: publishedEpisode.hostName,
+          guestName: publishedEpisode.guestName,
+        },
+      });
+    }
+
+    // ③ 内容溯源：无指纹快照（新建/历史数据）计算指纹 + 前缀源检测（衍生对话自动挂源）
+    let suspectedSource: { snapshotId: string; sourceTitle: string | null } | null = null;
+    if (Array.isArray(snapshot.parsedDialogue) && !snapshot.fingerprint) {
+      const dialogue = snapshot.parsedDialogue as TraceMessage[];
+      const candidates = await deps.listTraceableSnapshots();
+      const source = detectPrefixSource(dialogue, candidates.filter((c) => c.id !== snapshot.id).map((c) => ({ id: c.id, sourceTitle: c.sourceTitle, messages: (c.parsedDialogue ?? []) as TraceMessage[] })));
+      await deps.setSnapshotSourceTrace(snapshot.id, {
+        fingerprint: sequenceFingerprint(dialogue),
+        prefixSourceId: source?.id ?? null,
+      });
+      if (source) suspectedSource = { snapshotId: source.id, sourceTitle: source.sourceTitle };
+    }
+
+    // ④ polish 检查：用户已创建过该快照的容器 → 跳转编辑页
     // 展示标题用有效标题（旧容器名可能是占位复制来的；不影响 polish.title 数据本身）
     const existing = await deps.findPolishByUserSnapshot(userId, snapshot.id);
     if (existing) {
@@ -180,6 +225,8 @@ export function importRoutes(deps: ImportDeps) {
         messages: snapshot.parsedDialogue ?? [],
       },
       snapshotId: snapshot.id,
+      // 内容溯源提示（新快照检测到衍生自库内对话时返回；无则省略）
+      ...(suspectedSource ? { suspectedSource } : {}),
     });
   });
 
