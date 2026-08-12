@@ -10,6 +10,7 @@ import { collectChatgptShare } from "./platforms/chatgpt";
 import { collectDoubaoShare } from "./platforms/doubao";
 import { collectGeminiShare } from "./platforms/gemini";
 import { collectKimiShare } from "./platforms/kimi";
+import { collectPerplexityShare } from "./platforms/perplexity";
 import { httpGet, HttpError } from "./fetch";
 import type { CollectedDialogue, CollectError } from "./types";
 
@@ -54,6 +55,7 @@ const PLATFORMS: ReturnType<typeof rule>[] = [
   rule({ id: "doubao", label: "豆包", domains: ["doubao.com"], pathPrefix: "/thread/", shareIdRe: /[A-Za-z0-9]+/, collect: collectDoubaoShare }),
   rule({ id: "gemini", label: "Gemini", domains: ["share.gemini.google"], shareIdRe: /[A-Za-z0-9]+/, collect: collectGeminiShare }),
   rule({ id: "kimi", label: "Kimi", domains: ["kimi.com"], shareIdRe: /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/, collect: collectKimiShare }),
+  rule({ id: "perplexity", label: "Perplexity", domains: ["www.perplexity.ai", "perplexity.ai"], pathPrefix: "/search/", shareIdRe: /[A-Za-z0-9_-]+/, collect: collectPerplexityShare }),
   // 通义千问：单平台多域名示例（qwen.aliyun.com 为分享页主域名；tongyi.aliyun.com 网页版）。
   // 采集器待适配（无分享页 DOM 样本）——规则已注册（前端识别/预检可用），采集明确失败不写库
   rule({ id: "tongyi", label: "通义千问", domains: ["qwen.aliyun.com", "tongyi.aliyun.com"], shareIdRe: /[A-Za-z0-9-]+/, collect: async () => null }),

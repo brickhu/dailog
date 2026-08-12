@@ -229,11 +229,73 @@ describe("平台规则（单平台多域名）", () => {
     expect(re.test("https://tongyi.aliyun.com/share/abc123xyz")).toBe(true);
   });
 
+  it("perplexity 平台（/search/ 路径）", () => {
+    const rules = getPlatformRules();
+    const pplx = rules.find((r) => r.id === "perplexity");
+    expect(pplx).toBeTruthy();
+    const re = new RegExp(pplx!.sharePattern);
+    expect(re.test("https://www.perplexity.ai/search/fan-yi-cheng-zhong-wen-4O_bpNVoTgSdr4hOzrrZ1w")).toBe(true);
+    expect(re.test("https://perplexity.ai/search/abc-123")).toBe(true);
+    expect(re.test("https://www.perplexity.ai/chat/abc-123")).toBe(false);
+  });
+
   it("豆包路径前缀 /thread/ 保持", () => {
     const rules = getPlatformRules();
     const doubao = rules.find((r) => r.id === "doubao");
     const re = new RegExp(doubao!.sharePattern);
     expect(re.test("https://www.doubao.com/thread/abc123")).toBe(true);
     expect(re.test("https://www.doubao.com/share/abc123")).toBe(false);
+  });
+});
+
+describe("perplexity 分享解析", () => {
+  const URL = "https://www.perplexity.ai/search/fan-yi-cheng-zhong-wen-4O_bpNVoTgSdr4hOzrrZ1w";
+  const ID = "fan-yi-cheng-zhong-wen-4O_bpNVoTgSdr4hOzrrZ1w";
+
+  it("__NEXT_DATA__ 嵌入 JSON：深度提取 queries/answers + title", async () => {
+    const { parsePerplexityShare } = await import("../src/platforms/perplexity");
+    const nextData = JSON.stringify({
+      props: { pageProps: { title: "翻译成中文" } },
+      thread: {
+        title: "翻译成中文",
+        queries: ["翻译成中文：Hello world", "再翻译：Good morning"],
+        answers: ["你好，世界", "早上好"],
+      },
+    });
+    const html = `<html><head><title>翻译成中文 - Perplexity</title></head><body>
+      <script id="__NEXT_DATA__" type="application/json">${nextData}</script>
+      <div id="root"></div></body></html>`;
+    const d = parsePerplexityShare(html, ID, URL);
+    expect(d).not.toBeNull();
+    expect(d!.title).toBe("翻译成中文");
+    expect(d!.platform).toBe("perplexity");
+    expect(d!.messages).toEqual([
+      { role: "user", content: "翻译成中文：Hello world" },
+      { role: "assistant", content: "你好，世界" },
+      { role: "user", content: "再翻译：Good morning" },
+      { role: "assistant", content: "早上好" },
+    ]);
+  });
+
+  it("DOM 兜底：chat-turn-query + answer-content 按序提取", async () => {
+    const { parsePerplexityShare } = await import("../src/platforms/perplexity");
+    const html = `<html><head><title>翻译成中文 - Perplexity</title></head><body>
+      <div data-testid="chat-turn-query"><div class="prose">翻译成中文：Hello world</div></div>
+      <div data-testid="answer-content"><div class="prose"><p>你好，世界</p></div></div>
+      <div data-testid="chat-turn-query"><div class="prose">再翻译：Good morning</div></div>
+      <div data-testid="answer-content"><div class="prose"><p>早上好</p></div></div>
+    </body></html>`;
+    const d = parsePerplexityShare(html, ID, URL);
+    expect(d).not.toBeNull();
+    expect(d!.title).toBe("翻译成中文 - Perplexity");
+    expect(d!.messages).toHaveLength(4);
+    expect(d!.messages[0]).toMatchObject({ role: "user", content: expect.stringContaining("Hello world") });
+    expect(d!.messages[1]).toMatchObject({ role: "assistant", content: expect.stringContaining("你好，世界") });
+    expect(d!.messages[3]).toMatchObject({ role: "assistant", content: expect.stringContaining("早上好") });
+  });
+
+  it("无 assistant 消息/无结构 → null", async () => {
+    const { parsePerplexityShare } = await import("../src/platforms/perplexity");
+    expect(parsePerplexityShare("<html><body>普通页面</body></html>", ID, URL)).toBeNull();
   });
 });

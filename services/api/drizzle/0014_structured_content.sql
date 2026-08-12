@@ -64,5 +64,6 @@ INSERT INTO guests (id, platform, name, intro, url) VALUES
   ('gemini', 'gemini', 'Gemini', 'Google 的 AI 助手', 'https://gemini.google.com'),
   ('kimi', 'kimi', 'Kimi', '月之暗面的 AI 助手', 'https://kimi.moonshot.cn'),
   ('doubao', 'doubao', '豆包', '字节跳动的 AI 助手', 'https://www.doubao.com'),
-  ('tongyi', 'tongyi', '通义', '阿里的 AI 助手', 'https://tongyi.aliyun.com')
+  ('tongyi', 'tongyi', '通义', '阿里的 AI 助手', 'https://tongyi.aliyun.com'),
+  ('perplexity', 'perplexity', 'Perplexity', 'Perplexity 的 AI 搜索引擎', 'https://www.perplexity.ai')
 ON CONFLICT (platform) DO NOTHING;

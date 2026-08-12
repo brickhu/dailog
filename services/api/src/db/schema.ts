@@ -134,7 +134,7 @@ export const snapshots = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     url: text("url").notNull().unique(),
-    platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek", "plain"] }).notNull(),
+    platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek", "perplexity", "plain"] }).notNull(),
     sourceTitle: text("source_title"),
     sourceConversationId: text("source_conversation_id"),
     /** 解析后的对话（JSONB 存库——快照内容固定，入库后不随平台变化） */
@@ -236,7 +236,7 @@ export const episodes = pgTable("episodes", {
 /** AI 平台嘉宾库：我们支持的对话平台固定信息（脚本/节目引用 guestId，展示用 name/avatar/intro） */
 export const guests = pgTable("guests", {
   id: text("id").primaryKey(), // 用 platform 枚举值作 id（claude/chatgpt/...）
-  platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek"] }).notNull().unique(),
+  platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek", "perplexity"] }).notNull().unique(),
   name: text("name").notNull(),
   avatar: text("avatar"),
   intro: text("intro"),

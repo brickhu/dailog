@@ -1,5 +1,5 @@
 // 与 services/api/src/dialogue.ts 保持一致（分享采集输出 = 导入输入）
-export type Platform = "claude" | "deepseek" | "chatgpt" | "gemini" | "kimi" | "doubao";
+export type Platform = "claude" | "deepseek" | "chatgpt" | "gemini" | "kimi" | "doubao" | "perplexity";
 
 export interface DialogueMessage {
   role: "user" | "assistant";
@@ -31,7 +31,7 @@ export interface CollectError {
   };
 }
 
-const PLATFORMS: readonly Platform[] = ["claude", "deepseek", "chatgpt", "gemini", "kimi", "doubao"];
+const PLATFORMS: readonly Platform[] = ["claude", "deepseek", "chatgpt", "gemini", "kimi", "doubao", "perplexity"];
 
 /** 结果判别（与 services/api/src/dialogue.ts 同构）：dialogue 与 CollectError 的区分 */
 export function isCollectedDialogue(value: unknown): value is CollectedDialogue {
