@@ -79,6 +79,15 @@ const styles = stylex.create({
     color: colors.neutral,
     fontSize: dimensions.fontSizeSm,
   },
+  langTag: {
+    display: "inline-block",
+    marginLeft: dimensions.spacing2,
+    padding: "1px 6px",
+    borderRadius: dimensions.radiusSm,
+    border: `1px solid ${colors.ink}`,
+    fontSize: "11px",
+    lineHeight: 1.4,
+  },
   empty: {
     color: colors.neutral,
     textAlign: "center",
@@ -98,9 +107,10 @@ function fmtDuration(sec: number | null): string {
 }
 
 export default function DiscoverPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [tab, setTab] = createSignal<Tab>("new");
-  const episodes = createAsync<EpisodeSummary[]>(() => listLatestEpisodes(50));
+  // 语言偏好分流（同首页）：界面语言即内容偏好，同语言优先 + 时间 fallback
+  const episodes = createAsync<EpisodeSummary[]>(() => listLatestEpisodes(50, locale() === "zh" ? "zh" : "en"));
 
   return (
     <div {...stylex.props(styles.page)}>
@@ -133,6 +143,7 @@ export default function DiscoverPage() {
                 <div {...stylex.props(styles.epTitle)}>{ep.title || t("common.unnamed")}</div>
                 <div {...stylex.props(styles.meta)}>
                   @{ep.username} · {fmtDate(ep.publishedAt)} · {fmtDuration(ep.durationSeconds)}
+                  {ep.language ? <span {...stylex.props(styles.langTag)}>{ep.language === "en" ? "EN" : "中"}</span> : null}
                 </div>
               </a>
             )}

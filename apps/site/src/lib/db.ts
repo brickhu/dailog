@@ -52,8 +52,11 @@ async function withDb<T>(fn: (sql: postgres.Sql) => Promise<T>): Promise<T> {
   }
 }
 
-/** 最新已发布节目（首页） */
-export async function listLatestEpisodes(limit = 20): Promise<EpisodeSummary[]> {
+/** 最新已发布节目（首页/发现页）。
+ *  lang 可选（"zh"|"en"）：语言偏好分流——同语言内容优先（ORDER BY 匹配降序），
+ *  数量不足时按时间自然 fallback 到其他语言（推荐层数据分流，不做独立 tab）。
+ *  语言字段来自 transcripts（脚本语言，发布时固化）。 */
+export async function listLatestEpisodes(limit = 20, lang?: "zh" | "en"): Promise<EpisodeSummary[]> {
     return withDb((db) => db`
       SELECT e.id, e.slug, e.title, e.description,
              e.duration_seconds AS "durationSeconds",
@@ -69,7 +72,7 @@ export async function listLatestEpisodes(limit = 20): Promise<EpisodeSummary[]> 
         ORDER BY tr.created_at DESC LIMIT 1
       ) tr ON true
       WHERE e.status = 'published' AND e.is_public = true
-      ORDER BY e.published_at DESC
+      ${lang ? db`ORDER BY (t.language = ${lang}) DESC, e.published_at DESC` : db`ORDER BY e.published_at DESC`}
       LIMIT ${limit}
     ` as unknown as Promise<EpisodeSummary[]>);
 }

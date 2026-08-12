@@ -143,6 +143,15 @@ const styles = stylex.create({
     color: colors.neutral,
     fontSize: dimensions.fontSizeSm,
   },
+  langTag: {
+    display: "inline-block",
+    marginLeft: dimensions.spacing2,
+    padding: "1px 6px",
+    borderRadius: dimensions.radiusSm,
+    border: `1px solid ${colors.ink}`,
+    fontSize: "11px",
+    lineHeight: 1.4,
+  },
   empty: {
     color: colors.neutral,
     textAlign: "center",
@@ -162,8 +171,9 @@ function fmtDuration(sec: number | null): string {
 }
 
 export default function Home() {
-  const { t } = useI18n();
-  const episodes = createAsync<EpisodeSummary[]>(() => listLatestEpisodes(20));
+  const { t, locale } = useI18n();
+  // 语言偏好分流：界面语言即内容偏好（中文界面 → 中文节目优先，不足时 fallback 其他语言）
+  const episodes = createAsync<EpisodeSummary[]>(() => listLatestEpisodes(20, locale() === "zh" ? "zh" : "en"));
   const featured = () => episodes()?.[0] ?? null;
   const audioUrl = () => {
     const ep = featured();
@@ -221,6 +231,7 @@ export default function Home() {
                 <div {...stylex.props(styles.epTitle)}>{ep.title || t("common.unnamed")}</div>
                 <div {...stylex.props(styles.meta)}>
                   @{ep.username} · {fmtDate(ep.publishedAt)} · {fmtDuration(ep.durationSeconds)}
+                  {ep.language ? <span {...stylex.props(styles.langTag)}>{ep.language === "en" ? "EN" : "中"}</span> : null}
                 </div>
               </a>
             )}
