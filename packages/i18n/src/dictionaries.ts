@@ -678,7 +678,7 @@ export const en: Dictionary = {
 
   // ---- Home hero ----
   "home.hero.tagline": "Let the world hear the clash from your AI chats",
-  "home.hero.what": "dailog is an interview-style podcast cut from real AI chats — simulated interviews with AI in 5–10 mins: clashes, insights, feelings & experience.",
+  "home.hero.what": "dailog is an interview-style podcast cut from your AI chats — simulated real-people interviews with AI in 5–10 mins: clashes, insights, feelings & experience.",
   "home.hero.submit": "Submit your chat",
   "home.hero.ctaHint": "Submit your AI chats (e.g. ChatGPT...) — everyone can be a host",
   "home.hero.browse": "Browse episodes",
