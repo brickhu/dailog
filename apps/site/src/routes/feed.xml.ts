@@ -48,7 +48,7 @@ export async function GET(event: { request: Request }) {
   <channel>
     <title>dailog</title>
     <link>${env.siteBaseUrl}</link>
-    <description>${xmlEscape("让世界听到你和 AI 聊天的回响——模拟真人采访 AI 的访谈式播客。")}</description>
+    <description>${xmlEscape("听见人类和 AI 的思想交锋——模拟真人采访 AI 的访谈式播客。")}</description>
     <language>${locale === "zh" ? "zh-cn" : "en"}</language>
     <itunes:author>dailog</itunes:author>
     <itunes:category text="Technology"/>

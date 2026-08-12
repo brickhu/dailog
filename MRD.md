@@ -5,7 +5,7 @@
 
 ## 1. 产品定位
 
-**dailog，让世界听到你和 AI 聊天的回响。**（EN: **dailog — let the world hear the echo of your chats with AI**）
+**dailog——听见人类和 AI 的思想交锋。**（EN: **dailog — hear the clash between humans and AI**）
 
 **dailog 是一档"基于 AI 对话生成"的访谈式播客**——每期 5–10 分钟，通过真人主持，访谈AI嘉宾的形式呈现原始AI聊天中的精华，在 Apple/网易云音乐/小宇宙/喜马拉雅/蜻蜓FM/Spotify/QQ 音乐/荔枝FM/懒人听书等平台同步更新。
 
