@@ -15,4 +15,5 @@ export { Banner, type BannerProps, type BannerStatus, type BannerContainer, type
 export { Card } from "./components/card";
 export { TextField, type TextFieldProps } from "./components/text-field";
 export { Spinner } from "./components/spinner";
+export { Avatar, type AvatarProps } from "./components/avatar";
 export { default as Examples } from "./examples";

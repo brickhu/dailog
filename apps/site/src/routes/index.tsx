@@ -31,7 +31,7 @@ const styles = stylex.create({
     gap: dimensions.spacing4,
   },
   tagline: {
-    fontSize: dimensions.fontSize3xl,
+    fontSize: dimensions.fontSize4xl,
     fontWeight: dimensions.fontWeightBold,
     lineHeight: 1.25,
     margin: 0,
@@ -44,7 +44,7 @@ const styles = stylex.create({
   },
   ctaHint: {
     color: colors.neutral,
-    fontSize: dimensions.fontSizeSm,
+    fontSize: dimensions.fontSizeXs,
     margin: 0,
   },
   cta: {
@@ -216,7 +216,7 @@ export default function Home() {
           </Show>
         </div>
       </section>
-      <div {...stylex.props(styles.content)}>
+      {/* <div {...stylex.props(styles.content)}>
         <div {...stylex.props(styles.title)}>{t("home.latest")}</div>
         <Show
           when={episodes()?.length}
@@ -237,7 +237,7 @@ export default function Home() {
             )}
           </For>
         </Show>
-      </div>
+      </div> */}
     </div>
   );
 }
