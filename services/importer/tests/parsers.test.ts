@@ -205,3 +205,35 @@ describe("kimi HYDRATION_INIT_STATE 解析", () => {
     expect(d!.messages[1].content).not.toContain("这是一个知识问题");
   });
 });
+
+import { getPlatformRules } from "../src/collect";
+
+describe("平台规则（单平台多域名）", () => {
+
+  it("下发规则：chatgpt 多域名（chatgpt.com + chat.openai.com）共用一个 sharePattern", () => {
+    const rules = getPlatformRules();
+    const chatgpt = rules.find((r) => r.id === "chatgpt");
+    expect(chatgpt).toBeTruthy();
+    const re = new RegExp(chatgpt!.sharePattern);
+    expect(re.test("https://chatgpt.com/share/abc-123")).toBe(true);
+    expect(re.test("https://chat.openai.com/share/abc-123")).toBe(true);
+    expect(re.test("https://claude.ai/share/abc-123")).toBe(false);
+  });
+
+  it("tongyi 平台多域名（qwen.aliyun.com + tongyi.aliyun.com）", () => {
+    const rules = getPlatformRules();
+    const tongyi = rules.find((r) => r.id === "tongyi");
+    expect(tongyi).toBeTruthy();
+    const re = new RegExp(tongyi!.sharePattern);
+    expect(re.test("https://qwen.aliyun.com/share/abc123xyz")).toBe(true);
+    expect(re.test("https://tongyi.aliyun.com/share/abc123xyz")).toBe(true);
+  });
+
+  it("豆包路径前缀 /thread/ 保持", () => {
+    const rules = getPlatformRules();
+    const doubao = rules.find((r) => r.id === "doubao");
+    const re = new RegExp(doubao!.sharePattern);
+    expect(re.test("https://www.doubao.com/thread/abc123")).toBe(true);
+    expect(re.test("https://www.doubao.com/share/abc123")).toBe(false);
+  });
+});

@@ -1,6 +1,8 @@
 // 平台分发 + 错误归一化。平台规则变化只改 platforms/ 下对应文件，
 // 服务形态（HTTP/部署）不动——独立服务的核心价值。
 // URL 校验三级：http(s) 格式 → 平台域名+路径前缀 → 分享页结构（id 格式）。
+// 单平台多域名：domains 数组声明（如 ChatGPT = chatgpt.com + chat.openai.com；
+// 通义 = qwen.aliyun.com + tongyi.aliyun.com），match/shareRe 自动生成。
 
 import { collectClaudeShare } from "./platforms/claude";
 import { collectDeepSeekShare } from "./platforms/deepseek";
@@ -17,20 +19,44 @@ interface PlatformRule {
   /** 平台标识 + 展示名（规则端点下发用） */
   id: string;
   label: string;
-  /** 域名 + 路径前缀（识别平台归属） */
-  match: RegExp;
-  /** 分享页结构（id 格式）——严格校验，防止伪链接/对话页链接漏进来 */
-  shareRe: RegExp;
+  /** 该平台的分享页域名（单平台可多域名；生成 match/shareRe） */
+  domains: string[];
+  /** 分享页路径前缀（默认 /share/；豆包为 /thread/） */
+  pathPrefix?: string;
+  /** 分享页 ID 格式（严格校验，防止伪链接/对话页链接漏进来） */
+  shareIdRe: RegExp;
   collect: CollectFn;
 }
 
-const PLATFORMS: PlatformRule[] = [
-  { id: "claude", label: "Claude", match: /^https?:\/\/(www\.)?claude\.ai\/share\//, shareRe: /^https?:\/\/(www\.)?claude\.ai\/share\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/, collect: collectClaudeShare },
-  { id: "deepseek", label: "DeepSeek", match: /^https?:\/\/chat\.deepseek\.com\/share\//, shareRe: /^https?:\/\/chat\.deepseek\.com\/share\/([A-Za-z0-9]+)/, collect: collectDeepSeekShare },
-  { id: "chatgpt", label: "ChatGPT", match: /^https?:\/\/(www\.)?chatgpt\.com\/share\//, shareRe: /^https?:\/\/(www\.)?chatgpt\.com\/share\/([A-Za-z0-9-]+)/, collect: collectChatgptShare },
-  { id: "doubao", label: "豆包", match: /^https?:\/\/(www\.)?doubao\.com\/thread\//, shareRe: /^https?:\/\/(www\.)?doubao\.com\/thread\/([A-Za-z0-9]+)/, collect: collectDoubaoShare },
-  { id: "gemini", label: "Gemini", match: /^https?:\/\/share\.gemini\.google\//, shareRe: /^https?:\/\/share\.gemini\.google\/([A-Za-z0-9]+)/, collect: collectGeminiShare },
-  { id: "kimi", label: "Kimi", match: /^https?:\/\/(www\.)?kimi\.com\/share\//, shareRe: /^https?:\/\/(www\.)?kimi\.com\/share\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/, collect: collectKimiShare },
+/** 域名列表 → 非捕获 alternation（如 (?:chatgpt\.com|chat\.openai\.com)） */
+const domainAlt = (domains: string[]) =>
+  `(?:${domains.map((d) => d.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`;
+
+/** 由 domains + pathPrefix + shareIdRe 生成 match/shareRe（保持 shareRe 单一正则下发，前端零改动） */
+const rule = (r: PlatformRule) => {
+  const host = domainAlt(r.domains);
+  const path = r.pathPrefix ?? "/share/";
+  return {
+    id: r.id,
+    label: r.label,
+    /** 域名 + 路径前缀（识别平台归属） */
+    match: new RegExp(`^https?:\\/\\/(www\\.)?${host}${path}`),
+    /** 分享页结构（id 格式）——严格校验，防止伪链接/对话页链接漏进来 */
+    shareRe: new RegExp(`^https?:\\/\\/(www\\.)?${host}${path}(${r.shareIdRe.source})`),
+    collect: r.collect,
+  };
+};
+
+const PLATFORMS: ReturnType<typeof rule>[] = [
+  rule({ id: "claude", label: "Claude", domains: ["claude.ai"], shareIdRe: /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/, collect: collectClaudeShare }),
+  rule({ id: "deepseek", label: "DeepSeek", domains: ["chat.deepseek.com"], shareIdRe: /[A-Za-z0-9]+/, collect: collectDeepSeekShare }),
+  rule({ id: "chatgpt", label: "ChatGPT", domains: ["chatgpt.com", "chat.openai.com"], shareIdRe: /[A-Za-z0-9-]+/, collect: collectChatgptShare }),
+  rule({ id: "doubao", label: "豆包", domains: ["doubao.com"], pathPrefix: "/thread/", shareIdRe: /[A-Za-z0-9]+/, collect: collectDoubaoShare }),
+  rule({ id: "gemini", label: "Gemini", domains: ["share.gemini.google"], shareIdRe: /[A-Za-z0-9]+/, collect: collectGeminiShare }),
+  rule({ id: "kimi", label: "Kimi", domains: ["kimi.com"], shareIdRe: /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/, collect: collectKimiShare }),
+  // 通义千问：单平台多域名示例（qwen.aliyun.com 为分享页主域名；tongyi.aliyun.com 网页版）。
+  // 采集器待适配（无分享页 DOM 样本）——规则已注册（前端识别/预检可用），采集明确失败不写库
+  rule({ id: "tongyi", label: "通义千问", domains: ["qwen.aliyun.com", "tongyi.aliyun.com"], shareIdRe: /[A-Za-z0-9-]+/, collect: async () => null }),
 ];
 
 /** 校验规则（下发给前端做本地预检——单一来源，前端不双写规则） */

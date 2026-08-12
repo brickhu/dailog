@@ -270,9 +270,9 @@ export const zh = {
   "submit.step3Desc": "提交后由 dailog 编辑部审核制作，被收录的对话会做成节目播出。",
   "submit.confirm": "确认投稿",
   "submit.submitting": "提交中…",
-  "submit.success": "投稿已提交 ✓",
+  "submit.success": "对话导入成功，等待审核",
   "submit.successDesc": "编辑部会尽快审核你的对话。你可以在「我的投稿」查看状态。",
-  "submit.viewSubmissions": "查看我的投稿",
+  "submit.viewSubmissions": "投稿详情",
   "submit.submitAnother": "再投一个",
   "submit.existing": "这段对话你已经投过稿了（状态：{status}）",
   // 节目预览态：同 URL 已生成过节目
@@ -297,6 +297,12 @@ export const zh = {
   "submit.error.needVoice": "请先完成声音采样",
   "submit.error.submitFailed": "提交失败：{error}",
   "submit.needLogin": "投稿需要先登录",
+
+  // ---- 剪贴板检测（全站） ----
+  "clipboard.detectTitle": "检测到 AI 对话分享链接",
+  "clipboard.detectDesc": "剪贴板中检测到一个受支持的对话分享链接，是否要导入投稿？",
+  "clipboard.import": "导入投稿",
+  "clipboard.later": "暂不导入",
 
   // ---- 我的投稿 ----
   "meSubmits.title": "我的投稿",
@@ -751,9 +757,9 @@ export const en: Dictionary = {
   "submit.step3Desc": "After submission, the dailog editorial team reviews and produces it; accepted conversations become episodes.",
   "submit.confirm": "Confirm submission",
   "submit.submitting": "Submitting…",
-  "submit.success": "Submitted ✓",
+  "submit.success": "Conversation imported, pending review",
   "submit.successDesc": "The editorial team will review your conversation soon. Track its status in My Submissions.",
-  "submit.viewSubmissions": "View my submissions",
+  "submit.viewSubmissions": "Submission details",
   "submit.submitAnother": "Submit another",
   "submit.existing": "You already submitted this conversation (status: {status})",
   // 节目预览态：同 URL 已生成过节目
@@ -778,6 +784,12 @@ export const en: Dictionary = {
   "submit.error.needVoice": "Please record a voice sample first",
   "submit.error.submitFailed": "Submit failed: {error}",
   "submit.needLogin": "Please log in to submit",
+
+  // ---- Clipboard detection (site-wide) ----
+  "clipboard.detectTitle": "AI conversation share link detected",
+  "clipboard.detectDesc": "A supported share link was found in your clipboard. Import it as a submission?",
+  "clipboard.import": "Import submission",
+  "clipboard.later": "Not now",
 
   // ---- My submissions ----
   "meSubmits.title": "My submissions",

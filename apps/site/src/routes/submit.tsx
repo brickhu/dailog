@@ -219,6 +219,12 @@ export default function SubmitPage() {
 
   // 平台规则（预检用；失败静默——导入时后端仍会兜底校验）；登录守卫由 AuthGate 统一处理
   onMount(async () => {
+    // 剪贴板弹层跳转预填：/submit?url=…
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const prefill = params.get("url");
+      if (prefill && prefill.startsWith("http")) setUrl(prefill);
+    } catch { /* 静默 */ }
     try {
       const rulesRes = await fetch("/v1/importer/platforms");
       if (rulesRes.ok) {
@@ -553,9 +559,7 @@ export default function SubmitPage() {
             <p {...stylex.props(styles.stepDesc)}>{t("submit.successDesc")}</p>
             <div {...stylex.props(styles.actions)}>
               <a href="/me/submits"><Button>{t("submit.viewSubmissions")}</Button></a>
-              <Button appear="ghost" onClick={backToInput}>
-                {t("submit.submitAnother")}
-              </Button>
+              <a href="/"><Button appear="ghost">{t("submit.backHome")}</Button></a>
             </div>
           </div>
         </Show>
