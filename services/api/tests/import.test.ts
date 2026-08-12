@@ -17,6 +17,7 @@ function makeDeps(overrides: Partial<ImportDeps> = {}): ImportDeps {
     markSnapshotUnreachable: async () => {},
     markSnapshotParseFailed: async () => {},
     findPolishByUserSnapshot: async () => null,
+      parseShareHtml: async () => null,
       listTraceableSnapshots: async () => [],
       setSnapshotSourceTrace: async () => {},
       findPublishedEpisodeBySnapshot: async () => null,
@@ -354,5 +355,62 @@ ChatGPT:
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: "invalid_text" });
+  });
+});
+
+describe("POST /v1/import-paste/html（源码粘贴）", () => {
+  const HTML = `<html><head><title>测试 - Perplexity</title></head><body>
+    <script id="__NEXT_DATA__" type="application/json">{"thread":{"queries":["第一问：内容足够长，用来验证源码粘贴导入的完整流程和消息解析逻辑，这里继续补充文字。","第二问：继续提问，确保消息数量符合要求，这里也补充足够长的文字。"],"answers":["第一答：AI 的回答内容同样需要足够长才能通过字数校验，这里补充一些内容。","第二答：最后的回答，内容完整，满足播客制作的基本要求。"],"title":"测试对话"}}</script>
+  </body></html>`;
+
+  it("解析成功 → 建快照 + 返回 dialogue（platform 来自解析器）", async () => {
+    const createdRows: Array<{ parsedDialogue?: unknown }> = [];
+    const deps = makeDeps({
+      parseShareHtml: async () => ({
+        platform: "perplexity",
+        conversationId: "conv-1",
+        title: "测试对话",
+        url: "https://www.perplexity.ai/search/x",
+        messages: [
+          { role: "user", content: "第一问：内容足够长，用来验证源码粘贴导入的完整流程和消息解析逻辑，这里继续补充文字。" },
+          { role: "assistant", content: "第一答：AI 的回答内容同样需要足够长才能通过字数校验，这里补充一些内容。" },
+          { role: "user", content: "第二问：继续提问，确保消息数量符合要求，这里也补充足够长的文字。" },
+          { role: "assistant", content: "第二答：最后的回答，内容完整，满足播客制作的基本要求。" },
+        ],
+      }),
+      createSnapshot: async (row) => { createdRows.push(row); return { id: "snap-html-1" }; },
+      listTraceableSnapshots: async () => [],
+      setSnapshotSourceTrace: async () => {},
+    });
+    const res = await makeApp(deps).request("/v1/import-paste/html", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ html: HTML, url: "https://www.perplexity.ai/search/fan-yi-4O_bpNVoTgSdr4hOzrrZ1w" }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.snapshotId).toBe("snap-html-1");
+    expect(body.dialogue.platform).toBe("perplexity");
+    expect(body.dialogue.messages).toHaveLength(4);
+  });
+
+  it("解析失败 → 422 parse_failed", async () => {
+    const deps = makeDeps({ parseShareHtml: async () => null });
+    const res = await makeApp(deps).request("/v1/import-paste/html", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ html: "<html>some html content here that is long enough</html>", url: "https://www.perplexity.ai/search/x" }),
+    });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ error: "parse_failed" });
+  });
+
+  it("html 过短/缺 url → 400", async () => {
+    const res = await makeApp(makeDeps()).request("/v1/import-paste/html", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ html: "short" }),
+    });
+    expect(res.status).toBe(400);
   });
 });

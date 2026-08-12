@@ -299,3 +299,27 @@ describe("perplexity 分享解析", () => {
     expect(parsePerplexityShare("<html><body>普通页面</body></html>", ID, URL)).toBeNull();
   });
 });
+
+describe("parse-html（用户复制源码兜底）", () => {
+  it("按 URL 平台调解析器：kimi HTML → dialogue", async () => {
+    const { parseHtmlForUrl } = await import("../src/collect");
+    const html = `<html><body><script>window.HYDRATION_INIT_STATE={"queries":[{"queryKey":["share","s1"],"state":{"data":{"chat":{"name":"测试对话"},"messages":[{"role":2,"blocks":[{"content":{"case":"text","value":{"content":"问一句"}}}]},{"role":3,"blocks":[{"content":{"case":"text","value":{"content":"答一句"}}}]}]}}}]}</script></body></html>`;
+    const d = parseHtmlForUrl(html, "https://www.kimi.com/share/01234567-89ab-cdef-0123-456789abcdef");
+    expect(d).not.toBeNull();
+    expect(d!.messages).toHaveLength(2);
+  });
+
+  it("perplexity HTML（__NEXT_DATA__）→ dialogue", async () => {
+    const { parseHtmlForUrl } = await import("../src/collect");
+    const nextData = JSON.stringify({ thread: { queries: ["问题一", "问题二"], answers: ["回答一", "回答二"] } });
+    const html = `<html><head><title>翻译 - Perplexity</title></head><body><script id="__NEXT_DATA__" type="application/json">${nextData}</script></body></html>`;
+    const d = parseHtmlForUrl(html, "https://www.perplexity.ai/search/fan-yi-4O_bpNVoTgSdr4hOzrrZ1w");
+    expect(d).not.toBeNull();
+    expect(d!.messages).toHaveLength(4);
+  });
+
+  it("不匹配平台（deepseek/gemini 无 HTML 解析）→ null", async () => {
+    const { parseHtmlForUrl } = await import("../src/collect");
+    expect(parseHtmlForUrl("<html>any</html>", "https://chat.deepseek.com/share/abc123")).toBeNull();
+  });
+});

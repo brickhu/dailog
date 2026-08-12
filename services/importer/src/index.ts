@@ -7,7 +7,7 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { z } from "zod";
-import { collectShareUrl, getPlatformRules } from "./collect";
+import { collectShareUrl, getPlatformRules, parseHtmlForUrl } from "./collect";
 import { isCollectedDialogue } from "./types";
 
 const app = new Hono();
@@ -29,6 +29,25 @@ const authed = (c: { req: { header: (name: string) => string | undefined } }): b
   if (auth.startsWith("Bearer ") && auth.slice(7) === token) return true;
   return c.req.header("x-importer-token") === token;
 };
+
+const ParseHtmlBody = z.object({
+  html: z.string().min(50),
+  url: z.string().url(),
+});
+
+/** 用户复制分享页源码（view-source/outerHTML）粘贴 → 按 URL 平台调 HTML 解析器。
+ *  与 /collect 不同：不触达外网（内容来自用户浏览器，天然绕过 CF） */
+app.post("/parse-html", async (c) => {
+  if (!authed(c)) {
+    return c.json({ error: "unauthorized" }, 401);
+  }
+  const body = await c.req.json().catch(() => null);
+  const parsed = ParseHtmlBody.safeParse(body);
+  if (!parsed.success) return c.json({ error: "invalid_input" }, 400);
+  const d = parseHtmlForUrl(parsed.data.html, parsed.data.url);
+  if (!d) return c.json({ error: "parse_failed", detail: { message: "无法从粘贴的源码中解析出对话（平台不匹配或结构变化）" } }, 422);
+  return c.json(d);
+});
 
 app.post("/collect", async (c) => {
   if (!authed(c)) {

@@ -148,6 +148,7 @@ function makeApp(episodesOverrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
       markSnapshotUnreachable: async () => {},
       markSnapshotParseFailed: async () => {},
       findPolishByUserSnapshot: async () => null,
+      parseShareHtml: async () => null,
       listTraceableSnapshots: async () => [],
       setSnapshotSourceTrace: async () => {},
       findPublishedEpisodeBySnapshot: async () => null,

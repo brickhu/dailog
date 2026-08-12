@@ -4,13 +4,13 @@
 // 单平台多域名：domains 数组声明（如 ChatGPT = chatgpt.com + chat.openai.com；
 // 通义 = qwen.aliyun.com + tongyi.aliyun.com），match/shareRe 自动生成。
 
-import { collectClaudeShare } from "./platforms/claude";
+import { collectClaudeShare, parseClaudeSnapshot } from "./platforms/claude";
 import { collectDeepSeekShare } from "./platforms/deepseek";
-import { collectChatgptShare } from "./platforms/chatgpt";
-import { collectDoubaoShare } from "./platforms/doubao";
+import { collectChatgptShare, parseChatgptShareHtml, parseChatgptShareRsc } from "./platforms/chatgpt";
+import { collectDoubaoShare, parseDoubaoShare } from "./platforms/doubao";
 import { collectGeminiShare } from "./platforms/gemini";
-import { collectKimiShare } from "./platforms/kimi";
-import { collectPerplexityShare } from "./platforms/perplexity";
+import { collectKimiShare, parseKimiShare } from "./platforms/kimi";
+import { collectPerplexityShare, parsePerplexityShare } from "./platforms/perplexity";
 import { httpGet, HttpError } from "./fetch";
 import type { CollectedDialogue, CollectError } from "./types";
 
@@ -27,6 +27,8 @@ interface PlatformRule {
   /** 分享页 ID 格式（严格校验，防止伪链接/对话页链接漏进来） */
   shareIdRe: RegExp;
   collect: CollectFn;
+  /** HTML 解析器（用户复制源码粘贴兜底）：(html, id, url) → dialogue */
+  parse?: (html: string, id: string, url: string) => CollectedDialogue | null;
 }
 
 /** 域名列表 → 非捕获 alternation（如 (?:chatgpt\.com|chat\.openai\.com)） */
@@ -45,17 +47,19 @@ const rule = (r: PlatformRule) => {
     /** 分享页结构（id 格式）——严格校验，防止伪链接/对话页链接漏进来 */
     shareRe: new RegExp(`^https?:\\/\\/(www\\.)?${host}${path}(${r.shareIdRe.source})`),
     collect: r.collect,
+    /** HTML 解析器（view-source/outerHTML 粘贴兜底用）；无 HTML 结构的平台（gemini/deepseek API）缺省 */
+    parse: r.parse,
   };
 };
 
 const PLATFORMS: ReturnType<typeof rule>[] = [
-  rule({ id: "claude", label: "Claude", domains: ["claude.ai"], shareIdRe: /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/, collect: collectClaudeShare }),
+  rule({ id: "claude", label: "Claude", domains: ["claude.ai"], shareIdRe: /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/, collect: collectClaudeShare, parse: parseClaudeSnapshot }),
   rule({ id: "deepseek", label: "DeepSeek", domains: ["chat.deepseek.com"], shareIdRe: /[A-Za-z0-9]+/, collect: collectDeepSeekShare }),
-  rule({ id: "chatgpt", label: "ChatGPT", domains: ["chatgpt.com", "chat.openai.com"], shareIdRe: /[A-Za-z0-9-]+/, collect: collectChatgptShare }),
-  rule({ id: "doubao", label: "豆包", domains: ["doubao.com"], pathPrefix: "/thread/", shareIdRe: /[A-Za-z0-9]+/, collect: collectDoubaoShare }),
+  rule({ id: "chatgpt", label: "ChatGPT", domains: ["chatgpt.com", "chat.openai.com"], shareIdRe: /[A-Za-z0-9-]+/, collect: collectChatgptShare, parse: (html, id, url) => parseChatgptShareRsc(html, id, url) ?? parseChatgptShareHtml(html, id, url) }),
+  rule({ id: "doubao", label: "豆包", domains: ["doubao.com"], pathPrefix: "/thread/", shareIdRe: /[A-Za-z0-9]+/, collect: collectDoubaoShare, parse: parseDoubaoShare }),
   rule({ id: "gemini", label: "Gemini", domains: ["share.gemini.google"], shareIdRe: /[A-Za-z0-9]+/, collect: collectGeminiShare }),
-  rule({ id: "kimi", label: "Kimi", domains: ["kimi.com"], shareIdRe: /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/, collect: collectKimiShare }),
-  rule({ id: "perplexity", label: "Perplexity", domains: ["www.perplexity.ai", "perplexity.ai"], pathPrefix: "/search/", shareIdRe: /[A-Za-z0-9_-]+/, collect: collectPerplexityShare }),
+  rule({ id: "kimi", label: "Kimi", domains: ["kimi.com"], shareIdRe: /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/, collect: collectKimiShare, parse: parseKimiShare }),
+  rule({ id: "perplexity", label: "Perplexity", domains: ["www.perplexity.ai", "perplexity.ai"], pathPrefix: "/search/", shareIdRe: /[A-Za-z0-9_-]+/, collect: collectPerplexityShare, parse: parsePerplexityShare }),
   // 通义千问：单平台多域名示例（qwen.aliyun.com 为分享页主域名；tongyi.aliyun.com 网页版）。
   // 采集器待适配（无分享页 DOM 样本）——规则已注册（前端识别/预检可用），采集明确失败不写库
   rule({ id: "tongyi", label: "通义千问", domains: ["qwen.aliyun.com", "tongyi.aliyun.com"], shareIdRe: /[A-Za-z0-9-]+/, collect: async () => null }),
@@ -71,6 +75,16 @@ export interface PlatformRuleDto {
 
 export function getPlatformRules(): PlatformRuleDto[] {
   return PLATFORMS.map((p) => ({ id: p.id, label: p.label, sharePattern: p.shareRe.source }));
+}
+
+/** 用户复制源码兜底：按 URL 匹配平台 → 调对应 HTML 解析器（view-source/outerHTML 粘贴）。
+ *  返回 null = 平台无 HTML 解析器（gemini/deepseek）或解析失败 */
+export function parseHtmlForUrl(html: string, url: string): CollectedDialogue | null {
+  const platform = PLATFORMS.find((p) => p.match.test(url));
+  if (!platform?.parse) return null;
+  const id = url.match(platform.shareRe)?.[1] ?? null;
+  if (!id) return null;
+  return platform.parse(html, id, url);
 }
 
 /** 统一入口：按 URL 匹配平台 → 触达预检 → 采集 → CollectedDialogue 或 CollectError */

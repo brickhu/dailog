@@ -322,13 +322,47 @@ export default function SubmitPage() {
     })();
   });
 
-  /** 手动粘贴兜底①：解析粘贴文本 → 校对态（用户可视化确认角色） */
+  /** 粘贴内容是否为分享页源码（HTML）：自动检测，走 importer 平台解析（结构完整无需校对） */
+  const looksLikeHtml = (text: string) => /<html|<div|<script|<!doctype/i.test(text) && text.length > 80;
+
+  /** 手动粘贴兜底①：源码 → importer 解析直进确认；文本 → 校对态 */
   const doPasteImport = async () => {
     const text = pasteText().trim();
     if (!text) return;
+    const sourceUrl = url().trim();
     setPasteParsing(true);
     setErrorReason(null);
     try {
+      if (looksLikeHtml(text) && sourceUrl) {
+        // 源码模式：用户复制分享页源码（view-source/outerHTML）→ 按平台解析
+        const res = await fetch("/v1/import-paste/html", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ html: text, url: sourceUrl }),
+        });
+        const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+        if (!res.ok) {
+          const code = String(data?.error ?? res.status);
+          const detail = (data as { detail?: { message?: string } })?.detail?.message;
+          const mapped = t(`submit.error.${code}` as never);
+          setErrorReason(detail ?? (mapped.startsWith("submit.error.") ? code : mapped));
+          return;
+        }
+        const dialogue = data?.dialogue as { title?: string; platform?: string; messages?: unknown[] } | null;
+        setPreview({
+          snapshotId: String(data?.snapshotId ?? ""),
+          title: String(dialogue?.title ?? "分享对话"),
+          platform: String(dialogue?.platform ?? "paste"),
+          count: Array.isArray(dialogue?.messages) ? dialogue.messages.length : 0,
+        });
+        const src = (data as { suspectedSource?: { snapshotId?: string; sourceTitle?: string | null } | null }).suspectedSource;
+        if (src?.snapshotId) {
+          setSuspectedSource({ snapshotId: src.snapshotId, sourceTitle: src.sourceTitle ?? null });
+        }
+        setStep("confirm");
+        return;
+      }
+      // 文本模式 → 解析 → 校对态（用户可视化确认角色）
       const res = await fetch("/v1/import-paste/parse", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -651,8 +685,9 @@ export default function SubmitPage() {
           <div {...stylex.props(styles.card)}>
             <p {...stylex.props(styles.stepTitle)}>{t("submit.failedTitle")}</p>
             <p {...stylex.props(styles.stepDesc)}>{errorReason()}</p>
-            {/* 手动粘贴兜底（免扩展）：分享页被 CF 拦截时复制内容粘贴 */}
+            {/* 手动粘贴兜底（免扩展）：分享页被 CF 拦截时复制内容粘贴（文本/源码双模式） */}
             <p {...stylex.props(styles.traceHint)}>{t("submit.pasteFallbackTitle")}</p>
+            <p {...stylex.props(styles.hint)} style={{ "white-space": "pre-line" }}>{t("submit.pasteFallbackModes")}</p>
             <textarea
               {...stylex.props(styles.pasteInput)}
               placeholder={t("submit.pasteHint")}

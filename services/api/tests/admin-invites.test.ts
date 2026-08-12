@@ -123,6 +123,7 @@ function fakeImportDeps(): AppDeps["importDeps"] {
     markSnapshotUnreachable: async () => {},
     markSnapshotParseFailed: async () => {},
     findPolishByUserSnapshot: async () => null,
+      parseShareHtml: async () => null,
       listTraceableSnapshots: async () => [],
       setSnapshotSourceTrace: async () => {},
       findPublishedEpisodeBySnapshot: async () => null,

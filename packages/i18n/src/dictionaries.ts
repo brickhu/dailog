@@ -283,7 +283,8 @@ export const zh = {
   // 节目预览态：同 URL 已生成过节目
   "submit.backHome": "返回首页",
   "submit.failedTitle": "这篇对话信息不符合投稿要求",
-  "submit.pasteFallbackTitle": "无法自动读取？在分享页全选复制对话内容，粘贴到这里继续：",
+  "submit.pasteFallbackTitle": "无法自动读取？复制分享页内容粘贴（二选一）：",
+  "submit.pasteFallbackModes": "· 文本：全选复制对话内容（自动识别，可校对）\n· 源码（更准确）：打开分享页 → 右键「查看网页源代码」（或 F12 复制 <html>）→ 粘贴，自动按平台解析",
   "submit.pasteHint": "粘贴对话文本（保留问答格式，例如 You: / ChatGPT: 或直接分段粘贴）",
   "submit.pasteParse": "解析并继续",
   "submit.pasteReviewTitle": "校对对话内容",
@@ -784,7 +785,8 @@ export const en: Dictionary = {
   // 节目预览态：同 URL 已生成过节目
   "submit.backHome": "Back to home",
   "submit.failedTitle": "This conversation doesn't meet submission requirements",
-  "submit.pasteFallbackTitle": "Can't read it automatically? Copy the conversation from the share page and paste it below:",
+  "submit.pasteFallbackTitle": "Can't read it automatically? Copy from the share page (either way):",
+  "submit.pasteFallbackModes": "· Text: select-all copy of the conversation (auto-detected, reviewable)\n· Source (more accurate): open the share page → right-click \"View Page Source\" (or F12 → copy <html>) → paste; parsed per platform",
   "submit.pasteHint": "Paste the conversation text (keep the Q&A format, e.g. You: / ChatGPT:, or paste in paragraphs)",
   "submit.pasteParse": "Parse & continue",
   "submit.pasteReviewTitle": "Review the conversation",

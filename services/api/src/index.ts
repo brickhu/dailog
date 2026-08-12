@@ -104,6 +104,32 @@ const importDeps: ImportDeps = {
   listTraceableSnapshots: () => repo.snapshots.listTraceable(),
   setSnapshotSourceTrace: (id, row) => repo.snapshots.setSourceTrace(id, row),
   findPublishedEpisodeBySnapshot: (snapshotId) => repo.episodes.findPublishedEpisodeBySnapshot(snapshotId),
+  // 用户复制分享页源码 → importer /parse-html（内容来自用户浏览器，天然绕过 CF）
+  parseShareHtml: async (html, url) => {
+    const base = process.env.IMPORTER_URL;
+    if (!base) return null;
+    const token = process.env.IMPORTER_TOKEN;
+    try {
+      const res = await fetch(`${base.replace(/\/$/, "")}/parse-html`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ html, url }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!res.ok) return null;
+      const d = (await res.json()) as { platform?: string; conversationId?: string; title?: string; messages?: { role: string; content: string }[] };
+      if (!d.platform || !Array.isArray(d.messages)) return null;
+      return {
+        platform: d.platform,
+        conversationId: d.conversationId ?? "",
+        title: d.title ?? "分享对话",
+        url,
+        messages: d.messages,
+      };
+    } catch {
+      return null;
+    }
+  },
   // 平台规则单一来源在 importer（/platforms 下发 { platforms: [{id,label,sharePattern}] }）；不可达 → null（调用方 503）
   getPlatformRules: async () => {
     const base = process.env.IMPORTER_URL;

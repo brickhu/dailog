@@ -41,6 +41,15 @@ export interface ImportDeps {
     hostName: string | null;
     guestName: string | null;
   } | null>;
+  /** 用户复制分享页源码 → importer 按 URL 平台解析（内容来自用户浏览器，天然绕过 CF）；
+   *  null = 解析失败/平台无 HTML 解析器 */
+  parseShareHtml(html: string, url: string): Promise<{
+    platform: string;
+    conversationId: string;
+    title: string;
+    url: string;
+    messages: { role: string; content: string }[];
+  } | null>;
   /** 平台分享页规则（importer /platforms 转发——规则单一来源在 importer；sharePattern 含域名+路径+ID 三级校验）。
    *  null = importer 不可达（调用方 503，勿误判为"无规则"） */
   getPlatformRules(): Promise<Array<{ id: string; label: string; sharePattern: string }> | null>;
@@ -326,6 +335,41 @@ export function importRoutes(deps: ImportDeps) {
         platform: "plain",
         conversationId: null,
         title: messages.find((m) => m.role === "user")?.content.slice(0, 40) ?? "粘贴对话",
+        url: null,
+        messages,
+      },
+      snapshotId: created.id,
+      ...(suspectedSource ? { suspectedSource } : {}),
+    });
+  });
+
+  /** 源码粘贴：用户复制分享页源码（view-source/outerHTML）→ importer 按平台解析 →
+   *  建快照（结构完整，无需校对；解析失败返回 null 由前端回退校对态） */
+  app.post("/v1/import-paste/html", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { html?: unknown; url?: unknown } | null;
+    const html = typeof body?.html === "string" ? body.html.trim() : "";
+    const url = typeof body?.url === "string" ? body.url : "";
+    if (!html || html.length < 50 || !url) {
+      return c.json({ error: "invalid_input", detail: { message: "请粘贴分享页源码并确认来源链接" } }, 400);
+    }
+    const dialogue = await deps.parseShareHtml(html, url);
+    if (!dialogue || !Array.isArray(dialogue.messages) || dialogue.messages.length < 2) {
+      return c.json({ error: "parse_failed", detail: { message: "无法从源码中解析出对话（平台不匹配或结构变化）" } }, 422);
+    }
+    const messages: PasteMsg[] = dialogue.messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+    const userTurns = messages.filter((m) => m.role === "user").length;
+    const totalChars = messages.reduce((n, m) => n + m.content.length, 0);
+    if (userTurns < 1 || totalChars < 100) {
+      return c.json({ error: "too_short", detail: { message: `对话内容过短（${userTurns} 轮问答 / 约 ${totalChars} 字），无法制作播客单集` } }, 422);
+    }
+    const { created, suspectedSource } = await buildPasteSnapshot(messages);
+    return c.json({
+      dialogue: {
+        platform: dialogue.platform,
+        conversationId: dialogue.conversationId,
+        title: dialogue.title,
         url: null,
         messages,
       },

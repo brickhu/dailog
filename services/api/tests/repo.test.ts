@@ -572,6 +572,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       listTraceableSnapshots: () => repo.snapshots.listTraceable(),
       setSnapshotSourceTrace: (id, row) => repo.snapshots.setSourceTrace(id, row),
       findPublishedEpisodeBySnapshot: (snapshotId) => repo.episodes.findPublishedEpisodeBySnapshot(snapshotId),
+      parseShareHtml: async () => null,
       getPlatformRules: async () => [
         { id: "claude", label: "Claude", sharePattern: "^https?:\\/\\/(www\\.)?claude\\.ai\\/share\\/[0-9a-f-]{36}" },
         { id: "deepseek", label: "DeepSeek", sharePattern: "^https?:\\/\\/chat\\.deepseek\\.com\\/share\\/[A-Za-z0-9]+" },
