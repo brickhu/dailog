@@ -172,7 +172,7 @@ export interface TranscriptsRepo {
     guestId: string | null;
     status: string;
   } | null>;
-  listByPolish(polishId: string): Promise<{ id: string; segments: ScriptSegment[]; language: string | null; createdAt: Date }[]>;
+  listByPolish(polishId: string): Promise<{ id: string; segments: ScriptSegment[]; updatedSegments: ScriptSegment[] | null; topic: string | null; title: string | null; creationNote: string | null; language: string | null; createdAt: Date }[]>;
   /** 归属校验（join polish.user_id） */
   getOwned(id: string, userId: string): Promise<{
     id: string;
@@ -915,7 +915,16 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       },
       async listByPolish(polishId) {
         return db
-          .select({ id: schema.transcripts.id, segments: schema.transcripts.segments, topic: schema.transcripts.topic, language: schema.transcripts.language, createdAt: schema.transcripts.createdAt })
+          .select({
+            id: schema.transcripts.id,
+            segments: schema.transcripts.segments,
+            updatedSegments: schema.transcripts.updatedSegments,
+            topic: schema.transcripts.topic,
+            title: schema.transcripts.title,
+            creationNote: schema.transcripts.creationNote,
+            language: schema.transcripts.language,
+            createdAt: schema.transcripts.createdAt,
+          })
           .from(schema.transcripts)
           .where(eq(schema.transcripts.polishId, polishId))
           .orderBy(desc(schema.transcripts.createdAt));

@@ -1,11 +1,11 @@
-import { createAsync } from "@solidjs/router";
-import { createSignal, For, Show } from "solid-js";
+import { createResource, createSignal, For, Show } from "solid-js";
 import { useParams } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { Button } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { api } from "../lib/client";
+import ScriptEditor from "../components/script-editor";
 
 // 审核详情（/reviews/:id）：对话预览 → 审核+润色（process）→ 脚本候选 → 生成 → 发布确认
 // P3 基础版：脚本编辑（script-editor 迁移）与封面选择（cover-search）在下一轮接入
@@ -19,7 +19,7 @@ interface ReviewDetail {
   dialogue: { platform: string | null; sourceTitle: string | null; messages: { role: string; content: string }[] };
   /** 内容溯源：衍生自库内某快照（自动前缀检测） */
   prefixSource: { snapshotId: string; sourceTitle: string | null } | null;
-  transcripts: { id: string; segments: { speaker: string; text: string }[]; language: string | null; createdAt: string }[];
+  transcripts: { id: string; segments: { speaker: string; text: string }[]; topic: string | null; title: string | null; creationNote: string | null; language: string | null; createdAt: string }[];
   episodes: { id: string; title: string | null; status: string; number: number | null; isPicked: boolean; createdAt: string }[];
 }
 
@@ -104,9 +104,9 @@ export default function ReviewPage() {
   const [description, setDescription] = createSignal("");
   const [tags, setTags] = createSignal("");
 
-  const detail = createAsync<ReviewDetail | null>(async () => {
+  const [detail, detailOps] = createResource<ReviewDetail | null, string>(params.id, async (id) => {
     try {
-      return await api.get<ReviewDetail>(`/v1/editor/reviews/${params.id}`);
+      return await api.get<ReviewDetail>(`/v1/editor/reviews/${id}`);
     } catch {
       return null;
     }
@@ -201,6 +201,9 @@ export default function ReviewPage() {
     topic: null,
     creationNote: null,
   })) ?? [];
+  // 脚本编辑：仅 detail.transcripts（含 segments）可编辑；processResult 候选无 segments
+  const [editingId, setEditingId] = createSignal<string | null>(null);
+  const editableScript = (id: string) => detail()?.transcripts.find((tr) => tr.id === id) ?? null;
 
   return (
     <div {...stylex.props(styles.page)}>
@@ -249,10 +252,26 @@ export default function ReviewPage() {
                     <p {...stylex.props(styles.scriptNote)}>{s.creationNote}</p>
                   </Show>
                   <div {...stylex.props(styles.actions)}>
+                    <Show when={editableScript(s.id)}>
+                      <Button appear={editingId() === s.id ? "outline" : "ghost"} onClick={() => setEditingId(editingId() === s.id ? null : s.id)}>
+                        {t("admin.editScript")}
+                      </Button>
+                    </Show>
                     <Button appear={selected() === s.id ? "outline" : "ghost"} onClick={() => setSelected(s.id)}>
                       {t("admin.selectScript")}
                     </Button>
                   </div>
+                  {/* 脚本编辑器（编辑保存写 updated_segments 草稿） */}
+                  <Show when={editingId() === s.id}>
+                    <ScriptEditor
+                      transcriptId={s.id}
+                      title={editableScript(s.id)?.title ?? null}
+                      topic={editableScript(s.id)?.topic ?? null}
+                      creationNote={editableScript(s.id)?.creationNote ?? null}
+                      initialSegments={editableScript(s.id)?.segments ?? []}
+                      onSaved={() => detailOps.refetch()}
+                    />
+                  </Show>
                 </div>
               )}
             </For>

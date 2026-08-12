@@ -157,7 +157,11 @@ export function editorRoutes(deps: EditorDeps) {
       prefixSource,
       transcripts: transcripts.map((t) => ({
         id: t.id,
-        segments: t.segments,
+        // 有效脚本：编辑保存后的 updated_segments ?? 原始（编辑页/生成共用）
+        segments: t.updatedSegments ?? t.segments,
+        topic: t.topic,
+        title: t.title,
+        creationNote: t.creationNote,
         language: t.language,
         createdAt: t.createdAt,
       })),
