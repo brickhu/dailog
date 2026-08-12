@@ -193,12 +193,22 @@ export function editorRoutes(deps: EditorDeps) {
     const aiGuest = deps.guestsByPlatform?.[snapshot?.platform ?? ""];
 
     // 审核 + 按话题切分润色（非流式——编辑端一次返回全部脚本候选）
-    const raw = await deps.llm.complete(polishPrompt(messages, null, {
-      hostName,
-      aiName: aiGuest?.name ?? null,
-      aiIntro: aiGuest?.intro ?? null,
-      hostPersona: personaText || null,
-    }));
+    // LLM 超时（90s 上限，client 层 AbortSignal）→ 明确错误而非无限挂起（前端 408 网络超时是模糊信号）
+    let raw: string;
+    try {
+      raw = await deps.llm.complete(polishPrompt(messages, null, {
+        hostName,
+        aiName: aiGuest?.name ?? null,
+        aiIntro: aiGuest?.intro ?? null,
+        hostPersona: personaText || null,
+      }));
+    } catch (e) {
+      const name = e instanceof Error ? e.name : "";
+      if (name === "TimeoutError" || name === "AbortError") {
+        return c.json({ error: "llm_timeout", detail: { message: "AI 审核响应超时，请稍后重试" } }, 504);
+      }
+      throw e;
+    }
     const parsed = parseJsonLoose(raw) as
       | { language?: unknown; scripts?: unknown; quality_failed?: unknown; reason?: unknown }
       | ScriptSegment[]

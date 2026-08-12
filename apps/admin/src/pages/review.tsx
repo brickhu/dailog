@@ -166,7 +166,7 @@ export default function ReviewPage() {
     setPublishLoading(true);
     setPublishError(null);
     try {
-      const form = await api.get<PublishForm>(`/v1/editor/episodes/${epId}/publish-form`, { timeoutMs: 60_000 });
+      const form = await api.get<PublishForm>(`/v1/editor/episodes/${epId}/publish-form`, { timeoutMs: 120_000 });
       setPublishForm(form);
       setTitle(form.title ?? "");
       setDescription(form.description ?? "");

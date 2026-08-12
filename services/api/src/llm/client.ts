@@ -12,18 +12,22 @@ export interface LlmOptions {
   baseUrl: string;
   model: string;
   fetchImpl?: typeof fetch;
+  /** 单次补全超时（ms）；缺省 90s——长对话多脚本生成可能较慢，但必须有上限（防 LLM 挂起拖死请求） */
+  timeoutMs?: number;
 }
 
 export function createLlmClient(opts: LlmOptions): LlmClient {
   const f = opts.fetchImpl ?? fetch;
   const url = `${opts.baseUrl}/chat/completions`;
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${opts.apiKey}` };
+  const timeoutMs = opts.timeoutMs ?? 90_000;
 
   async function complete(messages: LlmMessage[]): Promise<string> {
     const res = await f(url, {
       method: "POST",
       headers,
       body: JSON.stringify({ model: opts.model, messages, stream: false }),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) throw new Error(`llm http_${res.status}: ${(await res.text()).slice(0, 200)}`);
     const data = (await res.json()) as { choices: { message: { content: string } }[] };
@@ -35,6 +39,7 @@ export function createLlmClient(opts: LlmOptions): LlmClient {
       method: "POST",
       headers,
       body: JSON.stringify({ model: opts.model, messages, stream: true }),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok || !res.body) throw new Error(`llm http_${res.status}: ${(await res.text()).slice(0, 200)}`);
     const reader = res.body.getReader();
