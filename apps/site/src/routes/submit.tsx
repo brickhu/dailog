@@ -8,10 +8,15 @@ import { SiteNav } from "../components/site-nav";
 import { AuthGate } from "../components/auth-gate";
 import Recorder from "../components/recorder";
 
-// 投稿流程（PRD §3/§5）：①导入（分享链接 → 采集预览）→ ②配置人设（信息 + 声音采样）→ ③提交投稿
+// 投稿流程（PRD §3/§5）四态：
+//   input     输入态：分享链接 + URL 合法性预检 → [导入对话]
+//   confirm   确认投稿态：对话基本信息 + 人设编辑（+声音采样）→ [确认投稿]
+//   error     导入失败态：importer 明确拦截/无法获取 → 原因 + [取消]
+//   published 已有节目态：同 URL 已生成节目 → 节目信息 + 二创提示 + [取消]
+//   done      提交成功
 // 端点在 site 站内代理（/v1/*），会话经 cookie；未登录跳统一登录页
 
-type Step = 1 | 2 | 3 | "done";
+type Step = "input" | "confirm" | "error" | "published" | "done";
 
 interface ImportPreview {
   snapshotId: string;
@@ -179,10 +184,12 @@ const styles = stylex.create({
 
 export default function SubmitPage() {
   const { t } = useI18n();
-  const [step, setStep] = createSignal<Step>(1);
+  const [step, setStep] = createSignal<Step>("input");
   const [url, setUrl] = createSignal("");
   const [importing, setImporting] = createSignal(false);
   const [importError, setImportError] = createSignal<string | null>(null);
+  /** 导入失败态：importer 明确拦截/无法获取的具体原因 */
+  const [errorReason, setErrorReason] = createSignal<string | null>(null);
   const [preview, setPreview] = createSignal<ImportPreview | null>(null);
   const [existing, setExisting] = createSignal<string | null>(null);
   const [publishedPreview, setPublishedPreview] = createSignal<PublishedPreview | null>(null);
@@ -224,9 +231,9 @@ export default function SubmitPage() {
     }
   });
 
-  // 进入步骤②时拉取已有人设/采样（此时 AuthGate 已放行、必然登录；避免未登录 401 噪音）
+  // 进入确认投稿态时拉取已有人设/采样（此时 AuthGate 已放行、必然登录；避免未登录 401 噪音）
   createEffect(() => {
-    if (step() !== 2) return;
+    if (step() !== "confirm") return;
     void (async () => {
       try {
         const profileRes = await fetch("/v1/me/profile");
@@ -245,6 +252,18 @@ export default function SubmitPage() {
     })();
   });
 
+  /** 返回输入态：清空全部导入/预览状态 */
+  const backToInput = () => {
+    setStep("input");
+    setUrl("");
+    setPreview(null);
+    setPublishedPreview(null);
+    setSuspectedSource(null);
+    setExisting(null);
+    setErrorReason(null);
+    setImportError(null);
+  };
+
   const doImport = async () => {
     const raw = url().trim();
     if (!raw) return;
@@ -261,11 +280,17 @@ export default function SubmitPage() {
       });
       const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
       if (!res.ok) {
-        setImportError(String((data as { detail?: { message?: string } })?.detail?.message ?? data?.error ?? res.status));
+        // 导入失败态：importer 明确拦截/无法获取 → 具体原因（错误码映射友好文案，未知码透传）
+        const code = String(data?.error ?? res.status);
+        const detail = (data as { detail?: { message?: string } })?.detail?.message;
+        const mapped = t(`submit.error.${code}` as never);
+        // t() 缺失 key 时返回 key 本身（submit.error.xxx）——回退显示原始码
+        setErrorReason(detail ?? (mapped.startsWith("submit.error.") ? code : mapped));
+        setStep("error");
         return;
       }
       if (data?.alreadyPublished) {
-        // 节目预览态：这篇对话已生成过节目 → 展示节目信息，引导在原对话中续写再投稿
+        // 导入已有节目态：同 URL 已生成过节目 → 节目信息 + 二创提示
         const ep = (data as { episode?: { id?: string; title?: string | null; durationSeconds?: number | null; hostName?: string | null; guestName?: string | null } }).episode;
         if (ep?.id) {
           setPublishedPreview({
@@ -278,11 +303,12 @@ export default function SubmitPage() {
             },
             sourceUrl: raw,
           });
+          setStep("published");
           return;
         }
       }
       if (data?.existing) {
-        // 已投过同一对话：提示并引导查看状态
+        // 自己已投过同一对话：输入态提示并引导查看状态
         setExisting(String((data as { status?: string })?.status ?? "submitted"));
         return;
       }
@@ -298,16 +324,17 @@ export default function SubmitPage() {
       if (src?.snapshotId) {
         setSuspectedSource({ snapshotId: src.snapshotId, sourceTitle: src.sourceTitle ?? null });
       }
-      setStep(2);
+      setStep("confirm");
     } catch {
-      setImportError(t("submit.importFailed", { error: "network" }));
+      setErrorReason(t("submit.importFailed", { error: "network" }));
+      setStep("error");
     } finally {
       setImporting(false);
     }
   };
 
-  /** 步骤②完成：保存人设（可选字段）+ 上传声音采样（必填）→ 步骤③ */
-  const savePersona = async () => {
+  /** 确认投稿：保存人设（可选字段）+ 上传声音采样（必填）→ 提交投稿 */
+  const confirmSubmit = async () => {
     setImportError(null);
     // 声音采样：已有采样可直接提交（重录则覆盖上传）；两者皆无才拦截
     if (!voiceBlob() && !hasVoiceSample()) {
@@ -319,11 +346,15 @@ export default function SubmitPage() {
     if (callName().trim()) persona.callName = callName().trim().slice(0, 20);
     if (traits().trim()) persona.traits = traits().trim().slice(0, 100);
     if (Object.keys(persona).length > 0) {
-      await fetch("/v1/me/persona", {
+      const personaRes = await fetch("/v1/me/persona", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ persona }),
       });
+      if (!personaRes.ok) {
+        setImportError(t("submit.error.submitFailed", { error: `persona ${personaRes.status}` }));
+        return;
+      }
     }
     // 声音采样上传（有重录才上传；已有采样直接沿用）
     if (voiceBlob()) {
@@ -337,10 +368,7 @@ export default function SubmitPage() {
         return;
       }
     }
-    setStep(3);
-  };
-
-  const doSubmit = async () => {
+    // 提交投稿
     const p = preview();
     if (!p) return;
     setSubmitting(true);
@@ -355,7 +383,7 @@ export default function SubmitPage() {
       if (!res.ok) {
         if (data?.existing) {
           setExisting(String(data.status ?? "submitted"));
-          setStep(1);
+          backToInput();
           return;
         }
         setSubmitError(String((data as { detail?: string })?.detail ?? data?.error ?? res.status));
@@ -377,7 +405,8 @@ export default function SubmitPage() {
         <div {...stylex.props(styles.content)}>
         <h1 {...stylex.props(styles.title)}>{t("submit.title")}</h1>
 
-        <Show when={step() === 1}>
+        {/* 1. 输入态：分享链接 + URL 合法性预检 + [导入对话] / [返回首页] */}
+        <Show when={step() === "input"}>
           <div {...stylex.props(styles.card)}>
             <p {...stylex.props(styles.stepTitle)}>{t("submit.step1")}</p>
             <p {...stylex.props(styles.stepDesc)}>{t("submit.step1Desc")}</p>
@@ -410,50 +439,15 @@ export default function SubmitPage() {
               <Button onClick={doImport} disabled={importing() || urlInvalid() || !url().trim()}>
                 {importing() ? t("submit.importing") : t("submit.import")}
               </Button>
+              <a href="/"><Button appear="ghost">{t("submit.backHome")}</Button></a>
             </div>
-            {/* 节目预览态（Read conversation 之后展示）：同 URL 已生成节目 → 不进确认导入 */}
-            <Show when={publishedPreview()}>
-              <div {...stylex.props(styles.previewCard)}>
-                <p {...stylex.props(styles.previewTitle)}>{t("submit.alreadyPublished")}</p>
-                {/* 节目信息块：可点击进入节目页 */}
-                <a href={`/episode/${publishedPreview()!.episode.id}`} {...stylex.props(styles.previewBlock)}>
-                  <p {...stylex.props(styles.previewRow)}>
-                    <span {...stylex.props(styles.previewLabel)}>{t("submit.epTitle")}：</span>
-                    {publishedPreview()!.episode.title || t("common.unnamed")}
-                  </p>
-                  <p {...stylex.props(styles.previewRow)}>
-                    <span {...stylex.props(styles.previewLabel)}>{t("submit.epHost")}：</span>
-                    {publishedPreview()!.episode.hostName || "—"}
-                  </p>
-                  <p {...stylex.props(styles.previewRow)}>
-                    <span {...stylex.props(styles.previewLabel)}>{t("submit.epGuest")}：</span>
-                    {publishedPreview()!.episode.guestName || "—"}
-                  </p>
-                  <p {...stylex.props(styles.previewRow)}>
-                    <span {...stylex.props(styles.previewLabel)}>{t("submit.epDuration")}：</span>
-                    {publishedPreview()!.episode.durationSeconds
-                      ? `${Math.round(publishedPreview()!.episode.durationSeconds! / 60)}m`
-                      : "—"}
-                  </p>
-                </a>
-                <p {...stylex.props(styles.previewHint)}>
-                  {t("submit.continueOriginal")}
-                  <a href={publishedPreview()!.sourceUrl} target="_blank" rel="noopener" {...stylex.props(styles.previewLink)}>
-                    {t("submit.openOriginal")}
-                  </a>
-                  {t("submit.continueOriginalTail")}
-                </p>
-                <Button appear="ghost" onClick={() => { setPublishedPreview(null); setUrl(""); }}>
-                  {t("submit.importAnother")}
-                </Button>
-              </div>
-            </Show>
           </div>
         </Show>
 
-        <Show when={step() === 2 && preview()}>
+        {/* 2. 确认投稿态：对话基本信息 + 人设编辑 + [确认投稿] / [取消] */}
+        <Show when={step() === "confirm" && preview()}>
           <div {...stylex.props(styles.card)}>
-            <p {...stylex.props(styles.stepTitle)}>{t("submit.step2")}</p>
+            <p {...stylex.props(styles.stepTitle)}>{t("submit.confirm")}</p>
             <p {...stylex.props(styles.stepDesc)}>
               {t("submit.previewTitle", { title: preview()!.title })} ·{" "}
               {t("submit.previewMessages", { count: preview()!.count, platform: preview()!.platform || "-" })}
@@ -491,28 +485,64 @@ export default function SubmitPage() {
             <Show when={importError()}>
               <p {...stylex.props(styles.error)}>{importError()}</p>
             </Show>
-            <div {...stylex.props(styles.actions)}>
-              <Button onClick={savePersona} disabled={!voiceBlob() && !hasVoiceSample()}>
-                {t("submit.step3")} →
-              </Button>
-              <Button appear="ghost" onClick={() => setStep(1)}>{t("common.back")}</Button>
-            </div>
-          </div>
-        </Show>
-
-        <Show when={step() === 3 && preview()}>
-          <div {...stylex.props(styles.card)}>
-            <p {...stylex.props(styles.stepTitle)}>{t("submit.step3")}</p>
-            <p {...stylex.props(styles.stepDesc)}>{t("submit.step3Desc")}</p>
-            <p {...stylex.props(styles.hint)}>{t("submit.previewTitle", { title: preview()!.title })}</p>
             <Show when={submitError()}>
               <p {...stylex.props(styles.error)}>{submitError()}</p>
             </Show>
             <div {...stylex.props(styles.actions)}>
-              <Button onClick={doSubmit} disabled={submitting()}>
+              {/* 人设信息缺失（称呼/风格均未填）→ 禁用 */}
+              <Button onClick={confirmSubmit} disabled={submitting() || (!callName().trim() && !traits().trim())}>
                 {submitting() ? t("submit.submitting") : t("submit.confirm")}
               </Button>
-              <Button appear="ghost" onClick={() => setStep(2)}>{t("common.back")}</Button>
+              <Button appear="ghost" onClick={backToInput}>{t("common.cancel")}</Button>
+            </div>
+          </div>
+        </Show>
+
+        {/* 3. 导入失败态：importer 明确拦截/无法获取 → 原因 + [取消] */}
+        <Show when={step() === "error"}>
+          <div {...stylex.props(styles.card)}>
+            <p {...stylex.props(styles.stepTitle)}>{t("submit.failedTitle")}</p>
+            <p {...stylex.props(styles.stepDesc)}>{errorReason()}</p>
+            <div {...stylex.props(styles.actions)}>
+              <Button appear="ghost" onClick={backToInput}>{t("common.cancel")}</Button>
+            </div>
+          </div>
+        </Show>
+
+        {/* 4. 导入已有节目态：节目信息 + 二创提示 + [取消] */}
+        <Show when={step() === "published" && publishedPreview()}>
+          <div {...stylex.props(styles.card)}>
+            <p {...stylex.props(styles.previewTitle)}>{t("submit.alreadyPublished")}</p>
+            {/* 节目信息块：可点击进入节目页 */}
+            <a href={`/episode/${publishedPreview()!.episode.id}`} {...stylex.props(styles.previewBlock)}>
+              <p {...stylex.props(styles.previewRow)}>
+                <span {...stylex.props(styles.previewLabel)}>{t("submit.epTitle")}：</span>
+                {publishedPreview()!.episode.title || t("common.unnamed")}
+              </p>
+              <p {...stylex.props(styles.previewRow)}>
+                <span {...stylex.props(styles.previewLabel)}>{t("submit.epHost")}：</span>
+                {publishedPreview()!.episode.hostName || "—"}
+              </p>
+              <p {...stylex.props(styles.previewRow)}>
+                <span {...stylex.props(styles.previewLabel)}>{t("submit.epGuest")}：</span>
+                {publishedPreview()!.episode.guestName || "—"}
+              </p>
+              <p {...stylex.props(styles.previewRow)}>
+                <span {...stylex.props(styles.previewLabel)}>{t("submit.epDuration")}：</span>
+                {publishedPreview()!.episode.durationSeconds
+                  ? `${Math.round(publishedPreview()!.episode.durationSeconds! / 60)}m`
+                  : "—"}
+              </p>
+            </a>
+            <p {...stylex.props(styles.previewHint)}>
+              {t("submit.continueOriginal")}
+              <a href={publishedPreview()!.sourceUrl} target="_blank" rel="noopener" {...stylex.props(styles.previewLink)}>
+                {t("submit.openOriginal")}
+              </a>
+              {t("submit.continueOriginalTail")}
+            </p>
+            <div {...stylex.props(styles.actions)}>
+              <Button appear="ghost" onClick={backToInput}>{t("common.cancel")}</Button>
             </div>
           </div>
         </Show>
@@ -523,7 +553,7 @@ export default function SubmitPage() {
             <p {...stylex.props(styles.stepDesc)}>{t("submit.successDesc")}</p>
             <div {...stylex.props(styles.actions)}>
               <a href="/me/submits"><Button>{t("submit.viewSubmissions")}</Button></a>
-              <Button appear="ghost" onClick={() => { setStep(1); setUrl(""); setPreview(null); }}>
+              <Button appear="ghost" onClick={backToInput}>
                 {t("submit.submitAnother")}
               </Button>
             </div>
