@@ -180,6 +180,19 @@ const styles = stylex.create({
     borderLeft: `3px solid ${colors.brand}`,
     paddingLeft: dimensions.spacing3,
   },
+  pasteInput: {
+    width: "100%",
+    minHeight: "120px",
+    boxSizing: "border-box",
+    padding: dimensions.spacing3,
+    borderRadius: dimensions.radiusSm,
+    border: `1px solid ${colors.ink}`,
+    backgroundColor: colors.background,
+    color: colors.foreground,
+    fontSize: dimensions.fontSizeSm,
+    fontFamily: "inherit",
+    resize: "vertical",
+  },
 });
 
 export default function SubmitPage() {
@@ -190,6 +203,9 @@ export default function SubmitPage() {
   const [importError, setImportError] = createSignal<string | null>(null);
   /** 导入失败态：importer 明确拦截/无法获取的具体原因 */
   const [errorReason, setErrorReason] = createSignal<string | null>(null);
+  /** 手动粘贴兜底：分享页被 CF 拦截时用户复制内容粘贴 */
+  const [pasteText, setPasteText] = createSignal("");
+  const [pasteParsing, setPasteParsing] = createSignal(false);
   const [preview, setPreview] = createSignal<ImportPreview | null>(null);
   const [existing, setExisting] = createSignal<string | null>(null);
   const [publishedPreview, setPublishedPreview] = createSignal<PublishedPreview | null>(null);
@@ -257,6 +273,46 @@ export default function SubmitPage() {
       } catch { /* 静默 */ }
     })();
   });
+
+  /** 手动粘贴兜底：解析粘贴文本 → 建快照 → 确认投稿态（复用 /v1/import 流程） */
+  const doPasteImport = async () => {
+    const text = pasteText().trim();
+    if (!text) return;
+    setPasteParsing(true);
+    setErrorReason(null);
+    try {
+      const res = await fetch("/v1/import-paste", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!res.ok) {
+        const code = String(data?.error ?? res.status);
+        const detail = (data as { detail?: { message?: string } })?.detail?.message;
+        const mapped = t(`submit.error.${code}` as never);
+        setErrorReason(detail ?? (mapped.startsWith("submit.error.") ? code : mapped));
+        return;
+      }
+      const dialogue = data?.dialogue as { title?: string; platform?: string; messages?: unknown[] } | null;
+      setPreview({
+        snapshotId: String(data?.snapshotId ?? ""),
+        title: String(dialogue?.title ?? "粘贴对话"),
+        platform: "paste",
+        count: Array.isArray(dialogue?.messages) ? dialogue.messages.length : 0,
+      });
+      // 内容溯源提示（粘贴内容疑似衍生自库内对话）
+      const src = (data as { suspectedSource?: { snapshotId?: string; sourceTitle?: string | null } | null }).suspectedSource;
+      if (src?.snapshotId) {
+        setSuspectedSource({ snapshotId: src.snapshotId, sourceTitle: src.sourceTitle ?? null });
+      }
+      setStep("confirm");
+    } catch {
+      setErrorReason(t("submit.importFailed", { error: "network" }));
+    } finally {
+      setPasteParsing(false);
+    }
+  };
 
   /** 返回输入态：清空全部导入/预览状态 */
   const backToInput = () => {
@@ -504,12 +560,26 @@ export default function SubmitPage() {
           </div>
         </Show>
 
-        {/* 3. 导入失败态：importer 明确拦截/无法获取 → 原因 + [取消] */}
+        {/* 3. 导入失败态：importer 明确拦截/无法获取 → 原因 + 手动粘贴兜底 + [取消] */}
         <Show when={step() === "error"}>
           <div {...stylex.props(styles.card)}>
             <p {...stylex.props(styles.stepTitle)}>{t("submit.failedTitle")}</p>
             <p {...stylex.props(styles.stepDesc)}>{errorReason()}</p>
+            {/* 手动粘贴兜底（免扩展）：分享页被 CF 拦截时复制内容粘贴 */}
+            <p {...stylex.props(styles.traceHint)}>{t("submit.pasteFallbackTitle")}</p>
+            <textarea
+              {...stylex.props(styles.pasteInput)}
+              placeholder={t("submit.pasteHint")}
+              value={pasteText()}
+              onInput={(e) => setPasteText(e.currentTarget.value)}
+            />
+            <Show when={pasteParsing()}>
+              <p {...stylex.props(styles.hint)}>{t("submit.importing")}</p>
+            </Show>
             <div {...stylex.props(styles.actions)}>
+              <Button onClick={doPasteImport} disabled={pasteParsing() || !pasteText().trim()}>
+                {t("submit.pasteParse")}
+              </Button>
               <Button appear="ghost" onClick={backToInput}>{t("common.cancel")}</Button>
             </div>
           </div>

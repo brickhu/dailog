@@ -7,8 +7,10 @@
 //  ⑤ 规则检查（非 LLM）：轮数 < 3 或总字数 < 500 → 422 too_short（内容门槛）
 // 预览确认后由 POST /api/polishes/new 创建容器。
 
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { detectPrefixSource, sequenceFingerprint, type TraceMessage } from "../lib/content-trace";
+import { parsePasteText } from "../lib/paste-parser";
 
 export interface ImportDeps {
   getSnapshotByUrl(url: string): Promise<{
@@ -138,6 +140,24 @@ export function importRoutes(deps: ImportDeps) {
       if (snapshot.status === "parse_failed" && !snapshot.parsedDialogue) {
         return c.json({ error: "parse_failed", detail: { message: snapshot.lastError ?? "该分享页解析失败" } }, 422);
       }
+      // unreachable 已过 TTL 且无内容（重试窗口结束）→ 重新采集，不能把空快照当可导入内容
+      if (!snapshot.parsedDialogue) {
+        const result = await callImporter(url);
+        if (!result.ok) {
+          if (result.error === "platform_unreachable" || result.error === "share_collect_unreachable") {
+            await deps.markSnapshotUnreachable(snapshot.id, String((result.detail as { message?: string } | undefined)?.message ?? result.error));
+            return c.json({ error: result.error }, 502);
+          }
+          return c.json({ error: result.error }, 422);
+        }
+        await deps.updateSnapshotContent(snapshot.id, {
+          platform: result.dialogue.platform,
+          sourceTitle: effectiveTitle(result.dialogue.title, result.dialogue.messages),
+          sourceConversationId: result.dialogue.conversationId || null,
+          parsedDialogue: result.dialogue.messages,
+        });
+        snapshot = await deps.getSnapshotByUrl(url);
+      }
     } else {
       const result = await callImporter(url);
       if (!result.ok) {
@@ -161,6 +181,7 @@ export function importRoutes(deps: ImportDeps) {
       snapshot = await deps.getSnapshotByUrl(url);
       if (!snapshot) return c.json({ error: "parse_failed" }, 422);
     }
+    if (!snapshot) return c.json({ error: "parse_failed" }, 422);
 
     // ② 节目预览：该快照已有任意用户的节目（ready/published）→ 不进入确认导入，
     // 返回预览态数据（标题/主持人/嘉宾/时长），前端引导"在原对话中续写再投稿"
@@ -226,6 +247,55 @@ export function importRoutes(deps: ImportDeps) {
       },
       snapshotId: snapshot.id,
       // 内容溯源提示（新快照检测到衍生自库内对话时返回；无则省略）
+      ...(suspectedSource ? { suspectedSource } : {}),
+    });
+  });
+
+  // ---- 手动粘贴兜底：分享页被 CF 拦截时，用户复制对话内容粘贴导入 ----
+  // 解析纯文本 → 建快照（platform=plain）→ 溯源检测，与 /v1/import 同构返回
+  app.post("/v1/import-paste", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { text?: unknown } | null;
+    const text = typeof body?.text === "string" ? body.text.trim() : "";
+    if (!text || text.length < 20) {
+      return c.json({ error: "invalid_text", detail: { message: "请粘贴对话内容（至少 20 字）" } }, 400);
+    }
+    const messages = parsePasteText(text);
+    if (!messages) {
+      return c.json({ error: "parse_failed", detail: { message: "无法从粘贴内容中识别出对话结构（请确认包含双方的问答）" } }, 422);
+    }
+    // 宽松内容门槛（手动粘贴场景）：至少 1 轮问答且 100 字
+    const userTurns = messages.filter((m) => m.role === "user").length;
+    const totalChars = messages.reduce((n, m) => n + m.content.length, 0);
+    if (userTurns < 1 || totalChars < 100) {
+      return c.json({ error: "too_short", detail: { message: `粘贴内容过短（${userTurns} 轮问答 / 约 ${totalChars} 字），无法制作播客单集` } }, 422);
+    }
+    // 建快照（paste URL 唯一；platform=plain 与平台分享区分）
+    const created = await deps.createSnapshot({
+      url: `paste:${randomUUID()}`,
+      platform: "plain",
+      sourceTitle: messages.find((m) => m.role === "user")?.content.slice(0, 40) ?? "粘贴对话",
+      sourceConversationId: null,
+      parsedDialogue: messages,
+    });
+    // 内容溯源：粘贴对话同样参与前缀检测（衍生自库内已收录对话 → 提示）
+    let suspectedSource: { snapshotId: string; sourceTitle: string | null } | null = null;
+    const candidates = await deps.listTraceableSnapshots();
+    const source = detectPrefixSource(messages, candidates.filter((c) => c.id !== created.id).map((c) => ({ id: c.id, sourceTitle: c.sourceTitle, messages: (c.parsedDialogue ?? []) as TraceMessage[] })));
+    await deps.setSnapshotSourceTrace(created.id, {
+      fingerprint: sequenceFingerprint(messages),
+      prefixSourceId: source?.id ?? null,
+    });
+    if (source) suspectedSource = { snapshotId: source.id, sourceTitle: source.sourceTitle };
+
+    return c.json({
+      dialogue: {
+        platform: "plain",
+        conversationId: null,
+        title: messages.find((m) => m.role === "user")?.content.slice(0, 40) ?? "粘贴对话",
+        url: null,
+        messages,
+      },
+      snapshotId: created.id,
       ...(suspectedSource ? { suspectedSource } : {}),
     });
   });

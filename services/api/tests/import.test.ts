@@ -101,6 +101,24 @@ describe("POST /v1/import 平台预检", () => {
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({ error: "share_collect_not_configured" });
   });
+
+  it("unreachable 快照过 TTL（无内容）→ 重新采集并更新内容，不返回空对话", async () => {
+    const updates: string[] = [];
+    const deps = makeDeps({
+      getSnapshotByUrl: async () => ({
+        id: "snap-stale", platform: "plain", sourceTitle: null, sourceConversationId: null,
+        parsedDialogue: null, fingerprint: null, status: "unreachable",
+        retryAfter: new Date(Date.now() - 1000), lastError: "上次超时",
+      }),
+      updateSnapshotContent: async (_id, row) => { updates.push(String(row.platform)); },
+      getPlatformRules: async () => RULES,
+    });
+    const res = await post(makeApp(deps), "https://claude.ai/share/01234567-89ab-cdef-0123-456789abcdef");
+    // 无 IMPORTER_URL 环境 → 采集失败（422 not_configured）；关键：走"重新采集"路径而非把空快照当内容返回
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ error: "share_collect_not_configured" });
+    expect(updates).toHaveLength(0); // 采集失败不更新
+  });
 });
 
 describe("POST /v1/import 节目预览态（alreadyPublished）", () => {
@@ -217,3 +235,48 @@ describe("POST /v1/import 内容溯源（前缀检测）", () => {
     expect(tracedCalls).toBe(0);
   });
 });
+
+describe("POST /v1/import-paste（手动粘贴兜底）", () => {
+  const TEXT = `You:
+帮我翻译这句话：Hello world，这是一段足够长的测试文本，用来验证粘贴导入的完整流程，同时确保内容超过一百字的最低门槛要求，让整个流程可以顺畅地跑通。
+
+ChatGPT:
+你好，世界。这是一句简单的英文问候语，祝你一天愉快。翻译时要保持原文的语气和风格，不要添加额外的解释。`;
+
+  it("解析成功 → 建快照 + 返回 dialogue（platform=plain）", async () => {
+    const createdRows: Array<{ url?: string; platform?: string }> = [];
+    const deps = makeDeps({
+      createSnapshot: async (row) => { createdRows.push(row); return { id: "snap-paste-1" }; },
+      listTraceableSnapshots: async () => [],
+      setSnapshotSourceTrace: async () => {},
+    });
+    const res = await appRequest(makeApp(deps), "/v1/import-paste", TEXT);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.snapshotId).toBe("snap-paste-1");
+    expect(body.dialogue.platform).toBe("plain");
+    expect(body.dialogue.messages).toHaveLength(2);
+    expect(body.dialogue.messages[0]).toMatchObject({ role: "user", content: expect.stringContaining("Hello world") });
+    expect(createdRows[0]?.url).toMatch(/^paste:/);
+  });
+
+  it("文本过短 → 400 invalid_text", async () => {
+    const res = await appRequest(makeApp(makeDeps()), "/v1/import-paste", "太短了");
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_text" });
+  });
+
+  it("无法解析出对话结构 → 422 parse_failed", async () => {
+    const res = await appRequest(makeApp(makeDeps()), "/v1/import-paste", "这是一段很长的普通文本，没有任何对话结构，只是单纯的一堆文字而已，凑够长度。");
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ error: "parse_failed" });
+  });
+});
+
+function appRequest(app: ReturnType<typeof makeApp>, path: string, text: string) {
+  return app.request(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+}

@@ -278,6 +278,9 @@ export const zh = {
   // 节目预览态：同 URL 已生成过节目
   "submit.backHome": "返回首页",
   "submit.failedTitle": "这篇对话信息不符合投稿要求",
+  "submit.pasteFallbackTitle": "无法自动读取？在分享页全选复制对话内容，粘贴到这里继续：",
+  "submit.pasteHint": "粘贴对话文本（保留问答格式，例如 You: / ChatGPT: 或直接分段粘贴）",
+  "submit.pasteParse": "解析并继续",
   "submit.error.parse_failed": "该分享页解析失败（平台结构可能已变化），请稍后重试",
   "submit.error.too_short": "对话内容过短，不适合制作播客单集",
   "submit.error.platform_unreachable": "分享内容暂时无法获取，请稍后再试",
@@ -765,6 +768,9 @@ export const en: Dictionary = {
   // 节目预览态：同 URL 已生成过节目
   "submit.backHome": "Back to home",
   "submit.failedTitle": "This conversation doesn't meet submission requirements",
+  "submit.pasteFallbackTitle": "Can't read it automatically? Copy the conversation from the share page and paste it below:",
+  "submit.pasteHint": "Paste the conversation text (keep the Q&A format, e.g. You: / ChatGPT:, or paste in paragraphs)",
+  "submit.pasteParse": "Parse & continue",
   "submit.error.parse_failed": "Failed to parse this share page (the platform may have changed); please retry later",
   "submit.error.too_short": "The conversation is too short for a podcast episode",
   "submit.error.platform_unreachable": "Unable to fetch the shared content right now, please retry later",
