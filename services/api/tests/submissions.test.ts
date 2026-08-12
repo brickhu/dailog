@@ -23,6 +23,7 @@ function makeRepo(overrides: { snapshots?: Partial<Repos["snapshots"]>; polishes
       findByUserSnapshot: async () => null,
       create: async () => ({ id: "polish-1" }),
       createSubmission: async () => ({ id: "sub-1" }),
+      countPendingByUser: async () => 0,
       listSubmissionsByUser: async () => [],
       listQueue: async () => [],
       setStatus: async () => {},
@@ -121,5 +122,37 @@ describe("GET /v1/me/submissions", () => {
     const list = await res.json();
     expect(list).toHaveLength(2);
     expect(list[0]).toMatchObject({ id: "sub-1", status: "submitted" });
+  });
+});
+
+describe("待审批投稿上限（pending_limit）", () => {
+  it("待审批 >= 5 → 429 pending_limit，不创建投稿", async () => {
+    let created = 0;
+    const repo2 = makeRepo({
+      polishes: {
+        countPendingByUser: async () => 5,
+        createSubmission: async () => { created++; return { id: "sub-x" }; },
+      },
+    });
+    const res = await makeApp(repo2).request("/v1/submissions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ snapshotId: "snap-1" }),
+    });
+    expect(res.status).toBe(429);
+    expect(await res.json()).toMatchObject({ error: "pending_limit", detail: { count: 5, limit: 5 } });
+    expect(created).toBe(0);
+  });
+
+  it("待审批 4 条 → 正常创建", async () => {
+    const res = await makeApp(makeRepo({
+      snapshots: { getById: async () => ({ parsedDialogue: [], sourceTitle: "对话", platform: "claude" }) },
+      polishes: { countPendingByUser: async () => 4 },
+    })).request("/v1/submissions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ snapshotId: "snap-1" }),
+    });
+    expect(res.status).toBe(201);
   });
 });

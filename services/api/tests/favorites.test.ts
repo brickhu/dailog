@@ -117,6 +117,7 @@ function fakeRepo(): AppDeps["repo"] {
 
       create: async () => ({ id: "polish-1" }),
       createSubmission: async () => ({ id: "sub-1" }),
+      countPendingByUser: async () => 0,
       listSubmissionsByUser: async () => [],
       listQueue: async () => [],
       getById: async () => null,

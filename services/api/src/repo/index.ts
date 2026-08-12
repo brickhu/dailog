@@ -77,6 +77,8 @@ export interface PolishesRepo {
   create(row: PolishRow): Promise<{ id: string }>;
   /** 投稿提交：创建 submitted 容器（唯一约束 user×snapshot 兜底） */
   createSubmission(userId: string, snapshotId: string, title: string | null): Promise<{ id: string }>;
+  /** 待审批投稿数（status=submitted）——投稿并发限制（pending_limit）用 */
+  countPendingByUser(userId: string): Promise<number>;
   /** 我的投稿列表（submitted/accepted/rejected + 最新节目状态） */
   listSubmissionsByUser(userId: string): Promise<Array<{
     id: string;
@@ -681,6 +683,13 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         }
       },
       /** 我的投稿列表（submitted/accepted/rejected + 最新节目状态）；按投稿时间倒序 */
+      async countPendingByUser(userId) {
+        const rows = await db
+          .select({ n: count() })
+          .from(schema.polishes)
+          .where(and(eq(schema.polishes.userId, userId), eq(schema.polishes.status, "submitted")));
+        return rows[0]?.n ?? 0;
+      },
       async listSubmissionsByUser(userId) {
         const polishRows = await db
           .select({

@@ -6,6 +6,9 @@
 import { Hono } from "hono";
 import type { Repos } from "../repo";
 
+// 待审批投稿上限：同时排队审批中的投稿超过该数 → 拒绝新投稿（防队列积压 + 引导等待）
+const PENDING_LIMIT = 5;
+
 export function submissionsRoutes(repo: Repos) {
   const app = new Hono<{ Variables: { userId: string } }>();
 
@@ -14,6 +17,11 @@ export function submissionsRoutes(repo: Repos) {
     const body = (await c.req.json().catch(() => null)) as { snapshotId?: unknown; title?: unknown } | null;
     if (!body || typeof body.snapshotId !== "string" || !body.snapshotId.trim()) {
       return c.json({ error: "invalid_snapshot", detail: "缺少 snapshotId（请先导入分享链接）" }, 400);
+    }
+    // 并发限制：待审批（submitted）超过上限 → 等待审批完成后再投（明确错误码，前端映射友好文案）
+    const pending = await repo.polishes.countPendingByUser(userId);
+    if (pending >= PENDING_LIMIT) {
+      return c.json({ error: "pending_limit", detail: { count: pending, limit: PENDING_LIMIT } }, 429);
     }
     const snapshot = await repo.snapshots.getById(body.snapshotId);
     if (!snapshot) return c.json({ error: "not_found", detail: "快照不存在（请先导入分享链接）" }, 404);

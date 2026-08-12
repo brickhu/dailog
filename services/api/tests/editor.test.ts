@@ -31,6 +31,7 @@ function fakeRepo(overrides: {
       findByUserSnapshot: async () => null,
       create: async () => ({ id: "polish-1" }),
       createSubmission: async () => ({ id: "sub-1" }),
+      countPendingByUser: async () => 0,
       listSubmissionsByUser: async () => [],
       listQueue: async () => [],
       getById: async () => ({ id: "rev-1", userId: "user-1", snapshotId: "snap-1", title: "投稿", status: "submitted", rejectedReason: null, createdAt: new Date() }),
