@@ -403,6 +403,15 @@ export default function SubmitPage() {
                 <a href="/me/submits"> {t("submit.viewSubmissions")}</a>
               </p>
             </Show>
+            <Show when={importError()}>
+              <p {...stylex.props(styles.error)}>{importError()}</p>
+            </Show>
+            <div {...stylex.props(styles.actions)}>
+              <Button onClick={doImport} disabled={importing() || urlInvalid() || !url().trim()}>
+                {importing() ? t("submit.importing") : t("submit.import")}
+              </Button>
+            </div>
+            {/* 节目预览态（Read conversation 之后展示）：同 URL 已生成节目 → 不进确认导入 */}
             <Show when={publishedPreview()}>
               <div {...stylex.props(styles.previewCard)}>
                 <p {...stylex.props(styles.previewTitle)}>{t("submit.alreadyPublished")}</p>
@@ -439,14 +448,6 @@ export default function SubmitPage() {
                 </Button>
               </div>
             </Show>
-            <Show when={importError()}>
-              <p {...stylex.props(styles.error)}>{importError()}</p>
-            </Show>
-            <div {...stylex.props(styles.actions)}>
-              <Button onClick={doImport} disabled={importing() || urlInvalid() || !url().trim()}>
-                {importing() ? t("submit.importing") : t("submit.import")}
-              </Button>
-            </div>
           </div>
         </Show>
 
