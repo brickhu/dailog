@@ -1,17 +1,39 @@
-// perplexity 分享：Next.js 分享页（/search/<slug>-<id>，公共路由无需登录）。
+// perplexity 分享：Next.js 分享页（/search/<slug>-<id>，公共路由）。
 // 提取策略两级：
 //  ① __NEXT_DATA__ 嵌入 JSON → 深度搜索 thread 结构（queries + answers 数组）
 //  ② DOM 兜底：data-testid="chat-turn-query"（用户问题）+ "answer-content"（回答），按文档序交替
 // 标题：嵌入 title → og:title → <title>
+// 通道（对齐 claude 多通道模式）：默认 → ScraperAPI（render）→ CF Worker。
+// 注意：perplexity.ai 全站 CF Turnstile 风控 + 分享内容客户端渲染——静态通道拿到的
+// 是空壳（实测 ScraperAPI 标准渲染被挑战拦）；需要能过 Turnstile 的通道
+// （ScraperAPI ultra_premium / CF Worker 转发）才可能拿到内容。
 
-import { httpGet } from "../fetch";
+import { httpGet, httpGetViaScraperApi, httpGetViaWorker } from "../fetch";
 import type { CollectedDialogue } from "../types";
 
 export async function collectPerplexityShare(url: string): Promise<CollectedDialogue | null> {
   const shareId = url.match(/perplexity\.ai\/search\/([^/?#]+)/)?.[1];
   if (!shareId) return null;
-  const res = await httpGet(url);
-  return parsePerplexityShare(res.body, shareId, url);
+  // 通道尝试顺序：默认（直连/代理池）→ ScraperAPI（render 需手动加参？fetch.ts 已含）→ CF Worker
+  const attempts: Array<{ viaScraper?: boolean; viaWorker?: boolean }> = [{ viaScraper: false, viaWorker: false }];
+  if (process.env.SCRAPERAPI_KEY) attempts.push({ viaScraper: true });
+  if (process.env.CF_WORKER_URL) attempts.push({ viaWorker: true });
+
+  for (const a of attempts) {
+    try {
+      const res = a.viaWorker
+        ? await httpGetViaWorker(url)
+        : a.viaScraper
+          ? await httpGetViaScraperApi(url)
+          : await httpGet(url);
+      const d = parsePerplexityShare(res.body, shareId, url);
+      if (d) return d;
+      // 解析失败（挑战页/空壳/结构变化）→ 换通道
+    } catch {
+      // 通道失败 → 换下一个
+    }
+  }
+  return null;
 }
 
 /* ---------- 嵌入 JSON 路径 ---------- */

@@ -170,6 +170,7 @@ queued → tts → merge → upload → done（failed 可重试）
 | doubao | SSR 快照（ScraperAPI + 香港出口）|
 | kimi | SSR HYDRATION（直连）|
 | deepseek | share/content API（直连）|
+| perplexity | /search/<slug>-<id> 分享页（规则/解析器就位；**内容采集待强通道**——全站 CF Turnstile + 客户端渲染，直连超时、ScraperAPI 标准渲染被挑战拦（实测空壳）、premium 免费账户不可用；生产需 CF Worker 转发或 ScraperAPI ultra_premium）|
 
 **URL 校验三级**：协议 → 平台域名锚定 → 分享页结构（id 格式）——规则经 `GET /platforms` 下发给前端预检（单一来源不双写）。
 
