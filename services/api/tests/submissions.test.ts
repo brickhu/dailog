@@ -146,7 +146,7 @@ describe("待审批投稿上限（pending_limit）", () => {
 
   it("待审批 4 条 → 正常创建", async () => {
     const res = await makeApp(makeRepo({
-      snapshots: { getById: async () => ({ parsedDialogue: [], sourceTitle: "对话", platform: "claude" }) },
+      snapshots: { getById: async () => ({ parsedDialogue: [], sourceTitle: "对话", platform: "claude", prefixSourceId: null }) },
       polishes: { countPendingByUser: async () => 4 },
     })).request("/v1/submissions", {
       method: "POST",
