@@ -13,6 +13,8 @@ function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
           unreadCount: async () => 0,
           markAllRead: async () => {},
           getEmailByUserId: async () => null,
+          existsAfter: async () => false,
+          existsByLink: async () => false,
         },
         guests: {
       getByPlatform: async () => null,
@@ -43,6 +45,8 @@ function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
       listQueue: async () => [],
       getById: async () => null,
       setStatus: async () => {},
+      listAccepted: async () => [],
+      overviewStats: async () => ({ reviews: { submitted: 0, accepted: 0, rejected: 0 }, scripts: { pending: 0, generated: 0, failed: 0 }, episodes: { published: 0, failed: 0 } }),
       getOwned: async () => null,
       getPolishDetail: async () => null,
       listByUser: async () => [],
@@ -165,17 +169,14 @@ function makeApp(episodesOverrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
       saveVoiceSample: async () => {},
       storage: { put: async () => {}, get: async () => new Uint8Array(), delete: async () => {} },
     },
-    channel: { activateChannel: async () => ({ ok: true }) },
     favorites: {
       getPublishableEpisode: async () => null,
       toggleFavorite: async () => ({ favorited: true }),
       toggleLike: async () => ({ liked: true }),
       listFavorites: async () => [],
     },
-    admin: { isAdmin: async () => false, createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }), storage: { put: async () => {} }, upsertGuestVoiceSample: async () => {}, listGuestVoiceSamples: async () => [], listGuests: async () => [] },
     shareCollectUrl: () => null,
     polishesDeps: {
-      getChannelActivatedAt: async () => new Date(),
 
       findPolishByUserSnapshot: async () => null,
       createPolish: async () => ({ id: "polish-1" }),
@@ -214,6 +215,13 @@ function makeApp(episodesOverrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
       getVoiceSampleByLanguage: async () => null,
       markUsed: async () => {},
       saveVoiceSample: async () => {},
+    },
+    admin: {
+      isAdmin: async () => false,
+      storage: { put: async () => {} },
+      upsertGuestVoiceSample: async () => {},
+      listGuestVoiceSamples: async () => [],
+      listGuests: async () => [],
     },
   });
 }

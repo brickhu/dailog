@@ -5,7 +5,6 @@
 import { Hono } from "hono";
 
 export interface PolishesDeps {
-  getChannelActivatedAt(userId: string): Promise<Date | null>;
   findPolishByUserSnapshot(userId: string, snapshotId: string): Promise<{ id: string; title: string | null } | null>;
   createPolish(row: { userId: string; snapshotId: string; title: string | null }): Promise<{ id: string }>;
   /** 列表（工作台"脚本"页）：对话分组 + 每条脚本（title/status）+ 来源平台 */
@@ -41,10 +40,6 @@ export function polishesRoutes(deps: PolishesDeps) {
     if (!body || typeof body.snapshotId !== "string") {
       return c.json({ error: "invalid_snapshot" }, 400);
     }
-    // 频道开通校验（未开通 → 403，前端引导先去创建频道）
-    const activated = await deps.getChannelActivatedAt(userId);
-    if (!activated) return c.json({ error: "channel_not_activated" }, 403);
-
     // 用户 × 快照唯一：已存在 → 返回已有容器（前端跳编辑页）
     const existing = await deps.findPolishByUserSnapshot(userId, body.snapshotId);
     if (existing) return c.json({ existing: true, polishId: existing.id }, 409);

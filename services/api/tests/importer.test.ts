@@ -13,6 +13,8 @@ function fakeRepo(): AppDeps["repo"] {
           unreadCount: async () => 0,
           markAllRead: async () => {},
           getEmailByUserId: async () => null,
+          existsAfter: async () => false,
+          existsByLink: async () => false,
         },
         guests: {
       getByPlatform: async () => null,
@@ -43,6 +45,8 @@ function fakeRepo(): AppDeps["repo"] {
       listQueue: async () => [],
       getById: async () => null,
       setStatus: async () => {},
+      listAccepted: async () => [],
+      overviewStats: async () => ({ reviews: { submitted: 0, accepted: 0, rejected: 0 }, scripts: { pending: 0, generated: 0, failed: 0 }, episodes: { published: 0, failed: 0 } }),
       getOwned: async () => null,
       getPolishDetail: async () => null,
       listByUser: async () => [],
@@ -125,7 +129,7 @@ function fakeImportDeps(): AppDeps["importDeps"] {
   };
 }
 function fakePolishesDeps(): AppDeps["polishesDeps"] {
-  return { getChannelActivatedAt: async () => new Date(), findPolishByUserSnapshot: async () => null, createPolish: async () => ({ id: "polish-1" }), getPolishDetail: async () => null, listByUser: async () => [] };
+  return { findPolishByUserSnapshot: async () => null, createPolish: async () => ({ id: "polish-1" }), getPolishDetail: async () => null, listByUser: async () => [] };
 }
 function fakeTranscriptsDeps(): AppDeps["transcriptsDeps"] {
   return { getDialogueForPolish: async () => null, getTranscriptCount: async () => 0, getPolishLimit: async () => 5, createTranscript: async () => ({ id: "transcript-1" }), getOwnedTranscript: async () => null, guestsByPlatform: {}, updateTranscriptSegments: async () => {}, llm: { complete: async () => "", stream: async () => "" } };
@@ -185,9 +189,6 @@ function makeApp(shareCollectUrl: string | null, importOverrides: Partial<AppDep
       saveVoiceSample: async () => {},
       storage: { put: async () => {}, get: async () => new Uint8Array(), delete: async () => {} },
     },
-    channel: {
-      activateChannel: async () => ({ ok: true }),
-    },
     favorites: {
       getPublishableEpisode: async () => null,
       toggleFavorite: async () => ({ favorited: true }),
@@ -196,7 +197,6 @@ function makeApp(shareCollectUrl: string | null, importOverrides: Partial<AppDep
     },
     admin: {
       isAdmin: async () => false,
-      createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }),
       storage: { put: async () => {} },
       upsertGuestVoiceSample: async () => {},
       listGuestVoiceSamples: async () => [],

@@ -3,6 +3,7 @@
 
 // ---------- 中文 ----------
 export const zh = {
+  "auth.hint": "注册需邮箱验证码",
   // ---- 通用 ----
   "common.loading": "加载中…",
   "common.save": "保存",
@@ -16,11 +17,15 @@ export const zh = {
   "common.unnamed": "未命名节目",
 
   // ---- 导航 ----
-  "nav.admin": "管理端",
   "nav.account": "账号",
   "nav.login": "登录",
   "nav.logout": "登出",
-  "nav.home": "返回首页",
+  "nav.home": "首页",
+  "nav.discover": "探索",
+  "nav.profile": "个人主页",
+  "nav.submissions": "我的投稿",
+  "nav.favorites": "收藏",
+  "nav.submit": "投稿",
   "nav.language": "语言",
   "nav.import": "导入",
   "nav.scripts": "脚本",
@@ -44,7 +49,6 @@ export const zh = {
   "auth.completeSignup": "完成注册",
   "auth.verifying": "验证中…",
   "auth.backToEmail": "返回修改邮箱",
-  "auth.hint": "注册需邮箱验证码 · 邀请码用于开通频道",
   "auth.or": "或",
   "auth.githubLogin": "使用 GitHub 登录",
   "auth.githubRedirecting": "跳转 GitHub…",
@@ -151,8 +155,6 @@ export const zh = {
   "persona.saveFailed": "保存失败",
   "persona.more": "更多资料",
   "settings.voiceDesc": "采样后立即生效。用于生成节目中\"你\"的声音——点击采样可试听，随时可以重新采样。",
-  "settings.inviteCode": "邀请码",
-  "settings.inviteCodeDesc": "发布满 3 期后，每发布一期获得一个邀请码（功能即将上线）",
   "settings.subscription": "订阅",
   "settings.subscriptionDesc": "免费用户可生成 1 期；Pro 订阅无限生成（支付功能即将上线）",
   "settings.uploadFailed": "上传失败",
@@ -336,6 +338,7 @@ export const zh = {
   "admin.publishingTips": "节目发布中，请稍候…",
   "admin.publishFailed": "节目发布失败",
   "admin.republish": "重新发布",
+  "admin.saveChanges": "保存修改",
   "admin.notifyPending": "暂未通知投稿人 {email}",
   "admin.notifySent": "已经通知投稿人 {email}",
 
@@ -484,11 +487,9 @@ export const zh = {
   "studio.startNew": "开始新节目",
   "studio.unnamed": "未命名对话",
   "studio.unnamedContainer": "未命名容器",
-  "studio.inviteFriends": "邀请好友（计划 7）",
   "studio.subscribePro": "订阅 Pro（计划 7）",
   "studio.episodeDuration": "{minutes} 分钟",
   "studio.episodeView": "查看发布页 →",
-  "studio.channelNotActivated": "频道未开通——请先到「初始化频道」完成邀请码 + 录音，再回来确认入库。",
 
   // ---- studio 导入页 ----
   "studio.import.title": "从分享链接导入对话",
@@ -570,11 +571,6 @@ export const zh = {
   "studio.onboarding.stepVoice": "② 录你的声音",
   "studio.onboarding.recordTitle": "录一段你的声音",
   "studio.onboarding.retip": "之后随时可以在设置页重录",
-  "studio.onboarding.activateTitle": "开通你的频道",
-  "studio.onboarding.code": "授权码",
-  "studio.onboarding.codeRequired": "请输入授权码",
-  "studio.onboarding.codeInvalid": "授权码无效或已被使用",
-  "studio.onboarding.activating": "开通中…",
   "studio.onboarding.activate": "开通频道",
   "studio.onboarding.uploadFailed": "上传失败，请重试",
 
@@ -599,6 +595,7 @@ export const zh = {
 
 // ---------- 英文（fallback 语言；结构必须与 zh 完全对齐）----------
 export const en: Dictionary = {
+  "auth.hint": "Email code required to sign up",
   // ---- 通用 ----
   "common.loading": "Loading…",
   "common.save": "Save",
@@ -612,11 +609,15 @@ export const en: Dictionary = {
   "common.unnamed": "Untitled episode",
 
   // ---- 导航 ----
-  "nav.admin": "Admin",
   "nav.account": "Account",
   "nav.login": "Log in",
   "nav.logout": "Log out",
-  "nav.home": "Back to home",
+  "nav.home": "Home",
+  "nav.discover": "Discover",
+  "nav.profile": "Profile",
+  "nav.submissions": "Submissions",
+  "nav.favorites": "Favorites",
+  "nav.submit": "Submit",
   "nav.language": "Language",
   "nav.import": "Import",
   "nav.scripts": "Scripts",
@@ -640,7 +641,6 @@ export const en: Dictionary = {
   "auth.completeSignup": "Complete sign up",
   "auth.verifying": "Verifying…",
   "auth.backToEmail": "Back to edit email",
-  "auth.hint": "Email code required to sign up · Invite code to activate your channel",
   "auth.or": "or",
   "auth.githubLogin": "Continue with GitHub",
   "auth.githubRedirecting": "Redirecting to GitHub…",
@@ -747,8 +747,6 @@ export const en: Dictionary = {
   "persona.saveFailed": "Failed to save",
   "persona.more": "More details",
   "settings.voiceDesc": "Takes effect immediately. Used for \"you\" in episodes — click to preview, resample anytime.",
-  "settings.inviteCode": "Invite codes",
-  "settings.inviteCodeDesc": "After 3 published episodes, earn one invite code per episode (coming soon)",
   "settings.subscription": "Subscription",
   "settings.subscriptionDesc": "Free: 1 episode. Pro: unlimited generation (payments coming soon)",
   "settings.uploadFailed": "Upload failed",
@@ -929,6 +927,7 @@ export const en: Dictionary = {
   "admin.publishingTips": "Publishing… please wait",
   "admin.publishFailed": "Publish failed",
   "admin.republish": "Republish",
+  "admin.saveChanges": "Save changes",
   "admin.notifyPending": "Submitter {email} not notified yet",
   "admin.notifySent": "Submitter {email} notified",
 
@@ -1077,11 +1076,9 @@ export const en: Dictionary = {
   "studio.startNew": "Start new",
   "studio.unnamed": "Untitled conversation",
   "studio.unnamedContainer": "Untitled container",
-  "studio.inviteFriends": "Invite friends (plan 7)",
   "studio.subscribePro": "Subscribe Pro (plan 7)",
   "studio.episodeDuration": "{minutes} min",
   "studio.episodeView": "View page →",
-  "studio.channelNotActivated": "Channel not activated — complete「Activate channel + record voice」first, then confirm the import.",
 
   // ---- studio 导入页 ----
   "studio.import.title": "Import conversation from a share link",
@@ -1163,11 +1160,6 @@ export const en: Dictionary = {
   "studio.onboarding.stepVoice": "② Record your voice",
   "studio.onboarding.recordTitle": "Record a voice sample",
   "studio.onboarding.retip": "You can re-record anytime in Settings",
-  "studio.onboarding.activateTitle": "Activate your channel",
-  "studio.onboarding.code": "Invite code",
-  "studio.onboarding.codeRequired": "Enter the invite code",
-  "studio.onboarding.codeInvalid": "Invalid or already used invite code",
-  "studio.onboarding.activating": "Activating…",
   "studio.onboarding.activate": "Activate channel",
   "studio.onboarding.uploadFailed": "Upload failed, please try again",
 

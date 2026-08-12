@@ -101,20 +101,6 @@ export const authApi = {
     return data.user ?? null;
   },
 
-  /** 授权码开通频道（注册开放；生成/发布前需开通）；token 可为 null——SSO cookie 会话无需 Bearer */
-  async activateChannel(token: string | null, inviteCode: string): Promise<void> {
-    const res = await expectOk(
-      await request("/v1/me/channel/activate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ inviteCode }),
-      }),
-    );
-    await res.json();
-  },
 
   /** 重发验证邮件（better-auth: POST send-verification-email { email, callbackURL }） */
   async resendVerification(email: string, callbackURL: string): Promise<void> {

@@ -16,10 +16,9 @@ export interface AuthState {
   signUp(email: string, password: string, name: string): Promise<{ error: string | null }>;
   /** 重发验证邮件到当前用户邮箱（验证链接跳回当前站点） */
   resendVerification(): Promise<{ error: string | null }>;
-  /** 授权码开通频道：成功后同步 channelActive（守卫据此跳转工作台） */
-  activateChannel(inviteCode: string): Promise<{ error: string | null; code?: string | null }>;
   /** 录音上传成功后调用：同步 hasVoiceSample（守卫放行进入工作台） */
   markVoiceSampleUploaded(): void;
+
   /** 会话失效（401）本地清理：清内存 user + localStorage token →
    *  第一层锁定（登录界面）自动出现，URL 不变，重新登录后回到原路径 */
   expireSession(): void;
@@ -127,17 +126,6 @@ export function AuthProvider(props: { children: JSX.Element }) {
         return { error: null };
       } catch (e) {
         return { error: e instanceof Error ? e.message : "发送失败" };
-      }
-    },
-    async activateChannel(inviteCode) {
-      try {
-        // token 可为 null（SSO cookie 会话无需 Bearer，authApi 带 credentials include）
-        await authApi.activateChannel(accessToken(), inviteCode);
-        setChannelActive(true);
-        return { error: null };
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "开通失败";
-        return { error: msg, code: msg.includes("invalid_invite_code") ? "invalid_invite_code" : null };
       }
     },
     markVoiceSampleUploaded() {

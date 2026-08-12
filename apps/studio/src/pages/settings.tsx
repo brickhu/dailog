@@ -312,13 +312,6 @@ export default function Settings() {
         </div>
 
         <div {...stylex.props(styles.card)}>
-          <div {...stylex.props(styles.cardTitle)}>{t("settings.inviteCode")}</div>
-          <div {...stylex.props(styles.placeholder)}>
-            发布满 3 期后，每发布一期获得一个邀请码（功能即将上线）
-          </div>
-        </div>
-
-        <div {...stylex.props(styles.card)}>
           <div {...stylex.props(styles.cardTitle)}>{t("settings.subscription")}</div>
           <div {...stylex.props(styles.placeholder)}>
             免费用户可生成 1 期；Pro 订阅无限生成（支付功能即将上线）

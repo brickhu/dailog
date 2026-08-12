@@ -10,6 +10,8 @@ function fakeRepo(): AppDeps["repo"] {
           unreadCount: async () => 0,
           markAllRead: async () => {},
           getEmailByUserId: async () => null,
+          existsAfter: async () => false,
+          existsByLink: async () => false,
         },
         guests: {
       getByPlatform: async () => null,
@@ -40,6 +42,8 @@ function fakeRepo(): AppDeps["repo"] {
       listQueue: async () => [],
       getById: async () => null,
       setStatus: async () => {},
+      listAccepted: async () => [],
+      overviewStats: async () => ({ reviews: { submitted: 0, accepted: 0, rejected: 0 }, scripts: { pending: 0, generated: 0, failed: 0 }, episodes: { published: 0, failed: 0 } }),
       getOwned: async () => null,
       getPolishDetail: async () => null,
       listByUser: async () => [],
@@ -139,7 +143,6 @@ function fakeImportDeps(): AppDeps["importDeps"] {
 }
 function fakePolishesDeps(): AppDeps["polishesDeps"] {
   return {
-    getChannelActivatedAt: async () => new Date(),
     findPolishByUserSnapshot: async () => null,
 
     createPolish: async () => ({ id: "polish-1" }),
@@ -227,7 +230,6 @@ function makeApp(envOverride: Partial<Env> = {}) {
     episodesDeps: fakeEpisodesDeps(),
     job: fakeJob(),
     voice: fakeVoice(),
-    channel: { activateChannel: async () => ({ ok: true }) },
     favorites: {
       getPublishableEpisode: async () => null,
       toggleFavorite: async () => ({ favorited: true }),
@@ -236,7 +238,6 @@ function makeApp(envOverride: Partial<Env> = {}) {
     },
     admin: {
       isAdmin: async () => false,
-      createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }),
       storage: { put: async () => {} },
       upsertGuestVoiceSample: async () => {},
       listGuestVoiceSamples: async () => [],

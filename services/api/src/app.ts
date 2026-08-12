@@ -14,7 +14,6 @@ import { importerRoutes } from "./routes/importer";
 import { authExtRoutes } from "./routes/auth-ext";
 import { jobRoutes, type JobDeps } from "./routes/job";
 import { voiceRoutes, type VoiceDeps } from "./routes/voice";
-import { channelRoutes, type ChannelDeps } from "./routes/channel";
 import { favoritesRoutes, type FavoritesRepo } from "./routes/favorites";
 import { tokenRoutes } from "./routes/token";
 import { adminRoutes, type AdminDeps } from "./routes/admin";
@@ -34,7 +33,6 @@ export type AppDeps = {
   episodesDeps: EpisodesDeps;
   job: JobDeps;
   voice: VoiceDeps;
-  channel: ChannelDeps; // 频道开通（授权码激活）
   favorites: FavoritesRepo; // 消费端互动（收藏/点赞）
   admin: AdminDeps; // 管理端点（ADMIN_EMAILS 白名单判定）
   /** importer 服务地址（测试注入用；缺省读 IMPORTER_URL env） */
@@ -101,10 +99,10 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
 
   app.get("/v1/me", async (c) => {
     const userId = c.get("userId");
-    const activated = await deps.repo.episodes.getChannelActivatedAt(userId);
+    // 邀请码机制已移除：频道自动开通（channelActive 恒 true，兼容前端守卫）
     const sample = await deps.repo.episodes.getVoiceSample(userId);
     const role = (await deps.repo.episodes.getRole?.(userId)) ?? "user";
-    return c.json({ userId, role, channelActive: activated !== null, hasVoiceSample: sample !== null });
+    return c.json({ userId, role, channelActive: true, hasVoiceSample: sample !== null });
   });
 
   // import/polishes/transcripts 路由内部自带 /api 前缀（挂根）；importer 路由无前缀（挂 /api）
@@ -120,7 +118,6 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   // 上面的 /api/* 鉴权中间件依然覆盖
   app.route("/", jobRoutes(deps.job, (c) => (c as unknown as { get: (k: string) => string }).get("userId")));
   app.route("/", voiceRoutes(deps.voice));
-  app.route("/", channelRoutes(deps.channel));
   app.route("/", favoritesRoutes(deps.favorites));
   app.route("/", adminRoutes(deps.admin));
   // 编辑端（P2）：requireRole(editor|admin) 守卫在 editorRoutes 内部施加
@@ -136,6 +133,7 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
     notifyEmail: (input) => sendEmail(deps.env, input),
     storage: deps.voice.storage,
     ffmpegPath: ffmpegInstaller.path,
+    siteBaseUrl: deps.env.SITE_BASE_URL || null,
   } satisfies EditorDeps));
 
   app.notFound((c) => c.json({ error: "not_found" }, 404));

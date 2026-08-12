@@ -46,7 +46,6 @@ import type { TranscriptsDeps } from "../src/routes/transcripts";
 import type { EpisodesDeps } from "../src/routes/episodes";
 import type { JobDeps } from "../src/routes/job";
 import type { VoiceDeps } from "../src/routes/voice";
-import { createActivateChannel, type ChannelDeps } from "../src/routes/channel";
 import { createFavoritesRepo } from "../src/routes/favorites";
 
 // 门控（skip 条件）：三个必需环境变量任一缺失 → SKIP
@@ -61,8 +60,6 @@ const ASSETS_DIR = join(ROOT, "assets", "audio");
 // 真实 better-auth 注册用户（M5）：beforeAll 造邀请码注册，token 供后续请求
 let AUTH_TOKEN = "";
 let USER_ID = "";
-const ADMIN_USER_ID = `e2e-admin-${randomUUID().slice(0, 8)}`;
-const INVITE_CODE = `e2e-code-${randomUUID().slice(0, 8)}`;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -91,22 +88,7 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     repo = createRepo(dbClient.db);
 
     // 造邀请码（admin user + 码），供真实注册
-    await dbClient.db.insert(schema.authUsers).values({
-      id: ADMIN_USER_ID,
-      name: "E2E Admin",
-      email: `e2e-admin-${randomUUID().slice(0, 8)}@test.local`,
-      emailVerified: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    await dbClient.db.insert(schema.inviteCodes).values({
-      code: INVITE_CODE,
-      createdBy: ADMIN_USER_ID,
-      source: "admin",
-      expiresAt: null,
-    });
-
-    const llm = createLlmClient({
+        const llm = createLlmClient({
       apiKey: env.DEEPSEEK_API_KEY,
       baseUrl: env.DEEPSEEK_BASE_URL,
       model: env.DEEPSEEK_MODEL,
@@ -158,7 +140,6 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     };
 
     const polishesDeps: PolishesDeps = {
-      getChannelActivatedAt: (userId) => repo.episodes.getChannelActivatedAt(userId),
       findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
       createPolish: (row) => repo.polishes.create(row),
       getPolishDetail: (id, userId) => repo.polishes.getPolishDetail(id, userId),
@@ -221,7 +202,6 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       getLatestJob: (id) => repo.jobs.getLatestJob(id),
     };
     const voice: VoiceDeps = { saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row), storage };
-    const channel: ChannelDeps = { activateChannel: createActivateChannel(dbClient.db) };
     const favorites = createFavoritesRepo(dbClient.db);
 
     // 真实 better-auth：注册测试用户，token 供全流程请求（认证与生产路径一致）
@@ -229,7 +209,6 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
     app = createApp({
       env,
       auth,
-      channel,
       favorites,
       repo,
       importDeps,
@@ -240,7 +219,6 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       voice,
       admin: {
         isAdmin: async () => false,
-        createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }),
         storage: { put: async () => {} },
         upsertGuestVoiceSample: async () => {},
         listGuestVoiceSamples: async () => [],
@@ -254,22 +232,13 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
         email: `e2e-${randomUUID().slice(0, 8)}@test.local`,
         password: "password123",
         name: "E2E User",
-        inviteCode: INVITE_CODE,
       }),
     });
     if (signUp.status !== 200) {
       throw new Error(`e2e sign-up failed: ${signUp.status} ${await signUp.text()}`);
     }
     const { token, user } = (await signUp.json()) as { token: string; user: { id: string } };
-    // 开通频道（授权码）：e2e 生成管线需要频道已开通
-    const activate = await app.request("/v1/me/channel/activate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ inviteCode: INVITE_CODE }),
-    });
-    if (activate.status !== 200) {
-      throw new Error(`e2e channel activation failed: ${activate.status} ${await activate.text()}`);
-    }
+    // 频道自动开通（邀请码机制移除）：e2e 生成管线无需激活
     AUTH_TOKEN = token;
     USER_ID = user.id;
   });
@@ -279,8 +248,6 @@ describe.skipIf(!hasE2eEnv)("e2e generation pipeline (real LLM + TTS + PG + ffmp
       try {
         // 级联清理：user 删除 → profiles/snapshots 无依赖（url 唯一）、polishes/transcripts/episodes/jobs
         if (USER_ID) await dbClient.db.delete(schema.authUsers).where(eq(schema.authUsers.id, USER_ID));
-        await dbClient.db.delete(schema.inviteCodes).where(eq(schema.inviteCodes.code, INVITE_CODE));
-        await dbClient.db.delete(schema.authUsers).where(eq(schema.authUsers.id, ADMIN_USER_ID));
       } catch { /* 表未就绪等情况忽略 */ }
       await dbClient.client.end().catch(() => {});
     }

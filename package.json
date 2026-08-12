@@ -9,8 +9,6 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "dev:orb": "bash scripts/dev-orb.sh",
-    "invite": "pnpm --filter @dailogues/api invites:create",
-    "invite:create": "pnpm --filter @dailogues/api invites:create",
     "otp": "bash scripts/otp.sh"
   }
 }

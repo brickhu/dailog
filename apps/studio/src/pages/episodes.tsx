@@ -287,7 +287,6 @@ export default function Dashboard() {
         </For>
 
         <div {...stylex.props(styles.placeholderRow)}>
-          <div {...stylex.props(styles.placeholder)}>{t("studio.inviteFriends")}</div>
           <div {...stylex.props(styles.placeholder)}>{t("studio.subscribePro")}</div>
         </div>
       </div>

@@ -216,11 +216,7 @@ export default function Importer(props: ImporterProps) {
         props.onGenerated?.(body.polishId, s.dialogue);
         return;
       }
-      if (res.status === 403) {
-        setActionError(t("studio.channelNotActivated"));
-      } else {
-        setActionError(body?.error ?? `入库失败（HTTP ${res.status}），请重试`);
-      }
+      setActionError(body?.error ?? `入库失败（HTTP ${res.status}），请重试`);
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         auth.expireSession();

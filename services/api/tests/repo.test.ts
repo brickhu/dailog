@@ -581,7 +581,6 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       ],
     };
     const polishesDeps: AppDeps["polishesDeps"] = {
-      getChannelActivatedAt: (userId) => repo.episodes.getChannelActivatedAt(userId),
       findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
       createPolish: (row) => repo.polishes.create(row),
       getPolishDetail: (id, userId) => repo.polishes.getPolishDetail(id, userId),
@@ -644,7 +643,6 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row),
             storage: { put: async () => {}, get: async () => new Uint8Array(), delete: async () => {} },
     };
-    const channel: AppDeps["channel"] = { activateChannel: async () => ({ ok: true }) };
     const favorites = createFavoritesRepo(db);
     const app = createApp({
       env: makeEnv(),
@@ -652,7 +650,6 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
         handler: async () => new Response("", { status: 404 }),
         api: { getSession: async () => ({ user: { id: API_USER } }) },
       },
-      channel,
       favorites,
       repo,
       importDeps,
@@ -663,7 +660,6 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       voice,
       admin: {
         isAdmin: async () => false,
-        createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }),
         storage: { put: async () => {} },
         upsertGuestVoiceSample: async () => {},
         listGuestVoiceSamples: async () => [],

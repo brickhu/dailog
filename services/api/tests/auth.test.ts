@@ -31,7 +31,6 @@ function fakeImportDeps(): AppDeps["importDeps"] {
 }
 function fakePolishesDeps(): AppDeps["polishesDeps"] {
   return {
-    getChannelActivatedAt: async () => new Date(),
     findPolishByUserSnapshot: async () => null,
 
     createPolish: async () => ({ id: "polish-1" }),
@@ -85,6 +84,8 @@ function fakeRepo(): AppDeps["repo"] {
           unreadCount: async () => 0,
           markAllRead: async () => {},
           getEmailByUserId: async () => null,
+          existsAfter: async () => false,
+          existsByLink: async () => false,
         },
         guests: {
       getByPlatform: async () => null,
@@ -115,6 +116,8 @@ function fakeRepo(): AppDeps["repo"] {
       listQueue: async () => [],
       getById: async () => null,
       setStatus: async () => {},
+      listAccepted: async () => [],
+      overviewStats: async () => ({ reviews: { submitted: 0, accepted: 0, rejected: 0 }, scripts: { pending: 0, generated: 0, failed: 0 }, episodes: { published: 0, failed: 0 } }),
       getOwned: async () => null,
       getPolishDetail: async () => null,
       listByUser: async () => [],
@@ -195,33 +198,11 @@ function fakeVoice(): AppDeps["voice"] {
 describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
   let dbClient: ReturnType<typeof createDb>;
   let app: ReturnType<typeof createApp>;
-  let adminUserId: string;
 
   const email = () => `auth-${randomUUID().slice(0, 8)}@test.local`;
-  const INVALID_CODE = "no-such-code-xyz";
-  /** 每个用例独立邀请码（避免用例间 used 状态污染） */
-  const freshCode = () => `auth-code-${randomUUID().slice(0, 8)}`;
-  const insertInvite = async (code: string, expiresAt: Date | null = null) => {
-    await dbClient!.db.insert(schema.inviteCodes).values({
-      code, createdBy: adminUserId, source: "admin", expiresAt,
-    });
-  };
 
   beforeAll(async () => {
     dbClient = createDb({ DATABASE_URL: process.env.DATABASE_URL! } as never);
-    // admin user（invite_codes.created_by 引用 user.id）
-    const admin = await dbClient.db
-      .insert(schema.authUsers)
-      .values({
-        id: `admin-${randomUUID()}`,
-        name: "Admin",
-        email: `auth-admin-${randomUUID().slice(0, 8)}@test.local`,
-        emailVerified: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning({ id: schema.authUsers.id });
-    adminUserId = admin[0].id;
 
     const testEnv = {
       DATABASE_URL: process.env.DATABASE_URL!,
@@ -256,7 +237,6 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
     episodesDeps: fakeEpisodesDeps(),
       job: fakeJob(),
       voice: fakeVoice(),
-    channel: { activateChannel: async () => ({ ok: true }) },
     favorites: {
       getPublishableEpisode: async () => null,
       toggleFavorite: async () => ({ favorited: true }),
@@ -265,7 +245,6 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
     },
     admin: {
       isAdmin: async () => false,
-      createInviteCode: async () => ({ ok: true, code: "fake", expiresAt: null }),
       storage: { put: async () => {} },
       upsertGuestVoiceSample: async () => {},
       listGuestVoiceSamples: async () => [],
@@ -276,10 +255,6 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
 
   afterAll(async () => {
     if (dbClient) {
-      // 清理顺序：先删邀请码（used_by 引用 user，无 cascade），再删测试用户（级联 profiles/sessions/accounts）
-      await dbClient.db
-        .delete(schema.inviteCodes)
-        .where(like(schema.inviteCodes.code, "auth-%"));
       await dbClient.db
         .delete(schema.authUsers)
         .where(like(schema.authUsers.email, "auth-%@test.local"));
@@ -287,7 +262,7 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
     }
   });
 
-  it("signs up without invite code → token + profile row（注册开放，码仅用于开通频道）", async () => {
+  it("signs up → token + profile row（注册开放，频道自动开通）", async () => {
     const mail = email();
     const res = await app.request("/v1/auth/sign-up/email", {
       method: "POST",
@@ -305,7 +280,8 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
       .from(schema.profiles)
       .where(eq(schema.profiles.id, json.user!.id));
     expect(profiles.length).toBe(1);
-    expect(profiles[0]?.channelActivatedAt).toBeNull(); // 频道未开通
+    // 频道自动开通（邀请码机制移除）：channelActive 恒 true（列仍为 null，仅展示用）
+    expect(profiles[0]?.channelActivatedAt).toBeNull();
 
     // 带 token 访问受保护接口
     const me = await app.request("/v1/me", {
@@ -314,7 +290,7 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
     expect(me.status).toBe(200);
     expect((await me.json()) as { userId: string; channelActive: boolean }).toEqual({
       userId: json.user!.id,
-      channelActive: false,
+      channelActive: true,
     });
   });
 

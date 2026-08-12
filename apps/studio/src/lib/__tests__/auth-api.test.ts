@@ -19,7 +19,7 @@ afterEach(() => {
 const USER = { id: "user-1", email: "a@b.co", name: "A" };
 
 describe("authApi.signUp", () => {
-  it("posts inviteCode and persists token", async () => {
+  it("signs up and persists token", async () => {
     mockFetchOnce(async (url, init) => {
       expect(String(url)).toContain("/v1/auth/sign-up/email");
       const body = JSON.parse(String(init?.body));
@@ -68,22 +68,3 @@ describe("authApi.signOut", () => {
   });
 });
 
-describe("authApi.activateChannel", () => {
-  it("posts inviteCode with bearer token", async () => {
-    mockFetchOnce(async (url, init) => {
-      expect(String(url)).toContain("/v1/me/channel/activate");
-      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer t5");
-      expect(JSON.parse(String(init?.body))).toEqual({ inviteCode: "code-1" });
-      return jsonResponse(200, { ok: true });
-    });
-    await authApi.activateChannel("t5", "code-1");
-  });
-});
-
-describe("authApi error mapping", () => {
-  it("surfaces better-auth error message (invalid_invite_code)", async () => {
-    mockFetchOnce(async () => jsonResponse(400, { message: "invalid_invite_code" }));
-    const err = await authApi.activateChannel("t", "bad").catch((e) => e);
-    expect((err as Error).message).toBe("invalid_invite_code");
-  });
-});

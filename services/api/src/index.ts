@@ -19,7 +19,6 @@ import type { PolishesDeps } from "./routes/polishes";
 import type { TranscriptsDeps } from "./routes/transcripts";
 import type { EpisodesDeps } from "./routes/episodes";
 import type { VoiceDeps } from "./routes/voice";
-import { createActivateChannel } from "./routes/channel";
 import { createFavoritesRepo } from "./routes/favorites";
 import { createAdminDeps } from "./routes/admin";
 
@@ -147,7 +146,6 @@ const importDeps: ImportDeps = {
 };
 
 const polishesDeps: PolishesDeps = {
-  getChannelActivatedAt: (userId) => repo.episodes.getChannelActivatedAt(userId),
   findPolishByUserSnapshot: (userId, snapshotId) => repo.polishes.findByUserSnapshot(userId, snapshotId),
   createPolish: (row) => repo.polishes.create(row),
   getPolishDetail: (id, userId) => repo.polishes.getPolishDetail(id, userId),
@@ -198,7 +196,8 @@ const episodesDeps: EpisodesDeps = {
   createEpisode: (row) => repo.episodes.create(row),
   markUsed: (transcriptId) => repo.transcripts.markUsed(transcriptId),
   safetyCheck: async (segments) => parseJsonLoose(await llm.complete(safetyMetaPrompt(segments))) as { pass: boolean; reason?: string; title?: string; description?: string; tags?: string[]; topic?: string },
-  getChannelActive: async (userId) => (await repo.episodes.getChannelActivatedAt(userId)) !== null,
+  // 邀请码机制已移除：频道自动开通（不再有未开通 403）
+  getChannelActive: async () => true,
   getQuota: (userId) => repo.jobs.getQuotaInfo(userId),
   consumeQuota: (userId, credit) => repo.jobs.consumeQuota(userId, credit),
   createJob: (episodeId) => repo.jobs.createJob(episodeId),
@@ -241,7 +240,6 @@ const app = createApp({
   episodesDeps,
   job,
   voice,
-  channel: { activateChannel: createActivateChannel(db) },
   favorites: createFavoritesRepo(db),
   admin: {
     ...createAdminDeps(db, env.ADMIN_EMAILS),
