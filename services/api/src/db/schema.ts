@@ -30,8 +30,6 @@ export const authUsers = pgTable("user", {
   image: text("image"),
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
-  // emailAndPassword additionalFields：注册携带的邀请码
-  inviteCode: text("invite_code"),
 });
 
 export const authSessions = pgTable("session", {
@@ -110,18 +108,6 @@ export const voiceSamples = pgTable(
   (t) => [uniqueIndex("voice_samples_user_language").on(t.userId, t.language)],
 );
 
-export const inviteCodes = pgTable("invite_codes", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  code: text("code").notNull().unique(),
-  createdBy: text("created_by").notNull().references(() => authUsers.id),
-  usedBy: text("used_by").references(() => authUsers.id),
-  usedAt: timestamp("used_at", { withTimezone: true }),
-  expiresAt: timestamp("expires_at", { withTimezone: true }),
-  source: text("source", { enum: ["admin", "reward"] }).notNull(),
-  issuedForEpisodeId: uuid("issued_for_episode_id"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
 // ---------------------------------------------------------------------------
 // 内容五层（快照 → 容器 → 润色脚本 → 节目 → 音轨）
 // ---------------------------------------------------------------------------
@@ -169,6 +155,8 @@ export const polishes = pgTable(
     status: text("status", { enum: ["editing", "generating", "published", "failed", "submitted", "accepted", "rejected"] }).notNull().default("editing"),
     /** 拒绝原因（rejected 时必填，投稿人 /me/submits 可见） */
     rejectedReason: text("rejected_reason"),
+    /** 拒审来源：llm（process 质量不达标自动拒）/ editor（编辑人工拒审）；null = 旧数据 */
+    reviewedBy: text("reviewed_by", { enum: ["llm", "editor"] }),
     /** 编辑处理时间（process/reject 落库） */
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

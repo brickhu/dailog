@@ -11,3 +11,6 @@ export const api = createApiClient({
   baseUrl: env.apiBaseUrl,
   getToken: () => tokenGetter(),
 });
+
+/** 后端资源 URL 拼接（音频流等非 JSON 资源；dev 走 vite 同源代理） */
+export const apiUrl = (path: string): string => `${env.apiBaseUrl}${path}`;

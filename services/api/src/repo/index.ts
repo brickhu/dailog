@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { randomBytes } from "node:crypto";
 import * as schema from "../db/schema";
@@ -37,7 +37,7 @@ export interface SnapshotRow {
 export interface SnapshotsRepo {
   /** 快照查询（URL 唯一）——命中即复用，不重复采集 */
   /** 按 id 查（polish → snapshot 对话用） */
-  getById(id: string): Promise<{ parsedDialogue: unknown; sourceTitle: string | null; platform: string; prefixSourceId: string | null } | null>;
+  getById(id: string): Promise<{ parsedDialogue: unknown; sourceTitle: string | null; platform: string; prefixSourceId: string | null; url: string | null } | null>;
   getByUrl(url: string): Promise<{
     id: string;
     platform: string;
@@ -108,10 +108,29 @@ export interface PolishesRepo {
     title: string | null;
     status: string;
     rejectedReason: string | null;
+    reviewedBy: string | null;
+    reviewedAt: Date | null;
     createdAt: Date;
   } | null>;
   /** 编辑状态流转：accepted（已收录）/ rejected（投稿失败，reason 必填） */
-  setStatus(id: string, status: "accepted" | "rejected", opts?: { rejectedReason?: string | null }): Promise<void>;
+  setStatus(id: string, status: "accepted" | "rejected", opts?: { rejectedReason?: string | null; reviewedBy?: "llm" | "editor" | null }): Promise<void>;
+  /** 编辑端生成列表：已收录投稿（按审核时间倒序） */
+  listAccepted(): Promise<Array<{
+    id: string;
+    title: string | null;
+    snapshotTitle: string | null;
+    platform: string | null;
+    createdAt: Date;
+    reviewedAt: Date | null;
+  }>>;
+  /** 概览统计（/v1/editor/overview）：审核 / 脚本 / 发布三组计数。
+   *  scripts.pending = 已收录投稿下未用脚本；generated = 已用脚本；failed = 语音生成失败节目数；
+   *  episodes.failed = 0（发布失败无持久化状态——发布是同步操作，失败仅前端可见） */
+  overviewStats(): Promise<{
+    reviews: { submitted: number; accepted: number; rejected: number };
+    scripts: { pending: number; generated: number; failed: number };
+    episodes: { published: number; failed: number };
+  }>;
   /** 归属校验（防 IDOR）+ 快照关联 */
   getOwned(id: string, userId: string): Promise<{ id: string; snapshotId: string; title: string | null; status: string } | null>;
   /** 编辑页详情：polish + 快照 meta + transcripts */
@@ -174,7 +193,7 @@ export interface TranscriptsRepo {
     guestId: string | null;
     status: string;
   } | null>;
-  listByPolish(polishId: string): Promise<{ id: string; segments: ScriptSegment[]; updatedSegments: ScriptSegment[] | null; topic: string | null; title: string | null; creationNote: string | null; language: string | null; createdAt: Date }[]>;
+  listByPolish(polishId: string): Promise<{ id: string; segments: ScriptSegment[]; updatedSegments: ScriptSegment[] | null; topic: string | null; title: string | null; creationNote: string | null; language: string | null; status: string; createdAt: Date }[]>;
   /** 归属校验（join polish.user_id） */
   getOwned(id: string, userId: string): Promise<{
     id: string;
@@ -315,8 +334,8 @@ export interface EpisodesRepo {
   } | null>;
   /** 发布确认：更新元数据 + 分配期号（max+1，事务）+ published */
   publish(id: string, row: { title: string | null; description: string | null; tags: string[] | null; coverUrl: string | null; isPicked: boolean }): Promise<{ number: number }>;
-  /** 已发布节目编辑：tags / 精选标记（未来清单入口） */
-  updatePublished(id: string, row: { tags?: string[] | null; isPicked?: boolean }): Promise<void>;
+  /** 已发布节目编辑：tags / 精选标记 / 元数据（标题/简介/封面，发布页"可修改"用） */
+  updatePublished(id: string, row: { tags?: string[] | null; isPicked?: boolean; title?: string | null; description?: string | null; coverUrl?: string | null }): Promise<void>;
   /** 已发布节目清单（编辑端）：按期号倒序，供 tags/精选 管理 */
   listPublished(): Promise<Array<{
     id: string;
@@ -338,11 +357,13 @@ export interface EpisodesRepo {
   /** 按投稿容器列节目（编辑端详情用，无归属校验） */
   listByPolish(polishId: string): Promise<Array<{
     id: string;
+    transcriptId: string;
     title: string | null;
     status: string;
     number: number | null;
     isPicked: boolean;
     createdAt: Date;
+    publishedAt: Date | null;
   }>>;
   /** 角色读取（认证中间件注入用）；无 profile 行 → null（按 user 处理）。可选——旧测试 fake 不实现时按 user */
   getRole?(userId: string): Promise<"user" | "editor" | "admin" | null>;
@@ -373,6 +394,10 @@ export interface NotificationsRepo {
   markAllRead(userId: string): Promise<void>;
   /** 用户邮箱（通知邮件收件人） */
   getEmailByUserId(userId: string): Promise<string | null>;
+  /** 某时间点之后是否存在指定类型通知（拒审/收录后是否已通知投稿人——编辑端推断用） */
+  existsAfter(userId: string, type: string, after: Date): Promise<boolean>;
+  /** 是否已存在指向该链接的通知（发布通知 link=/episode/{id}——已通知推断） */
+  existsByLink(link: string): Promise<boolean>;
 }
 
 export interface GuestsRepo {
@@ -466,6 +491,26 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .limit(1);
         return rows[0]?.email ?? null;
       },
+      async existsAfter(userId, type, after) {
+        const rows = await db
+          .select({ n: sql<number>`count(*)` })
+          .from(schema.notifications)
+          .where(and(
+            eq(schema.notifications.userId, userId),
+            eq(schema.notifications.type, type as never),
+            gte(schema.notifications.createdAt, after),
+          ))
+          .limit(1);
+        return Number(rows[0]?.n ?? 0) > 0;
+      },
+      async existsByLink(link) {
+        const rows = await db
+          .select({ n: sql<number>`count(*)` })
+          .from(schema.notifications)
+          .where(eq(schema.notifications.link, link))
+          .limit(1);
+        return Number(rows[0]?.n ?? 0) > 0;
+      },
     },
 
     guests: {
@@ -557,6 +602,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             sourceTitle: schema.snapshots.sourceTitle,
             platform: schema.snapshots.platform,
             prefixSourceId: schema.snapshots.prefixSourceId,
+            url: schema.snapshots.url,
           })
           .from(schema.snapshots)
           .where(eq(schema.snapshots.id, id))
@@ -754,6 +800,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             title: schema.polishes.title,
             status: schema.polishes.status,
             rejectedReason: schema.polishes.rejectedReason,
+            reviewedBy: schema.polishes.reviewedBy,
+            reviewedAt: schema.polishes.reviewedAt,
             createdAt: schema.polishes.createdAt,
           })
           .from(schema.polishes)
@@ -766,9 +814,71 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .set({
             status,
             rejectedReason: opts.rejectedReason ?? null,
+            reviewedBy: opts.reviewedBy ?? null,
             reviewedAt: new Date(),
           })
           .where(eq(schema.polishes.id, id));
+      },
+      async listAccepted() {
+        return db
+          .select({
+            id: schema.polishes.id,
+            title: schema.polishes.title,
+            snapshotTitle: schema.snapshots.sourceTitle,
+            platform: schema.snapshots.platform,
+            createdAt: schema.polishes.createdAt,
+            reviewedAt: schema.polishes.reviewedAt,
+          })
+          .from(schema.polishes)
+          .innerJoin(schema.snapshots, eq(schema.polishes.snapshotId, schema.snapshots.id))
+          .where(eq(schema.polishes.status, "accepted"))
+          .orderBy(desc(schema.polishes.reviewedAt));
+      },
+      async overviewStats() {
+        const countBy = async (status: "submitted" | "accepted" | "rejected") => {
+          const rows = await db
+            .select({ n: sql<number>`count(*)` })
+            .from(schema.polishes)
+            .where(eq(schema.polishes.status, status));
+          return Number(rows[0]?.n ?? 0);
+        };
+        // 脚本：待生成 = 已收录投稿下未用脚本；已生成 = 已用脚本；失败 = 语音生成失败节目数
+        const scripts = async () => {
+          const pending = await db
+            .select({ n: sql<number>`count(*)` })
+            .from(schema.transcripts)
+            .innerJoin(schema.polishes, eq(schema.transcripts.polishId, schema.polishes.id))
+            .where(and(eq(schema.polishes.status, "accepted"), eq(schema.transcripts.status, "unused")));
+          const generated = await db
+            .select({ n: sql<number>`count(*)` })
+            .from(schema.transcripts)
+            .where(eq(schema.transcripts.status, "used"));
+          const failed = await db
+            .select({ n: sql<number>`count(*)` })
+            .from(schema.episodes)
+            .where(eq(schema.episodes.status, "failed"));
+          return {
+            pending: Number(pending[0]?.n ?? 0),
+            generated: Number(generated[0]?.n ?? 0),
+            failed: Number(failed[0]?.n ?? 0),
+          };
+        };
+        const episodes = async () => {
+          const published = await db
+            .select({ n: sql<number>`count(*)` })
+            .from(schema.episodes)
+            .where(eq(schema.episodes.status, "published"));
+          return { published: Number(published[0]?.n ?? 0), failed: 0 };
+        };
+        const [submitted, accepted, rejected] = await Promise.all([
+          countBy("submitted"), countBy("accepted"), countBy("rejected"),
+        ]);
+        const [scriptStats, episodeStats] = await Promise.all([scripts(), episodes()]);
+        return {
+          reviews: { submitted, accepted, rejected },
+          scripts: scriptStats,
+          episodes: episodeStats,
+        };
       },
       async getOwned(id, userId) {
         const rows = await db
@@ -932,6 +1042,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             title: schema.transcripts.title,
             creationNote: schema.transcripts.creationNote,
             language: schema.transcripts.language,
+            status: schema.transcripts.status,
             createdAt: schema.transcripts.createdAt,
           })
           .from(schema.transcripts)
@@ -1330,6 +1441,9 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .set({
             ...(row.tags !== undefined ? { tags: row.tags } : {}),
             ...(row.isPicked !== undefined ? { isPicked: row.isPicked } : {}),
+            ...(row.title !== undefined ? { title: row.title } : {}),
+            ...(row.description !== undefined ? { description: row.description } : {}),
+            ...(row.coverUrl !== undefined ? { coverUrl: row.coverUrl } : {}),
           })
           .where(eq(schema.episodes.id, id));
       },
@@ -1373,11 +1487,13 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return db
           .select({
             id: schema.episodes.id,
+            transcriptId: schema.episodes.transcriptId,
             title: schema.episodes.title,
             status: schema.episodes.status,
             number: schema.episodes.number,
             isPicked: schema.episodes.isPicked,
             createdAt: schema.episodes.createdAt,
+            publishedAt: schema.episodes.publishedAt,
           })
           .from(schema.episodes)
           .where(eq(schema.episodes.polishId, polishId))

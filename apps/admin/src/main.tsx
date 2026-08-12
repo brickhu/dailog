@@ -4,8 +4,12 @@ import { render } from "solid-js/web";
 import { AuthProvider, useAuth } from "./lib/auth";
 import { I18nProvider, useI18n } from "@dailogues/i18n";
 import LoginPage from "./pages/login";
-import QueuePage from "./pages/queue";
+import OverviewPage from "./pages/overview";
+import ReviewsPage from "./pages/reviews";
 import ReviewPage from "./pages/review";
+import GeneratesPage from "./pages/generates";
+import GeneratePage from "./pages/generate";
+import PublishPage from "./pages/publish";
 import EpisodesPage from "./pages/episodes";
 import SettingsPage from "./pages/settings";
 import ForbiddenPage from "./pages/forbidden";
@@ -16,14 +20,16 @@ import "./main.css";
 // 管理员工作台（admin.dailog.fm）——编辑/管理员专用，普通用户无权限
 // 守卫：未登录 → 登录视图；角色非 editor/admin → 无权限视图（URL 不变，登录/授权后自动解锁）
 // 布局对齐 studio app-layout：左 sidebar（220px，品牌 + 一级导航 + 底部账号） + 右侧内容区
-//   /            投稿队列（默认待审批 inbox）
-//   /reviews/:id 审核详情（对话预览 → 审核+润色 → 脚本 → 生成 → 发布确认）
-//   /episodes    已发布节目（tags / 精选管理）
-//   /settings    嘉宾管理
+//   流程：/（概览）→ /reviews（审核列表）→ /reviews/:id（审核详情）
+//         → /generates（生成任务列表）→ /generate/:id（生成任务详情）
+//         → /publish/:id（发布确认）→ /episodes（已发布节目）
+//   /settings 嘉宾管理
 
-// 一级导航（左侧纵向）；active 用 pathname 前缀匹配（/reviews/* 归属投稿队列）
+// 一级导航（左侧纵向）；active 用 pathname 前缀匹配
 const NAV = [
-  { path: "/", label: "admin.queue" },
+  { path: "/", label: "admin.overview" },
+  { path: "/reviews", label: "admin.reviews" },
+  { path: "/generates", label: "admin.generates" },
   { path: "/episodes", label: "admin.publishedEpisodes" },
   { path: "/settings", label: "admin.guests" },
 ] as const;
@@ -127,7 +133,7 @@ function AdminShell(props: RouteSectionProps) {
   const navigate = useNavigate();
   const isActive = (path: string) =>
     path === "/"
-      ? location.pathname === "/" || location.pathname.startsWith("/reviews")
+      ? location.pathname === "/"
       : location.pathname.startsWith(path);
   return (
     <Show when={!auth.loading()} fallback={<div {...stylex.props(styles.denied)}>{t("common.loading")}</div>}>
@@ -176,8 +182,12 @@ render(
         <AuthProvider>
           <Router>
             <Route path="/" component={AdminShell}>
-              <Route path="/" component={QueuePage} />
+              <Route path="/" component={OverviewPage} />
+              <Route path="/reviews" component={ReviewsPage} />
               <Route path="/reviews/:id" component={ReviewPage} />
+              <Route path="/generates" component={GeneratesPage} />
+              <Route path="/generate/:id" component={GeneratePage} />
+              <Route path="/publish/:id" component={PublishPage} />
               <Route path="/episodes" component={EpisodesPage} />
               <Route path="/settings" component={SettingsPage} />
             </Route>

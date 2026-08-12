@@ -1,11 +1,13 @@
-import { createAsync } from "@solidjs/router";
-import { For, Show, createSignal } from "solid-js";
+import { createResource, createSignal, For, Show } from "solid-js";
+import { useSearchParams } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { api } from "../lib/client";
 
-// 投稿队列（inbox）：待审批（默认，先到先审）/ 已收录 / 已拒绝
+// 审核列表（/reviews）：待审核（默认，先到先审）/ 审核通过 / 审核未通过
+// 数据源：GET /v1/editor/queue?status=...
+
 interface QueueItem {
   id: string;
   title: string | null;
@@ -44,45 +46,62 @@ const styles = stylex.create({
   },
   itemTitle: { fontWeight: dimensions.fontWeightMedium, marginBottom: dimensions.spacing1 },
   meta: { color: colors.neutral, fontSize: dimensions.fontSizeSm },
+  badge: {
+    display: "inline-block",
+    marginLeft: dimensions.spacing2,
+    padding: `${dimensions.spacing1} ${dimensions.spacing2}`,
+    borderRadius: dimensions.radiusSm,
+    backgroundColor: colors.surfaceStrong,
+    fontSize: dimensions.fontSizeSm,
+  },
   empty: { color: colors.neutral, textAlign: "center", padding: dimensions.spacing12 },
 });
 
-export default function QueuePage() {
+export default function ReviewsPage() {
   const { t } = useI18n();
-  const [tab, setTab] = createSignal<Tab>("submitted");
-  const items = createAsync<QueueItem[]>(async () => {
+  const [params, setParams] = useSearchParams();
+  const [tab, setTab] = createSignal<Tab>((params.status as Tab) ?? "submitted");
+  const [items] = createResource(tab, async (status: Tab) => {
     try {
-      const res = await api.get<{ items: QueueItem[] }>(`/v1/editor/queue?status=${tab()}`);
+      const res = await api.get<{ items: QueueItem[] }>(`/v1/editor/queue?status=${status}`);
       return res.items;
     } catch {
       return [];
     }
   });
 
+  const switchTab = (key: Tab) => {
+    setTab(key);
+    setParams({ status: key });
+  };
+
   return (
     <div {...stylex.props(styles.page)}>
-      <h1 {...stylex.props(styles.title)}>{t("admin.queue")}</h1>
+      <h1 {...stylex.props(styles.title)}>{t("admin.reviewListTitle")}</h1>
       <div {...stylex.props(styles.tabs)}>
         <For each={TABS}>
           {(key) => (
             <button
               type="button"
-              onClick={() => setTab(key)}
+              onClick={() => switchTab(key)}
               {...stylex.props(styles.tab, tab() === key && styles.tabActive)}
             >
-              {t(`status.${key}` as never)}
+              {t(`admin.status.${key}` as never)}
             </button>
           )}
         </For>
       </div>
       <Show
         when={items()?.length}
-        fallback={<div {...stylex.props(styles.empty)}>{t("admin.queueEmpty")}</div>}
+        fallback={<div {...stylex.props(styles.empty)}>{t("admin.reviewEmpty")}</div>}
       >
         <For each={items()}>
           {(item) => (
             <a href={`/reviews/${item.id}`} {...stylex.props(styles.card)}>
-              <div {...stylex.props(styles.itemTitle)}>{item.title || item.snapshotTitle || t("common.unnamed")}</div>
+              <div {...stylex.props(styles.itemTitle)}>
+                {item.title || item.snapshotTitle || t("common.unnamed")}
+                <span {...stylex.props(styles.badge)}>{t(`admin.status.${item.status}` as never)}</span>
+              </div>
               <div {...stylex.props(styles.meta)}>
                 {item.createdAt ? new Date(item.createdAt).toLocaleString("zh-CN") : ""}
                 {item.platform ? ` · ${item.platform}` : ""}

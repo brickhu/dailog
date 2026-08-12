@@ -13,6 +13,8 @@ function fakeRepo(overrides: {
     polishes?: Partial<Repos["polishes"]>;
     transcripts?: Partial<Repos["transcripts"]>;
     episodes?: Partial<Repos["episodes"]>;
+    notifications?: Partial<Repos["notifications"]>;
+    guests?: Partial<Repos["guests"]>;
   } = {}): Repos {
   return {
     snapshots: {
@@ -91,6 +93,9 @@ function fakeRepo(overrides: {
       unreadCount: async () => 0,
       markAllRead: async () => {},
       getEmailByUserId: async () => null,
+      existsAfter: async () => false,
+      existsByLink: async () => false,
+      ...overrides.notifications,
     },
     guests: {
       getByPlatform: async () => null,
@@ -99,6 +104,7 @@ function fakeRepo(overrides: {
       voiceSampleAny: async () => null,
       upsertVoiceSample: async () => {},
       listVoiceSamples: async () => [],
+      ...overrides.guests,
     },
     jobs: {
       getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
@@ -366,5 +372,405 @@ describe("已发布节目（list / edit）", () => {
     });
     expect(res.status).toBe(404);
     expect(await res.json()).toMatchObject({ error: "not_found" });
+  });
+});
+
+describe("审核详情扩展字段（reviews/:id）", () => {
+  it("返回投稿摘要聚合：邮箱/分享URL/字数/语言/人设/采样/拒审来源/已通知", async () => {
+    const deps = makeDeps({
+      repo: fakeRepo({
+        polishes: {
+          getById: async () => ({
+            id: "rev-1", userId: "user-1", snapshotId: "snap-1", title: "投稿标题", status: "rejected",
+            rejectedReason: "内容空泛", reviewedBy: "llm", reviewedAt: new Date(), createdAt: new Date(),
+          }),
+        },
+        snapshots: {
+          getById: async () => ({
+            parsedDialogue: [{ role: "user", content: "你好世界" }, { role: "assistant", content: "12345" }],
+            sourceTitle: "分享标题", platform: "claude", prefixSourceId: null, url: "https://claude.ai/share/x",
+          }),
+        },
+        notifications: {
+          getEmailByUserId: async () => "user@example.com",
+          existsAfter: async () => true,
+          existsByLink: async () => false,
+        },
+        transcripts: {
+          listByPolish: async () => [{ id: "tr-1", segments: [{ speaker: "host", text: "你好" }], updatedSegments: null, topic: null, title: null, creationNote: null, language: "zh", status: "unused", createdAt: new Date() }],
+        },
+        episodes: {
+          getVoiceSample: async () => ({ userId: "user-1", language: "zh", audioUrl: "voices/user-1/zh.webm", referenceId: null, transcript: null, duration: 5, status: "ready" }),
+          getProfile: async () => ({ email: "user@example.com", nickname: "主持人昵称", displayName: "主持人", emailVerified: true, image: null, hasGithub: false, username: "host", bio: null, channelActivatedAt: null, persona: { callName: "阿峰" } }),
+        },
+        guests: {
+          voiceSampleAny: async () => ({ id: "s1", guestId: "claude", language: "zh", audioKey: "guests/claude/zh.webm", referenceId: null, transcript: null }),
+        },
+      }),
+      guestsByPlatform: { claude: { id: "claude", name: "Claude", intro: "Claude 的 AI 助手" } },
+    });
+    const res = await makeApp(deps).request("/v1/editor/reviews/rev-1");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({
+      email: "user@example.com",
+      snapshotUrl: "https://claude.ai/share/x",
+      sourceTitle: "分享标题",
+      msgCount: 2,
+      wordCount: 9,
+      platform: "claude",
+      language: "zh",
+      reviewedBy: "llm",
+      notified: true,
+      host: { name: "主持人", hasSample: true },
+      guest: { id: "claude", name: "Claude", hasSample: true },
+    });
+    // 对话全文保留（折叠展示用）
+    expect(body.dialogue.messages).toHaveLength(2);
+  });
+});
+
+describe("拒审来源记录", () => {
+  it("人工拒审 → reviewedBy=editor", async () => {
+    let reviewedBy: string | null | undefined;
+    const deps = makeDeps({
+      repo: fakeRepo({
+        polishes: { setStatus: async (_id, _s, opts) => { reviewedBy = opts?.reviewedBy ?? null; } },
+      }),
+    });
+    const res = await makeApp(deps).request("/v1/editor/reviews/rev-1/reject", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reason: "违规内容" }),
+    });
+    expect(res.status).toBe(200);
+    expect(reviewedBy).toBe("editor");
+  });
+
+  it("LLM 质量不达标自动拒 → reviewedBy=llm", async () => {
+    let reviewedBy: string | null | undefined;
+    const deps = makeDeps({
+      llm: { complete: async () => JSON.stringify({ quality_failed: true, reason: "过短" }), stream: async () => "" } as unknown as LlmClient,
+      repo: fakeRepo({
+        polishes: { setStatus: async (_id, _s, opts) => { reviewedBy = opts?.reviewedBy ?? null; } },
+      }),
+    });
+    const res = await makeApp(deps).request("/v1/editor/reviews/rev-1/process", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(200);
+    expect(reviewedBy).toBe("llm");
+  });
+});
+
+describe("生成任务列表（generates）", () => {
+  it("列表返回脚本数 + 各节目语音状态（job 阶段并入）", async () => {
+    const deps = makeDeps({
+      repo: fakeRepo({
+        polishes: {
+          listAccepted: async () => [
+            { id: "rev-1", title: "投稿A", snapshotTitle: "对话A", platform: "claude", createdAt: new Date(), reviewedAt: new Date() },
+          ],
+        },
+        transcripts: {
+          listByPolish: async () => [
+            { id: "tr-1", segments: [], updatedSegments: null, topic: null, title: "脚本一", creationNote: null, language: "zh", status: "unused", createdAt: new Date() },
+            { id: "tr-2", segments: [], updatedSegments: null, topic: null, title: "脚本二", creationNote: null, language: "zh", status: "used", createdAt: new Date() },
+          ],
+        },
+        episodes: {
+          listByPolish: async () => [
+            { id: "ep-1", transcriptId: "tr-2", title: null, status: "generating", number: null, isPicked: false, createdAt: new Date(), publishedAt: null },
+          ],
+        },
+      }),
+      getLatestJob: async () => ({ id: "job-1", status: "tts", progress: 40, error: null }),
+    });
+    const res = await makeApp(deps).request("/v1/editor/generates");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0]).toMatchObject({
+      id: "rev-1",
+      scripts: 2,
+      episodes: [{ id: "ep-1", transcriptId: "tr-2", status: "generating", jobStatus: "tts" }],
+    });
+  });
+});
+
+describe("生成任务详情（generates/:id）", () => {
+  it("返回投稿摘要 + 脚本列表（关联节目 + job 状态）", async () => {
+    const deps = makeDeps({
+      repo: fakeRepo({
+        polishes: {
+          getById: async () => ({
+            id: "rev-1", userId: "user-1", snapshotId: "snap-1", title: "投稿A", status: "accepted",
+            rejectedReason: null, reviewedBy: null, reviewedAt: new Date(), createdAt: new Date(),
+          }),
+        },
+        transcripts: {
+          listByPolish: async () => [
+            { id: "tr-1", segments: [{ speaker: "host", text: "你好" }], updatedSegments: null, topic: "主题一", title: "脚本一", creationNote: "思路", language: "zh", status: "used", createdAt: new Date() },
+            { id: "tr-2", segments: [{ speaker: "guest", text: "再见" }], updatedSegments: null, topic: "主题二", title: "脚本二", creationNote: null, language: "zh", status: "unused", createdAt: new Date() },
+          ],
+        },
+        episodes: {
+          listByPolish: async () => [
+            { id: "ep-1", transcriptId: "tr-1", title: null, status: "failed", number: null, isPicked: false, createdAt: new Date(), publishedAt: null },
+          ],
+        },
+      }),
+      getLatestJob: async () => ({ id: "job-1", status: "failed", progress: 100, error: "tts 服务不可用" }),
+    });
+    const res = await makeApp(deps).request("/v1/editor/generates/rev-1");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ id: "rev-1", status: "accepted" });
+    expect(body.scripts).toHaveLength(2);
+    expect(body.scripts[0]).toMatchObject({
+      id: "tr-1",
+      status: "used",
+      episode: { id: "ep-1", status: "failed", jobStatus: "failed", jobError: "tts 服务不可用" },
+    });
+    expect(body.scripts[1].episode).toBeNull();
+  });
+
+  it("不存在的投稿 → 404", async () => {
+    const deps = makeDeps({ repo: fakeRepo({ polishes: { getById: async () => null } }) });
+    const res = await makeApp(deps).request("/v1/editor/generates/missing");
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("追加脚本（scripts）", () => {
+  it("缺少创作要求 → 400 prompt_required", async () => {
+    const deps = makeDeps({
+      repo: fakeRepo({
+        polishes: {
+          getById: async () => ({
+            id: "rev-1", userId: "user-1", snapshotId: "snap-1", title: "投稿A", status: "accepted",
+            rejectedReason: null, reviewedBy: null, reviewedAt: new Date(), createdAt: new Date(),
+          }),
+        },
+      }),
+    });
+    const res = await makeApp(deps).request("/v1/editor/reviews/rev-1/scripts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "prompt_required" });
+  });
+
+  it("非 accepted 投稿 → 409", async () => {
+    const res = await makeApp(makeDeps()).request("/v1/editor/reviews/rev-1/scripts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt: "换个轻松的角度" }),
+    });
+    // 默认 fake status=submitted
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: "invalid_status" });
+  });
+
+  it("成功 → 创建一条新脚本并返回", async () => {
+    let created = 0;
+    const deps = makeDeps({
+      llm: {
+        complete: async () => JSON.stringify({ language: "zh", scripts: [{ topic: "轻松角度", title: "轻松版", creationNote: "追加说明", segments: [{ speaker: "host", text: "换个聊法" }] }] }),
+        stream: async () => "",
+      } as unknown as LlmClient,
+      repo: fakeRepo({
+        polishes: {
+          getById: async () => ({
+            id: "rev-1", userId: "user-1", snapshotId: "snap-1", title: "投稿A", status: "accepted",
+            rejectedReason: null, reviewedBy: null, reviewedAt: new Date(), createdAt: new Date(),
+          }),
+        },
+        transcripts: {
+          create: async () => { created += 1; return { id: `tr-new-${created}` }; },
+        },
+      }),
+    });
+    const res = await makeApp(deps).request("/v1/editor/reviews/rev-1/scripts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt: "换个轻松的角度聊聊" }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.transcript).toMatchObject({
+      id: "tr-new-1",
+      title: "轻松版",
+      topic: "轻松角度",
+      creationNote: "追加说明",
+    });
+    expect(created).toBe(1);
+  });
+});
+
+describe("概览统计（overview）", () => {
+  it("返回审核/脚本/发布三组计数", async () => {
+    const deps = makeDeps({
+      repo: fakeRepo({
+        polishes: {
+          overviewStats: async () => ({
+            reviews: { submitted: 5, accepted: 3, rejected: 2 },
+            scripts: { pending: 6, generated: 10, failed: 1 },
+            episodes: { published: 4, failed: 0 },
+          }),
+        },
+      }),
+    });
+    const res = await makeApp(deps).request("/v1/editor/overview");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      reviews: { submitted: 5, accepted: 3, rejected: 2 },
+      scripts: { pending: 6, generated: 10, failed: 1 },
+      episodes: { published: 4, failed: 0 },
+    });
+  });
+});
+
+describe("发布页详情（publish-detail）", () => {
+  it("返回节目 + 音频 + 投稿/脚本摘要 + 已通知推断 + 节目 URL", async () => {
+    const deps = makeDeps({
+      siteBaseUrl: "https://site.dailog.fm",
+      repo: fakeRepo({
+        episodes: {
+          getById: async () => ({ id: "ep-1", polishId: "rev-1", transcriptId: "tr-1", title: "第 1 期", description: "简介", coverUrl: "covers/ep-1.jpg", tags: ["AI"], status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
+          getPublicAudioKey: async () => ({ audioKey: "audio/ep-1.mp3", version: "v1" }),
+          getProfile: async () => ({ email: "user@example.com", nickname: null, displayName: "主持人", emailVerified: true, image: null, hasGithub: false, username: "host", bio: null, channelActivatedAt: null, persona: { callName: "阿峰" } }),
+        },
+        transcripts: {
+          getById: async () => ({ id: "tr-1", polishId: "rev-1", segments: [{ speaker: "host", text: "你好" }], updatedSegments: null, topic: "主题", title: "脚本标题", language: "zh", guestId: "claude", status: "used" }),
+        },
+        notifications: {
+          getEmailByUserId: async () => "user@example.com",
+          existsByLink: async () => true,
+        },
+        guests: {
+          getByPlatform: async () => ({ id: "claude", name: "Claude" }),
+        },
+      }),
+    });
+    const res = await makeApp(deps).request("/v1/editor/episodes/ep-1/publish-detail");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({
+      episode: { id: "ep-1", status: "published", number: 1 },
+      audioUrl: "/v1/editor/episodes/ep-1/audio",
+      polish: { id: "rev-1", email: "user@example.com" },
+      transcript: { id: "tr-1", title: "脚本标题", topic: "主题" },
+      host: { name: "主持人", callName: "阿峰" },
+      guest: { id: "claude", name: "Claude" },
+      notified: true,
+      programUrl: "https://site.dailog.fm/episode/ep-1",
+    });
+  });
+
+  it("未发布 → programUrl null", async () => {
+    const deps = makeDeps({ repo: fakeRepo() });
+    // 默认 fake episode status=ready
+    const res = await makeApp(deps).request("/v1/editor/episodes/ep-1/publish-detail");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.programUrl).toBeNull();
+    expect(body.episode.status).toBe("ready");
+  });
+});
+
+describe("采样音频端点（samples）", () => {
+  const storage = { get: async () => new Uint8Array([0x1f, 0x8b, 0x08]), put: async () => {} };
+
+  it("主持人采样 → 音频流 audio/webm", async () => {
+    const deps = makeDeps({
+      storage,
+      repo: fakeRepo({
+        episodes: {
+          getVoiceSample: async () => ({ userId: "user-1", language: "zh", audioUrl: "voices/user-1/zh.webm", referenceId: null, transcript: null, duration: 5, status: "ready" }),
+        },
+      }),
+    });
+    const res = await makeApp(deps).request("/v1/editor/samples/host/user-1/audio");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("audio/webm");
+    expect((await res.arrayBuffer()).byteLength).toBe(3);
+  });
+
+  it("嘉宾采样 → 音频流 audio/webm", async () => {
+    const deps = makeDeps({
+      storage,
+      repo: fakeRepo({
+        guests: {
+          voiceSampleAny: async () => ({ id: "s1", guestId: "claude", language: "zh", audioKey: "guests/claude/zh.webm", referenceId: null, transcript: null }),
+        },
+      }),
+    });
+    const res = await makeApp(deps).request("/v1/editor/samples/guest/claude/audio");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("audio/webm");
+  });
+
+  it("无采样/无存储 → 404", async () => {
+    const res = await makeApp(makeDeps()).request("/v1/editor/samples/host/user-1/audio");
+    expect(res.status).toBe(404);
+  });
+
+  it("节目音频 → audio/mpeg", async () => {
+    const deps = makeDeps({
+      storage,
+      repo: fakeRepo({
+        episodes: {
+          getPublicAudioKey: async () => ({ audioKey: "audio/ep-1.mp3", version: "v1" }),
+        },
+      }),
+    });
+    const res = await makeApp(deps).request("/v1/editor/episodes/ep-1/audio");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("audio/mpeg");
+  });
+});
+
+describe("已发布节目元数据编辑（PUT 标题/封面/摘要）", () => {
+  it("PUT title/description/coverUrl → updatePublished 透传", async () => {
+    let updated: Record<string, unknown> | null = null;
+    const deps = makeDeps({
+      repo: fakeRepo({
+        episodes: {
+          getById: async () => ({ id: "ep-1", polishId: "rev-1", transcriptId: "tr-1", title: null, description: null, coverUrl: null, tags: null, status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
+          updatePublished: async (_id, row) => { updated = row as Record<string, unknown>; },
+        },
+      }),
+    });
+    const res = await makeApp(deps).request("/v1/editor/episodes/ep-1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "新标题", description: "新简介", coverUrl: "https://img.example.com/a.jpg" }),
+    });
+    expect(res.status).toBe(200);
+    expect(updated).toMatchObject({ title: "新标题", description: "新简介", coverUrl: "https://img.example.com/a.jpg" });
+  });
+
+  it("PUT 非 http 封面 → coverUrl null", async () => {
+    let updated: Record<string, unknown> | null = null;
+    const deps = makeDeps({
+      repo: fakeRepo({
+        episodes: {
+          getById: async () => ({ id: "ep-1", polishId: "rev-1", transcriptId: "tr-1", title: null, description: null, coverUrl: null, tags: null, status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
+          updatePublished: async (_id, row) => { updated = row as Record<string, unknown>; },
+        },
+      }),
+    });
+    const res = await makeApp(deps).request("/v1/editor/episodes/ep-1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ coverUrl: "not-a-url" }),
+    });
+    expect(res.status).toBe(200);
+    expect(updated).toMatchObject({ coverUrl: null });
   });
 });
