@@ -115,7 +115,8 @@ triggers:
 
 ```bash
 pnpm editor list                  # 待审队列（先到先审；⚠️无采样 = 无法克隆主持人音色）
-pnpm editor detail <submissionId> # URL/投稿人/采样 transcript/已上线节目（采样在服务端 R2，无需下载本地）
+pnpm editor detail <submissionId> # URL/投稿人/主持人称呼(callName)/采样 transcript/已上线节目
+                                  # （采样在服务端 R2，无需下载本地；callName 2026-08-13 已修）
 ```
 
 ### ③ 采集 + 内容解码（`pnpm editor fetch <id>`）
@@ -165,9 +166,14 @@ pnpm editor detail <submissionId> # URL/投稿人/采样 transcript/已上线节
 | 平台 | 规则状态 | 选择器要点 |
 |---|---|---|
 | chatgpt | ✅ 已入库 | `div[data-message-author-role]`（是 div 不是 article）+ `.markdown` 正文 |
-| doubao | ⚠️ 占位 | `data-message-author-role` 系（待实测校准） |
+| doubao | ✅ API 直取（2026-08-13 实测） | 静态 HTML 是 SSR 壳（`_ROUTER_DATA.shareInfo` 为空，对话不内嵌）。**分享接口**：`POST https://www.doubao.com/im/message/share/get`，body `{"share_id":"<thread id>"}`（UA 伪装 + Origin/Referer 分享页）→ `data.message_snapshot.message_list[]` 每条 `{user_type: 1=用户/2=AI, content: '{"text":"..."}'}`，按 `index_in_conv` 排序 → 转 `dialogue.json`（alice 变体 `/alice/message/share/get` 会报 710020202，用 im 变体） |
 | claude | 待沉淀 | 分享页内容在 JS 数据（CSS 提取不到）——浏览器兜底后按需沉淀 |
-| deepseek/gemini/kimi/tongyi/perplexity | 待沉淀 | 首次遇到时走浏览器兜底 + 规则沉淀流程 |
+| deepseek | ✅ API 直取（2026-08-13 实测） | 静态 HTML 是 SPA 壳无内容（CSS 规则不可用）。**分享接口**：`GET https://chat.deepseek.com/api/v0/share/content?share_id=<id>`（UA 伪装 + `Referer: https://chat.deepseek.com/share/<id>`）→ `data.biz_data.messages[]` 每条 `{role: "USER"\|"ASSISTANT", content}` → 转 `dialogue.json`（小写 role）落草稿即可继续管线 |
+| gemini/kimi/tongyi/perplexity | 待沉淀 | 首次遇到时走浏览器兜底 + 规则沉淀流程 |
+
+> **接口逆向法**（deepseek 已验证的通用路径）：SPA 分享页拉不到内容时，先拉页面 `main.*.js`
+> 从 bundle 里 grep `"/api/[^"]*"` 找分享数据接口（deepseek 是 `/api/v0/share/content`，
+> GET + `share_id` 查询参数即可），比浏览器兜底更快——命中即结构化 dialogue.json。
 
 ### ④ 脚本生成规范（dailog 编辑标准——原服务端润色 prompt 完整迁移）
 
@@ -257,15 +263,20 @@ description（2-3 句简介）、tags（3-5 个话题标签）、coverKeywords�
 ```
 生成 script.json 后：
   ① pnpm editor script-preview <id> [--script script.json]
-     → 展示标题/主题/统计（段数·字数·约时长）/逐段预览
-  ② 人工确认：
+     → 展示标题/主题/统计（段数·字数·约时长）
+  ② Agent 把完整脚本全文展示到对话（不要只给统计与截断预览）：
+     · 逐段渲染：编号 + 说话人（host/guest）+ 情绪标签 + 完整文本
+     · 让编辑通读全文——开场称呼/措辞/情绪/时长都在全文里把关
+  ③ 人工确认：
      · ✅ 确认 → 进入 tts
      · ✏️ 修改 → 给方向指示（更简短/换开场/改情绪/调整称呼/重新切主题）
-       → 重新生成 → 再 preview 确认（循环，确认后才放行）
+       → 重新生成 → 再走 ①-③ 展示确认（循环，确认后才放行）
 ```
 
 **红线**：脚本未经人工确认不得进入 tts 合成——脚本是节目内容核心
 （说什么/怎么说/称呼/时长），编辑把关后才能生成语音。
+**展示要求**：确认环节必须给编辑看**完整脚本全文**（非预览摘要）——编辑说
+「把脚本展示出来我看看」即此环节漏做，直接补全文展示。
 
 ### ⑤ TTS（`pnpm editor tts <id> --script script.json [--language zh|en] [--guest <platform>]`）
 
@@ -288,7 +299,7 @@ description（2-3 句简介）、tags（3-5 个话题标签）、coverKeywords�
 ### ⑥ 合成（`pnpm editor merge <id> [--language zh|en]`）
 
 - **intro/outro 统一自动匹配节目语言**：`tools/dailog-editor/assets/intro.{lang}.mp3` / `outro.{lang}.mp3`
-  （仓库已提供 zh/en 两套）——目标语言缺失自动 **fallback 英文**；都缺失则警告跳过
+  ——语言专属缺失自动 **fallback 通用资产** `intro.mp3` / `outro.mp3`；都缺失则警告跳过
 - 段间自动插 0.6s 静音；`--intro/--outro` 可显式指定本地文件临时替换
 - 产物 `final.mp3` + 时长/大小；`open final.mp3` 试听（**发布前必须试听**：音色/断句/情绪标签是否正常）
 
@@ -307,6 +318,7 @@ pnpm editor cover <id> [--texture squares|crosses|hexagons|woven|diagonal|zigzag
   - 渲染：渐变底色 + pattern 纹理 + 噪点 → resvg → 1400×1400 标准 JPEG
   - 固定复现：`--texture <名> --colors "<底色>,<纹理色>"`（日志会给出当前指令与组合）
 - **编辑不满意** → 贴图片 URL：`pnpm editor cover <id> --image-url <URL>`（下载 → ffmpeg 裁 1400×1400）
+- **生成后立即把封面图展示给编辑**（Read 图片直接呈现——确认环节也要再次展示）
 - 发布时不传封面 → 播放页自适应（无封面）
 
 ### ⑧ 发布 / 拒审（与编辑确认后执行）
@@ -317,6 +329,10 @@ pnpm editor publish <id> --title "…" \
 # 成功后：episode 直接 published（期号 max+1），投稿人收到「dailog 第 N 期」通知+邮件
 pnpm editor reject <id> --reason "拒审原因（必填，投稿人可见）"
 ```
+
+**确认呈现要求**（确认点 ② 节目信息预览）：
+- **封面图直接展示**（Read 图片呈现给编辑——不要只描述「已生成/什么颜色」）
+- 连同标题/简介/标签/嘉宾/时长一并列出，编辑确认后一次执行 publish
 
 ## 批量处理（批量过滤器 → 选号 → 制作流水线）
 
@@ -344,7 +360,7 @@ pnpm editor reject <id> --reason "拒审原因（必填，投稿人可见）"
    → 逐个自动：tts（逐段）→ merge（intro/outro 按语言）→ cover（脚本 coverKeywords）
    → 输出：final.mp3 路径 + 节目信息草稿（标题）
 ⑤ 确认点 ① 语音预览：open final.mp3 试听（音色/断句/情绪标签）→ 确认
-⑥ 确认点 ② 节目信息预览：确认标题/简介/标签/封面（Agent 呈现）→ 确认发布
+⑥ 确认点 ② 节目信息预览：确认标题/简介/标签/**封面（封面图直接 Read 展示给编辑）**→ 确认发布
 ⑦ pnpm editor publish <id> --title "..." [--cover ...] [--tags ...]
    → 发布成功：投稿状态 → published + 站内通知 + 邮件（「dailog 第 N 期」）
    → 草稿自动清理（发布为终态）
@@ -375,12 +391,28 @@ pnpm editor reject <id> --reason "拒审原因（必填，投稿人可见）"
 与 `*.jpg/*.jpeg/*.png`——整集/合成/逐段语音与封面不留本地；对话/脚本/页面等文本草稿保留，
 可查阅与重做；重做时重新 tts 即可）。
 
+## 工具链已知点（维护记忆，2026-08-13 整理）
+
+- **multipart 上传必须走 `serializeFormData`**（`src/lib.ts`）：undici dispatcher 路径
+  （本地 `.orb.local` 自签证书）下原生 `FormData` 作 body 会失效——服务端收到空表单，
+  publish/guest-voice 报 400 `audio_required`/`invalid_body`。`api()` 已接上自定义编码
+  （字节流 + 手写 boundary + 显式 content-type）。**改 api()/加上传端点时别再把 formData
+  直接当 body 传**——回归测试：multipart 请求后服务端能读到文件字段。
+- **detail 已含主持人称呼**：`getDetail` 返回 `callName`（profiles.persona.callName），
+  detail.ts 展示「主持人称呼」行；脚本生成时用它替换 {主持人称呼}，无则「主持人」。
+- **测试红线**：`publish` 端点无 dry-run——curl/脚本直打真实 submission 就是真实发布
+  （2026-08-13 事故：curl 探测把投稿发布成带测试元数据的期）。探测 multipart 用本地回环
+  服务器解析结构，或打已 published 的投稿（状态检查在 formData 解析前，不污染数据）。
+- **本地环境存储是 R2**：`services/api/.env.local` 为 `STORAGE_DRIVER=r2`——发布产物在
+  R2 不在宿主机 `services/api/data`；`episodes/{userId}/{submissionId}.mp3` key 确定性，
+  重发同投稿会覆盖旧音频。
+
 ## 红线
 
 1. **不伪造内容**：网页拉取失败/内容无法提取 → 如实汇报，不凭猜测生成脚本
 2. **脚本必须符合 dailog 标准**：固定开场结构（自我介绍 + Dailog 概念 + 双方称呼不可变）、
    5-10 分钟、四维价值聚焦；纯寒暄对话 → 建议拒审
-3. **脚本确认门**：生成脚本后必须 script-preview 人工确认（内容/时长/称呼/情绪），未确认不进 tts
+3. **脚本确认门**：生成脚本后必须**全文展示**给编辑确认（内容/时长/称呼/情绪），未确认不进 tts
 4. **发布前必须试听**（open final.mp3）：音色克隆异常/断句错误/情绪标签未生效 → 修好再发
 5. **发布/拒审是外发动作**：先与编辑确认（标题/封面/拒审原因），确认后一次执行
 6. **拒审原因必填且具体**：投稿人 /me/submits 可见，邮件也会发送——写清楚为什么
