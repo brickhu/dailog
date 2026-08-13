@@ -109,7 +109,7 @@ covers/{submissionId}.jpg                  ← 封面（可选；无封面播放
   编辑账号 / FISH_API_KEY / PEXELS_API_KEY / GUEST_REFERENCE_ID；模板 `.env.example`
 - **草稿**：`.dailog-editor/drafts/{submissionId}/`（gitignored）——脚本 JSON、采样（webm/wav/transcript）、
   分段音频、final.mp3、封面；发布成功后保留（可重新生成对比）
-- **命令**：`pnpm editor list|detail|download|tts|merge|cover|publish|reject`（源码 `tools/dailog-editor/src/`，esbuild bundle 产物 `.agents/skills/dailog-editor/editor.mjs`）
+- **命令**：`overview / batch / batch-reject / batch-scripts / produce / fetch / script-preview / tts / merge / cover / publish / reject / guests / guest-voice / guest-set / progress` 等（源码 `tools/dailog-editor/src/`，编译产物 `.agents/skills/dailog-editor/scripts/*.js`）
 - **认证**：编辑账号登录（better-auth sign-in/email）→ bearer token（内存缓存）
 - **工作流规范**（脚本生成标准/情绪标签/开场白结构）：`.agents/skills/dailog-editor/SKILL.md`
 

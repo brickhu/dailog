@@ -1,9 +1,9 @@
-// 逐段合成（统一 TTS 端点——编辑本地不直连 Fish Audio）：
-//   POST /v1/editor/tts（multipart）逐段调用：
-//     · speaker=host  → 服务端取投稿人采样（R2）+ 表内 transcript，无需编辑上传
-//     · speaker=guest → 上传声线资源文件（工程 assets 的平台声线/统一声线，mp3）+ 配套 transcript
-//   服务端 ffmpeg 转 wav + Fish 合成 → mp3 返回
-// 每段一个请求（稳妥，失败可重试单段）；产物 drafts/{submissionId}/seg-{i}.mp3 + segments.json
+// 整集语音合成（multi speaker——官方多说话人接口，一次调用合成完整脚本）：
+//   pnpm editor tts <submissionId> --script <script.json> [--language zh] [--guest <platform>]
+//   → POST /v1/editor/tts（JSON：submissionId + language + guestId + 完整 segments）
+//   → 服务端：host 采样（R2）+ guest 声线（guest_voice_samples）→ multi speaker 一次合成
+//   → 产物 drafts/{submissionId}/full.mp3（整集，含 host/guest 交替）
+//   → 合成：pnpm editor merge（intro + full + outro）
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { EditorConfig } from "./lib.js";
@@ -34,48 +34,33 @@ function parseArgs(args: string[]): { submissionId: string; scriptPath: string; 
   return { submissionId, scriptPath: args[scriptIdx + 1], language: language.toLowerCase(), platform };
 }
 
-/** 调统一 TTS 端点合成单段 → mp3 字节（guest 声线由服务端配置取用——guestId 指定） */
-async function synthesizeSegment(config: EditorConfig, submissionId: string, seg: ScriptSegment, language: string, platform: string | null): Promise<Uint8Array> {
-  const form = new FormData();
-  form.append("submissionId", submissionId);
-  form.append("text", seg.text);
-  form.append("speaker", seg.speaker);
-  form.append("language", language);
-  if (seg.speaker === "guest") {
-    if (!platform) throw new Error("guest 段需要 --guest <platform>（嘉宾声线在服务端配置）");
-    form.append("guestId", platform);
-  }
-  const res = await api(config, "/v1/editor/tts", { method: "POST", formData: form, expectJson: false });
-  return new Uint8Array(await (res as Response).arrayBuffer());
-}
-
 export async function tts(config: EditorConfig, args: string[]): Promise<void> {
   const { submissionId, scriptPath, language, platform } = parseArgs(args);
   const dir = draftDir(submissionId);
   const segments = readScript(scriptPath);
-
-  console.log(`[tts] 开始合成 ${segments.length} 段（统一端点 /v1/editor/tts；host 采样与 guest 声线均由服务端取用）`);
-  const index: Array<{ i: number; speaker: string; file: string; chars: number }> = [];
-  for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i];
-    if (seg.speaker === "guest" && !platform) {
-      console.warn(`[tts] 跳过 ${i} 号 guest 段（guest 段需要 --guest <platform>）`);
-      continue;
-    }
-    process.stdout.write(`[tts] 段 ${i + 1}/${segments.length}（${seg.speaker}，${seg.text.length} 字）… `);
-    try {
-      const audio = await synthesizeSegment(config, submissionId, seg, language, platform);
-      const file = `seg-${String(i).padStart(2, "0")}.mp3`;
-      writeFileSync(join(dir, file), audio);
-      index.push({ i, speaker: seg.speaker, file, chars: seg.text.length });
-      console.log(`${(audio.length / 1024).toFixed(0)}KB ✅`);
-    } catch (e) {
-      console.error(`失败：${(e as Error).message}`);
-      console.error(`  重试：pnpm editor tts ${submissionId} --script ${scriptPath} --language ${language}${platform ? ` --guest ${platform}` : ""}`);
-      process.exit(1);
-    }
+  const hasGuest = segments.some((s) => s.speaker === "guest");
+  if (hasGuest && !platform) {
+    console.error("[tts] 脚本含 guest 段，需要 --guest <platform>（嘉宾声线服务端配置）");
+    process.exit(1);
   }
-  writeFileSync(join(dir, "segments.json"), JSON.stringify(index, null, 2));
+
+  // 一次请求：完整脚本 → 服务端 multi speaker 合成（host 采样 + guest 声线服务端取用）
+  const body: Record<string, unknown> = {
+    submissionId,
+    language,
+    segments,
+  };
+  if (platform) body.guestId = platform;
+
+  const chars = segments.reduce((n, s) => n + s.text.length, 0);
+  console.log(`[tts] 整集合成（multi speaker）：${segments.length} 段 / ${chars} 字 / ${language}${platform ? ` / 嘉宾 ${platform}` : ""}`);
+  console.log(`[tts] host 采样与${platform ? " guest 声线" : ""}由服务端取用，一次调用…`);
+
+  const res = await api(config, "/v1/editor/tts", { method: "POST", body, expectJson: false });
+  const audio = new Uint8Array(await (res as Response).arrayBuffer());
+  const fullPath = join(dir, "full.mp3");
+  writeFileSync(fullPath, audio);
   writeProgress(submissionId, "tts");
-  console.log(`[tts] 完成 ${index.length} 段 → ${dir}（合成：pnpm editor merge ${submissionId} --language ${language}）`);
+  console.log(`[tts] ✅ 整集合成完成 → ${fullPath}（${(audio.length / 1024 / 1024).toFixed(2)}MB）`);
+  console.log(`[tts] 下一步：pnpm editor merge ${submissionId} --language ${language}（intro + 整集 + outro）`);
 }

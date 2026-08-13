@@ -6,7 +6,7 @@
 //     .dailog-editor/session.json（gitignored，chmod 600）；跨环境 token 不通用（防误操作）
 //   · 草稿：.dailog-editor/drafts/{submissionId}/ 存脚本/分段音频/合成中间件/封面（gitignored）
 import { Agent, fetch as undiciFetch, type Dispatcher } from "undici";
-import { readFileSync, existsSync, mkdirSync, writeFileSync, chmodSync, unlinkSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync, chmodSync, unlinkSync, rmSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -24,7 +24,8 @@ function findRoot(startDir: string): string {
 
 const root = findRoot(dirname(fileURLToPath(import.meta.url)));
 const configDir = join(root, ".dailog-editor");
-const draftsDir = join(configDir, "drafts");
+/** 草稿根目录（overview 遍历全部投稿草稿用） */
+export const draftsDir = join(configDir, "drafts");
 const sessionFile = join(configDir, "session.json");
 const envsFile = join(configDir, "envs.json");
 
@@ -37,9 +38,9 @@ export function rulesPath(): string {
 export interface EditorConfig {
   /** 环境 API 基址（本次命令生效；来自 --env/--api-base/DAILOG_ENV → envs.json → .env 回退） */
   apiBase: string;
-  /** 浏览器访问基址（授权链接拼装；缺省用 apiBase——local 因 Node 不信任自签证书用 http，
-   *  浏览器授权页用 https 域名，故单列 webBase） */
-  webBase: string | null;
+  /** 站点基址（节目 URL 拼装；来自 envs.json 的 siteUrl） */
+  siteUrl: string | null;
+
   /** 环境名（--env/DAILOG_ENV 指定；null = 默认/未命名） */
   envName: string | null;
   pexelsApiKey?: string;
@@ -49,8 +50,8 @@ export interface EnvironmentEntry {
   name: string;
   label?: string;
   apiBase: string;
-  /** 浏览器访问基址（可选；授权链接用，缺省 apiBase） */
-  webBase?: string;
+  /** 站点基址（节目 URL 拼装；可选） */
+  siteUrl?: string;
 }
 
 /** 环境清单（.dailog-editor/envs.json；缺失 → 空——用 .env 的 API_BASE 回退） */
@@ -108,7 +109,7 @@ export function loadConfig(argv: string[] = process.argv): EditorConfig {
 
   let apiBase = flagApiBase;
   let resolvedEnvName = envName;
-  let webBase: string | null = null;
+  let siteUrl: string | null = null;
   if (!apiBase) {
     const envs = listEnvironments();
     if (envs.length > 0) {
@@ -127,7 +128,7 @@ export function loadConfig(argv: string[] = process.argv): EditorConfig {
       const target = pick ?? envs[0];
       apiBase = target.apiBase;
       resolvedEnvName = target.name;
-      webBase = target.webBase ?? null;
+      siteUrl = target.siteUrl ?? null;
     } else if (secrets.API_BASE) {
       apiBase = secrets.API_BASE.replace(/\/$/, "");
     }
@@ -140,8 +141,7 @@ export function loadConfig(argv: string[] = process.argv): EditorConfig {
   return {
     apiBase,
     envName: resolvedEnvName,
-    webBase,
-    pexelsApiKey: secrets.PEXELS_API_KEY || undefined,
+    siteUrl,
   };
 }
 
@@ -247,12 +247,6 @@ export async function apiFetch(input: string | URL | Request, init?: RequestInit
     return fetch(input, init);
   }
   let effectiveInit = init;
-  if (init?.body instanceof FormData) {
-    const { body, contentType } = await serializeFormData(init.body);
-    const headers = new Headers(init.headers);
-    headers.set("content-type", contentType);
-    effectiveInit = { ...init, body, headers };
-  }
   if (url.includes(".orb.local")) {
     if (!orbAgent) orbAgent = new Agent({ connect: { rejectUnauthorized: false } });
     return undiciFetch(input as never, { ...effectiveInit, dispatcher: orbAgent } as never) as unknown as Promise<Response>;
@@ -314,6 +308,31 @@ export function writeProgress(submissionId: string, step: string): void {
   try {
     writeFileSync(progressPath(submissionId), JSON.stringify({ step, updatedAt: new Date().toISOString() }, null, 2));
   } catch { /* 进度标记失败不阻塞流程 */ }
+}
+
+/** 发布成功后清理语音/封面等大文件产物（保留对话/脚本/页面等文本草稿）：
+ *  删除 *.mp3/*.wav/*.webm（整集 full.mp3、合成 final.mp3、逐段 seg-*、静音段）+
+ *  *.jpg/*.jpeg/*.png（封面）——本地不留语音与图片；文本资料保留供查阅/重做。
+ *  清理后验证：仍有音频/图片残留时输出警告。 */
+const ARTIFACT_RE = /\.(mp3|wav|webm|jpg|jpeg|png)$/i;
+export function clearArtifacts(submissionId: string): void {
+  const dir = draftDir(submissionId);
+  if (!existsSync(dir)) return;
+  let removed = 0;
+  for (const f of readdirSync(dir)) {
+    if (ARTIFACT_RE.test(f)) {
+      try {
+        rmSync(join(dir, f), { force: true });
+        removed++;
+      } catch { /* 单文件失败继续 */ }
+    }
+  }
+  const remain = readdirSync(dir).filter((f) => ARTIFACT_RE.test(f));
+  if (remain.length > 0) {
+    console.warn(`[clearArtifacts] ⚠️ 仍有语音/封面残留（${remain.length}）：${remain.join(", ")}——请手动清理`);
+  } else {
+    console.log(`[clearArtifacts] 已清理 ${removed} 个语音/封面文件（文本草稿保留）`);
+  }
 }
 
 /** 读取进度（无记录 → null） */

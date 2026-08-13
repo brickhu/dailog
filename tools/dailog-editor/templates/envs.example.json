@@ -4,17 +4,20 @@
     {
       "name": "local",
       "label": "本地开发（OrbStack，站点 dailog.orb.local）",
-      "apiBase": "https://api.dailog.orb.local"
+      "apiBase": "https://api.dailog.orb.local",
+      "siteUrl": "https://dailog.orb.local"
     },
     {
       "name": "dev",
       "label": "远程开发（站点 candelbot.app）",
-      "apiBase": "https://api.candelbot.app"
+      "apiBase": "https://api.candelbot.app",
+      "siteUrl": "https://candelbot.app"
     },
     {
       "name": "prod",
       "label": "生产（站点 dailog.fm）",
-      "apiBase": "https://api.dailog.fm"
+      "apiBase": "https://api.dailog.fm",
+      "siteUrl": "https://dailog.fm"
     }
   ]
 }

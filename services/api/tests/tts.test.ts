@@ -9,7 +9,8 @@ import { ttsRoutes, type TtsDeps } from "../src/routes/tts";
 import type { AuthEnv } from "../src/middleware/auth";
 import type { Repos } from "../src/repo";
 
-// 统一 TTS 端点测试：编辑本地不直连 Fish——端点做「采样/声线 → 转码 → Fish 合成 → mp3」。
+// 统一 TTS 端点测试（multi speaker）：JSON 完整脚本 → 服务端组装
+// <|speaker:N|> 标签 + references 2D（官方多说话人接口）→ 整集 mp3。
 // fish 客户端 mock；ffmpeg 用真实二进制（@ffmpeg-installer）转码测试音频。
 
 function fakeRepo(overrides: Partial<Repos> = {}): Repos {
@@ -89,7 +90,7 @@ function makeApp(deps: Partial<TtsDeps> = {}, role: "user" | "editor" | "admin" 
     ffmpegPath: ffmpegInstaller.path,
     fish: {
       synthesizeSingle: async () => new Uint8Array([1, 2, 3]),
-      synthesizeMultiSpeaker: async () => new Uint8Array(),
+      synthesizeMultiSpeaker: async () => new Uint8Array([9, 9, 9]),
     },
     ...deps,
   }));
@@ -110,141 +111,130 @@ const SUBMITTED_DETAIL = {
   voiceSample: { audioUrl: "voices/user-1/zh.webm", transcript: "大家好", language: "zh", status: "ready" },
 };
 
+const SEGMENTS = [
+  { speaker: "host", text: "大家好，欢迎收听 dailog。" },
+  { speaker: "guest", text: "很高兴回到这里。" },
+  { speaker: "host", text: "今天聊聊 AI 编程。" },
+];
+
+function baseDeps(): Partial<TtsDeps> {
+  const wav = makeTestWav();
+  return {
+    repo: fakeRepo({
+      submissions: { ...fakeRepo().submissions, getDetail: async () => SUBMITTED_DETAIL },
+      episodes: {
+        ...fakeRepo().episodes,
+        getVoiceSampleByLanguage: async () => ({ userId: "user-1", language: "zh", audioUrl: "voices/user-1/zh.webm", transcript: "大家好", duration: 5, status: "ready" }),
+      },
+      guests: {
+        ...fakeRepo().guests,
+        voiceSampleByLanguage: async () => ({ id: "gvs-1", guestId: "claude", language: "zh", audioKey: "guests/claude/zh.mp3", referenceId: null, transcript: "声线文案" }),
+      },
+    }),
+    storage: { get: async () => wav },
+    fish: {
+      synthesizeSingle: async () => new Uint8Array([1]),
+      synthesizeMultiSpeaker: async () => new Uint8Array([9, 9, 9]),
+    },
+  };
+}
+
+function postJson(app: ReturnType<typeof makeApp>, body: unknown) {
+  return app.request("/v1/editor/tts", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 describe("角色守卫", () => {
   it("普通用户 → 403", async () => {
-    const res = await makeApp({}, "user").request("/v1/editor/tts", { method: "POST", body: new FormData() });
+    const res = await makeApp({}, "user").request("/v1/editor/tts", { method: "POST", body: "{}" });
     expect(res.status).toBe(403);
   });
 });
 
-describe("POST /v1/editor/tts（统一 TTS 端点）", () => {
+describe("POST /v1/editor/tts（multi speaker 整集合成）", () => {
   it("服务端未配置 FISH_API_KEY → 503", async () => {
-    const res = await makeApp({ fish: null }).request("/v1/editor/tts", { method: "POST", body: new FormData() });
+    const res = await makeApp({ fish: null }).request("/v1/editor/tts", { method: "POST", body: "{}" });
     expect(res.status).toBe(503);
     expect((await res.json()) as { error: string }).toMatchObject({ error: "tts_not_configured" });
   });
 
-  it("text 缺失 → 400", async () => {
-    const form = new FormData();
-    form.append("submissionId", "sub-1");
-    const res = await makeApp().request("/v1/editor/tts", { method: "POST", body: form });
+  it("segments 缺失 → 400", async () => {
+    const res = await postJson(makeApp(baseDeps()), { submissionId: "sub-1", segments: [] });
     expect(res.status).toBe(400);
-    expect((await res.json()) as { error: string }).toMatchObject({ error: "text_required" });
+    expect((await res.json()) as { error: string }).toMatchObject({ error: "segments_required" });
   });
 
-  it("host：投稿人无采样 → 422", async () => {
-    const app = makeApp({ repo: fakeRepo({ submissions: { ...fakeRepo().submissions, getDetail: async () => SUBMITTED_DETAIL } }) });
-    const form = new FormData();
-    form.append("submissionId", "sub-1");
-    form.append("text", "大家好");
-    form.append("speaker", "host");
-    const res = await app.request("/v1/editor/tts", { method: "POST", body: form });
-    expect(res.status).toBe(422);
-    expect((await res.json()) as { error: string }).toMatchObject({ error: "no_voice_sample" });
-  });
-
-  it("host：服务端取采样（storage + transcript）→ 合成 → mp3", async () => {
-    const wav = makeTestWav();
-    const synthesizeSingle = vi.fn(async () => new Uint8Array([9, 9, 9]));
-    const app = makeApp({
-      repo: fakeRepo({
-        submissions: { ...fakeRepo().submissions, getDetail: async () => SUBMITTED_DETAIL },
-        episodes: {
-          ...fakeRepo().episodes,
-          getVoiceSampleByLanguage: async () => ({ userId: "user-1", language: "zh", audioUrl: "voices/user-1/zh.webm", transcript: "大家好", duration: 5, status: "ready" }),
-        },
-      }),
-      storage: { get: async () => wav },
-      fish: { synthesizeSingle, synthesizeMultiSpeaker: async () => new Uint8Array() },
-    });
-    const form = new FormData();
-    form.append("submissionId", "sub-1");
-    form.append("text", "欢迎大家收听");
-    form.append("speaker", "host");
-    form.append("language", "zh");
-    const res = await app.request("/v1/editor/tts", { method: "POST", body: form });
-    expect(res.status).toBe(200);
-    expect(res.headers.get("Content-Type")).toContain("audio/mpeg");
-    expect(await res.arrayBuffer()).toEqual(new Uint8Array([9, 9, 9]).buffer);
-    // Fish 收到的是转码后的 wav + 采样 transcript
-    expect(synthesizeSingle).toHaveBeenCalledWith(expect.objectContaining({ text: "欢迎大家收听", referenceAudioTranscript: "大家好" }));
-  });
-
-  it("guest：服务端取声线（guest_voice_samples + R2）→ 合成", async () => {
-    const wav = makeTestWav();
-    const synthesizeSingle = vi.fn(async () => new Uint8Array([1]));
-    const app = makeApp({
-      repo: fakeRepo({
-        submissions: { ...fakeRepo().submissions, getDetail: async () => SUBMITTED_DETAIL },
-        guests: {
-          ...fakeRepo().guests,
-          voiceSampleByLanguage: async () => ({ id: "gvs-1", guestId: "claude", language: "zh", audioKey: "guests/claude/zh.mp3", referenceId: null, transcript: "声线朗读文案" }),
-        },
-      }),
-      storage: { get: async () => wav },
-      fish: { synthesizeSingle, synthesizeMultiSpeaker: async () => new Uint8Array() },
-    });
-    const form = new FormData();
-    form.append("submissionId", "sub-1");
-    form.append("text", "我是嘉宾");
-    form.append("speaker", "guest");
-    form.append("guestId", "claude");
-    form.append("language", "zh");
-    const res = await app.request("/v1/editor/tts", { method: "POST", body: form });
-    expect(res.status).toBe(200);
-    expect(synthesizeSingle).toHaveBeenCalledWith(expect.objectContaining({ text: "我是嘉宾", referenceAudioTranscript: "声线朗读文案" }));
-  });
-
-  it("guest：缺 guestId → 400", async () => {
-    const app = makeApp({ repo: fakeRepo({ submissions: { ...fakeRepo().submissions, getDetail: async () => SUBMITTED_DETAIL } }) });
-    const form = new FormData();
-    form.append("submissionId", "sub-1");
-    form.append("text", "我是嘉宾");
-    form.append("speaker", "guest");
-    const res = await app.request("/v1/editor/tts", { method: "POST", body: form });
+  it("含 guest 段但缺 guestId → 400", async () => {
+    const res = await postJson(makeApp(baseDeps()), { submissionId: "sub-1", segments: SEGMENTS });
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: string }).toMatchObject({ error: "guest_required" });
   });
 
-  it("guest：服务端未配置声线 → 422", async () => {
+  it("host+guest：multi speaker 一次合成（<|speaker:N|> 标签 + references 2D）→ 整集 mp3", async () => {
+    const synthesizeMultiSpeaker = vi.fn(async () => new Uint8Array([9, 9, 9]));
+    const synthesizeSingle = vi.fn(async () => new Uint8Array([1]));
+    const app = makeApp({ ...baseDeps(), fish: { synthesizeSingle, synthesizeMultiSpeaker } });
+    const res = await postJson(app, { submissionId: "sub-1", language: "zh", guestId: "claude", segments: SEGMENTS });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toContain("audio/mpeg");
+    expect(await res.arrayBuffer()).toEqual(new Uint8Array([9, 9, 9]).buffer);
+    // multi speaker 组装断言：speaker 序号 + references 2D + 转录
+    expect(synthesizeMultiSpeaker).toHaveBeenCalledWith(expect.objectContaining({
+      segments: [
+        { speaker: 0, text: "大家好，欢迎收听 dailog。" },
+        { speaker: 1, text: "很高兴回到这里。" },
+        { speaker: 0, text: "今天聊聊 AI 编程。" },
+      ],
+      referenceAudios: [expect.any(Uint8Array), expect.any(Uint8Array)],
+      transcripts: ["大家好", "声线文案"],
+    }));
+    expect(synthesizeSingle).not.toHaveBeenCalled();
+  });
+
+  it("纯 host：single 整集（无 guest 标签）", async () => {
+    const synthesizeSingle = vi.fn(async () => new Uint8Array([1]));
+    const synthesizeMultiSpeaker = vi.fn(async () => new Uint8Array([9]));
+    const app = makeApp({ ...baseDeps(), fish: { synthesizeSingle, synthesizeMultiSpeaker } });
+    const res = await postJson(app, { submissionId: "sub-1", language: "zh", segments: [{ speaker: "host", text: "大家好" }] });
+    expect(res.status).toBe(200);
+    expect(synthesizeSingle).toHaveBeenCalledWith(expect.objectContaining({ text: "大家好", referenceAudioTranscript: "大家好" }));
+    expect(synthesizeMultiSpeaker).not.toHaveBeenCalled();
+  });
+
+  it("guest 声线服务端未配置 → 422", async () => {
     const app = makeApp({
-      repo: fakeRepo({ submissions: { ...fakeRepo().submissions, getDetail: async () => SUBMITTED_DETAIL } }),
+      repo: fakeRepo({
+        submissions: { ...fakeRepo().submissions, getDetail: async () => SUBMITTED_DETAIL },
+        episodes: { ...fakeRepo().episodes, getVoiceSampleByLanguage: async () => ({ userId: "user-1", language: "zh", audioUrl: "v", transcript: "t", duration: 5, status: "ready" }) },
+      }),
+      storage: { get: async () => makeTestWav() },
     });
-    const form = new FormData();
-    form.append("submissionId", "sub-1");
-    form.append("text", "我是嘉宾");
-    form.append("speaker", "guest");
-    form.append("guestId", "claude");
-    const res = await app.request("/v1/editor/tts", { method: "POST", body: form });
+    const res = await postJson(app, { submissionId: "sub-1", guestId: "claude", segments: SEGMENTS });
     expect(res.status).toBe(422);
     expect((await res.json()) as { error: string }).toMatchObject({ error: "no_guest_voice" });
   });
 
+  it("host 无采样 → 422", async () => {
+    const app = makeApp({
+      repo: fakeRepo({ submissions: { ...fakeRepo().submissions, getDetail: async () => SUBMITTED_DETAIL } }),
+    });
+    const res = await postJson(app, { submissionId: "sub-1", segments: [{ speaker: "host", text: "大家好" }] });
+    expect(res.status).toBe(422);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: "no_voice_sample" });
+  });
+
   it("投稿不存在 → 404", async () => {
-    const form = new FormData();
-    form.append("submissionId", "missing");
-    form.append("text", "测试");
-    const res = await makeApp().request("/v1/editor/tts", { method: "POST", body: form });
+    // 默认 fake 的 getDetail 返回 null（未覆盖）→ 404
+    const res = await postJson(makeApp(), { submissionId: "missing", segments: [{ speaker: "host", text: "x" }] });
     expect(res.status).toBe(404);
   });
 
-  it("非法参考音频 → 422（ffmpeg 转码失败）", async () => {
-    const app = makeApp({
-      repo: fakeRepo({
-        submissions: { ...fakeRepo().submissions, getDetail: async () => SUBMITTED_DETAIL },
-        episodes: {
-          ...fakeRepo().episodes,
-          getVoiceSampleByLanguage: async () => ({ userId: "user-1", language: "zh", audioUrl: "voices/user-1/zh.webm", transcript: "大家好", duration: 5, status: "ready" }),
-        },
-      }),
-      storage: { get: async () => new Uint8Array([0, 1, 2, 3]) }, // 非法音频字节
-    });
-    const form = new FormData();
-    form.append("submissionId", "sub-1");
-    form.append("text", "测试");
-    form.append("speaker", "host");
-    const res = await app.request("/v1/editor/tts", { method: "POST", body: form });
-    expect(res.status).toBe(422);
-    expect((await res.json()) as { error: string }).toMatchObject({ error: "audio_decode_failed" });
+  it("非法 speaker → 400", async () => {
+    const res = await postJson(makeApp(baseDeps()), { submissionId: "sub-1", segments: [{ speaker: "ai", text: "x" }] });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: "invalid_segment" });
   });
 });

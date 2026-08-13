@@ -7,6 +7,12 @@
 //   pnpm editor login [--force] [--logout]     配对码登录（浏览器授权 → 粘贴配对码）
 //   pnpm editor auth-status                    当前环境授权状态（有效/无效/未登录）
 //   pnpm editor list                           待审队列
+//   pnpm editor overview                       工作台概要（环境/编辑/三类待办计数）
+//   pnpm editor batch [--limit N]              批量提取 + 分组展示（已处理跳过）
+//   pnpm editor batch-reject --ids <id1,id2> --reason "..."   批量拒审（通知+状态）
+//   pnpm editor batch-scripts [--limit N]    脚本批次汇总（生成/质量不过关/待生成）
+//   pnpm editor produce --ids <id1,id2> [--language zh] [--guest claude]
+//                                               制作流水线（tts→merge→cover，两个确认点）
 //   pnpm editor detail <submissionId>          投稿详情（URL/投稿人/采样 transcript）
 //   pnpm editor fetch <submissionId>           采集 + 内容解码（拉取 URL → page.html/page.txt/dialogue.json）
 //   pnpm editor rule-test <submissionId> --user-selector "..." --assistant-selector "..." [--save]
@@ -19,6 +25,7 @@
 //   pnpm editor guest-set <guestId> --name "..." [--intro "..."]
 //                                               更新嘉宾称呼/简介（服务端 guests 表）
 //   pnpm editor progress <submissionId>          进度查看（中断恢复断点）
+//   pnpm editor script-preview <submissionId>    脚本预览（人工确认门：确认后进 tts）
 //   pnpm editor tts <submissionId> --script <script.json> [--language zh|en]
 //                                              逐段合成语音（host 采样克隆 / guest 品牌声线资源文件）
 //   pnpm editor merge <submissionId> [--language zh|en] [--intro f.mp3] [--outro f.mp3]
@@ -72,6 +79,31 @@ async function main() {
       await list(config, args);
       break;
     }
+    case "overview": {
+      const { overview } = await import("./overview.js");
+      await overview(config, args);
+      break;
+    }
+    case "batch": {
+      const { batch } = await import("./batch.js");
+      await batch(config, args);
+      break;
+    }
+    case "batch-reject": {
+      const { batchReject } = await import("./batch-reject.js");
+      await batchReject(config, args);
+      break;
+    }
+    case "batch-scripts": {
+      const { batchScripts } = await import("./batch-scripts.js");
+      await batchScripts(config, args);
+      break;
+    }
+    case "produce": {
+      const { produce } = await import("./produce.js");
+      await produce(config, args);
+      break;
+    }
     case "detail": {
       const { detail } = await import("./detail.js");
       await detail(config, args);
@@ -117,6 +149,11 @@ async function main() {
       await progress(config, args);
       break;
     }
+    case "script-preview": {
+      const { scriptPreview } = await import("./script-preview.js");
+      await scriptPreview(config, args);
+      break;
+    }
     case "tts": {
       const { tts } = await import("./tts.js");
       await tts(config, args);
@@ -144,7 +181,7 @@ async function main() {
     }
     default:
       console.error(`未知命令: ${cmd}\n\n` +
-        "用法：pnpm editor <login|auth-status|list|detail|fetch|rule-test|console-script|paste|guests|guest-voice|guest-set|progress|tts|merge|cover|publish|reject> [args]");
+        "用法：pnpm editor <login|auth-status|overview|list|batch|batch-reject|batch-scripts|produce|detail|fetch|rule-test|console-script|paste|guests|guest-voice|guest-set|progress|script-preview|tts|merge|cover|publish|reject> [args]");
       process.exit(1);
   }
 }

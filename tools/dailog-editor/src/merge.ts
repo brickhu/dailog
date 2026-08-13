@@ -47,14 +47,10 @@ function ffprobeDuration(file: string): number {
 export async function merge(config: EditorConfig, args: string[]): Promise<void> {
   const { submissionId, language, intro, outro } = parseArgs(args);
   const dir = draftDir(submissionId);
+  const fullPath = join(dir, "full.mp3");
   const segmentsFile = join(dir, "segments.json");
-  if (!existsSync(segmentsFile)) {
-    console.error(`[merge] 缺少 ${segmentsFile}——先运行 pnpm editor tts ${submissionId}`);
-    process.exit(1);
-  }
-  const index = JSON.parse(readFileSync(segmentsFile, "utf-8")) as Array<{ file: string }>;
-  if (index.length === 0) {
-    console.error("[merge] 无合成段落（tts 阶段全部跳过？）");
+  if (!existsSync(fullPath) && !existsSync(segmentsFile)) {
+    console.error(`[merge] 缺少 ${fullPath}（整集）或 ${segmentsFile}（逐段）——先运行 pnpm editor tts ${submissionId}`);
     process.exit(1);
   }
 
@@ -72,18 +68,24 @@ export async function merge(config: EditorConfig, args: string[]): Promise<void>
     console.warn(`[merge] outro 资产缺失（${language}/en 均无）——已跳过`);
   }
 
-  // 拼接清单：intro → 每段后加 0.6s 静音（anullsrc 生成）→ outro
+  // 拼接清单：整集模式（multi speaker 一次合成——intro + full + outro）；
+  // 兼容旧逐段模式（segments.json 存在且无 full.mp3）
   const parts: string[] = [];
   if (introPath) parts.push(introPath);
-  const silence = join(dir, "_silence.mp3");
-  try {
-    execFileSync("ffmpeg", ["-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", "0.6", "-q:a", "9", silence], { stdio: "ignore" });
-  } catch {
-    console.warn("[merge] 静音段生成失败（继续拼接）");
-  }
-  for (const seg of index) {
-    parts.push(join(dir, seg.file));
-    if (existsSync(silence)) parts.push(silence);
+  if (existsSync(fullPath)) {
+    parts.push(fullPath);
+  } else {
+    const index = JSON.parse(readFileSync(segmentsFile, "utf-8")) as Array<{ file: string }>;
+    const silence = join(dir, "_silence.mp3");
+    try {
+      execFileSync("ffmpeg", ["-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", "0.6", "-q:a", "9", silence], { stdio: "ignore" });
+    } catch {
+      console.warn("[merge] 静音段生成失败（继续拼接）");
+    }
+    for (const seg of index) {
+      parts.push(join(dir, seg.file));
+      if (existsSync(silence)) parts.push(silence);
+    }
   }
   if (outroPath) parts.push(outroPath);
 

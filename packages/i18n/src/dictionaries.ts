@@ -455,6 +455,7 @@ export const zh = {
   "episode.favorite": "☆ 收藏",
   "episode.notFound": "节目不存在或未发布",
   "episode.noDescription": "（暂无简介）",
+  "episode.sourceUrl": "对话原文",
 
   // ---- 声音采样 ----
   "voice.currentSample": "当前采样",
@@ -1055,6 +1056,7 @@ export const en: Dictionary = {
   "episode.favorite": "☆ Favorite",
   "episode.notFound": "Episode not found or unpublished",
   "episode.noDescription": "（No description yet）",
+  "episode.sourceUrl": "Original conversation",
 
   // ---- 声音采样 ----
   "voice.currentSample": "Current sample",

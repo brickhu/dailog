@@ -64,6 +64,7 @@
   真人对话感（[break] 停顿 / 反馈接话 / 比喻 / 打断 / 调侃 / [laughing]）、**固定开场白结构**（问候 → 自我介绍 →
   欢迎来到 Dailog 并说明形态 → 引出 AI 嘉宾；信息点不可变）、**Fish Audio S2 情绪标签**（[happy]/[sad]/[excited]/
   [whispering]/[sighing] 等，随文本直达 TTS）、隐私模糊化
+- **批量流程**：`batch` 批量提取分组 → 处置 → 自动质量检查/脚本生成（quality_failed 落盘）→ `batch-scripts` 分组 → 处置 → 选号 `produce` 制作流水线（语音试听、发布确认两个确认点）→ `publish`（状态 published + 通知 + 邮件 + 草稿清理）；`overview` 一键工作台概要
 - **脚本可多次迭代**（编辑与 Agent 对话调整：更简短 / 换个开场 / 换情绪风格），草稿存本地（`.dailog-editor/drafts/`）
 - 语言跟随对话内容自动检测，与界面语言无关
 

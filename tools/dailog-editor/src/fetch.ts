@@ -126,19 +126,16 @@ function sniffMessages($: ReturnType<typeof loadHtml>): { role: string; content:
   return messages.length > 0 ? messages : null;
 }
 
-export async function fetchPage(config: EditorConfig, args: string[]): Promise<void> {
-  const submissionId = args[0];
-  if (!submissionId) {
-    console.error("用法：pnpm editor fetch <submissionId>");
-    process.exit(1);
-  }
+/** 共享提取：拉取 + 解码 + 落盘（fetch 命令与 batch 批量处理共用）。
+ *  返回 { ok, messages?, error? }——失败给出原因（反爬/失效/未提取到消息）。 */
+export async function extractSubmission(
+  config: EditorConfig,
+  submissionId: string,
+): Promise<{ ok: boolean; messages?: { role: string; content: string }[]; error?: string }> {
   const dir = draftDir(submissionId);
-
-  // ① 详情拿 URL
   const detail = (await api(config, `/v1/editor/submissions/${submissionId}`)) as { url: string };
-  console.log(`[fetch] 投稿 URL：${detail.url}`);
 
-  // ② 拉取页面
+  // 拉取页面
   let res: Response;
   try {
     res = await fetch(detail.url, {
@@ -150,64 +147,60 @@ export async function fetchPage(config: EditorConfig, args: string[]): Promise<v
       redirect: "follow",
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
-  } catch (e) {
-    console.error(`[fetch] 拉取失败：${(e as Error).message}`);
-    console.error("[fetch] 反爬/超时 → 用浏览器交互兜底（browser-use），或让编辑复制分享页内容");
-    process.exit(1);
+  } catch {
+    return { ok: false, error: "拉取失败（反爬/超时——可用 console-script 浏览器兜底）" };
   }
   if (!res.ok) {
-    console.error(`[fetch] HTTP ${res.status}——分享页不可直接抓取（${res.status === 403 ? "可能被反爬拦截" : "链接可能失效"}）`);
-    console.error("[fetch] 用浏览器交互兜底（browser-use），或让编辑复制分享页内容");
-    process.exit(1);
+    return { ok: false, error: `HTTP ${res.status}（${res.status === 403 ? "可能被反爬拦截" : "链接可能失效"}）` };
   }
   const contentType = res.headers.get("content-type") ?? "";
   if (!contentType.includes("text/html") && !contentType.includes("application/json") && !contentType.includes("text/plain")) {
-    console.error(`[fetch] 响应不是 HTML（${contentType}）——可能不是对话分享页`);
-    process.exit(1);
+    return { ok: false, error: `响应不是 HTML（${contentType}）` };
   }
   const raw = await res.text();
   const html = raw.length > MAX_HTML_BYTES ? raw.slice(0, MAX_HTML_BYTES) : raw;
   writeFileSync(join(dir, "page.html"), html);
-  console.log(`[fetch] 拉取完成：HTTP ${res.status}，${(html.length / 1024).toFixed(0)}KB → page.html`);
 
-  // ③ 清洗正文（page.txt 始终落盘——规则沉淀/人工兜底用）
+  // 清洗正文（page.txt 始终落盘）
   const $ = loadHtml(html);
   $("script,style,noscript,template,svg,iframe,link,meta").remove();
   $("nav,footer,header,[role='navigation'],[role='banner'],[role='dialog'],[class*='cookie'],[class*='Cookie'],[id*='cookie']").remove();
   const bodyText = normalizeText($("body").text());
   writeFileSync(join(dir, "page.txt"), bodyText);
-  console.log(`[fetch] 清洗正文：${bodyText.length} 字 → page.txt`);
 
-  // ④ 提取：规则库（本地优先 → 产物 fallback）→ 通用嗅探 → 提示沉淀
+  // 提取：规则库 → 通用嗅探
   let messages: { role: string; content: string }[] | null = null;
-  let source = "";
   const { rules, fromLocal } = loadRules();
   const rule = matchRule(rules, detail.url);
   if (rule) {
     messages = extractByRule($, rule);
-    source = `规则 ${rule.platform}（${rule.userSelector} / ${rule.assistantSelector}）`;
-    bumpHits(rule); // 命中自动统计（进化落本地；fallback 命中会先初始化本地）
-    console.log(`[fetch] 规则命中：${rule.platform}（${rule.note ?? "无备注"}）${fromLocal ? "" : " [fallback 种子]"}`);
+    bumpHits(rule);
   }
   if (!messages || messages.length === 0) {
-    const sniffed = sniffMessages($);
-    if (sniffed) {
-      messages = sniffed;
-      source = "通用嗅探（data-message-author-role）";
-    }
+    messages = sniffMessages($);
   }
-
   if (messages && messages.length > 0) {
-  writeProgress(submissionId, "fetched");
-    writeFileSync(join(dir, "dialogue.json"), JSON.stringify({ sourceUrl: detail.url, source, messages }, null, 2));
-    const users = messages.filter((m) => m.role === "user").length;
-    const words = messages.reduce((n, m) => n + m.content.length, 0);
-    console.log(`[fetch] ✅ ${source} 命中：${messages.length} 条消息（user ${users} / assistant ${messages.length - users}），共 ${words} 字 → dialogue.json`);
-    console.log("[fetch] 下一步：基于 dialogue.json 生成脚本（脚本生成规范见 skill ④）");
-  } else {
-    console.log("[fetch] ⚠️ 未提取到消息（无规则命中 + 通用嗅探未识别）——两种处理：");
-    console.log("[fetch]   ① 浏览器兜底：browser-use 打开页面滚动加载 → 复制正文 → Agent 提炼消息");
-    console.log("[fetch]   ② 规则沉淀：分析草稿 page.html 的消息容器选择器 → 直接更新");
-    console.log(`[fetch]      ${rulesPath()}（本地规则库，下次 fetch 即时生效，无需 build；红线：基于真实 DOM 采样）`);
+    writeFileSync(join(dir, "dialogue.json"), JSON.stringify({ sourceUrl: detail.url, source: rule ? `rule:${rule.platform}` : "sniff", messages }, null, 2));
+    return { ok: true, messages };
   }
+  return { ok: false, error: "未提取到消息（无规则命中 + 通用嗅探未识别——可用 console-script 浏览器兜底，或沉淀规则）" };
+}
+
+export async function fetchPage(config: EditorConfig, args: string[]): Promise<void> {
+  const submissionId = args[0];
+  if (!submissionId) {
+    console.error("用法：pnpm editor fetch <submissionId>");
+    process.exit(1);
+  }
+  const dir = draftDir(submissionId);
+  const result = await extractSubmission(config, submissionId);
+  if (!result.ok) {
+    console.error(`[fetch] 提取失败：${result.error}`);
+    console.error("[fetch] 处理：console-script 浏览器兜底 / rule-test 沉淀规则 / 人工核对链接");
+    process.exit(1);
+  }
+  const users = result.messages!.filter((m) => m.role === "user").length;
+  const words = result.messages!.reduce((n, m) => n + m.content.length, 0);
+  console.log(`[fetch] ✅ 提取成功：${result.messages!.length} 条消息（user ${users} / assistant ${result.messages!.length - users}），共 ${words} 字 → dialogue.json`);
+  console.log("[fetch] 下一步：基于 dialogue.json 生成脚本（脚本生成规范见 skill ④）");
 }

@@ -61,7 +61,8 @@ pnpm editor --env local login
   → 页面显示配对码 → 复制回终端粘贴 → 配对成功，token **绑定环境**缓存到
   `.dailog-editor/session.json`（chmod 600，gitignored）；跨环境 token 不通用
   （token 属于 dev 时操作 prod 会提示先配对 prod）
-- 草稿（脚本/分段音频/合成件/封面）在 `.dailog-editor/drafts/{submissionId}/`（gitignored）
+- 草稿（脚本/分段音频/合成件/封面）在 `.dailog-editor/drafts/{submissionId}/`（gitignored）；
+  **发布成功后自动清理语音/封面**（终态——音频与图片不留本地，对话/脚本文本保留）
 
 ## 命令
 
@@ -76,13 +77,14 @@ pnpm editor --env <环境名> fetch <submissionId>     # 采集 + 内容解码�
 # ① 本地拉取网页内容（Agent 浏览器/WebFetch）→ 提取对话
 # ② 生成脚本（dailog 编辑规范见 skill：.agents/skills/dailog-editor/SKILL.md）→ script.json
 pnpm editor --env <环境名> tts <submissionId> --script script.json [--language zh|en] [--guest claude]
-#   · 统一走服务端 /v1/editor/tts 端点（Fish key 只在服务端，编辑本地无 TTS 密钥）
+#   · 统一走服务端 /v1/editor/tts 端点（Fish key 只在服务端；multi speaker 整集一次合成 → full.mp3）
 #   · guest 声线在服务端配置（guest-voice 上传；guest-set 设置称呼）；tts 传 --guest <platform>
 pnpm editor --env <环境名> merge <submissionId> [--language zh|en] [--intro x.mp3] [--outro x.mp3]
 #   · intro/outro 统一自动匹配语言：assets/intro.{lang}.mp3（目标语言缺失 → fallback 英文）
 #   · 资产命名：{intro|outro|guest}.{lang}.mp3（工程 assets/ 管理，构建分发到产物 assets/）
 #   · --intro/--outro 可显式指定本地文件（临时替换）；资产缺失时警告跳过
-pnpm editor --env <环境名> cover <submissionId> "AI 程序员"
+pnpm editor --env <环境名> cover <submissionId> [--texture squares] [--colors "#020617,#22d3ee"] [--image-url <URL>]
+#   · 默认纹理+配色随机（6 种几何平铺 × 10 配色组）；不满意贴 URL 裁剪——无 Pexels 依赖
 pnpm editor --env <环境名> publish <submissionId> --title "..." [--cover cover.jpg]
 pnpm editor --env <环境名> reject <submissionId> --reason "..."
 ```

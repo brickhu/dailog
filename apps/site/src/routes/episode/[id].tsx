@@ -56,6 +56,17 @@ const styles = stylex.create({
     lineHeight: 1.8,
     whiteSpace: "pre-wrap",
   },
+  source: {
+    display: "block",
+    marginTop: dimensions.spacing6,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    textDecoration: "none",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    ":hover": { color: colors.primary },
+  },
   notFound: {
     color: colors.neutral,
     textAlign: "center",
@@ -156,6 +167,11 @@ export default function EpisodePage() {
           </Show>
           <InteractButtons episodeId={ep()!.id} />
           <div {...stylex.props(styles.desc)}>{ep()!.description || t("episode.noDescription")}</div>
+          <Show when={ep()!.sourceUrl}>
+            <a href={ep()!.sourceUrl!} target="_blank" rel="noopener noreferrer" {...stylex.props(styles.source)}>
+              {t("episode.sourceUrl")} ↗ {ep()!.sourceUrl}
+            </a>
+          </Show>
         </Show>
       </div>
     </div>

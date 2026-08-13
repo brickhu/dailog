@@ -3,7 +3,7 @@
 // 成功后 episode 直接 published + 投稿人收到通知（「dailog 第 N 期」）
 import { readFileSync } from "node:fs";
 import type { EditorConfig } from "./lib.js";
-import { api, draftDir, writeProgress } from "./lib.js";
+import { api, clearArtifacts, draftDir, writeProgress } from "./lib.js";
 
 interface PublishArgs {
   submissionId: string;
@@ -70,6 +70,11 @@ export async function publish(config: EditorConfig, args: string[]): Promise<voi
   console.log(`[publish] 上传 ${p.audio}（${(audioBytes.length / 1024 / 1024).toFixed(1)}MB）→ 发布投稿 ${p.submissionId}…`);
   const res = await api(config, `/v1/editor/submissions/${p.submissionId}/publish`, { method: "POST", formData: form });
   console.log(`[publish] ✅ 已发布：dailog 第 ${(res as { number?: number }).number ?? "?"} 期「${p.title}」`);
+  const episodeId = (res as { episodeId?: string }).episodeId ?? "";
   writeProgress(p.submissionId, "published");
-  console.log(`[publish] 节目页：${config.apiBase.replace(/api.*$/, "")}episode/${(res as { episodeId?: string }).episodeId ?? ""}`);
+  const episodeUrl = config.siteUrl
+    ? `${config.siteUrl.replace(/\/$/, "")}/episode/${episodeId}`
+    : null;
+  console.log(`[publish] 🎙 节目地址：${episodeUrl ?? "(未配置 siteUrl，请检查 .dailog-editor/envs.json)"}`);
+  clearArtifacts(p.submissionId); // 发布是终态：清理语音/封面文件（文本草稿保留——对话/脚本可查阅/重做）
 }

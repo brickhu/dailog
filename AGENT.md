@@ -90,10 +90,16 @@ dailog/
 
 ## 编辑工作流（新增协作者必读）
 
-1. 配置：`cp .dailog-editor/.env.example .dailog-editor/.env` 并填写（API/账号/Fish/Pexels）
-2. 命令：`pnpm editor list | detail <id> | download <id> | tts <id> --script … | merge <id> | cover <id> "词" | publish <id> --title … | reject <id> --reason …`
-3. 完整流程与脚本生成规范（开场白结构 / 情绪标签 / 四维价值）：`.agents/skills/dailog-editor/SKILL.md`
-4. 草稿：`.dailog-editor/drafts/{submissionId}/`（gitignored，发布后保留）
+1. 配置：`.dailog-editor/.env`（Pexels key）+ `envs.json`（local/dev/prod 环境清单）
+2. 登录：`pnpm editor login --env <环境>`（配对码，浏览器授权——token 绑定环境）
+3. 命令（23 个）：`overview`（工作台概要）/ `batch`（批量提取分组）/ `batch-reject`（批量拒审）/
+   `batch-scripts`（脚本批次汇总）/ `produce`（制作流水线 tts→merge→cover）/
+   `fetch`（采集+解码，规则自进化）/ `script-preview`（脚本确认门）/ `tts` / `merge` / `cover` /
+   `publish`（发布=状态+通知+邮件+草稿清理）/ `reject` / `guests` / `guest-voice` / `guest-set` /
+   `progress`（中断恢复）/ `login` / `auth-status` / `list` / `detail` 等
+4. 完整流程与规范：`.agents/skills/dailog-editor/SKILL.md`（含 `prompts/script-generation.md` 提示词模板；
+   批量两级流程：提取分组处置 → 自动质量检查/脚本生成 → 脚本分组处置 → 选号 produce → 两个确认点 → publish）
+5. 草稿：`.dailog-editor/drafts/{submissionId}/`（gitignored；发布后自动清理）
 
 ## 共享设计系统约束（StyleX 硬性规则）
 

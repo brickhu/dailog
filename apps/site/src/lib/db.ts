@@ -14,6 +14,8 @@ export interface EpisodeSummary {
   coverUrl: string | null;
   language: string | null;
   audioUrl: string | null;
+  /** 对话原文地址（投稿时用户提交的分享链接） */
+  sourceUrl: string | null;
   // 频道信息
   username: string | null;
   displayName: string | null;
@@ -105,8 +107,10 @@ export async function getEpisode(id: string): Promise<EpisodeSummary | null> {
              e.duration_seconds AS "durationSeconds",
              e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
              e.language, e.audio_url AS "audioUrl",
+             s.url AS "sourceUrl",
              p.username, p.display_name AS "displayName"
       FROM episodes e
+      JOIN submissions s ON s.id = e.submission_id
       JOIN profiles p ON p.id = e.user_id
       WHERE e.id = ${id} AND e.status = 'published' AND e.is_public = true
       LIMIT 1
