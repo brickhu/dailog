@@ -1,6 +1,6 @@
 // ffmpeg 合成：intro + 主对话（逐段拼接）+ outro → final.mp3
-//   · intro/outro **统一自动匹配语言**（--language，默认 zh）：assets/audio/intro.{lang}.mp3
-//     目标语言缺失 → fallback 英文 intro.en.mp3；都缺失 → 警告跳过（不阻塞发布）
+//   · intro/outro **统一自动匹配语言**（--language，默认 zh）：assets/intro.{lang}.mp3
+//     语言专属缺失 → fallback 通用 intro.mp3；都缺失 → 警告跳过（不阻塞发布）
 //   · --intro/--outro 可显式指定本地文件（临时替换默认资产）
 //   · 段之间留 0.6s 静音间隔（ffmpeg concat demuxer 用 silence 占位——文案自然停顿）
 // 输出：drafts/{submissionId}/final.mp3 + duration（ffprobe）
@@ -28,12 +28,11 @@ function parseArgs(args: string[]): { submissionId: string; language: string; in
   return { submissionId, language: language.toLowerCase(), intro: take("--intro"), outro: take("--outro") };
 }
 
-/** 按语言解析资产：{assets}/{kind}.{lang}.mp3 → fallback {kind}.en.mp3；都无 → null */
+/** 按语言解析资产：{assets}/{kind}.{lang}.mp3 → fallback {kind}.mp3；都无 → null */
 function resolveAsset(config: EditorConfig, kind: "intro" | "outro", language: string): string | null {
   const base = defaultAssetsDir();
-  const candidates = language === "en" ? ["en"] : [language, "en"];
-  for (const lang of candidates) {
-    const p = join(base, `${kind}.${lang}.mp3`);
+  const candidates = [join(base, `${kind}.${language}.mp3`), join(base, `${kind}.mp3`)];
+  for (const p of candidates) {
     if (existsSync(p)) return p;
   }
   return null;
@@ -54,18 +53,18 @@ export async function merge(config: EditorConfig, args: string[]): Promise<void>
     process.exit(1);
   }
 
-  // intro/outro：显式 --intro/--outro 优先；否则按语言自动匹配（fallback 英文）
+  // intro/outro：显式 --intro/--outro 优先；否则按语言自动匹配（语言专属缺失 → 通用资产）
   const introPath = intro && existsSync(intro) ? intro : resolveAsset(config, "intro", language);
   const outroPath = outro && existsSync(outro) ? outro : resolveAsset(config, "outro", language);
   if (introPath) {
     console.log(`[merge] intro：${introPath.replace(process.cwd() + "/", "")} ✅`);
   } else {
-    console.warn(`[merge] intro 资产缺失（${language}/en 均无）——已跳过（可放 ${defaultAssetsDir()}/intro.{lang}.mp3）`);
+    console.warn(`[merge] intro 资产缺失（${language} 专属与通用均无）——已跳过（可放 ${defaultAssetsDir()}/intro.mp3）`);
   }
   if (outroPath) {
     console.log(`[merge] outro：${outroPath.replace(process.cwd() + "/", "")} ✅`);
   } else {
-    console.warn(`[merge] outro 资产缺失（${language}/en 均无）——已跳过`);
+    console.warn(`[merge] outro 资产缺失（${language} 专属与通用均无）——已跳过`);
   }
 
   // 拼接清单：整集模式（multi speaker 一次合成——intro + full + outro）；

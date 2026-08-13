@@ -80,8 +80,8 @@ pnpm editor --env <环境名> tts <submissionId> --script script.json [--languag
 #   · 统一走服务端 /v1/editor/tts 端点（Fish key 只在服务端；multi speaker 整集一次合成 → full.mp3）
 #   · guest 声线在服务端配置（guest-voice 上传；guest-set 设置称呼）；tts 传 --guest <platform>
 pnpm editor --env <环境名> merge <submissionId> [--language zh|en] [--intro x.mp3] [--outro x.mp3]
-#   · intro/outro 统一自动匹配语言：assets/intro.{lang}.mp3（目标语言缺失 → fallback 英文）
-#   · 资产命名：{intro|outro|guest}.{lang}.mp3（工程 assets/ 管理，构建分发到产物 assets/）
+#   · intro/outro 统一自动匹配语言：assets/intro.{lang}.mp3（语言专属缺失 → fallback 通用 intro.mp3）
+#   · 资产命名：{intro|outro}.{lang}.mp3（语言专属，可选）；通用 {intro|outro}.mp3 兜底
 #   · --intro/--outro 可显式指定本地文件（临时替换）；资产缺失时警告跳过
 pnpm editor --env <环境名> cover <submissionId> [--texture squares] [--colors "#020617,#22d3ee"] [--image-url <URL>]
 #   · 默认纹理+配色随机（6 种几何平铺 × 10 配色组）；不满意贴 URL 裁剪——无 Pexels 依赖

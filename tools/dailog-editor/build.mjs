@@ -53,8 +53,10 @@ cpSync(join(here, "templates", "envs.example.json"), join(outDir, "envs.example.
 cpSync(join(here, "templates", "env.example"), join(outDir, "env.example"));
 
 // 4. 资源文件（intro/outro/guest 品牌声线，随产物分发；运行时从产物 assets/ 定位）
+//    先清空产物 assets（旧语言专属文件不随源码删除会残留，且会遮蔽通用 intro.mp3 fallback）
 const assetsSrc = join(here, "assets");
 const assetsOut = join(outDir, "assets");
+rmSync(assetsOut, { recursive: true, force: true });
 if (existsSync(assetsSrc)) {
   mkdirSync(assetsOut, { recursive: true });
   for (const f of readdirSync(assetsSrc)) {
