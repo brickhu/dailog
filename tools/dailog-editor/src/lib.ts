@@ -267,7 +267,10 @@ export async function api(config: EditorConfig, path: string, opts: ApiOptions =
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
   let body: BodyInit | undefined;
   if (opts.formData) {
-    body = opts.formData;
+    // undici dispatcher 路径下原生 FormData 会失效（服务端收到空表单）——自行编码 multipart
+    const { body: formBody, contentType } = await serializeFormData(opts.formData);
+    headers["content-type"] = contentType;
+    body = formBody;
   } else if (opts.body !== undefined) {
     headers["content-type"] = "application/json";
     body = JSON.stringify(opts.body);

@@ -2,8 +2,15 @@
 //   multipart：audio（必填）+ cover（可选）+ meta JSON（title/description/tags/language/guestId/durationSeconds）
 // 成功后 episode 直接 published + 投稿人收到通知（「dailog 第 N 期」）
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import type { EditorConfig } from "./lib.js";
 import { api, clearArtifacts, draftDir, writeProgress } from "./lib.js";
+
+/** ffprobe 音频时长（秒）——发布 meta 的 durationSeconds 来源（页面显示「N 分钟」） */
+function ffprobeDuration(file: string): number {
+  const out = execFileSync("ffprobe", ["-v", "quiet", "-show_entries", "format=duration", "-of", "csv=p=0", file], { encoding: "utf-8" });
+  return Math.round(parseFloat(out.trim()));
+}
 
 interface PublishArgs {
   submissionId: string;
@@ -64,7 +71,12 @@ export async function publish(config: EditorConfig, args: string[]): Promise<voi
   if (p.description) meta.description = p.description;
   if (p.tags?.length) meta.tags = p.tags;
   if (p.guestId) meta.guestId = p.guestId;
-  // durationSeconds：由 merge 阶段 ffprobe 结果填写（可选——服务端可缺省）
+  // durationSeconds：ffprobe 成品音频（merge 产物）——页面「N 分钟」展示
+  try {
+    meta.durationSeconds = ffprobeDuration(p.audio!);
+  } catch {
+    console.warn("[publish] ⚠️ ffprobe 时长读取失败，durationSeconds 缺省（页面将显示 0 分钟）");
+  }
   form.append("meta", JSON.stringify(meta));
 
   console.log(`[publish] 上传 ${p.audio}（${(audioBytes.length / 1024 / 1024).toFixed(1)}MB）→ 发布投稿 ${p.submissionId}…`);
