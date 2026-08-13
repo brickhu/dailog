@@ -1,10 +1,8 @@
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { randomBytes } from "node:crypto";
 import * as schema from "../db/schema";
-import type { ScriptSegment } from "../db/schema";
 import type { VoiceSampleRow } from "../routes/voice";
-import { stripSegmentTexts } from "../lib/script-text";
 
 function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "23505";
@@ -24,304 +22,91 @@ function randomSlug(): string {
   return randomBytes(8).toString("hex");
 }
 
-export type JobStatus = "queued" | "tts" | "merge" | "upload" | "done" | "failed";
+// ---------------------------------------------------------------------------
+// 投稿（本质版）：用户提交 URL + 采样 → submitted；编辑本地制作后 reject / markPublished
+// ---------------------------------------------------------------------------
 
-export interface SnapshotRow {
-  url: string;
-  platform: string;
-  sourceTitle: string | null;
-  sourceConversationId: string | null;
-  parsedDialogue: unknown;
-}
-
-export interface SnapshotsRepo {
-  /** 快照查询（URL 唯一）——命中即复用，不重复采集 */
-  /** 按 id 查（polish → snapshot 对话用） */
-  getById(id: string): Promise<{ parsedDialogue: unknown; sourceTitle: string | null; platform: string; prefixSourceId: string | null; url: string | null } | null>;
-  getByUrl(url: string): Promise<{
-    id: string;
-    platform: string;
-    sourceTitle: string | null;
-    sourceConversationId: string | null;
-    parsedDialogue: unknown;
-    fingerprint: string | null;
-    quality: schema.QualityResult | null;
-    status: "ok" | "unreachable" | "parse_failed";
-    retryAfter: Date | null;
-    lastError: string | null;
-  } | null>;
-  create(row: SnapshotRow): Promise<{ id: string }>;
-  /** 采集成功落库（内容 + meta + status=ok，清 retryAfter） */
-  updateContent(id: string, row: SnapshotRow): Promise<void>;
-  /** 质量分析结果写快照（内容固定 → 分析一次全局复用） */
-  updateQuality(id: string, quality: schema.QualityResult): Promise<void>;
-  /** 内容溯源：所有已解析快照（id/标题/指纹/消息）——前缀比对候选集 */
-  listTraceable(): Promise<Array<{ id: string; sourceTitle: string | null; fingerprint: string | null; parsedDialogue: unknown }>>;
-  /** 写内容溯源结果（指纹 + 前缀源快照；import 时计算一次） */
-  setSourceTrace(id: string, row: { fingerprint: string | null; prefixSourceId: string | null }): Promise<void>;
-  /** 触达失败：status=unreachable，retryAfter=10 分钟后 */
-  markUnreachable(id: string, error: string): Promise<void>;
-  markParseFailed(id: string, error: string): Promise<void>;
-}
-
-export interface PolishRow {
-  userId: string;
-  snapshotId: string;
-  title: string | null;
-}
-
-export interface PolishesRepo {
-  /** 用户 × 快照唯一：已存在 → 跳转编辑页（继续创作） */
-  findByUserSnapshot(userId: string, snapshotId: string): Promise<{ id: string; title: string | null; status: string } | null>;
-  /** 更新 host 节目称呼（生成脚本前设置） */
-  create(row: PolishRow): Promise<{ id: string }>;
-  /** 投稿提交：创建 submitted 容器（唯一约束 user×snapshot 兜底） */
-  createSubmission(userId: string, snapshotId: string, title: string | null): Promise<{ id: string }>;
-  /** 待审批投稿数（status=submitted）——投稿并发限制（pending_limit）用 */
+export interface SubmissionsRepo {
+  /** 投稿入库（唯一约束 user×url 兜底；重复提交由路由层查 findByUserUrl） */
+  create(userId: string, url: string, title: string | null): Promise<{ id: string }>;
+  /** 重复投稿检测（同用户同 URL → 已存在） */
+  findByUserUrl(userId: string, url: string): Promise<{ id: string; status: string } | null>;
+  /** 待审核投稿数（status=submitted）——投稿并发限制（pending_limit）用 */
   countPendingByUser(userId: string): Promise<number>;
-  /** 我的投稿列表（submitted/accepted/rejected + 最新节目状态） */
-  listSubmissionsByUser(userId: string): Promise<Array<{
+  /** 我的投稿列表（submitted/rejected/published + 最新节目状态）；按投稿时间倒序 */
+  listByUser(userId: string): Promise<Array<{
     id: string;
+    url: string;
     title: string | null;
     status: string;
-    snapshotTitle: string | null;
-    platform: string | null;
-    episodeStatus: string | null;
     rejectedReason: string | null;
+    episodeStatus: string | null;
     createdAt: Date;
   }>>;
-  // ---- 编辑端（P2，权限由路由层 requireRole 保证） ----
-  /** 编辑队列：按状态筛选，submitted 按提交时间升序（inbox 先到先审） */
-  listQueue(status: "submitted" | "accepted" | "rejected"): Promise<Array<{
+  /** 编辑队列：按状态筛选（缺省 submitted），submitted 按提交时间升序（inbox 先到先审）。
+   *  附带投稿人信息与采样就绪标记（无采样 = 无法制作主持人克隆音色，先标注） */
+  listQueue(status?: "submitted" | "rejected" | "published"): Promise<Array<{
     id: string;
+    url: string;
     title: string | null;
-    snapshotTitle: string | null;
-    platform: string | null;
     status: string;
     createdAt: Date;
+    userEmail: string;
+    displayName: string;
+    hasVoiceSample: boolean;
   }>>;
-  /** 编辑详情（无归属校验） */
-  getById(id: string): Promise<{
+  /** 编辑详情（无归属校验）：投稿 + 投稿人 + 最新声音采样（transcript 供本地 TTS 克隆） */
+  getDetail(id: string): Promise<{
     id: string;
     userId: string;
-    snapshotId: string;
+    url: string;
     title: string | null;
     status: string;
     rejectedReason: string | null;
-    reviewedBy: string | null;
     reviewedAt: Date | null;
     createdAt: Date;
+    userEmail: string;
+    displayName: string;
+    voiceSample: { audioUrl: string; transcript: string | null; language: string; status: string } | null;
   } | null>;
-  /** 编辑状态流转：accepted（已收录）/ rejected（投稿失败，reason 必填） */
-  setStatus(id: string, status: "accepted" | "rejected", opts?: { rejectedReason?: string | null; reviewedBy?: "llm" | "editor" | null }): Promise<void>;
-  /** 编辑端生成列表：已收录投稿（按审核时间倒序） */
-  listAccepted(): Promise<Array<{
-    id: string;
-    title: string | null;
-    snapshotTitle: string | null;
-    platform: string | null;
-    createdAt: Date;
-    reviewedAt: Date | null;
-  }>>;
-  /** 概览统计（/v1/editor/overview）：审核 / 脚本 / 发布三组计数。
-   *  scripts.pending = 已收录投稿下未用脚本；generated = 已用脚本；failed = 语音生成失败节目数；
-   *  episodes.failed = 0（发布失败无持久化状态——发布是同步操作，失败仅前端可见） */
-  overviewStats(): Promise<{
-    reviews: { submitted: number; accepted: number; rejected: number };
-    scripts: { pending: number; generated: number; failed: number };
-    episodes: { published: number; failed: number };
-  }>;
-  /** 归属校验（防 IDOR）+ 快照关联 */
-  getOwned(id: string, userId: string): Promise<{ id: string; snapshotId: string; title: string | null; status: string } | null>;
-  /** 编辑页详情：polish + 快照 meta + transcripts */
-  getPolishDetail(id: string, userId: string): Promise<{
-    id: string;
-    title: string | null;
-    snapshotTitle: string | null;
-    snapshotUrl: string | null;
-    quality: schema.QualityResult | null;
-    transcripts: {
-      id: string;
-      /** 有效脚本（编辑保存后的 updated_segments ?? 原始 segments） */
-      segments: schema.ScriptSegment[];
-      topic: string | null;
-      /** 脚本标题 + 创作说明（大模型生成） */
-      title: string | null;
-      creationNote: string | null;
-      /** 是否已生成节目 */
-      status: string | null;
-      language: string | null;
-      createdAt: Date;
-      episodeId: string | null;
-    }[];
-  } | null>;
-  /** 工作台列表：polish + 快照标题 + 节目状态 + 每条脚本（title/status） */
-  listByUser(userId: string): Promise<{
-    id: string;
-    title: string | null;
-    status: string;
-    snapshotTitle: string | null;
-    /** 对话来源平台（claude/chatgpt/...）+ 展示名（guests 表，如 DeepSeek） */
-    platform: string | null;
-    aiName: string | null;
-    /** 该对话下的脚本（新→旧，与编辑页同序）；title 为空时前端回退 topic/编号 */
-    scripts: { id: string; title: string | null; topic: string | null; status: string | null }[];
-    episodeId: string | null;
-    episodeStatus: string | null;
-    createdAt: Date;
-  }[]>;
+  /** 拒审（reason 必填） */
+  reject(id: string, reason: string): Promise<void>;
+  /** 编辑已上传成品 → published */
+  markPublished(id: string): Promise<void>;
 }
 
-export interface TranscriptsRepo {
-  create(
-    polishId: string,
-    segments: ScriptSegment[],
-    language: string | null,
-    opts?: { topic?: string | null; title?: string | null; creationNote?: string | null; hostName?: string | null; guestId?: string | null; guestName?: string | null },
-  ): Promise<{ id: string }>;
-  /** 标记脚本已生成节目（一脚本一期） */
-  markUsed(id: string): Promise<void>;
-  /** 脚本详情（无归属校验——编辑端用，P2） */
-  getById(id: string): Promise<{
-    id: string;
-    polishId: string;
-    segments: ScriptSegment[];
-    updatedSegments: ScriptSegment[] | null;
-    topic: string | null;
-    title: string | null;
-    language: string | null;
-    guestId: string | null;
-    status: string;
-  } | null>;
-  listByPolish(polishId: string): Promise<{ id: string; segments: ScriptSegment[]; updatedSegments: ScriptSegment[] | null; topic: string | null; title: string | null; creationNote: string | null; language: string | null; status: string; createdAt: Date }[]>;
-  /** 归属校验（join polish.user_id） */
-  getOwned(id: string, userId: string): Promise<{
-    id: string;
-    polishId: string;
-    segments: ScriptSegment[];
-    topic: string | null;
-    language: string | null;
-    guestId: string | null;
-    snapshotId: string | null;
-  } | null>;
-  updateSegments(id: string, segments: ScriptSegment[]): Promise<void>;
-}
+// ---------------------------------------------------------------------------
+// 节目（成品）：编辑一次性上传即发布（期号 max+1）
+// ---------------------------------------------------------------------------
 
-export interface EpisodeRow {
+export interface EpisodeCreateRow {
+  submissionId: string;
   userId: string;
-  transcriptId: string;
-  polishId: string;
-  title: string | null;
-  description?: string | null;
-  /** 来源快照（transcript→polish→snapshot 直接关联） */
-  snapshotId?: string | null;
-  /** 主题（脚本 topic 继承） */
-  topic?: string | null;
-  /** 标签（大模型生成） */
-  tags?: string[] | null;
-  /** 字幕（程序化：脚本去情绪标签后的纯文本） */
-  subtitle?: string | null;
-  /** 主持人（频道主人）+ 嘉宾（脚本引用） */
   hostId?: string | null;
   guestId?: string | null;
+  title: string | null;
+  description?: string | null;
+  coverUrl?: string | null;
+  /** R2 storage key（编辑上传的成品音频） */
+  audioUrl: string;
+  audioSize?: number | null;
+  durationSeconds?: number | null;
+  language?: string;
+  tags?: string[] | null;
 }
 
 export interface EpisodesRepo {
-  /** 创建节目（由 transcript 生成；slug 随机） */
-  create(row: EpisodeRow): Promise<{ id: string }>;
-  listByUser(userId: string): Promise<{
-    id: string;
-    title: string | null;
-    status: string;
-    polishId: string;
-    durationSeconds: number | null;
-    /** 主题（脚本 topic 继承）+ 标签（大模型生成） */
-    topic: string | null;
-    tags: string[] | null;
-    coverUrl: string | null;
-    /** 最新生成 job 状态（列表区分 生成中/失败；episodes.status 只有 published 会被更新） */
-    jobStatus: string | null;
-    jobError: string | null;
-    createdAt: Date;
-  }[]>;
-  /** 详情（/episodes/:id 页）：元数据 + 封面 + 状态 */
-  getOwned(id: string, userId: string): Promise<{
-    id: string;
-    transcriptId: string;
-    polishId: string;
-    title: string | null;
-    description: string | null;
-    status: string;
-    durationSeconds: number | null;
-    topic: string | null;
-    tags: string[] | null;
-    coverUrl: string | null;
-    createdAt: Date;
-    publishedAt: Date | null;
-  } | null>;
-  /** 一个脚本只能生成一期节目：按 transcript 查已生成节目 */
-  getByTranscript(transcriptId: string): Promise<{ id: string } | null>;
-  /** 一个脚本只能生成一期节目：按 transcript 查已生成节目 */
-  getByTranscript(transcriptId: string): Promise<{ id: string } | null>;
-  /** 工作台试听：episode 音频 storage key（归属过滤） */
-  getEpisodeAudio(id: string, userId: string): Promise<string | null>;
-  /** 生成管线来源脚本：经 episodes.transcript_id → transcripts.segments */
-  getEpisodeScript(episodeId: string): Promise<{ segments: ScriptSegment[] } | null>;
-  /** 生成管线嘉宾：经 episodes.transcript_id → transcripts.guest_id（无引用 → null） */
-  getEpisodeGuest(episodeId: string): Promise<{ guestId: string | null } | null>;
-  /** 公开读音频（主站免鉴权端点用）：仅已发布且公开的节目，取最新音轨；
-   *  version = 音轨创建时间（ETag 用——重试重新生成后内容变化，浏览器据此重新拉取） */
+  /** 编辑一次性上传发布：slug + 期号（max+1，事务）+ published + isPublic，单事务 */
+  createPublished(row: EpisodeCreateRow): Promise<{ id: string; number: number }>;
+  /** 公开读封面（主站免鉴权端点用）：仅已发布且公开 */
   getPublicCoverKey(episodeId: string): Promise<string | null>;
+  /** 公开读音频（主站免鉴权端点用）：仅已发布且公开；
+   *  version = 发布时间（ETag 用） */
   getPublicAudioKey(episodeId: string): Promise<{ audioKey: string; version: string } | null>;
-  /** 内容站公开读：仅已发布可见；对话内容在 snapshots.parsedDialogue（join 链） */
-  getPublishedDialogue(episodeId: string): Promise<{
-    platform: string;
-    sourceTitle: string | null;
-    sourceUrl: string;
-    parsedDialogue: unknown;
-  } | null>;
-  setPublished(id: string): Promise<void>;
-  getEpisodeUserId(episodeId: string): Promise<string | null>;
-  /** 语言随 transcript（join 链） */
-  getEpisodeLanguage(episodeId: string): Promise<string | null>;
-  // ---- voice/channel 相关（沿用） ----
-  getHostModelId(userId: string): Promise<string | null>;
-  getVoiceSampleKey(userId: string): Promise<string | null>;
-  getVoiceSample(userId: string): Promise<VoiceSampleRow | null>;
-  /** 按语种取采样（生成时注入同语种）；无该语种 → null（调用方用兜底） */
-  getVoiceSampleByLanguage(userId: string, language: string): Promise<VoiceSampleRow | null>;
-  saveVoiceSample(row: VoiceSampleRow): Promise<void>;
-  /** 写入音轨（多语言）：episode 音频在 tracks */
-  insertTrack(episodeId: string, language: string, audioKey: string, durationSeconds: number, size?: number | null): Promise<void>;
-  getChannelActivatedAt(userId: string): Promise<Date | null>;
-  // ---- 账号/频道（/api/me/profile、/api/me/channel） ----
-  /** 账号 + 频道档案（hasGithub = account 表有 github 绑定）——昵称对外叫 nickname（列 user.name） */
-  getProfile(userId: string): Promise<{
-    email: string | null;
-    nickname: string | null;
-    emailVerified: boolean;
-    image: string | null;
-    hasGithub: boolean;
-    username: string | null;
-    displayName: string | null;
-    bio: string | null;
-    channelActivatedAt: Date | null;
-    /** 主持人默认人设（生成脚本前展示/修改的初始值） */
-    persona: schema.HostPersona | null;
-  } | null>;
-  updateUserNickname(userId: string, nickname: string): Promise<void>;
-  /** 保存默认人设（覆盖整体；null = 清除） */
-  updatePersona(userId: string, persona: schema.HostPersona | null): Promise<void>;
-  /** 频道设置（slug/频道名/简介）；返回冲突：username 被占用 */
-  updateChannel(userId: string, row: { username?: string; displayName?: string; bio?: string | null }): Promise<{ ok: true } | { error: "username_taken" }>;
-  /** slug 占用检测（排除自己；PATCH /api/me/channel 内部同样复用） */
-  isUsernameTaken(userId: string, username: string): Promise<boolean>;
-  // ---- 编辑端（P2，权限由路由层 requireRole 保证） ----
-  /** 节目详情（无归属校验） */
+  /** 编辑端节目详情（无归属校验） */
   getById(id: string): Promise<{
     id: string;
-    polishId: string;
-    transcriptId: string;
+    submissionId: string;
     title: string | null;
     description: string | null;
     coverUrl: string | null;
@@ -332,11 +117,9 @@ export interface EpisodesRepo {
     createdAt: Date;
     publishedAt: Date | null;
   } | null>;
-  /** 发布确认：更新元数据 + 分配期号（max+1，事务）+ published */
-  publish(id: string, row: { title: string | null; description: string | null; tags: string[] | null; coverUrl: string | null; isPicked: boolean }): Promise<{ number: number }>;
-  /** 已发布节目编辑：tags / 精选标记 / 元数据（标题/简介/封面，发布页"可修改"用） */
+  /** 已发布节目编辑：tags / 精选标记 / 元数据 */
   updatePublished(id: string, row: { tags?: string[] | null; isPicked?: boolean; title?: string | null; description?: string | null; coverUrl?: string | null }): Promise<void>;
-  /** 已发布节目清单（编辑端）：按期号倒序，供 tags/精选 管理 */
+  /** 已发布节目清单（编辑端）：按期号倒序 */
   listPublished(): Promise<Array<{
     id: string;
     title: string | null;
@@ -346,18 +129,9 @@ export interface EpisodesRepo {
     durationSeconds: number | null;
     publishedAt: Date | null;
   }>>;
-  /** 快照 → 已生成节目预览（任意用户；ready/published 取最新）——同 URL 二次提交的预览态数据源 */
-  findPublishedEpisodeBySnapshot(snapshotId: string): Promise<{
+  /** 按投稿列节目（编辑端详情用，无归属校验） */
+  listBySubmission(submissionId: string): Promise<Array<{
     id: string;
-    title: string | null;
-    durationSeconds: number | null;
-    hostName: string | null;
-    guestName: string | null;
-  } | null>;
-  /** 按投稿容器列节目（编辑端详情用，无归属校验） */
-  listByPolish(polishId: string): Promise<Array<{
-    id: string;
-    transcriptId: string;
     title: string | null;
     status: string;
     number: number | null;
@@ -365,10 +139,39 @@ export interface EpisodesRepo {
     createdAt: Date;
     publishedAt: Date | null;
   }>>;
+  /** 节目归属投稿人（发布通知收件人用） */
+  getEpisodeUserId(episodeId: string): Promise<string | null>;
   /** 角色读取（认证中间件注入用）；无 profile 行 → null（按 user 处理）。可选——旧测试 fake 不实现时按 user */
   getRole?(userId: string): Promise<"user" | "editor" | "admin" | null>;
   /** 管理员同步（部署自动预留）：把 ADMIN_EMAILS 列出的邮箱提升为 admin；返回更新数 */
   syncAdminRoles(emails: string[]): Promise<number>;
+  // ---- 声音采样（voice 路由沿用） ----
+  getVoiceSample(userId: string): Promise<VoiceSampleRow | null>;
+  /** 按语种取采样（编辑本地 TTS 按脚本语言取用）；无该语种 → null（调用方用兜底） */
+  getVoiceSampleByLanguage(userId: string, language: string): Promise<VoiceSampleRow | null>;
+  getVoiceSampleKey(userId: string): Promise<string | null>;
+  saveVoiceSample(row: VoiceSampleRow): Promise<void>;
+  // ---- 账号/档案（/api/me/profile） ----
+  /** 账号 + 档案——昵称对外叫 nickname（列 user.name） */
+  getProfile(userId: string): Promise<{
+    email: string | null;
+    nickname: string | null;
+    emailVerified: boolean;
+    image: string | null;
+    username: string | null;
+    displayName: string | null;
+    bio: string | null;
+    channelActivatedAt: Date | null;
+    /** 主持人默认人设（编辑制作时取用） */
+    persona: schema.HostPersona | null;
+  } | null>;
+  updateUserNickname(userId: string, nickname: string): Promise<void>;
+  /** 保存默认人设（覆盖整体；null = 清除） */
+  updatePersona(userId: string, persona: schema.HostPersona | null): Promise<void>;
+  /** 档案设置（username/displayName/bio）；返回冲突：username 被占用 */
+  updateChannel(userId: string, row: { username?: string; displayName?: string; bio?: string | null }): Promise<{ ok: true } | { error: "username_taken" }>;
+  /** slug 占用检测（排除自己） */
+  isUsernameTaken(userId: string, username: string): Promise<boolean>;
 }
 
 export interface GuestVoiceSampleRow {
@@ -380,35 +183,17 @@ export interface GuestVoiceSampleRow {
   transcript: string | null;
 }
 
-export interface NotificationsRepo {
-  /** 创建站内通知 */
-  create(row: { userId: string; type: "accepted" | "rejected" | "published"; title: string; body?: string | null; link?: string | null }): Promise<void>;
-  /** 我的通知（新→旧，limit 50） */
-  listByUser(userId: string): Promise<Array<{
-    id: string; type: string; title: string; body: string | null; link: string | null;
-    readAt: Date | null; createdAt: Date;
-  }>>;
-  /** 未读数 */
-  unreadCount(userId: string): Promise<number>;
-  /** 全部标记已读 */
-  markAllRead(userId: string): Promise<void>;
-  /** 用户邮箱（通知邮件收件人） */
-  getEmailByUserId(userId: string): Promise<string | null>;
-  /** 某时间点之后是否存在指定类型通知（拒审/收录后是否已通知投稿人——编辑端推断用） */
-  existsAfter(userId: string, type: string, after: Date): Promise<boolean>;
-  /** 是否已存在指向该链接的通知（发布通知 link=/episode/{id}——已通知推断） */
-  existsByLink(link: string): Promise<boolean>;
-}
-
 export interface GuestsRepo {
   getByPlatform(platform: string): Promise<{ id: string; name: string } | null>;
   list(): Promise<{ id: string; platform: string; name: string; avatar: string | null; intro: string | null; url: string | null }[]>;
-  /** 嘉宾音频采样：按语种取（生成时同语种优先注入）；无该语种 → null（调用方兜底任意语种） */
+  /** 嘉宾音频采样：按语种取（本地 TTS 同语种优先注入）；无该语种 → null（调用方兜底任意语种） */
   voiceSampleByLanguage(guestId: string, language: string): Promise<GuestVoiceSampleRow | null>;
   /** 兜底：该嘉宾任意语种采样（缺目标语种时用） */
   voiceSampleAny(guestId: string): Promise<GuestVoiceSampleRow | null>;
   /** 管理录入/更新（guest_id + language 唯一，upsert） */
   upsertVoiceSample(row: { guestId: string; language: string; audioKey: string; referenceId?: string | null; transcript?: string | null }): Promise<void>;
+  /** 更新嘉宾称呼/简介（guests 表——节目中的称呼服务端配置） */
+  update(id: string, row: { name?: string; intro?: string | null }): Promise<void>;
   /** 管理列表（join guests 展示名） */
   listVoiceSamples(): Promise<{
     id: string;
@@ -421,25 +206,30 @@ export interface GuestsRepo {
   }[]>;
 }
 
-export interface JobsRepo {
-  getQuotaInfo(userId: string): Promise<{ plan: "free" | "pro"; generatedCount: number; creditBalance: number }>;
-  consumeQuota(userId: string, credit: number): Promise<void>;
-  createJob(episodeId: string): Promise<{ id: string; episodeId: string; status: string; progress: number }>;
-  getLatestJob(episodeId: string): Promise<{ id: string; status: string; progress: number; error: string | null } | null>;
-  getOwnedEpisode(episodeId: string, userId: string): Promise<{ id: string } | null>;
-  listRecoverableJobs(): Promise<{ id: string; episodeId: string }[]>;
-  markJobProgress(jobId: string, status: JobStatus, progress: number): Promise<void>;
-  markJobDone(jobId: string): Promise<void>;
-  markJobFailed(jobId: string, error: string): Promise<void>;
+export interface NotificationsRepo {
+  /** 创建站内通知（拒审 / 上线） */
+  create(row: { userId: string; type: "rejected" | "published"; title: string; body?: string | null; link?: string | null }): Promise<void>;
+  /** 我的通知（新→旧，limit 50） */
+  listByUser(userId: string): Promise<Array<{
+    id: string; type: string; title: string; body: string | null; link: string | null;
+    readAt: Date | null; createdAt: Date;
+  }>>;
+  /** 未读数 */
+  unreadCount(userId: string): Promise<number>;
+  /** 全部标记已读 */
+  markAllRead(userId: string): Promise<void>;
+  /** 用户邮箱（通知邮件收件人） */
+  getEmailByUserId(userId: string): Promise<string | null>;
+  /** 某时间点之后是否存在指定类型通知（拒审/上线后是否已通知投稿人——编辑端推断用） */
+  existsAfter(userId: string, type: string, after: Date): Promise<boolean>;
+  /** 是否已存在指向该链接的通知（发布通知 link=/episode/{id}——已通知推断） */
+  existsByLink(link: string): Promise<boolean>;
 }
 
 export type Repos = {
   guests: GuestsRepo;
-  snapshots: SnapshotsRepo;
-  polishes: PolishesRepo;
-  transcripts: TranscriptsRepo;
+  submissions: SubmissionsRepo;
   episodes: EpisodesRepo;
-  jobs: JobsRepo;
   notifications: NotificationsRepo;
 };
 
@@ -578,6 +368,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           },
         });
       },
+      async update(id, row) {
+        await db.update(schema.guests)
+          .set({
+            ...(row.name !== undefined ? { name: row.name } : {}),
+            ...(row.intro !== undefined ? { intro: row.intro } : {}),
+          })
+          .where(eq(schema.guests.id, id));
+      },
       async listVoiceSamples() {
         return db
           .select({
@@ -594,627 +392,180 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .orderBy(schema.guests.platform);
       },
     },
-    snapshots: {
-      async getById(id) {
-        const rows = await db
-          .select({
-            parsedDialogue: schema.snapshots.parsedDialogue,
-            sourceTitle: schema.snapshots.sourceTitle,
-            platform: schema.snapshots.platform,
-            prefixSourceId: schema.snapshots.prefixSourceId,
-            url: schema.snapshots.url,
-          })
-          .from(schema.snapshots)
-          .where(eq(schema.snapshots.id, id))
-          .limit(1);
-        return rows[0] ?? null;
-      },
-      async getByUrl(url) {
-        const rows = await db
-          .select({
-            id: schema.snapshots.id,
-            platform: schema.snapshots.platform,
-            sourceTitle: schema.snapshots.sourceTitle,
-            sourceConversationId: schema.snapshots.sourceConversationId,
-            parsedDialogue: schema.snapshots.parsedDialogue,
-            fingerprint: schema.snapshots.fingerprint,
-            quality: schema.snapshots.quality,
-            status: schema.snapshots.status,
-            retryAfter: schema.snapshots.retryAfter,
-            lastError: schema.snapshots.lastError,
-          })
-          .from(schema.snapshots)
-          .where(eq(schema.snapshots.url, url))
-          .limit(1);
-        return rows[0] ?? null;
-      },
-      async create(row) {
-        const rows = await db.insert(schema.snapshots).values({
-          url: row.url,
-          platform: row.platform as never,
-          sourceTitle: row.sourceTitle,
-          sourceConversationId: row.sourceConversationId,
-          parsedDialogue: row.parsedDialogue,
-        }).returning({ id: schema.snapshots.id });
-        return { id: rows[0].id };
-      },
-      async updateContent(id, row) {
-        await db.update(schema.snapshots)
-          .set({
-            platform: row.platform as never,
-            sourceTitle: row.sourceTitle,
-            sourceConversationId: row.sourceConversationId,
-            parsedDialogue: row.parsedDialogue,
-            status: "ok",
-            lastError: null,
-            retryAfter: null,
-            updatedAt: new Date(),
-          })
-          .where(eq(schema.snapshots.id, id));
-      },
-      async updateQuality(id, quality) {
-        await db.update(schema.snapshots)
-          .set({ quality, updatedAt: new Date() })
-          .where(eq(schema.snapshots.id, id));
-      },
-      async markUnreachable(id, error) {
-        await db.update(schema.snapshots)
-          .set({
-            status: "unreachable",
-            lastError: error,
-            retryAfter: new Date(Date.now() + 10 * 60 * 1000),
-            updatedAt: new Date(),
-          })
-          .where(eq(schema.snapshots.id, id));
-      },
-      async markParseFailed(id, error) {
-        await db.update(schema.snapshots)
-          .set({ status: "parse_failed", lastError: error, updatedAt: new Date() })
-          .where(eq(schema.snapshots.id, id));
-      },
-      async listTraceable() {
-        return db
-          .select({
-            id: schema.snapshots.id,
-            sourceTitle: schema.snapshots.sourceTitle,
-            fingerprint: schema.snapshots.fingerprint,
-            parsedDialogue: schema.snapshots.parsedDialogue,
-          })
-          .from(schema.snapshots)
-          .where(isNotNull(schema.snapshots.parsedDialogue));
-      },
-      async setSourceTrace(id, row) {
-        await db.update(schema.snapshots)
-          .set({
-            fingerprint: row.fingerprint,
-            prefixSourceId: row.prefixSourceId,
-            updatedAt: new Date(),
-          })
-          .where(eq(schema.snapshots.id, id));
-      },
-    },
 
-    polishes: {
-      async findByUserSnapshot(userId, snapshotId) {
-        const rows = await db
-          .select({ id: schema.polishes.id, title: schema.polishes.title, status: schema.polishes.status })
-          .from(schema.polishes)
-          .where(and(eq(schema.polishes.userId, userId), eq(schema.polishes.snapshotId, snapshotId)))
-          .limit(1);
-        return rows[0] ?? null;
-      },
-
-      async create(row) {
+    submissions: {
+      /** 投稿入库（唯一约束 user×url 兜底；重复提交由路由层查 existing） */
+      async create(userId, url, title) {
         try {
-          const rows = await db.insert(schema.polishes).values(row).returning({ id: schema.polishes.id });
-          return { id: rows[0].id };
-        } catch (err) {
-          if (isUniqueViolation(err)) return { id: "" }; // 竞态：并发创建撞唯一约束
-          throw err;
-        }
-      },
-      /** 投稿提交：创建 submitted 容器（唯一约束 user×snapshot 兜底；重复提交由路由层查 existing） */
-      async createSubmission(userId, snapshotId, title) {
-        try {
-          const rows = await db.insert(schema.polishes).values({
+          const rows = await db.insert(schema.submissions).values({
             userId,
-            snapshotId,
+            url,
             title: title ?? null,
             status: "submitted",
-          }).returning({ id: schema.polishes.id });
+          }).returning({ id: schema.submissions.id });
           return { id: rows[0].id };
         } catch (err) {
-          if (isUniqueViolation(err)) return { id: "" };
+          if (isUniqueViolation(err)) return { id: "" }; // 竞态：并发提交撞唯一约束
           throw err;
         }
       },
-      /** 我的投稿列表（submitted/accepted/rejected + 最新节目状态）；按投稿时间倒序 */
+      async findByUserUrl(userId, url) {
+        const rows = await db
+          .select({ id: schema.submissions.id, status: schema.submissions.status })
+          .from(schema.submissions)
+          .where(and(eq(schema.submissions.userId, userId), eq(schema.submissions.url, url)))
+          .limit(1);
+        return rows[0] ?? null;
+      },
       async countPendingByUser(userId) {
         const rows = await db
           .select({ n: count() })
-          .from(schema.polishes)
-          .where(and(eq(schema.polishes.userId, userId), eq(schema.polishes.status, "submitted")));
+          .from(schema.submissions)
+          .where(and(eq(schema.submissions.userId, userId), eq(schema.submissions.status, "submitted")));
         return rows[0]?.n ?? 0;
       },
-      async listSubmissionsByUser(userId) {
-        const polishRows = await db
+      async listByUser(userId) {
+        const subRows = await db
           .select({
-            id: schema.polishes.id,
-            title: schema.polishes.title,
-            status: schema.polishes.status,
-            snapshotTitle: schema.snapshots.sourceTitle,
-            platform: schema.snapshots.platform,
-            rejectedReason: schema.polishes.rejectedReason,
-            createdAt: schema.polishes.createdAt,
+            id: schema.submissions.id,
+            url: schema.submissions.url,
+            title: schema.submissions.title,
+            status: schema.submissions.status,
+            rejectedReason: schema.submissions.rejectedReason,
+            createdAt: schema.submissions.createdAt,
           })
-          .from(schema.polishes)
-          .innerJoin(schema.snapshots, eq(schema.polishes.snapshotId, schema.snapshots.id))
-          .where(and(
-            eq(schema.polishes.userId, userId),
-            inArray(schema.polishes.status, ["submitted", "accepted", "rejected"]),
-          ))
-          .orderBy(desc(schema.polishes.createdAt));
+          .from(schema.submissions)
+          .where(eq(schema.submissions.userId, userId))
+          .orderBy(desc(schema.submissions.createdAt));
         const epRows = await db
-          .select({ polishId: schema.episodes.polishId, status: schema.episodes.status, createdAt: schema.episodes.createdAt })
+          .select({ submissionId: schema.episodes.submissionId, status: schema.episodes.status, createdAt: schema.episodes.createdAt })
           .from(schema.episodes)
-          .where(inArray(schema.episodes.polishId, polishRows.map((p) => p.id)));
-        // 每投稿最新节目状态（一投稿可多期——编辑多脚本多次生成，取最新）
-        const latestByPolish = new Map<string, { status: string; createdAt: Date }>();
+          .where(inArray(schema.episodes.submissionId, subRows.map((s) => s.id)));
+        // 每投稿最新节目状态（一投稿可多期——编辑多次制作，取最新）
+        const latestBySubmission = new Map<string, { status: string; createdAt: Date }>();
         for (const ep of epRows) {
-          const cur = latestByPolish.get(ep.polishId);
-          if (!cur || ep.createdAt > cur.createdAt) latestByPolish.set(ep.polishId, { status: ep.status, createdAt: ep.createdAt });
+          const cur = latestBySubmission.get(ep.submissionId);
+          if (!cur || ep.createdAt > cur.createdAt) latestBySubmission.set(ep.submissionId, { status: ep.status, createdAt: ep.createdAt });
         }
-        return polishRows.map((p) => ({
-          id: p.id,
-          title: p.title,
-          status: p.status,
-          snapshotTitle: p.snapshotTitle,
-          platform: p.platform,
-          episodeStatus: latestByPolish.get(p.id)?.status ?? null,
-          rejectedReason: p.rejectedReason,
-          createdAt: p.createdAt,
+        return subRows.map((s) => ({
+          id: s.id,
+          url: s.url,
+          title: s.title,
+          status: s.status,
+          rejectedReason: s.rejectedReason,
+          episodeStatus: latestBySubmission.get(s.id)?.status ?? null,
+          createdAt: s.createdAt,
         }));
       },
-      async listQueue(status) {
+      async listQueue(status = "submitted") {
         const rows = await db
           .select({
-            id: schema.polishes.id,
-            title: schema.polishes.title,
-            snapshotTitle: schema.snapshots.sourceTitle,
-            platform: schema.snapshots.platform,
-            status: schema.polishes.status,
-            createdAt: schema.polishes.createdAt,
+            id: schema.submissions.id,
+            url: schema.submissions.url,
+            title: schema.submissions.title,
+            status: schema.submissions.status,
+            createdAt: schema.submissions.createdAt,
+            userEmail: schema.authUsers.email,
+            displayName: schema.profiles.displayName,
+            hasVoiceSample: sql<boolean>`EXISTS (
+              SELECT 1 FROM ${schema.voiceSamples} vs
+              WHERE vs.user_id = ${schema.submissions.userId} AND vs.status = 'ready'
+            )`,
           })
-          .from(schema.polishes)
-          .innerJoin(schema.snapshots, eq(schema.polishes.snapshotId, schema.snapshots.id))
-          .where(eq(schema.polishes.status, status))
-          .orderBy(asc(schema.polishes.createdAt)); // inbox：先到先审
+          .from(schema.submissions)
+          .innerJoin(schema.profiles, eq(schema.submissions.userId, schema.profiles.id))
+          .innerJoin(schema.authUsers, eq(schema.profiles.id, schema.authUsers.id))
+          .where(eq(schema.submissions.status, status))
+          .orderBy(asc(schema.submissions.createdAt)); // inbox：先到先审
         return rows;
       },
-      async getById(id) {
+      async getDetail(id) {
         const rows = await db
           .select({
-            id: schema.polishes.id,
-            userId: schema.polishes.userId,
-            snapshotId: schema.polishes.snapshotId,
-            title: schema.polishes.title,
-            status: schema.polishes.status,
-            rejectedReason: schema.polishes.rejectedReason,
-            reviewedBy: schema.polishes.reviewedBy,
-            reviewedAt: schema.polishes.reviewedAt,
-            createdAt: schema.polishes.createdAt,
+            id: schema.submissions.id,
+            userId: schema.submissions.userId,
+            url: schema.submissions.url,
+            title: schema.submissions.title,
+            status: schema.submissions.status,
+            rejectedReason: schema.submissions.rejectedReason,
+            reviewedAt: schema.submissions.reviewedAt,
+            createdAt: schema.submissions.createdAt,
+            userEmail: schema.authUsers.email,
+            displayName: schema.profiles.displayName,
           })
-          .from(schema.polishes)
-          .where(eq(schema.polishes.id, id))
-          .limit(1);
-        return rows[0] ?? null;
-      },
-      async setStatus(id, status, opts = {}) {
-        await db.update(schema.polishes)
-          .set({
-            status,
-            rejectedReason: opts.rejectedReason ?? null,
-            reviewedBy: opts.reviewedBy ?? null,
-            reviewedAt: new Date(),
-          })
-          .where(eq(schema.polishes.id, id));
-      },
-      async listAccepted() {
-        return db
-          .select({
-            id: schema.polishes.id,
-            title: schema.polishes.title,
-            snapshotTitle: schema.snapshots.sourceTitle,
-            platform: schema.snapshots.platform,
-            createdAt: schema.polishes.createdAt,
-            reviewedAt: schema.polishes.reviewedAt,
-          })
-          .from(schema.polishes)
-          .innerJoin(schema.snapshots, eq(schema.polishes.snapshotId, schema.snapshots.id))
-          .where(eq(schema.polishes.status, "accepted"))
-          .orderBy(desc(schema.polishes.reviewedAt));
-      },
-      async overviewStats() {
-        const countBy = async (status: "submitted" | "accepted" | "rejected") => {
-          const rows = await db
-            .select({ n: sql<number>`count(*)` })
-            .from(schema.polishes)
-            .where(eq(schema.polishes.status, status));
-          return Number(rows[0]?.n ?? 0);
-        };
-        // 脚本：待生成 = 已收录投稿下未用脚本；已生成 = 已用脚本；失败 = 语音生成失败节目数
-        const scripts = async () => {
-          const pending = await db
-            .select({ n: sql<number>`count(*)` })
-            .from(schema.transcripts)
-            .innerJoin(schema.polishes, eq(schema.transcripts.polishId, schema.polishes.id))
-            .where(and(eq(schema.polishes.status, "accepted"), eq(schema.transcripts.status, "unused")));
-          const generated = await db
-            .select({ n: sql<number>`count(*)` })
-            .from(schema.transcripts)
-            .where(eq(schema.transcripts.status, "used"));
-          const failed = await db
-            .select({ n: sql<number>`count(*)` })
-            .from(schema.episodes)
-            .where(eq(schema.episodes.status, "failed"));
-          return {
-            pending: Number(pending[0]?.n ?? 0),
-            generated: Number(generated[0]?.n ?? 0),
-            failed: Number(failed[0]?.n ?? 0),
-          };
-        };
-        const episodes = async () => {
-          const published = await db
-            .select({ n: sql<number>`count(*)` })
-            .from(schema.episodes)
-            .where(eq(schema.episodes.status, "published"));
-          return { published: Number(published[0]?.n ?? 0), failed: 0 };
-        };
-        const [submitted, accepted, rejected] = await Promise.all([
-          countBy("submitted"), countBy("accepted"), countBy("rejected"),
-        ]);
-        const [scriptStats, episodeStats] = await Promise.all([scripts(), episodes()]);
-        return {
-          reviews: { submitted, accepted, rejected },
-          scripts: scriptStats,
-          episodes: episodeStats,
-        };
-      },
-      async getOwned(id, userId) {
-        const rows = await db
-          .select({
-            id: schema.polishes.id,
-            snapshotId: schema.polishes.snapshotId,
-            title: schema.polishes.title,
-            status: schema.polishes.status,
-          })
-          .from(schema.polishes)
-          .where(and(eq(schema.polishes.id, id), eq(schema.polishes.userId, userId)))
-          .limit(1);
-        return rows[0] ?? null;
-      },
-
-      async getPolishDetail(id, userId) {
-        const rows = await db
-          .select({
-            id: schema.polishes.id,
-            title: schema.polishes.title,
-            snapshotTitle: schema.snapshots.sourceTitle,
-            snapshotUrl: schema.snapshots.url,
-            quality: schema.snapshots.quality,
-          })
-          .from(schema.polishes)
-          .innerJoin(schema.snapshots, eq(schema.polishes.snapshotId, schema.snapshots.id))
-          .where(and(eq(schema.polishes.id, id), eq(schema.polishes.userId, userId)))
+          .from(schema.submissions)
+          .innerJoin(schema.profiles, eq(schema.submissions.userId, schema.profiles.id))
+          .innerJoin(schema.authUsers, eq(schema.profiles.id, schema.authUsers.id))
+          .where(eq(schema.submissions.id, id))
           .limit(1);
         const row = rows[0];
         if (!row) return null;
-        const transcripts = await db
+        const sampleRows = await db
           .select({
-            id: schema.transcripts.id,
-            segments: schema.transcripts.segments,
-            updatedSegments: schema.transcripts.updatedSegments,
-            topic: schema.transcripts.topic,
-            title: schema.transcripts.title,
-            creationNote: schema.transcripts.creationNote,
-            status: schema.transcripts.status,
-            language: schema.transcripts.language,
-            createdAt: schema.transcripts.createdAt,
-            // 一个脚本只能生成一期节目：join 出该脚本的节目（无 = 未生成）
-            episodeId: schema.episodes.id,
+            audioUrl: schema.voiceSamples.audioUrl,
+            transcript: schema.voiceSamples.transcript,
+            language: schema.voiceSamples.language,
+            status: schema.voiceSamples.status,
           })
-          .from(schema.transcripts)
-          .leftJoin(schema.episodes, eq(schema.episodes.transcriptId, schema.transcripts.id))
-          .where(eq(schema.transcripts.polishId, id))
-          .orderBy(desc(schema.transcripts.createdAt));
+          .from(schema.voiceSamples)
+          .where(and(eq(schema.voiceSamples.userId, row.userId), eq(schema.voiceSamples.status, "ready")))
+          .orderBy(desc(schema.voiceSamples.createdAt))
+          .limit(1);
         return {
           id: row.id,
+          userId: row.userId,
+          url: row.url,
           title: row.title,
-          snapshotTitle: row.snapshotTitle,
-          snapshotUrl: row.snapshotUrl,
-          quality: row.quality ?? null,
-          transcripts: transcripts.map((t) => ({
-            id: t.id,
-            // 对外去标签（防搬运到其他 TTS）；TTS 管线用存储原始带标签文本
-            segments: stripSegmentTexts((t.updatedSegments ?? t.segments) as schema.ScriptSegment[]),
-            topic: t.topic,
-            title: t.title,
-            creationNote: t.creationNote,
-            status: t.status,
-            language: t.language,
-            createdAt: t.createdAt,
-            episodeId: t.episodeId,
-          })),
+          status: row.status,
+          rejectedReason: row.rejectedReason,
+          reviewedAt: row.reviewedAt,
+          createdAt: row.createdAt,
+          userEmail: row.userEmail,
+          displayName: row.displayName,
+          voiceSample: sampleRows[0] ?? null,
         };
       },
-      async listByUser(userId) {
-        // 工作台：polish 列表 + 快照标题/平台；每 polish 最新节目状态与脚本列表在 JS 里归并（数据量小）
-        const polishRows = await db
-          .select({
-            id: schema.polishes.id,
-            title: schema.polishes.title,
-            status: schema.polishes.status,
-            snapshotTitle: schema.snapshots.sourceTitle,
-            platform: schema.snapshots.platform,
-            createdAt: schema.polishes.createdAt,
-          })
-          .from(schema.polishes)
-          .innerJoin(schema.snapshots, eq(schema.polishes.snapshotId, schema.snapshots.id))
-          .where(eq(schema.polishes.userId, userId))
-          .orderBy(desc(schema.polishes.createdAt));
-        const epRows = await db
-          .select({
-            id: schema.episodes.id,
-            polishId: schema.episodes.polishId,
-            status: schema.episodes.status,
-            createdAt: schema.episodes.createdAt,
-          })
-          .from(schema.episodes)
-          .where(eq(schema.episodes.userId, userId))
-          .orderBy(desc(schema.episodes.createdAt));
-        // 全部脚本一次取回按 polish 归并（新→旧，与编辑页同序）
-        const trRows = await db
-          .select({
-            polishId: schema.transcripts.polishId,
-            id: schema.transcripts.id,
-            title: schema.transcripts.title,
-            topic: schema.transcripts.topic,
-            status: schema.transcripts.status,
-          })
-          .from(schema.transcripts)
-          .orderBy(desc(schema.transcripts.createdAt));
-        const scriptsByPolish = new Map<string, { id: string; title: string | null; topic: string | null; status: string | null }[]>();
-        for (const tr of trRows) {
-          const list = scriptsByPolish.get(tr.polishId) ?? [];
-          list.push({ id: tr.id, title: tr.title, topic: tr.topic, status: tr.status });
-          scriptsByPolish.set(tr.polishId, list);
-        }
-        // AI 平台展示名（guests 表，7 平台小表一次取）
-        const guestRows = await db
-          .select({ platform: schema.guests.platform, name: schema.guests.name })
-          .from(schema.guests);
-        // 快照 platform 可能含测试用非枚举值（plain），按 string 索引
-        const nameByPlatform = new Map<string, string>(guestRows.map((g) => [g.platform, g.name]));
-        const latestByPolish = new Map<string, { id: string; status: string }>();
-        for (const ep of epRows) {
-          if (!latestByPolish.has(ep.polishId)) latestByPolish.set(ep.polishId, { id: ep.id, status: ep.status });
-        }
-        return polishRows.map((p) => ({
-          id: p.id,
-          title: p.title,
-          status: p.status,
-          snapshotTitle: p.snapshotTitle,
-          platform: p.platform,
-          aiName: p.platform ? (nameByPlatform.get(p.platform) ?? null) : null,
-          scripts: scriptsByPolish.get(p.id) ?? [],
-          episodeId: latestByPolish.get(p.id)?.id ?? null,
-          episodeStatus: latestByPolish.get(p.id)?.status ?? null,
-          createdAt: p.createdAt,
-        }));
+      async reject(id, reason) {
+        await db.update(schema.submissions)
+          .set({ status: "rejected", rejectedReason: reason, reviewedAt: new Date(), updatedAt: new Date() })
+          .where(eq(schema.submissions.id, id));
       },
-    },
-
-    transcripts: {
-      async create(polishId, segments, language, opts = {}) {
-        const rows = await db.insert(schema.transcripts).values({
-          polishId,
-          segments,
-          language,
-          topic: opts.topic ?? null,
-          title: opts.title ?? null,
-          creationNote: opts.creationNote ?? null,
-          hostName: opts.hostName ?? null,
-          guestId: opts.guestId ?? null,
-          guestName: opts.guestName ?? null,
-        }).returning({ id: schema.transcripts.id });
-        return { id: rows[0].id };
-      },
-      async markUsed(id) {
-        await db.update(schema.transcripts).set({ status: "used" }).where(eq(schema.transcripts.id, id));
-      },
-      async listByPolish(polishId) {
-        return db
-          .select({
-            id: schema.transcripts.id,
-            segments: schema.transcripts.segments,
-            updatedSegments: schema.transcripts.updatedSegments,
-            topic: schema.transcripts.topic,
-            title: schema.transcripts.title,
-            creationNote: schema.transcripts.creationNote,
-            language: schema.transcripts.language,
-            status: schema.transcripts.status,
-            createdAt: schema.transcripts.createdAt,
-          })
-          .from(schema.transcripts)
-          .where(eq(schema.transcripts.polishId, polishId))
-          .orderBy(desc(schema.transcripts.createdAt));
-      },
-      async getById(id) {
-        const rows = await db
-          .select({
-            id: schema.transcripts.id,
-            polishId: schema.transcripts.polishId,
-            segments: schema.transcripts.segments,
-            updatedSegments: schema.transcripts.updatedSegments,
-            topic: schema.transcripts.topic,
-            title: schema.transcripts.title,
-            language: schema.transcripts.language,
-            guestId: schema.transcripts.guestId,
-            status: schema.transcripts.status,
-          })
-          .from(schema.transcripts)
-          .where(eq(schema.transcripts.id, id))
-          .limit(1);
-        return rows[0] ?? null;
-      },
-      async getOwned(id, userId) {
-        const rows = await db
-          .select({
-            id: schema.transcripts.id,
-            polishId: schema.transcripts.polishId,
-            segments: schema.transcripts.segments,
-            updatedSegments: schema.transcripts.updatedSegments,
-            topic: schema.transcripts.topic,
-            language: schema.transcripts.language,
-            guestId: schema.transcripts.guestId,
-            snapshotId: schema.polishes.snapshotId,
-          })
-          .from(schema.transcripts)
-          .innerJoin(schema.polishes, eq(schema.transcripts.polishId, schema.polishes.id))
-          .where(and(eq(schema.transcripts.id, id), eq(schema.polishes.userId, userId)))
-          .limit(1);
-        const row = rows[0];
-        if (!row) return null;
-        return {
-          id: row.id,
-          polishId: row.polishId,
-          // 对外去标签；TTS 管线用存储原始带标签文本
-          segments: stripSegmentTexts((row.updatedSegments ?? row.segments) as ScriptSegment[]),
-          topic: row.topic,
-          language: row.language,
-          guestId: row.guestId,
-          snapshotId: row.snapshotId,
-        };
-      },
-      async updateSegments(id, segments) {
-        // 编辑草稿写 updated_segments：原始 segments（LLM 生成）保留对比/恢复
-        await db.update(schema.transcripts).set({ updatedSegments: segments }).where(eq(schema.transcripts.id, id));
+      async markPublished(id) {
+        await db.update(schema.submissions)
+          .set({ status: "published", reviewedAt: new Date(), updatedAt: new Date() })
+          .where(eq(schema.submissions.id, id));
       },
     },
 
     episodes: {
-      async create(row) {
-        const rows = await db.insert(schema.episodes).values({
-          userId: row.userId,
-          transcriptId: row.transcriptId,
-          polishId: row.polishId,
-          slug: randomSlug(),
-          title: row.title,
-          description: row.description ?? null,
-          snapshotId: row.snapshotId ?? null,
-          topic: row.topic ?? null,
-          tags: row.tags ?? null,
-          subtitle: row.subtitle ?? null,
-          hostId: row.hostId ?? null,
-          guestId: row.guestId ?? null,
-        }).returning({ id: schema.episodes.id });
-        return { id: rows[0].id };
-      },
-      async getByTranscript(transcriptId) {
-        const rows = await db
-          .select({ id: schema.episodes.id })
-          .from(schema.episodes)
-          .where(eq(schema.episodes.transcriptId, transcriptId))
-          .limit(1);
-        return rows[0] ?? null;
-      },
-      async listByUser(userId) {
-        const episodes = await db
-          .select({
-            id: schema.episodes.id,
-            title: schema.episodes.title,
-            status: schema.episodes.status,
-            polishId: schema.episodes.polishId,
-            durationSeconds: schema.episodes.durationSeconds,
-            topic: schema.episodes.topic,
-            tags: schema.episodes.tags,
-            coverUrl: schema.episodes.coverUrl,
-            createdAt: schema.episodes.createdAt,
-          })
-          .from(schema.episodes)
-          .where(eq(schema.episodes.userId, userId))
-          .orderBy(desc(schema.episodes.createdAt));
-        // 最新 job 归并（数据量小；episodes.status 不随管线更新，job 才是真状态）
-        const jobRows = await db
-          .select({
-            episodeId: schema.generationJobs.episodeId,
-            status: schema.generationJobs.status,
-            error: schema.generationJobs.error,
-            createdAt: schema.generationJobs.createdAt,
-          })
-          .from(schema.generationJobs)
-          .orderBy(desc(schema.generationJobs.createdAt));
-        const latestByEpisode = new Map<string, { status: string; error: string | null }>();
-        for (const j of jobRows) {
-          if (!latestByEpisode.has(j.episodeId)) latestByEpisode.set(j.episodeId, { status: j.status, error: j.error });
-        }
-        return episodes.map((e) => ({
-          ...e,
-          jobStatus: latestByEpisode.get(e.id)?.status ?? null,
-          jobError: latestByEpisode.get(e.id)?.error ?? null,
-        }));
-      },
-      async getOwned(id, userId) {
-        const rows = await db
-          .select({
-            id: schema.episodes.id,
-            transcriptId: schema.episodes.transcriptId,
-            polishId: schema.episodes.polishId,
-            title: schema.episodes.title,
-            description: schema.episodes.description,
-            status: schema.episodes.status,
-            durationSeconds: schema.episodes.durationSeconds,
-            topic: schema.episodes.topic,
-            tags: schema.episodes.tags,
-            coverUrl: schema.episodes.coverUrl,
-            createdAt: schema.episodes.createdAt,
-            publishedAt: schema.episodes.publishedAt,
-          })
-          .from(schema.episodes)
-          .where(and(eq(schema.episodes.id, id), eq(schema.episodes.userId, userId)))
-          .limit(1);
-        return rows[0] ?? null;
-      },
-      async getEpisodeAudio(id, userId) {
-        // 音频在 tracks（多语言音轨；默认取最新一条 = 主语言）
-        const rows = await db
-          .select({ audioUrl: schema.tracks.audioUrl })
-          .from(schema.episodes)
-          .innerJoin(schema.tracks, eq(schema.tracks.episodeId, schema.episodes.id))
-          .where(and(eq(schema.episodes.id, id), eq(schema.episodes.userId, userId)))
-          .orderBy(desc(schema.tracks.createdAt))
-          .limit(1);
-        return rows[0]?.audioUrl ?? null;
-      },
-      async getEpisodeScript(episodeId) {
-        const rows = await db
-          .select({ segments: schema.transcripts.segments, updatedSegments: schema.transcripts.updatedSegments })
-          .from(schema.episodes)
-          .innerJoin(schema.transcripts, eq(schema.episodes.transcriptId, schema.transcripts.id))
-          .where(eq(schema.episodes.id, episodeId))
-          .limit(1);
-        const row = rows[0];
-        if (!row) return null;
-        return { segments: (row.updatedSegments ?? row.segments) as ScriptSegment[] };
-      },
-      async getEpisodeGuest(episodeId) {
-        const rows = await db
-          .select({ guestId: schema.transcripts.guestId })
-          .from(schema.episodes)
-          .innerJoin(schema.transcripts, eq(schema.episodes.transcriptId, schema.transcripts.id))
-          .where(eq(schema.episodes.id, episodeId))
-          .limit(1);
-        return rows[0] ?? null;
+      /** 编辑一次性上传发布：slug + 期号（max+1，无空洞）+ published + isPublic，单事务 */
+      async createPublished(row) {
+        return db.transaction(async (tx) => {
+          const [maxRow] = await tx
+            .select({ max: sql<number>`COALESCE(MAX(${schema.episodes.number}), 0)` })
+            .from(schema.episodes);
+          const number = (maxRow?.max ?? 0) + 1;
+          const inserted = await tx.insert(schema.episodes).values({
+            submissionId: row.submissionId,
+            userId: row.userId,
+            hostId: row.hostId ?? null,
+            guestId: row.guestId ?? null,
+            slug: randomSlug(),
+            title: row.title,
+            description: row.description ?? null,
+            coverUrl: row.coverUrl ?? null,
+            audioUrl: row.audioUrl,
+            audioSize: row.audioSize ?? null,
+            durationSeconds: row.durationSeconds ?? null,
+            language: row.language ?? "zh",
+            tags: row.tags ?? null,
+            number,
+            status: "published",
+            isPublic: true, // 上传即公开（公开音频端点/RSS/首页依赖此标志）
+            publishedAt: new Date(),
+          }).returning({ id: schema.episodes.id });
+          return { id: inserted[0].id, number };
+        });
       },
       async getPublicCoverKey(episodeId) {
         const rows = await db
@@ -1226,178 +577,23 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       },
       async getPublicAudioKey(episodeId) {
         const rows = await db
-          .select({ audioUrl: schema.tracks.audioUrl, createdAt: schema.tracks.createdAt })
+          .select({ audioUrl: schema.episodes.audioUrl, publishedAt: schema.episodes.publishedAt })
           .from(schema.episodes)
-          .innerJoin(schema.tracks, eq(schema.tracks.episodeId, schema.episodes.id))
           .where(and(
             eq(schema.episodes.id, episodeId),
             eq(schema.episodes.status, "published"),
             eq(schema.episodes.isPublic, true),
           ))
-          .orderBy(desc(schema.tracks.createdAt))
           .limit(1);
         const row = rows[0];
-        return row ? { audioKey: row.audioUrl!, version: row.createdAt.toISOString() } : null;
-      },
-      async getPublishedDialogue(episodeId) {
-        const rows = await db
-          .select({
-            platform: schema.snapshots.platform,
-            sourceTitle: schema.snapshots.sourceTitle,
-            sourceUrl: schema.snapshots.url,
-            parsedDialogue: schema.snapshots.parsedDialogue,
-          })
-          .from(schema.episodes)
-          .innerJoin(schema.polishes, eq(schema.episodes.polishId, schema.polishes.id))
-          .innerJoin(schema.snapshots, eq(schema.polishes.snapshotId, schema.snapshots.id))
-          .where(and(eq(schema.episodes.id, episodeId), eq(schema.episodes.isPublic, true)))
-          .limit(1);
-        const row = rows[0];
-        return row ? { platform: row.platform, sourceTitle: row.sourceTitle ?? null, sourceUrl: row.sourceUrl, parsedDialogue: row.parsedDialogue } : null;
-      },
-      async setPublished(id) {
-        await db.update(schema.episodes)
-          .set({ status: "published", isPublic: true, publishedAt: new Date() })
-          .where(eq(schema.episodes.id, id));
-      },
-      async getEpisodeUserId(episodeId) {
-        const rows = await db
-          .select({ userId: schema.episodes.userId })
-          .from(schema.episodes)
-          .where(eq(schema.episodes.id, episodeId))
-          .limit(1);
-        return rows[0]?.userId ?? null;
-      },
-      async getEpisodeLanguage(episodeId) {
-        const rows = await db
-          .select({ language: schema.transcripts.language })
-          .from(schema.episodes)
-          .innerJoin(schema.transcripts, eq(schema.episodes.transcriptId, schema.transcripts.id))
-          .where(eq(schema.episodes.id, episodeId))
-          .limit(1);
-        return rows[0]?.language ?? null;
-      },
-      async getHostModelId(userId) {
-        const rows = await db
-          .select({ referenceId: schema.voiceSamples.referenceId })
-          .from(schema.voiceSamples)
-          .where(and(eq(schema.voiceSamples.userId, userId), eq(schema.voiceSamples.status, "ready")))
-          .orderBy(desc(schema.voiceSamples.createdAt))
-          .limit(1);
-        return rows[0]?.referenceId ?? null;
-      },
-      async getVoiceSampleKey(userId) {
-        const rows = await db
-          .select({ audioUrl: schema.voiceSamples.audioUrl })
-          .from(schema.voiceSamples)
-          .where(and(eq(schema.voiceSamples.userId, userId), eq(schema.voiceSamples.status, "ready")))
-          .orderBy(desc(schema.voiceSamples.createdAt))
-          .limit(1);
-        return rows[0]?.audioUrl ?? null;
-      },
-      async getVoiceSample(userId) {
-        const rows = await db
-          .select({
-            id: schema.voiceSamples.id,
-            language: schema.voiceSamples.language,
-            userId: schema.voiceSamples.userId,
-            status: schema.voiceSamples.status,
-            referenceId: schema.voiceSamples.referenceId,
-            transcript: schema.voiceSamples.transcript,
-            audioUrl: schema.voiceSamples.audioUrl,
-            duration: schema.voiceSamples.duration,
-            createdAt: schema.voiceSamples.createdAt,
-          })
-          .from(schema.voiceSamples)
-          .where(eq(schema.voiceSamples.userId, userId))
-          .orderBy(desc(schema.voiceSamples.createdAt))
-          .limit(1);
-        return rows[0] ?? null;
-      },
-      async getChannelActivatedAt(userId) {
-        const rows = await db
-          .select({ channelActivatedAt: schema.profiles.channelActivatedAt })
-          .from(schema.profiles)
-          .where(eq(schema.profiles.id, userId))
-          .limit(1);
-        return rows[0]?.channelActivatedAt ?? null;
-      },
-      async saveVoiceSample(row: VoiceSampleRow) {
-        // 一人多语种各一条（upsert by user+language）
-        await db.insert(schema.voiceSamples).values({
-          userId: row.userId,
-          language: row.language,
-          audioUrl: row.audioUrl,
-          referenceId: row.referenceId,
-          transcript: row.transcript,
-          duration: row.duration,
-          status: row.status,
-        }).onConflictDoUpdate({
-          target: [schema.voiceSamples.userId, schema.voiceSamples.language],
-          set: {
-            audioUrl: row.audioUrl,
-            referenceId: row.referenceId,
-            transcript: row.transcript,
-            duration: row.duration,
-            status: row.status,
-          },
-        });
-      },
-      async getVoiceSampleByLanguage(userId, language) {
-        const rows = await db
-          .select({
-            id: schema.voiceSamples.id,
-            language: schema.voiceSamples.language,
-            userId: schema.voiceSamples.userId,
-            status: schema.voiceSamples.status,
-            referenceId: schema.voiceSamples.referenceId,
-            transcript: schema.voiceSamples.transcript,
-            audioUrl: schema.voiceSamples.audioUrl,
-            duration: schema.voiceSamples.duration,
-            createdAt: schema.voiceSamples.createdAt,
-          })
-          .from(schema.voiceSamples)
-          .where(and(eq(schema.voiceSamples.userId, userId), eq(schema.voiceSamples.language, language)))
-          .limit(1);
-        return rows[0] ?? null;
-      },
-      async insertTrack(episodeId, language, audioKey, durationSeconds, size) {
-        await db.insert(schema.tracks).values({
-          episodeId,
-          language: language as "zh",
-          audioUrl: audioKey,
-          // ffprobe 时长是小数（如 164.05s），duration_seconds 列为 integer——取整写入
-          durationSeconds: Math.round(durationSeconds),
-        });
-      },
-
-      // ---- 账号/频道（/api/me/profile、/api/me/channel） ----
-      async getRole(userId) {
-        const rows = await db
-          .select({ role: schema.profiles.role })
-          .from(schema.profiles)
-          .where(eq(schema.profiles.id, userId))
-          .limit(1);
-        return (rows[0]?.role as "user" | "editor" | "admin" | undefined) ?? null;
-      },
-      async syncAdminRoles(emails) {
-        if (emails.length === 0) return 0;
-        const rows = await db
-          .update(schema.profiles)
-          .set({ role: "admin" })
-          .where(and(
-            inArray(schema.profiles.id, db.select({ id: schema.authUsers.id }).from(schema.authUsers).where(inArray(schema.authUsers.email, emails))),
-            ne(schema.profiles.role, "admin"),
-          ))
-          .returning({ id: schema.profiles.id });
-        return rows.length;
+        // version = 发布时间（ETag 用——重新制作发布是新 episode，内容变化 → 浏览器重新拉取）
+        return row && row.audioUrl ? { audioKey: row.audioUrl, version: (row.publishedAt ?? new Date(0)).toISOString() } : null;
       },
       async getById(id) {
         const rows = await db
           .select({
             id: schema.episodes.id,
-            polishId: schema.episodes.polishId,
-            transcriptId: schema.episodes.transcriptId,
+            submissionId: schema.episodes.submissionId,
             title: schema.episodes.title,
             description: schema.episodes.description,
             coverUrl: schema.episodes.coverUrl,
@@ -1412,29 +608,6 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .where(eq(schema.episodes.id, id))
           .limit(1);
         return rows[0] ?? null;
-      },
-      async publish(id, row) {
-        // 期号分配（max+1，无空洞——未发布无编号）+ 元数据 + published，单事务
-        return db.transaction(async (tx) => {
-          const [maxRow] = await tx
-            .select({ max: sql<number>`COALESCE(MAX(${schema.episodes.number}), 0)` })
-            .from(schema.episodes);
-          const number = (maxRow?.max ?? 0) + 1;
-          await tx.update(schema.episodes)
-            .set({
-              title: row.title,
-              description: row.description,
-              tags: row.tags,
-              coverUrl: row.coverUrl,
-              isPicked: row.isPicked,
-              number,
-              status: "published",
-              isPublic: true, // 发布即公开（公开音频端点/RSS/首页依赖此标志）
-              publishedAt: new Date(),
-            })
-            .where(eq(schema.episodes.id, id));
-          return { number };
-        });
       },
       async updatePublished(id, row) {
         await db.update(schema.episodes)
@@ -1462,32 +635,10 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .where(eq(schema.episodes.status, "published"))
           .orderBy(desc(schema.episodes.number));
       },
-      async findPublishedEpisodeBySnapshot(snapshotId) {
-        const rows = await db
-          .select({
-            id: schema.episodes.id,
-            title: schema.episodes.title,
-            durationSeconds: schema.episodes.durationSeconds,
-            // 称呼快照（生成时固化）：host/guest 均落在 transcript；旧数据为空时前端回退
-            hostName: schema.transcripts.hostName,
-            guestName: schema.transcripts.guestName,
-          })
-          .from(schema.episodes)
-          .innerJoin(schema.polishes, eq(schema.polishes.id, schema.episodes.polishId))
-          .innerJoin(schema.transcripts, eq(schema.transcripts.id, schema.episodes.transcriptId))
-          .where(and(
-            eq(schema.polishes.snapshotId, snapshotId),
-            inArray(schema.episodes.status, ["ready", "published"]),
-          ))
-          .orderBy(desc(schema.episodes.publishedAt))
-          .limit(1);
-        return rows[0] ?? null;
-      },
-      async listByPolish(polishId) {
+      async listBySubmission(submissionId) {
         return db
           .select({
             id: schema.episodes.id,
-            transcriptId: schema.episodes.transcriptId,
             title: schema.episodes.title,
             status: schema.episodes.status,
             number: schema.episodes.number,
@@ -1496,11 +647,102 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             publishedAt: schema.episodes.publishedAt,
           })
           .from(schema.episodes)
-          .where(eq(schema.episodes.polishId, polishId))
+          .where(eq(schema.episodes.submissionId, submissionId))
           .orderBy(desc(schema.episodes.createdAt));
       },
+      async getEpisodeUserId(episodeId) {
+        const rows = await db
+          .select({ userId: schema.episodes.userId })
+          .from(schema.episodes)
+          .where(eq(schema.episodes.id, episodeId))
+          .limit(1);
+        return rows[0]?.userId ?? null;
+      },
+      async getRole(userId) {
+        const rows = await db
+          .select({ role: schema.profiles.role })
+          .from(schema.profiles)
+          .where(eq(schema.profiles.id, userId))
+          .limit(1);
+        return (rows[0]?.role as "user" | "editor" | "admin" | undefined) ?? null;
+      },
+      async syncAdminRoles(emails) {
+        if (emails.length === 0) return 0;
+        const rows = await db
+          .update(schema.profiles)
+          .set({ role: "admin" })
+          .where(and(
+            inArray(schema.profiles.id, db.select({ id: schema.authUsers.id }).from(schema.authUsers).where(inArray(schema.authUsers.email, emails))),
+            ne(schema.profiles.role, "admin"),
+          ))
+          .returning({ id: schema.profiles.id });
+        return rows.length;
+      },
+      async getVoiceSample(userId) {
+        const rows = await db
+          .select({
+            id: schema.voiceSamples.id,
+            language: schema.voiceSamples.language,
+            userId: schema.voiceSamples.userId,
+            status: schema.voiceSamples.status,
+            transcript: schema.voiceSamples.transcript,
+            audioUrl: schema.voiceSamples.audioUrl,
+            duration: schema.voiceSamples.duration,
+            createdAt: schema.voiceSamples.createdAt,
+          })
+          .from(schema.voiceSamples)
+          .where(eq(schema.voiceSamples.userId, userId))
+          .orderBy(desc(schema.voiceSamples.createdAt))
+          .limit(1);
+        return rows[0] ?? null;
+      },
+      async getVoiceSampleByLanguage(userId, language) {
+        const rows = await db
+          .select({
+            id: schema.voiceSamples.id,
+            language: schema.voiceSamples.language,
+            userId: schema.voiceSamples.userId,
+            status: schema.voiceSamples.status,
+            transcript: schema.voiceSamples.transcript,
+            audioUrl: schema.voiceSamples.audioUrl,
+            duration: schema.voiceSamples.duration,
+            createdAt: schema.voiceSamples.createdAt,
+          })
+          .from(schema.voiceSamples)
+          .where(and(eq(schema.voiceSamples.userId, userId), eq(schema.voiceSamples.language, language)))
+          .limit(1);
+        return rows[0] ?? null;
+      },
+      async getVoiceSampleKey(userId) {
+        const rows = await db
+          .select({ audioUrl: schema.voiceSamples.audioUrl })
+          .from(schema.voiceSamples)
+          .where(and(eq(schema.voiceSamples.userId, userId), eq(schema.voiceSamples.status, "ready")))
+          .orderBy(desc(schema.voiceSamples.createdAt))
+          .limit(1);
+        return rows[0]?.audioUrl ?? null;
+      },
+      async saveVoiceSample(row: VoiceSampleRow) {
+        // 一人多语种各一条（upsert by user+language）
+        await db.insert(schema.voiceSamples).values({
+          userId: row.userId,
+          language: row.language,
+          audioUrl: row.audioUrl,
+          transcript: row.transcript,
+          duration: row.duration,
+          status: row.status,
+        }).onConflictDoUpdate({
+          target: [schema.voiceSamples.userId, schema.voiceSamples.language],
+          set: {
+            audioUrl: row.audioUrl,
+            transcript: row.transcript,
+            duration: row.duration,
+            status: row.status,
+          },
+        });
+      },
       async getProfile(userId) {
-        const [userRows, profileRows, accountRows] = await Promise.all([
+        const [userRows, profileRows] = await Promise.all([
           db
             .select({ email: schema.authUsers.email, name: schema.authUsers.name, emailVerified: schema.authUsers.emailVerified, image: schema.authUsers.image })
             .from(schema.authUsers)
@@ -1511,11 +753,6 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             .from(schema.profiles)
             .where(eq(schema.profiles.id, userId))
             .limit(1),
-          db
-            .select({ id: schema.authAccounts.id })
-            .from(schema.authAccounts)
-            .where(and(eq(schema.authAccounts.userId, userId), eq(schema.authAccounts.providerId, "github")))
-            .limit(1),
         ]);
         const user = userRows[0];
         const profile = profileRows[0];
@@ -1525,7 +762,6 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           nickname: user.name, // 对外契约 nickname；DB 列 user.name 是 better-auth 标准字段
           emailVerified: user.emailVerified,
           image: user.image,
-          hasGithub: accountRows.length > 0,
           username: profile.username,
           displayName: profile.displayName,
           bio: profile.bio,
@@ -1555,101 +791,6 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       async isUsernameTaken(userId, username) {
         return usernameTaken(db, userId, username);
       },
-    },
-
-    jobs: {
-      async getQuotaInfo(userId) {
-        const profileRows = await db
-          .select({ plan: schema.profiles.plan, creditBalance: schema.profiles.creditBalance })
-          .from(schema.profiles)
-          .where(eq(schema.profiles.id, userId))
-          .limit(1);
-        const profile = profileRows[0];
-        if (!profile) return { plan: "free", generatedCount: 0, creditBalance: 0 };
-        const doneRows = await db
-          .select({ count: count() })
-          .from(schema.generationJobs)
-          .innerJoin(schema.episodes, eq(schema.generationJobs.episodeId, schema.episodes.id))
-          .where(and(eq(schema.episodes.userId, userId), eq(schema.generationJobs.status, "done")));
-        return {
-          plan: profile.plan,
-          generatedCount: Number(doneRows[0].count),
-          creditBalance: profile.creditBalance,
-        };
-      },
-      async consumeQuota(userId, credit) {
-        if (credit <= 0) return;
-        await db.update(schema.profiles)
-          .set({ creditBalance: sql`${schema.profiles.creditBalance} - ${credit}` })
-          .where(and(eq(schema.profiles.id, userId), eq(schema.profiles.plan, "free")));
-      },
-      async createJob(episodeId) {
-        const rows = await db.insert(schema.generationJobs).values({
-          episodeId,
-          status: "queued",
-          progress: 0,
-        }).returning({
-          id: schema.generationJobs.id,
-          episodeId: schema.generationJobs.episodeId,
-          status: schema.generationJobs.status,
-          progress: schema.generationJobs.progress,
-        });
-        return rows[0];
-      },
-      async markJobFailed(jobId, error) {
-        await db
-          .update(schema.generationJobs)
-          .set({ status: "failed", error })
-          .where(eq(schema.generationJobs.id, jobId));
-      },
-      async getOwnedEpisode(episodeId, userId) {
-        const rows = await db
-          .select({ id: schema.episodes.id })
-          .from(schema.episodes)
-          .where(and(eq(schema.episodes.id, episodeId), eq(schema.episodes.userId, userId)))
-          .limit(1);
-        return rows[0] ?? null;
-      },
-      async getLatestJob(episodeId) {
-        const rows = await db
-          .select({
-            id: schema.generationJobs.id,
-            status: schema.generationJobs.status,
-            progress: schema.generationJobs.progress,
-            error: schema.generationJobs.error,
-          })
-          .from(schema.generationJobs)
-          .where(eq(schema.generationJobs.episodeId, episodeId))
-          .orderBy(desc(schema.generationJobs.createdAt))
-          .limit(1);
-        return rows[0] ?? null;
-      },
-      async listRecoverableJobs() {
-        return db
-          .select({ id: schema.generationJobs.id, episodeId: schema.generationJobs.episodeId })
-          .from(schema.generationJobs)
-          .where(inArray(schema.generationJobs.status, ["queued", "tts", "merge", "upload"]));
-      },
-      async markJobProgress(jobId, status, progress) {
-        await db.update(schema.generationJobs)
-          .set({ status, progress, updatedAt: new Date() })
-          .where(eq(schema.generationJobs.id, jobId));
-      },
-      async markJobDone(jobId) {
-        // job done + 节目进入"待发布"（ready）——编辑确认后才 published（P2）
-        await db.transaction(async (tx) => {
-          const rows = await tx.update(schema.generationJobs)
-            .set({ status: "done", progress: 100, error: null, updatedAt: new Date() })
-            .where(eq(schema.generationJobs.id, jobId))
-            .returning({ episodeId: schema.generationJobs.episodeId });
-          if (rows[0]) {
-            await tx.update(schema.episodes)
-              .set({ status: "ready" })
-              .where(and(eq(schema.episodes.id, rows[0].episodeId), eq(schema.episodes.status, "generating")));
-          }
-        });
-      },
-      
     },
   };
 }

@@ -32,11 +32,6 @@ export const env = {
     viteEnv("VITE_SITE_BASE_URL") ??
     serverEnv.SITE_BASE_URL ??
     (import.meta.env.DEV ? "http://localhost:3000" : "https://dailog.fm"),
-  /** admin 工作台基址（导航/回跳白名单）：本地 dev 5174 */
-  adminBaseUrl:
-    viteEnv("VITE_ADMIN_BASE_URL") ??
-    serverEnv.ADMIN_BASE_URL ??
-    (import.meta.env.DEV ? "http://localhost:5174" : "https://admin.dailog.fm"),
 };
 
 /** 节目封面 URL：R2 key（covers/ 前缀）→ 公开端点；外链（历史 Pexels 数据）→ 直用 */

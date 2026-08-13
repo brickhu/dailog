@@ -2,11 +2,9 @@
 #   docker compose up -d          → 起全部
 #   pnpm dev:orb                  → 同上（含首次迁移）
 # 域名（无端口，OrbStack DNS + 自动 TLS）：
-#   site    https://dailog.orb.local          （容器名 dailog）
-#   admin   https://admin.dailog.orb.local
+#   site    https://dailog.orb.local
 #   api     https://api.dailog.orb.local
-#   importer https://importer.dailog.orb.local
-# 容器间调用走服务名（api/postgres/importer）；宿主机 localhost:端口 同样可达（publish）。
+# 容器间调用走服务名（api/postgres）；宿主机 localhost:端口 同样可达（publish）。
 name: dailog
 
 services:
@@ -30,6 +28,11 @@ services:
   api:
     build: .
     container_name: api
+    # 强制 OrbStack 域名路由到 api 8787（与 site 的 http-port=80 同理——否则 api.dailog.orb.local
+    # 会被泛域名 fallback 路由到 site 容器，表现为返回 site 页面）
+    labels:
+      - "dev.orbstack.http-port=8787"
+      - "dev.orbstack.domains=api.dailog.orb.local"
     command: sh -c "pnpm --filter @dailogues/api db:migrate && pnpm --filter @dailogues/api dev"
     ports:
       - "8787:8787"
@@ -39,15 +42,14 @@ services:
       # 容器内 127.0.0.1 是容器自身——出网代理经 host.docker.internal 指向宿主 socks 代理
       # （宿主直跑时用 .env.local 的 127.0.0.1:1081；compose 环境变量覆盖 .env.local）
       FISH_PROXY_URL: socks5://host.docker.internal:1081
-      IMPORTER_URL: http://importer:8798
       # 本地用 http：better-auth 按 baseURL scheme 决定 cookie Secure 标志——
       # https 下 cookie 带 Secure，http 页面登录"成功"但 cookie 不落地（表现为登录失败）。
       # 生产（api.dailog.fm）用 https 不受影响；录音功能仍需 https 访问（安全上下文）
-      BETTER_AUTH_URL: http://api.dailog.orb.local
-      # 子域共享会话（SSO）：admin/site 登录态互通（Domain=.dailog.orb.local）。
+      BETTER_AUTH_URL: https://api.dailog.orb.local
+      # 子域共享会话（SSO）：site 登录态互通（Domain=.dailog.orb.local）。
       # localhost:3000 不再可用（host-only 才匹配）——统一用 https://dailog.orb.local（录音/登录均可）
       BETTER_AUTH_COOKIE_DOMAIN: .dailog.orb.local
-      APP_ORIGINS: https://dailog.orb.local,https://admin.dailog.orb.local,http://dailog.orb.local,http://admin.dailog.orb.local
+      APP_ORIGINS: https://dailog.orb.local,http://dailog.orb.local,https://api.dailog.orb.local
       # 本地开发放宽认证限流（容器内请求共享 local 桶）；生产不配，用默认 5 次/分钟
       AUTH_RATE_MAX: 30
       # 部署自动预留管理员（逗号分隔邮箱）：启动时提升为 admin，新注册的也即时提升
@@ -55,6 +57,13 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
+      - /app/apps/site/node_modules
+      - /app/services/api/node_modules
+      - /app/packages/ui/node_modules
+      - /app/packages/i18n/node_modules
+      - /app/packages/auth-ui/node_modules
+      - /app/packages/shared/node_modules
+      - /app/tools/dailog-editor/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -81,42 +90,16 @@ services:
       # 浏览器端音频 URL 必须 https（https 页面加载 http 音频 = mixed content 被拦）
       VITE_PUBLIC_API_BASE_URL: https://api.dailog.orb.local
       VITE_SITE_BASE_URL: https://dailog.orb.local
-      VITE_ADMIN_BASE_URL: https://admin.dailog.orb.local
     volumes:
       - .:/app
       - /app/node_modules
-    depends_on:
-      - api
-
-  admin:
-    build: .
-    container_name: admin
-    # 与 site 同构：容器内监听 80（OrbStack 域名路由 80 最稳；5174 的非 80 路由曾落到 site）
-    labels:
-      - "dev.orbstack.http-port=80"
-    command: "pnpm --filter @dailogues/admin dev --host :: --port 80"
-    ports:
-      - "5174:80"
-    environment:
-      VITE_PROXY_TARGET: http://api:8787
-      VITE_PROXY_ORIGIN: http://admin.dailog.orb.local
-      VITE_SITE_BASE_URL: https://dailog.orb.local
-      VITE_ADMIN_BASE_URL: https://admin.dailog.orb.local
-    volumes:
-      - .:/app
-      - /app/node_modules
-    depends_on:
-      - api
-
-  importer:
-    build: .
-    container_name: importer
-    command: pnpm --filter @dailogues/importer dev
-    ports:
-      - "8798:8798"
-    volumes:
-      - .:/app
-      - /app/node_modules
+      - /app/apps/site/node_modules
+      - /app/services/api/node_modules
+      - /app/packages/ui/node_modules
+      - /app/packages/i18n/node_modules
+      - /app/packages/auth-ui/node_modules
+      - /app/packages/shared/node_modules
+      - /app/tools/dailog-editor/node_modules
     depends_on:
       - api
 

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "note": "dailog 编辑解码规则库（自进化）——fetch 按 URL 匹配规则提取对话消息；规则基于真实 DOM 采样沉淀（SKILL ③），不凭猜测。更新规则：改本文件 → pnpm --filter @dailogues/dailog-editor build → 重新 fetch 验证命中。",
+  "rules": [
+    {
+      "platform": "chatgpt",
+      "host": "chatgpt.com",
+      "pathPrefix": "/share/",
+      "userSelector": "[data-message-author-role='user']",
+      "assistantSelector": "[data-message-author-role='assistant']",
+      "contentSelector": ".markdown",
+      "note": "2026-08-13 实测校准（div 不是 article；正文在 .markdown）",
+      "hits": 0
+    },
+    {
+      "platform": "doubao",
+      "host": "www.doubao.com",
+      "pathPrefix": "/share/",
+      "userSelector": "[data-message-author-role='user']",
+      "assistantSelector": "[data-message-author-role='assistant']",
+      "contentSelector": null,
+      "note": "2026-08-13 占位规则（data-message-author-role 系，待实测校准）",
+      "hits": 0
+    }
+  ]
+}

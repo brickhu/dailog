@@ -1,0 +1,20 @@
+{
+  "_comment": "dailog 编辑环境清单。复制到 .dailog-editor/envs.json 后按需增删（本地文件，不上传）。环境是会话级选择：pnpm editor --env <name> <cmd>。apiBase 是 API 基址（/v1/device、/v1/editor/* 端点所在），label 里标注对应的站点域名",
+  "environments": [
+    {
+      "name": "local",
+      "label": "本地开发（OrbStack，站点 dailog.orb.local）",
+      "apiBase": "https://api.dailog.orb.local"
+    },
+    {
+      "name": "dev",
+      "label": "远程开发（站点 candelbot.app）",
+      "apiBase": "https://api.candelbot.app"
+    },
+    {
+      "name": "prod",
+      "label": "生产（站点 dailog.fm）",
+      "apiBase": "https://api.dailog.fm"
+    }
+  ]
+}

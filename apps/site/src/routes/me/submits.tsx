@@ -7,17 +7,16 @@ import { useI18n } from "@dailogues/i18n";
 import { SiteNav } from "../../components/site-nav";
 import { AuthGate } from "../../components/auth-gate";
 
-// 我的投稿（PRD §5 /me/submits）：投稿状态列表（审核中/已收录/投稿失败 + 最新节目状态）
+// 我的投稿（本质版，2026-08-13）：投稿状态列表（审核中/投稿失败/已发布 + 最新节目状态）
 // 会话判定与 me.tsx 同模式（client 判定，未登录跳统一登录）
 
 interface SubmissionRow {
   id: string;
+  url: string;
   title: string | null;
   status: string;
-  snapshotTitle: string | null;
-  platform: string | null;
-  episodeStatus: string | null;
   rejectedReason: string | null;
+  episodeStatus: string | null;
   createdAt: string;
 }
 
@@ -99,11 +98,8 @@ function SubmissionsList() {
   // 投稿状态 → i18n 键（状态值来自后端，动态拼接需显式映射）
   const STATUS_KEYS: Record<string, Parameters<typeof t>[0]> = {
     submitted: "status.submitted",
-    accepted: "status.accepted",
     rejected: "status.rejected",
     published: "status.published",
-    generating: "status.generating",
-    failed: "status.failed",
   };
   const statusLabel = (status: string | null) => {
     if (!status) return "";
@@ -127,12 +123,15 @@ function SubmissionsList() {
           {(sub) => (
             <div {...stylex.props(styles.card)}>
               <div {...stylex.props(styles.subTitle)}>
-                {sub.title || sub.snapshotTitle || t("common.unnamed")}
+                {sub.title || t("common.unnamed")}
                 <span {...stylex.props(styles.badge)}>{statusLabel(sub.status)}</span>
               </div>
               <div {...stylex.props(styles.meta)}>
                 {sub.createdAt ? new Date(sub.createdAt).toLocaleDateString("zh-CN") : ""}
-                {sub.platform ? ` · ${sub.platform}` : ""}
+                {" · "}
+                <a href={sub.url} target="_blank" rel="noopener" style={{ color: "inherit", "text-decoration": "underline" }}>
+                  {sub.url.length > 60 ? `${sub.url.slice(0, 60)}…` : sub.url}
+                </a>
                 {sub.episodeStatus ? ` · ${statusLabel(sub.episodeStatus)}` : ""}
               </div>
               <Show when={sub.status === "rejected" && sub.rejectedReason}>

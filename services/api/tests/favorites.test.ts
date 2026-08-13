@@ -8,161 +8,52 @@ import * as schema from "../src/db/schema";
 import { createFavoritesRepo } from "../src/routes/favorites";
 
 // 消费端互动全链路（真实本地 PG）：注册 → 收藏/点赞 toggle → 列表
-let testPolishId = "";
-let testTranscriptId = "";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
-
-
-function fakeImportDeps(): AppDeps["importDeps"] {
-  return {
-    getSnapshotByUrl: async () => null,
-    createSnapshot: async (row) => ({ id: "snap-1", platform: row.platform, sourceTitle: row.sourceTitle, sourceConversationId: row.sourceConversationId, parsedDialogue: row.parsedDialogue, quality: null, status: "ok", retryAfter: null, lastError: null }),
-    updateSnapshotContent: async () => {},
-    markSnapshotUnreachable: async () => {},
-    markSnapshotParseFailed: async () => {},
-    findPolishByUserSnapshot: async () => null,
-      parseShareHtml: async () => null,
-      listTraceableSnapshots: async () => [],
-      setSnapshotSourceTrace: async () => {},
-      findPublishedEpisodeBySnapshot: async () => null,
-    getPlatformRules: async () => [
-      { id: "claude", label: "Claude", sharePattern: "^https?:\\/\\/(www\\.)?claude\\.ai\\/share\\/[0-9a-f-]{36}" },
-      { id: "deepseek", label: "DeepSeek", sharePattern: "^https?:\\/\\/chat\\.deepseek\\.com\\/share\\/[A-Za-z0-9]+" },
-      { id: "chatgpt", label: "ChatGPT", sharePattern: "^https?:\\/\\/(www\\.)?chatgpt\\.com\\/share\\/[A-Za-z0-9-]+" },
-      { id: "kimi", label: "Kimi", sharePattern: "^https?:\\/\\/(www\\.)?kimi\\.com\\/share\\/[0-9a-f-]{36}" },
-    ],
-  };
-}
-function fakePolishesDeps(): AppDeps["polishesDeps"] {
-  return {
-    findPolishByUserSnapshot: async () => null,
-
-    createPolish: async () => ({ id: "polish-1" }),
-    getPolishDetail: async () => null,
-      listByUser: async () => [],
-  };
-}
-function fakeTranscriptsDeps(): AppDeps["transcriptsDeps"] {
-  return {
-    getDialogueForPolish: async () => null,
-    getTranscriptCount: async () => 0,
-    getPolishLimit: async () => 5,
-          guestsByPlatform: {},
-createTranscript: async () => ({ id: "transcript-1" }),
-    getOwnedTranscript: async () => null,
-    updateTranscriptSegments: async () => {},
-    llm: { complete: async () => "", stream: async () => "" },
-  };
-}
-function fakeEpisodesDeps(): AppDeps["episodesDeps"] {
-  return {
-    listByUser: async () => [],
-    getOwned: async () => null,
-    getEpisodeAudio: async () => null,
-    getOwnedTranscript: async () => null,
-    getEpisodeByTranscript: async () => null,
-    createEpisode: async () => ({ id: "ep-1" }),
-    safetyCheck: async () => ({ pass: true }),
-    getChannelActive: async () => true,
-    getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
-    consumeQuota: async () => {},
-    createJob: async (episodeId: string) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
-    getLatestJob: async () => null,
-    enqueueJob: async () => {},
-    setPublished: async () => {},
-    getChannelActivatedAt: async () => new Date(),
-    getHostModelId: async () => null,
-    getVoiceSampleKey: async () => null,
-    getVoiceSample: async () => null,
-    getVoiceSampleByLanguage: async () => null,
-    markUsed: async () => {},
-    saveVoiceSample: async () => {},
-  };
-}
-
 function fakeRepo(): AppDeps["repo"] {
   return {
-        notifications: {
-          create: async () => {},
-          listByUser: async () => [],
-          unreadCount: async () => 0,
-          markAllRead: async () => {},
-          getEmailByUserId: async () => null,
-          existsAfter: async () => false,
-          existsByLink: async () => false,
-        },
-        guests: {
+    notifications: {
+      create: async () => {},
+      listByUser: async () => [],
+      unreadCount: async () => 0,
+      markAllRead: async () => {},
+      getEmailByUserId: async () => null,
+      existsAfter: async () => false,
+      existsByLink: async () => false,
+    },
+    guests: {
       getByPlatform: async () => null,
       list: async () => [],
       voiceSampleByLanguage: async () => null,
       voiceSampleAny: async () => null,
       upsertVoiceSample: async () => {},
+      update: async () => {},
       listVoiceSamples: async () => [],
     },
-    snapshots: {
-      getByUrl: async () => null,
-      getById: async () => null,
-      create: async () => ({ id: "snap-1" }),
-      updateContent: async () => {},
-      updateQuality: async () => {},
-      markUnreachable: async () => {},
-            markParseFailed: async () => {},
-      listTraceable: async () => [],
-      setSourceTrace: async () => {},
-    },
-    polishes: {
-      findByUserSnapshot: async () => null,
-
-      create: async () => ({ id: "polish-1" }),
-      createSubmission: async () => ({ id: "sub-1" }),
+    submissions: {
+      create: async () => ({ id: "sub-1" }),
+      findByUserUrl: async () => null,
       countPendingByUser: async () => 0,
-      listSubmissionsByUser: async () => [],
-      listQueue: async () => [],
-      getById: async () => null,
-      setStatus: async () => {},
-      listAccepted: async () => [],
-      overviewStats: async () => ({ reviews: { submitted: 0, accepted: 0, rejected: 0 }, scripts: { pending: 0, generated: 0, failed: 0 }, episodes: { published: 0, failed: 0 } }),
-      getOwned: async () => null,
-      getPolishDetail: async () => null,
       listByUser: async () => [],
-    },
-    transcripts: {
-      create: async () => ({ id: "transcript-1" }),
-      listByPolish: async () => [],
-      getOwned: async () => null,
-      updateSegments: async () => {},
-      markUsed: async () => {},
-      getById: async () => null,
+      listQueue: async () => [],
+      getDetail: async () => null,
+      reject: async () => {},
+      markPublished: async () => {},
     },
     episodes: {
-      create: async () => ({ id: "ep-1" }),
-      listByUser: async () => [],
-      getOwned: async () => null,
-      getEpisodeAudio: async () => null,
-      getByTranscript: async () => null,
-      listByPolish: async () => [],
-      getEpisodeScript: async () => null,
-      getEpisodeGuest: async () => null,
+      createPublished: async () => ({ id: "ep-1", number: 1 }),
       getPublicAudioKey: async () => null,
       getPublicCoverKey: async () => null,
-      getPublishedDialogue: async () => null,
-      setPublished: async () => {},
       getById: async () => null,
-      publish: async () => ({ number: 1 }),
       updatePublished: async () => {},
       listPublished: async () => [],
-      findPublishedEpisodeBySnapshot: async () => null,
+      listBySubmission: async () => [],
       getEpisodeUserId: async () => null,
-      getEpisodeLanguage: async () => null,
-      getHostModelId: async () => null,
-      getVoiceSampleKey: async () => null,
       getVoiceSample: async () => null,
       getVoiceSampleByLanguage: async () => null,
+      getVoiceSampleKey: async () => null,
       saveVoiceSample: async () => {},
-      insertTrack: async () => {},
-      getChannelActivatedAt: async () => new Date(),
       getProfile: async () => null,
       updateUserNickname: async () => {},
       updatePersona: async () => {},
@@ -170,25 +61,6 @@ function fakeRepo(): AppDeps["repo"] {
       isUsernameTaken: async () => false,
       syncAdminRoles: async () => 0,
     },
-    jobs: {
-      getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
-      consumeQuota: async () => {},
-      createJob: async () => ({ id: "job-1", episodeId: "ep-1", status: "queued", progress: 0 }),
-      getLatestJob: async () => null,
-      getOwnedEpisode: async () => null,
-      listRecoverableJobs: async () => [],
-      markJobProgress: async () => {},
-      markJobDone: async () => {},
-
-      markJobFailed: async () => {},
-    },
-  };
-}
-
-function fakeJob(): AppDeps["job"] {
-  return {
-    getOwnedEpisode: async () => ({ id: "ep-1" }),
-    getLatestJob: async () => null,
   };
 }
 
@@ -213,21 +85,14 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
       BETTER_AUTH_SECRET: "test-secret",
       BETTER_AUTH_URL: "http://localhost:8787",
       PORT: 8787,
-      DEEPSEEK_API_KEY: "",
-      DEEPSEEK_BASE_URL: "https://api.deepseek.com/v1",
-      DEEPSEEK_MODEL: "deepseek-chat",
       FISH_API_KEY: "",
       STORAGE_DRIVER: "fs" as const,
       STORAGE_DIR: "./data",
-      ASSETS_DIR: "assets/audio",
       APP_ORIGINS: "",
-      POLISH_MAX_VERSIONS: 5,
       RESEND_API_KEY: "",
       EMAIL_FROM: "dailog <no-reply@dailog.fm>",
       ADMIN_EMAILS: "",
-      PEXELS_API_KEY: "",
-    SITE_BASE_URL: "https://site.dailog.fm",
-
+      SITE_BASE_URL: "https://dailog.fm",
     };
 
     const auth = createAuth({ db: dbClient.db, secret: "test-secret", env: testEnv });
@@ -248,19 +113,19 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
     await dbClient.db.insert(schema.profiles).values({
       id: userId, username: `fav-${randomUUID().slice(0, 6)}`, displayName: "Fav",
     });
-    const snap = await dbClient.db.insert(schema.snapshots).values({ url: `https://example.com/share/${randomUUID()}`, platform: "claude", parsedDialogue: [] }).returning({ id: schema.snapshots.id });
-    const polish = await dbClient.db.insert(schema.polishes).values({ userId, snapshotId: snap[0].id }).returning({ id: schema.polishes.id });
-    const transcript = await dbClient.db.insert(schema.transcripts).values({ polishId: polish[0].id, segments: [] }).returning({ id: schema.transcripts.id });
-    testPolishId = polish[0].id;
-    testTranscriptId = transcript[0].id;
+    const sub = await dbClient.db.insert(schema.submissions).values({
+      userId,
+      url: `https://example.com/share/${randomUUID()}`,
+      status: "published",
+    }).returning({ id: schema.submissions.id });
     const ep = await dbClient.db
       .insert(schema.episodes)
       .values({
+        submissionId: sub[0].id,
         userId,
-        transcriptId: transcript[0].id,
-        polishId: polish[0].id,
         slug: `fav-ep-${randomUUID().slice(0, 8)}`,
         title: "收藏测试节目",
+        audioUrl: `episodes/${userId}/${sub[0].id}.mp3`,
         status: "published",
         isPublic: true,
         publishedAt: new Date(),
@@ -268,24 +133,25 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
       .returning({ id: schema.episodes.id });
     episodeId = ep[0].id;
 
+    const repo = fakeRepo();
     app = createApp({
       env: testEnv,
       auth,
-      repo: fakeRepo(),
-      importDeps: fakeImportDeps(),
-      polishesDeps: fakePolishesDeps(),
-      transcriptsDeps: fakeTranscriptsDeps(),
-      episodesDeps: fakeEpisodesDeps(),
-      job: fakeJob(),
+      repo,
       voice: fakeVoice(),
-      favorites: createFavoritesRepo(dbClient.db),
-      admin: {
-        isAdmin: async () => false,
-        storage: { put: async () => {} },
-        upsertGuestVoiceSample: async () => {},
-        listGuestVoiceSamples: async () => [],
-        listGuests: async () => [],
+      editor: {
+        repo,
+        env: testEnv,
+        storage: { put: async () => {}, get: async () => new Uint8Array() },
+        siteBaseUrl: null,
       },
+      tts: {
+        repo,
+        storage: { get: async () => new Uint8Array() },
+        ffmpegPath: "/fake/ffmpeg",
+        fish: null,
+      },
+      favorites: createFavoritesRepo(dbClient.db),
     });
 
     // 注册真实用户拿 token
@@ -330,10 +196,15 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
     expect(await del.json()).toEqual({ liked: false });
   });
 
-  it("draft episode not interactable (404)", async () => {
+  it("unpublished episode not interactable (404)", async () => {
+    const draftSub = await dbClient.db.insert(schema.submissions).values({
+      userId,
+      url: `https://example.com/share/${randomUUID()}`,
+      status: "submitted",
+    }).returning({ id: schema.submissions.id });
     const draft = await dbClient.db
       .insert(schema.episodes)
-      .values({ userId, transcriptId: testTranscriptId, polishId: testPolishId, slug: `fav-draft-${randomUUID().slice(0, 8)}`, title: "draft", status: "generating" })
+      .values({ submissionId: draftSub[0].id, userId, slug: `fav-draft-${randomUUID().slice(0, 8)}`, title: "draft", audioUrl: "x.mp3", status: "generating" as never })
       .returning({ id: schema.episodes.id });
     const res = await app.request(`/v1/episodes/${draft[0].id}/favorite`, {
       method: "POST",
@@ -341,6 +212,7 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
     });
     expect(res.status).toBe(404);
     await dbClient.db.delete(schema.episodes).where(eq(schema.episodes.id, draft[0].id));
+    await dbClient.db.delete(schema.submissions).where(eq(schema.submissions.id, draftSub[0].id));
   });
 
   it("unauthenticated → 401", async () => {

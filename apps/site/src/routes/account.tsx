@@ -3,6 +3,7 @@ import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { Button, TextField, Spinner } from "@dailogues/ui";
+import Recorder from "../components/recorder";
 import { useI18n } from "@dailogues/i18n";
 
 // 账号中心（dailog.fm/account）：
@@ -10,17 +11,11 @@ import { useI18n } from "@dailogues/i18n";
 //   区块二「频道设置」——频道地址 slug/频道名/简介（PATCH /api/me/channel）
 // 划分：账号 = user 表（登录凭据），频道 = profiles 表（公开身份）——各管各的
 
-const clientEnv = {
-  apiBaseUrl: (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "https://api.dailog.fm",
-  siteBaseUrl: (import.meta.env.VITE_SITE_BASE_URL as string | undefined) ?? "https://dailog.fm",
-};
-
 interface ProfileData {
   email: string | null;
   nickname: string | null;
   emailVerified: boolean;
   image: string | null;
-  hasGithub: boolean;
   username: string | null;
   displayName: string | null;
   bio: string | null;
@@ -85,10 +80,22 @@ const styles = stylex.create({
   field: {
     marginBottom: dimensions.spacing3,
   },
-  hint: {
-    fontSize: dimensions.fontSizeSm,
+  audio: {
+    width: "100%",
+    marginBottom: dimensions.spacing3,
+  },
+  readingScript: {
     color: colors.neutral,
-    marginTop: dimensions.spacing1,
+    fontSize: dimensions.fontSizeSm,
+    lineHeight: 1.7,
+    borderLeft: `3px solid ${colors.brand}`,
+    paddingLeft: dimensions.spacing3,
+    marginBottom: dimensions.spacing3,
+  },
+  hint: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    marginBottom: dimensions.spacing2,
   },
   error: {
     fontSize: dimensions.fontSizeSm,
@@ -216,9 +223,39 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
     }
   };
 
-  // GitHub 登录入口（未配置 GITHUB_CLIENT_ID 时按钮隐藏——由 api 侧插件未注册决定，
-  // 这里用 profile 是否返回 hasGithub 无法判断配置；直接点击后由 api 返回错误提示）
-  const githubUrl = `${clientEnv.apiBaseUrl}/v1/auth/sign-in/social?provider=github&callbackURL=${encodeURIComponent(`${clientEnv.siteBaseUrl}/account`)}`;
+  // ---- 声音采样（生成节目中"你"的声音；可重录覆盖） ----
+  const [hasSample, setHasSample] = createSignal<boolean | null>(null);
+  const [sampleBusy, setSampleBusy] = createSignal(false);
+  const [sampleMsg, setSampleMsg] = createSignal<{ ok: boolean; text: string } | null>(null);
+  onMount(async () => {
+    try {
+      const res = await fetch("/v1/me/voice-sample");
+      setHasSample(res.ok);
+    } catch {
+      setHasSample(false);
+    }
+  });
+  const uploadSample = async (blob: Blob) => {
+    setSampleBusy(true);
+    setSampleMsg(null);
+    try {
+      const form = new FormData();
+      form.append("file", blob, "voice.webm");
+      form.append("transcript", t("submit.readingScript"));
+      form.append("language", "zh");
+      const res = await fetch("/v1/me/voice-sample", { method: "POST", body: form });
+      if (!res.ok) {
+        setSampleMsg({ ok: false, text: t("account.voiceSampleFailed") });
+        return;
+      }
+      setHasSample(true);
+      setSampleMsg({ ok: true, text: t("account.voiceSampleDone") });
+    } catch {
+      setSampleMsg({ ok: false, text: t("account.voiceSampleFailed") });
+    } finally {
+      setSampleBusy(false);
+    }
+  };
 
   return (
     <>
@@ -233,12 +270,6 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
             </Show>
           </span>
         </div>
-        <div {...stylex.props(styles.row)}>
-          <span {...stylex.props(styles.rowLabel)}>{t("account.github")}</span>
-          <Show when={p().hasGithub} fallback={<a href={githubUrl}>{t("account.githubLink")}</a>}>
-            <span {...stylex.props(styles.badge)}>{t("account.githubLinked")}</span>
-          </Show>
-        </div>
       </div>
 
       <div {...stylex.props(styles.card)}>
@@ -251,6 +282,29 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
         <Button onClick={saveName}>{t("account.saveNickname")}</Button>
         <Show when={nameMsg()}>
           <div {...stylex.props(nameMsg()!.ok ? styles.success : styles.error)}>{nameMsg()!.text}</div>
+        </Show>
+      </div>
+
+      <div {...stylex.props(styles.card)}>
+        <div {...stylex.props(styles.row)}>
+          <span {...stylex.props(styles.rowLabel)}>{t("account.voiceSample")}</span>
+          <Show when={hasSample() !== null} fallback={<Spinner />}>
+            <Show when={hasSample()} fallback={<span {...stylex.props(styles.rowValue)}>{t("account.voiceSampleNone")}</span>}>
+              <span {...stylex.props(styles.badge)}>{t("account.voiceSampleRecorded")}</span>
+            </Show>
+          </Show>
+        </div>
+        <div {...stylex.props(styles.field)}>
+          <div {...stylex.props(styles.rowValue)}>{t("account.voiceSampleDesc")}</div>
+        </div>
+        <Show when={hasSample()}>
+          <audio controls src="/v1/me/voice-sample/audio" {...stylex.props(styles.audio)} />
+        </Show>
+        <div {...stylex.props(styles.hint)}>{t("submit.voiceHint")}</div>
+        <div {...stylex.props(styles.readingScript)}>{t("submit.readingScript")}</div>
+        <Recorder minSeconds={8} maxSeconds={30} onReady={uploadSample} busy={sampleBusy()} />
+        <Show when={sampleMsg()}>
+          <div {...stylex.props(sampleMsg()!.ok ? styles.success : styles.error)}>{sampleMsg()!.text}</div>
         </Show>
       </div>
 

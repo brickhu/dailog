@@ -1,14 +1,12 @@
 import {
-  boolean, foreignKey, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
+  boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
 } from "drizzle-orm/pg-core";
 
-export interface ScriptSegment { speaker: "host" | "guest"; text: string; }
-
-/** 主持人结构化人设（profiles.persona；生成脚本前展示/修改，注入润色提示词）。
+/** 主持人结构化人设（profiles.persona；编辑本地制作时取用，注入生成规范）。
  *  核心是性格画像（traits，如"风趣幽默、雷厉风行"）——用户指定的风格，生成时遵循；
  *  旧版细碎字段（gender/profession/age/hobbies/extra）并入 traits 自由描述，不再单列。 */
 export interface HostPersona {
-  /** 节目中的称呼（优先级高于 transcripts/new 的 hostName 字段） */
+  /** 节目中的称呼 */
   callName?: string | null;
   gender?: string | null;
   profession?: string | null;
@@ -16,7 +14,6 @@ export interface HostPersona {
   /** 性格/风格描述（自由文本；如"风趣幽默，雷厉风行，说话直来直去"）——用户指定，生成时遵循 */
   traits?: string | null;
 }
-export interface QualityResult { pass: boolean; reason?: string; language?: string; }
 
 // ---------------------------------------------------------------------------
 // better-auth 核心表（官方字段，profiles.id 关联 user.id；M5 迁移）
@@ -80,11 +77,11 @@ export const profiles = pgTable("profiles", {
   bio: text("bio"),
   plan: text("plan", { enum: ["free", "pro"] }).notNull().default("free"),
   creditBalance: integer("credit_balance").notNull().default(0),
-  /** 角色：user（投稿人）/ editor（编辑）/ admin（管理员）——studio 管理员工作台仅 admin/editor 可登录 */
+  /** 角色：user（投稿人）/ editor（编辑）/ admin（管理员）——编辑端点仅 editor/admin 可调用 */
   role: text("role", { enum: ["user", "editor", "admin"] }).notNull().default("user"),
   /** 频道开通时间（授权码激活；null = 未开通，不能生成/发布） */
   channelActivatedAt: timestamp("channel_activated_at", { withTimezone: true }),
-  /** 主持人默认人设（生成脚本前展示可改，仅本次生效；null = 未设置） */
+  /** 主持人默认人设（编辑制作时取用） */
   persona: jsonb("persona").$type<HostPersona>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -94,12 +91,10 @@ export const voiceSamples = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     userId: text("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
-    /** 采样语种（zh/en/…）：一人多语种各一条；生成时按脚本语言注入，缺语种用兜底 */
+    /** 采样语种（zh/en/…）：一人多语种各一条；编辑按脚本语言取用 */
     language: text("language").notNull().default("zh"),
     audioUrl: text("audio_url").notNull(),
-  /** 训练好的音色模型 id（fish.audio model id）；为空 = 未训练，走零样本 fallback（Task 7） */
-  referenceId: text("reference_id"),
-  /** 参考音频转录文本（用户朗读的固定文案；references 2D 零样本克隆用，缺省占位） */
+  /** 参考音频转录文本（用户朗读的固定文案；零样本克隆用） */
   transcript: text("transcript"),
   duration: integer("duration").notNull(),
   status: text("status", { enum: ["ready", "failed"] }).notNull().default("ready"),
@@ -109,119 +104,35 @@ export const voiceSamples = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// 内容五层（快照 → 容器 → 润色脚本 → 节目 → 音轨）
+// 投稿制（本质版）：submissions（投稿）→ episodes（成品节目）
+// 用户只提交 URL + 声音采样；内容采集/脚本/语音/合成全部由编辑本地 Agent 完成，
+// 成品一次性上传（音频 → R2，元数据 → episodes）。服务端无采集/LLM/TTS/合成代码。
 // ---------------------------------------------------------------------------
 
-/** 分享快照：分享 URL 的内容提取（全局资源，与用户无耦合；URL 唯一）。
- *  分享页是原对话的快照——内容固定、永久有效；关闭后重开 = 新 URL。
- *  status=unreachable 时 10 分钟内不重试 importer */
-export const snapshots = pgTable(
-  "snapshots",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    url: text("url").notNull().unique(),
-    platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek", "perplexity", "plain"] }).notNull(),
-    sourceTitle: text("source_title"),
-    sourceConversationId: text("source_conversation_id"),
-    /** 解析后的对话（JSONB 存库——快照内容固定，入库后不随平台变化） */
-    parsedDialogue: jsonb("parsed_dialogue"),
-    /** 内容指纹：归一化消息序列的 sha256（精确重复检测；import 时计算一次） */
-    fingerprint: text("fingerprint"),
-    /** 内容前缀源：消息序列以本快照为前缀（衍生对话自动检测，指向被续写的源快照） */
-    prefixSourceId: uuid("prefix_source_id"),
-    /** 质量分析结果：{ pass, reason?, language? }（内容固定 → 分析一次全局复用） */
-    quality: jsonb("quality").$type<QualityResult>(),
-    status: text("status", { enum: ["ok", "unreachable", "parse_failed"] }).notNull().default("ok"),
-    lastError: text("last_error"),
-    /** 触达失败时间（unreachable 后 10 分钟内不重试） */
-    retryAfter: timestamp("retry_after", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  // 自引用外键放表级定义（列级 references 会与表常量循环引用，TS 报 7022）
-  (t) => [foreignKey({ columns: [t.prefixSourceId], foreignColumns: [t.id] })],
-);
-
-/** 创作容器：用户 × 快照的工作区（纯容器，不含脚本内容；重复粘贴跳转已有）。
- *  投稿制：status 同时承载投稿状态机——submitted（已投稿待审核）/ accepted（已收录）/ rejected（投稿失败）；
- *  editing/generating/published/failed 为旧自助创作模型残留（未迁移数据兼容，新流程不再产生）。 */
-export const polishes = pgTable(
-  "polishes",
+/** 投稿：用户提交的分享链接 + 采样（采样存 voiceSamples，投稿仅关联 userId）。
+ *  状态机：submitted（待审核）→ rejected（拒审，附原因）/ published（已上线）。
+ *  审核与制作在编辑本地 Agent 完成，此处不承载生成中间状态。 */
+export const submissions = pgTable(
+  "submissions",
   {
     id: uuid("id").defaultRandom().primaryKey(),
     userId: text("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
-    snapshotId: uuid("snapshot_id").notNull().references(() => snapshots.id),
+    /** 用户提交的对话分享链接（仅做合法性 + 触达性检查，不做内容采集） */
+    url: text("url").notNull(),
     title: text("title"),
-    status: text("status", { enum: ["editing", "generating", "published", "failed", "submitted", "accepted", "rejected"] }).notNull().default("editing"),
-    /** 拒绝原因（rejected 时必填，投稿人 /me/submits 可见） */
+    status: text("status", { enum: ["submitted", "rejected", "published"] }).notNull().default("submitted"),
+    /** 拒审原因（rejected 时必填，投稿人 /me/submits 可见） */
     rejectedReason: text("rejected_reason"),
-    /** 拒审来源：llm（process 质量不达标自动拒）/ editor（编辑人工拒审）；null = 旧数据 */
-    reviewedBy: text("reviewed_by", { enum: ["llm", "editor"] }),
-    /** 编辑处理时间（process/reject 落库） */
+    /** 编辑处理时间（reject/publish 落库） */
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("polishes_user_snapshot").on(t.userId, t.snapshotId)],
+  (t) => [uniqueIndex("submissions_user_url").on(t.userId, t.url)],
 );
 
-/** 润色脚本：polish 可包含多个（每次润色生成一条独立记录，无版本概念） */
-export const transcripts = pgTable("transcripts", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  polishId: uuid("polish_id").notNull().references(() => polishes.id, { onDelete: "cascade" }),
-  segments: jsonb("segments").$type<ScriptSegment[]>().notNull(),
-  /** 用户修改后的脚本（保存草稿用；原始 segments 保留对比/重生成恢复） */
-  updatedSegments: jsonb("updated_segments").$type<ScriptSegment[]>(),
-  /** 主题名（多主题切分润色：一对话多脚本，各属一个主题；旧数据为空） */
-  topic: text("topic"),
-  /** 脚本标题（大模型生成，脚本列表展示） */
-  title: text("title"),
-  /** 创作说明（大模型生成——给创作者看：为什么生成这段脚本、主题/角度是什么） */
-  creationNote: text("creation_note"),
-  /** host（主持人）称呼（生成时用户输入固化；旧数据为空） */
-  hostName: text("host_name"),
-  /** 嘉宾引用（guests 表）+ 称呼快照（防嘉宾信息改动影响历史脚本） */
-  guestId: text("guest_id").references(() => guests.id),
-  guestName: text("guest_name"),
-  /** 是否已生成节目（used = 已生成，一脚本一期） */
-  status: text("status", { enum: ["unused", "used"] }).notNull().default("unused"),
-  language: text("language"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const episodes = pgTable("episodes", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: text("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
-  /** 生成来源：润色脚本 + 容器（transcript 删除则节目级联删除） */
-  transcriptId: uuid("transcript_id").notNull().references(() => transcripts.id, { onDelete: "cascade" }),
-  polishId: uuid("polish_id").notNull().references(() => polishes.id, { onDelete: "cascade" }),
-  slug: text("slug").notNull().unique(),
-  title: text("title"),
-  description: text("description"),
-  coverUrl: text("cover_url"),
-  durationSeconds: integer("duration_seconds"),
-  /** 来源快照（对话原文展示用——经 transcript→polish→snapshot 也可达，加直接关联省查询） */
-  snapshotId: uuid("snapshot_id").references(() => snapshots.id),
-  /** 字幕（程序化：脚本去情绪标签后的纯文本） */
-  subtitle: text("subtitle"),
-  /** 标签（大模型生成） */
-  tags: text("tags").array(),
-  /** 主题（脚本 topic 继承） */
-  topic: text("topic"),
-  hostId: text("host_id").references(() => profiles.id),
-  guestId: text("guest_id").references(() => guests.id),
-  /** 数字期号：发布确认时分配（max+1，唯一；未发布无编号，无空洞）——"dailog 第 N 期" */
-  number: integer("number"),
-  /** 精选标记（首页播放器 / discover/picked） */
-  isPicked: boolean("is_picked").notNull().default(false),
-  /** 生成完成待编辑确认（ready）→ 编辑确认发布（published） */
-  status: text("status", { enum: ["generating", "ready", "published", "failed"] }).notNull().default("generating"),
-  isPublic: boolean("is_public").notNull().default(false),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  publishedAt: timestamp("published_at", { withTimezone: true }),
-});
-
-/** AI 平台嘉宾库：我们支持的对话平台固定信息（脚本/节目引用 guestId，展示用 name/avatar/intro） */
+/** AI 平台嘉宾库：品牌声线宿主（跨期统一的 AI 受访嘉宾）。
+ *  编辑本地 TTS 用 guest_voice_samples 的 referenceId/参考音频作嘉宾音色。 */
 export const guests = pgTable("guests", {
   id: text("id").primaryKey(), // 用 platform 枚举值作 id（claude/chatgpt/...）
   platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek", "perplexity"] }).notNull().unique(),
@@ -232,10 +143,9 @@ export const guests = pgTable("guests", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-/** 音轨：一期节目可生成多语言音轨（episodes.audio_url 已废弃，音频全在 tracks） */
-/** 嘉宾音频采样（按平台 × 语种各一条）：生成时按 episode 语言注入同语种采样；
- *  audio_key = storage key（R2/fs），reference_id = TTS 音色 id（逐段降级路径），
- *  transcript = 参考音频转录文本（2D references 主路径用，替换采样音频时一并更新） */
+/** 嘉宾音频采样（按平台 × 语种各一条）：编辑本地 TTS 的嘉宾音色来源；
+ *  audio_key = storage key（R2/fs），reference_id = TTS 音色 id，
+ *  transcript = 参考音频转录文本（2D references 用） */
 export const guestVoiceSamples = pgTable("guest_voice_samples", {
   id: uuid("id").defaultRandom().primaryKey(),
   guestId: text("guest_id").notNull().references(() => guests.id, { onDelete: "cascade" }),
@@ -246,18 +156,41 @@ export const guestVoiceSamples = pgTable("guest_voice_samples", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("guest_voice_samples_guest_language_unique").on(t.guestId, t.language)]);
 
-export const tracks = pgTable("tracks", {
+/** 成品节目：编辑本地制作完成后一次性上传入库，即已发布（published + isPublic）。
+ *  音频在 R2（audioUrl），封面可选（coverUrl）；期号发布时 max+1 分配——"dailog 第 N 期"。 */
+export const episodes = pgTable("episodes", {
   id: uuid("id").defaultRandom().primaryKey(),
-  episodeId: uuid("episode_id").notNull().references(() => episodes.id, { onDelete: "cascade" }),
-  language: text("language", { enum: ["zh", "en", "ja"] }).notNull(),
-  audioUrl: text("audio_url"),
+  /** 来源投稿（submission 删除则节目级联删除） */
+  submissionId: uuid("submission_id").notNull().references(() => submissions.id, { onDelete: "cascade" }),
+  /** 投稿人（主持人 = 自己的克隆音色） */
+  userId: text("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  hostId: text("host_id").references(() => profiles.id),
+  /** AI 嘉宾（品牌声线宿主，guests 表） */
+  guestId: text("guest_id").references(() => guests.id),
+  slug: text("slug").notNull().unique(),
+  title: text("title"),
+  description: text("description"),
+  coverUrl: text("cover_url"),
+  /** 成品音频（R2 storage key）与字节数（RSS enclosure length——Apple 要求） */
+  audioUrl: text("audio_url").notNull(),
+  audioSize: integer("audio_size"),
   durationSeconds: integer("duration_seconds"),
-  /** 音频字节数（RSS enclosure length——Apple 要求） */
-  size: integer("size"),
+  /** 节目语言（编辑提交时判定；site 展示用） */
+  language: text("language").notNull().default("zh"),
+  /** 标签（编辑提交） */
+  tags: text("tags").array(),
+  /** 数字期号：发布时分配（max+1，唯一；无空洞）——"dailog 第 N 期" */
+  number: integer("number"),
+  /** 精选标记（首页播放器 / discover/picked） */
+  isPicked: boolean("is_picked").notNull().default(false),
+  /** 编辑上传即发布；枚举保留单值 published 兼容既有查询 */
+  status: text("status", { enum: ["published"] }).notNull().default("published"),
+  isPublic: boolean("is_public").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
 });
 
-// 消费端互动（计划 6）：user_id 引用 better-auth user（未登录用户不能收藏/点赞）
+// 消费端互动：user_id 引用 better-auth user（未登录用户不能收藏/点赞）
 export const favorites = pgTable(
   "favorites",
   {
@@ -280,14 +213,14 @@ export const likes = pgTable(
   (t) => [uniqueIndex("likes_user_episode").on(t.userId, t.episodeId)],
 );
 
-/** 站内通知（投稿状态变化：收录/拒绝/上线）——site /me/notifications 展示 */
+/** 站内通知（投稿状态变化：拒审/上线）——site /me/notifications 展示 */
 export const notifications = pgTable(
   "notifications",
   {
     id: uuid("id").defaultRandom().primaryKey(),
     userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
-    /** 通知类型：accepted（已收录）/ rejected（未收录）/ published（节目上线） */
-    type: text("type", { enum: ["accepted", "rejected", "published"] }).notNull(),
+    /** 通知类型：rejected（未收录）/ published（节目上线） */
+    type: text("type", { enum: ["rejected", "published"] }).notNull(),
     title: text("title").notNull(),
     body: text("body"),
     /** 关联链接（节目页/投稿状态页） */
@@ -297,34 +230,3 @@ export const notifications = pgTable(
   },
   (t) => [index("notifications_user_created_idx").on(t.userId, t.createdAt)],
 );
-
-export const generationJobs = pgTable("generation_jobs", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  episodeId: uuid("episode_id").notNull().references(() => episodes.id, { onDelete: "cascade" }),
-  status: text("status", { enum: ["queued", "tts", "merge", "upload", "done", "failed"] }).notNull().default("queued"),
-  progress: integer("progress").notNull().default(0),
-  error: text("error"),
-  attempts: integer("attempts").notNull().default(0),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const payments = pgTable("payments", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: text("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
-  stripeSessionId: text("stripe_session_id").notNull().unique(),
-  amount: integer("amount").notNull(),
-  episodesGranted: integer("episodes_granted").notNull(),
-  status: text("status", { enum: ["succeeded", "failed"] }).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const subscriptions = pgTable("subscriptions", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: text("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
-  stripeCustomerId: text("stripe_customer_id").notNull(),
-  stripeSubscriptionId: text("stripe_subscription_id").notNull(),
-  plan: text("plan", { enum: ["pro"] }).notNull(),
-  status: text("status", { enum: ["active", "past_due", "canceled"] }).notNull(),
-  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
-});

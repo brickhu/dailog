@@ -1,5 +1,5 @@
 import { createAsync } from "@solidjs/router";
-import { For, Show } from "solid-js";
+import { Show } from "solid-js";
 import { listLatestEpisodes, type EpisodeSummary } from "../lib/db";
 import { SiteNav } from "../components/site-nav";
 import { env, episodeCoverUrl } from "../lib/env";

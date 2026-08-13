@@ -31,7 +31,6 @@ describe("GET /api/me/voice-sample", () => {
         userId: "user-1",
         language: "zh",
         audioUrl: "voices/user-1.webm",
-        referenceId: null,
         transcript: "大家好，我是测试录音。",
         duration: 15,
         status: "ready",
@@ -41,7 +40,7 @@ describe("GET /api/me/voice-sample", () => {
     const res = await app.request("/v1/me/voice-sample");
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json).toMatchObject({ status: "ready", referenceId: null, duration: 15 });
+    expect(json).toMatchObject({ status: "ready", duration: 15 });
     expect(json.createdAt).toBeDefined();
   });
 });
@@ -64,7 +63,7 @@ describe("POST /api/me/voice-sample（样本直传：只保存，不训练）", 
     expect(call[0]).toBe("voices/user-1/zh.webm");
     expect(call[1]).toEqual(new Uint8Array([1, 2, 3])); // Uint8Array 按值深度比较
     expect(saveVoiceSample).toHaveBeenCalledWith(
-      expect.objectContaining({ audioUrl: "voices/user-1/zh.webm", language: "zh", referenceId: null, transcript: null, status: "ready" }),
+      expect.objectContaining({ audioUrl: "voices/user-1/zh.webm", language: "zh", transcript: null, status: "ready" }),
     );
   });
 

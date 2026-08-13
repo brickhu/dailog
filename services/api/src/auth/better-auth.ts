@@ -1,7 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { bearer, emailOTP } from "better-auth/plugins";
-import { github } from "better-auth/social-providers";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "../db/schema";
 import { randomBytes } from "node:crypto";
@@ -28,16 +27,6 @@ export interface CreateAuthOptions {
  * - bearer：Bearer token 会话（SPA/扩展用 Authorization 头；扩展注入协议不变）
  */
 export function createAuth(opts: CreateAuthOptions) {
-  // GitHub OAuth：注册在 socialProviders 配置项（非 plugins 数组）——better-auth 按 key
-  // 用内置工厂实例化，value 为配置对象；enabled=false 时端点不生效（登录页按钮同步隐藏）
-  const socialProviders = {
-    github: {
-      clientId: opts.env.GITHUB_CLIENT_ID ?? "",
-      clientSecret: opts.env.GITHUB_CLIENT_SECRET ?? "",
-      enabled: Boolean(opts.env.GITHUB_CLIENT_ID),
-    },
-  };
-
   return betterAuth({
     // API 路径统一 /v1 前缀（域名已标识 API，路径前缀做版本化）——认证端点 /v1/auth/*
     basePath: "/v1/auth",
@@ -87,7 +76,6 @@ export function createAuth(opts: CreateAuthOptions) {
         },
       }),
     ],
-    socialProviders,
     advanced: {
       // cookie 前缀 = dailog：换名一次性清掉所有历史同名 cookie（better-auth.session_token 曾经历
       // Secure/host-only/Domain 多个版本，浏览器残留同名冲突导致登录态错乱——换名后旧 cookie 全部失效）

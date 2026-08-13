@@ -6,7 +6,6 @@ export interface VoiceSampleRow {
   language: string;     // 采样语种（一人多语种各一条）
   userId: string;
   audioUrl: string;   // storage key
-  referenceId: string | null;  // 已废弃（不再训练音色模型），保留列兼容
   /** 参考音频转录文本（用户朗读的固定文案；零样本克隆用） */
   transcript: string | null;
   duration: number;
@@ -33,7 +32,6 @@ export function voiceRoutes(deps: VoiceDeps) {
     return c.json({
       id: row.id ?? null,
       status: row.status,
-      referenceId: row.referenceId,
       duration: row.duration,
       createdAt: row.createdAt,
     });
@@ -69,7 +67,7 @@ export function voiceRoutes(deps: VoiceDeps) {
     // R2 目录规划：voices/{userId}/{language}.webm
     const key = `voices/${userId}/${language}.webm`;
     await deps.storage.put(key, bytes);
-    await deps.saveVoiceSample({ userId, language, audioUrl: key, referenceId: null, transcript, duration: 0, status: "ready" });
+    await deps.saveVoiceSample({ userId, language, audioUrl: key, transcript, duration: 0, status: "ready" });
     return c.json({ ok: true });
   });
   return app;

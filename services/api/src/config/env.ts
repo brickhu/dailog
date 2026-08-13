@@ -6,41 +6,28 @@ const schema = z.object({
   BETTER_AUTH_SECRET: z.string().default("dev-secret-change-me-0123456789abcdef"),
   /** better-auth 公开基址（回调/重定向用；本地 dev 默认，生产按环境设置 https://api.*） */
   BETTER_AUTH_URL: z.string().default("http://localhost:8787"),
-  /** 消费站基址（找回密码邮件链接指向 /reset-password 页；本地 sslip 裸域，生产 https://site.dailog.fm） */
-  SITE_BASE_URL: z.string().url().default("https://site.dailog.fm"),
-  /** GitHub OAuth（登录按钮未配置时前端隐藏）：GitHub App → Client ID/Secret；callback 需在 GitHub App 设置添加 */
-  GITHUB_CLIENT_ID: z.string().optional(),
-  GITHUB_CLIENT_SECRET: z.string().optional(),
+  /** 消费站基址（通知邮件链接指向 /episode/{id} 等页面；本地 sslip 裸域，生产 https://dailog.fm） */
+  SITE_BASE_URL: z.string().url().default("https://dailog.fm"),
   /** SSO 跨子域 cookie 域（生产 .dailog.fm；本地留空 = host-only cookie，localhost 跨端口天然共享） */
   BETTER_AUTH_COOKIE_DOMAIN: z.string().optional(),
   PORT: z.coerce.number().default(8787),
-  // 注意：default("") 会被 zod 内层校验再次校验，故不能用 .min(1)（空串会抛错），
-  // 与计划「默认空串使无 key 本地环境可启动、key 为空在调用时再报错」的意图一致
-  DEEPSEEK_API_KEY: z.string().default(""),
-  DEEPSEEK_BASE_URL: z.string().url().default("https://api.deepseek.com/v1"),
-  DEEPSEEK_MODEL: z.string().default("deepseek-chat"),
+  /** Fish Audio TTS（统一 TTS 端点；未配置 → /v1/editor/tts 503） */
   FISH_API_KEY: z.string().default(""),
+  /** 本地 socks5 代理（容器出网访问 Fish 用；生产直连不配） */
   FISH_PROXY_URL: z.string().optional(),
-  FISH_GUEST_REFERENCE_ID: z.string().optional(),
   STORAGE_DRIVER: z.enum(["fs", "r2"]).default("fs"),
   STORAGE_DIR: z.string().default("./data"),
   // 工作台 SPA 跨域白名单（逗号分隔的完整 Origin）；空 = 不放开任何浏览器 Origin
   APP_ORIGINS: z.string().default(""),
-  // 对话级润色上限（PRD §4.7）：每个对话最多 N 个脚本版本（=N 次润色调用）；pro 用户不限
-  POLISH_MAX_VERSIONS: z.coerce.number().default(5),
-  // 片头/片尾音频资产目录（Task 11 生成；缺失时 merge 降级为只拼主对话）
-  ASSETS_DIR: z.string().default("assets/audio"),
-  /** Resend 事务邮件（注册邮箱验证/密码重置）：免费 3000 封/月，超出按量计费 */
+  /** Resend 事务邮件（投稿状态通知）：免费 3000 封/月，超出按量计费 */
   RESEND_API_KEY: z.string().default(""),
   EMAIL_FROM: z.string().default("dailog <no-reply@dailog.fm>"),
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY: z.string().optional(),
   R2_SECRET_KEY: z.string().optional(),
   R2_BUCKET: z.string().optional(),
-  // 管理端点管理员白名单（逗号分隔邮箱；空 = 无管理员，/api/admin/* 一律 403）
+  // 部署自动预留管理员（逗号分隔邮箱）：启动时提升为 admin
   ADMIN_EMAILS: z.string().default(""),
-  // 封面图库（Pexels）搜索 key：未配置 → cover-search 503，发布用模板/占位封面
-  PEXELS_API_KEY: z.string().default(""),
 });
 
 export type Env = z.infer<typeof schema>;

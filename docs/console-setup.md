@@ -1,60 +1,45 @@
-# 双环境控制台配置清单（2026-08-03）
+# 双环境控制台配置清单（本质版，2026-08-13 更新）
 
 仓库：`https://github.com/brickhu/dailog`（`dev` = 开发环境，`master` = 生产环境）
 
-| 环境 | 分支 | API | Studio (SPA) | 消费站 (SSR) | Postgres |
-|---|---|---|---|---|---|
-| 开发 | `dev` | `api.candelbot.app`（同站必须——默认 URL 跨站，凭据请求在浏览器挂起/SSO 失效） | `app.candelbot.app` | `candelbot.app` | Railway Development 环境 |
-| 生产 | `master` | `api.dailog.fm` | `admin.dailog.fm` | `dailog.fm` | Railway Production 环境 |
+| 环境 | 分支 | API | 消费站 (SSR) | Postgres |
+|---|---|---|---|---|
+| 开发 | `dev` | `api.candelbot.app` | `candelbot.app` | Railway Development 环境 |
+| 生产 | `master` | `api.dailog.fm` | `dailog.fm` | Railway Production 环境 |
+
+> 本质版要点：**服务端无采集/LLM/TTS/ffmpeg**——编辑工作流全部在编辑本地 Agent
+> （`tools/dailog-editor` 子工程 → 产物 `.agents/skills/dailog-editor`，密钥在编辑机器 `.dailog-editor/.env`）。
+> admin/studio/extension/importer 四个前端与采集服务已删除，无对应部署。
 
 ## 1. Railway（API + Postgres）
 
-1. [ ] 新建项目 → **Connect GitHub repo**：`brickhu/dailog`
-2. [ ] 分支部署是**按服务**配置的（项目级 "Production Branch" 设置已取消）：
-   - 默认即 `production` 环境：各 service → Settings → **Source → Branch connected to = `master`**
-   - Development 环境：顶部环境下拉 → **+ New Environment**（选 **Duplicate** 可复制生产环境的 services/变量；或 Empty 后手动加）→ 该环境各 service 的 Source branch 选 `dev`
-   - 此后 `master` push 自动部署 Production、`dev` push 自动部署 Development
-3. [ ] Production 环境：`Add Database → PostgreSQL` + 部署 API service（自动识别根 `railway.json`：Docker 镜像含 ffmpeg，healthcheck `/health`）
-4. [ ] Development 环境（Duplicate 出来的）：确认同样有 Postgres + API service；两个环境的 Postgres 是独立的
-5. [ ] 域名：Production API 服务 → Settings → Domains 绑 `api.dailog.fm`；Development API **不绑自定义域名**（直接用 Railway 默认 URL）
-6. [ ] 各环境 Variable（按环境分别设置）：
+1. [x] 新建项目 → **Connect GitHub repo**：`brickhu/dailog`
+2. [x] 分支部署按服务配置：Production 环境各 service Source branch = `master`；Development 环境 = `dev`
+3. [x] Production 环境：`Add Database → PostgreSQL` + 部署 API service（自动识别根 `railway.json`，healthcheck `/health`）
+4. [x] Development 环境：同样有 Postgres + API service；两个环境 Postgres 独立
+5. [x] 域名：Production API 绑 `api.dailog.fm`；Development API 绑 `api.candelbot.app`
+6. [x] 各环境 Variable（按环境分别设置）：
 
 | 变量 | 开发环境 | 生产环境 |
 |---|---|---|
 | `DATABASE_URL` | 本环境 Postgres | 本环境 Postgres |
-| `APP_ORIGINS` | `https://admin.candelbot.app,https://candelbot.app,https://dailog.pages.dev,http://localhost:5174,http://localhost:3000`（每次新增前端域名都要补） | `https://admin.dailog.fm,https://dailog.fm` |
-| `ADMIN_EMAILS` | 逗号分隔邮箱——**部署自动预留管理员**（api 启动时提升、新注册即时提升；无需手动 role:set） | 同左（生产填你的邮箱） |
-| `DEEPSEEK_API_KEY` / `BASE_URL` / `MODEL` | ✓ | ✓ |
-| `FISH_API_KEY` / `FISH_PROXY_URL` / `FISH_GUEST_REFERENCE_ID` | ✓ | ✓ |
+| `APP_ORIGINS` | `https://candelbot.app`（站点域名；新增域名需补） | `https://dailog.fm` |
+| `ADMIN_EMAILS` | 逗号分隔邮箱——**部署自动预留管理员**（api 启动时提升、注册即时提升） | 同左（生产填你的邮箱） |
 | `STORAGE_DRIVER` | `fs`（或 r2） | `r2` + `R2_ACCOUNT_ID/ACCESS_KEY/SECRET_KEY/BUCKET` |
 | `BETTER_AUTH_SECRET` | 已启用（各环境独立随机） | 同左 |
-| `BETTER_AUTH_URL` | `https://api.candelbot.app`（dev） | `https://api.dailog.fm`（生产必改） |
-| `BETTER_AUTH_COOKIE_DOMAIN` | `.candelbot.app`（dev 同站 SSO——真域名环境必须显式设 cookie 域，host-only 只对 api 主机生效） | `.dailog.fm`（SSO 跨子域 cookie） |
-| `PORT` | 不配（Railway 默认 8080；内部端口与公网域名无关，healthcheck 自动探测） | 同左 |
+| `BETTER_AUTH_URL` | `https://api.candelbot.app` | `https://api.dailog.fm` |
+| `BETTER_AUTH_COOKIE_DOMAIN` | `.candelbot.app` | `.dailog.fm`（SSO 跨子域 cookie） |
+| `FISH_API_KEY` / `FISH_PROXY_URL` | ✓（统一 TTS 端点合成语音；本地容器经 socks 代理出网） | ✓ |
+| `PORT` | 不配（Railway 默认；healthcheck 自动探测） | 同左 |
 
-7. [x] 迁移**随部署自动执行**（Dockerfile CMD = `pnpm db:migrate && pnpm start`；drizzle 幂等，已应用自动跳过）。手动兜底：
+> 已移除的服务端变量：`DEEPSEEK_*`、`PEXELS_API_KEY`、`IMPORTER_URL/TOKEN`、`POLISH_MAX_VERSIONS`、`ASSETS_DIR`（LLM/封面/资产编辑本地承载；TTS 已收敛回服务端统一端点，故 FISH_* 保留在服务端）。
+
+7. [x] 迁移**随部署自动执行**（Dockerfile CMD = `pnpm db:migrate && pnpm start`；drizzle 幂等）。手动兜底：
    `pnpm --filter @dailogues/api db:migrate`（Service → Exec 或本地 `railway run`）
-8. [ ] 初始化编辑角色（注册开放 + 邮箱验证；admin user 自动创建）：
-   `psql` 直连生产库：`UPDATE profiles SET role='editor' WHERE id='<admin-user-id>'`
+8. [ ] 编辑角色：注册开放 + 邮箱验证即获投稿资格；编辑账号 = `ADMIN_EMAILS` 自动提升（无需手动 SQL）
+9. [ ] **验证链**：`https://api.candelbot.app/health` → 200；`https://api.dailog.fm/health` → 200
 
-## 2. Cloudflare Pages（SPA）——单项目双分支
-
-**模型**：每个应用只建 **1 个 Pages 项目**，production/preview 两个环境承载 master/dev 两个分支（Pages 只有这两个环境，变量按环境分设；我们唯一的非生产分支是 dev，所以 preview 变量 = dev 值正好）。
-
-| 项目 `dailog-admin` | production 环境 | preview 环境 |
-|---|---|---|
-| 分支 | `master` | `dev`（**需勾选 "Builds for non-production branches"**） |
-| 构建命令 | `pnpm --filter @dailogues/admin build` | 同左 |
-| 输出目录 | `apps/admin/dist` | 同左 |
-| Node 版本 | 22 | 22 |
-| `VITE_API_BASE_URL` | `https://api.dailog.fm` | `https://api.candelbot.app` |
-| 自定义域名 | `admin.dailog.fm`（待定） | `admin.candelbot.app`（绑 dev 分支；要求域名在 CF DNS，否则用 branch alias `dev.dailog-admin.pages.dev`） |
-| 入口（2026 统一界面） | Workers & Pages → Create application → **Pages** → Connect to Git（勿走 Workers Import a repository，其产物形态为 Workers Assets，无 output directory） | 同左 |
-
-> ⚠️ admin 项目：上线前把 production branch 设为 `master`（dev 分支自动为 preview 部署，域名/变量按上表迁移）。
-> `VITE_EXTENSION_ID` 可留空（扩展连接卡隐藏）。
-
-## 2.5 Cloudflare Pages（消费站 SSR）——单项目双分支
+## 2. Cloudflare Pages（消费站 SSR）——单项目双分支
 
 | 项目 `dailog-site` | production 环境 | preview 环境 |
 |---|---|---|
@@ -63,30 +48,33 @@
 | 输出目录 | `apps/site/dist` | 同左 |
 | Node 版本 | 22 | 22 |
 | **Node.js compatibility** | **开启（Node 22）**——postgres 直连需要 | 同左 |
-| 自定义域名 | `dailog.fm` | `candelbot.app`（绑 dev 分支；域名在 CF DNS 时） |
-| 变量 | `DATABASE_URL`=生产 Postgres、`VITE_API_BASE_URL`=`https://api.dailog.fm`、`VITE_SITE_BASE_URL`=`https://dailog.fm`、`VITE_ADMIN_BASE_URL`=`https://admin.dailog.fm` | `DATABASE_URL`=dev Postgres、`VITE_API_BASE_URL`=`https://api.candelbot.app`、`VITE_SITE_BASE_URL`=`https://candelbot.app`、`VITE_ADMIN_BASE_URL`=`https://admin.candelbot.app` |
+| 自定义域名 | `dailog.fm` | `candelbot.app` |
+| 变量 | `DATABASE_URL`=生产 Postgres、`VITE_API_BASE_URL`=`https://api.dailog.fm`、`VITE_SITE_BASE_URL`=`https://dailog.fm` | `DATABASE_URL`=dev Postgres、`VITE_API_BASE_URL`=`https://api.candelbot.app`、`VITE_SITE_BASE_URL`=`https://candelbot.app` |
 
-> 变量（各环境）：`DATABASE_URL`（对应环境 Postgres，只读连接可加 `?sslmode=require`）、`VITE_API_BASE_URL`（`https://api.candelbot.app` / `https://api.dailog.fm`）、`VITE_SITE_BASE_URL`（站点自身，**登录代理以它作为 Origin 转发给 API**）、`VITE_ADMIN_BASE_URL`（`admin.*`）。
-> **site 与 admin 统一用 VITE_ 一套变量**——vite 构建期注入：客户端直接读；服务端（代理转发）的 `import.meta.env.VITE_*` 同样被替换成字面量，workerd 运行时无需环境变量。旧部署的 `API_BASE_URL`/`SITE_BASE_URL` 仍可兜底（代码兼容），新部署统一 VITE_。
-> ⚠️ **站点实际域名必须加入 API 的 `APP_ORIGINS`**（auth-proxy 转发时以 `SITE_BASE_URL` 为 Origin，better-auth CSRF 白名单校验）——dev 用 Pages 默认域名时也要加（如 preview 分支的 `https://dev.dailog-site.pages.dev`）。
-> 消费端登录统一走本站 `/login`（server 代理 api 认证端点，SSO cookie 与 admin 共享）。
+> 变量（各环境）：`DATABASE_URL`（对应环境 Postgres，只读连接可加 `?sslmode=require`）、
+> `VITE_API_BASE_URL`（`https://api.candelbot.app` / `https://api.dailog.fm`）、
+> `VITE_SITE_BASE_URL`（站点自身，**登录代理以它作为 Origin 转发给 API**）。
+> ⚠️ **站点实际域名必须加入 API 的 `APP_ORIGINS`**（auth-proxy 转发时以 `SITE_BASE_URL` 为 Origin，
+> better-auth CSRF 白名单校验）——preview 分支用 Pages 默认域名时也要加。
 
 ## 3. DNS（candelbot.app 托管处）
 
-- `admin.candelbot.app` → CNAME `dailog-admin-dev.pages.dev`
-- `candelbot.app` → 暂不解析（SSR 预留）
+- `api.candelbot.app` → CNAME/ALIAS 到 Railway Dev API
+- `candelbot.app` → CF Pages `dailog-site` preview 环境
 
-## 4. 扩展 dev 包
+## 4. 编辑本地 Agent（无需部署）
 
 ```bash
-pnpm --filter @dailogues/extension build:dev   # 注入 gracious-caring-development.up.railway.app
+cp .dailog-editor/.env.example .dailog-editor/.env            # Fish/Pexels 密钥
+cp tools/dailog-editor/templates/envs.example.json .dailog-editor/envs.json  # 环境清单（local/dev/prod）
+pnpm editor --env dev login        # 配对码登录（浏览器授权 → 粘贴配对码）
+pnpm editor --env dev auth-status  # 会话初始化：/health + 授权检查
+pnpm editor --env dev list         # 待审队列
 ```
-
-chrome://extensions 加载 `apps/extension/`（unpacked），popup 确认 API 地址为 `https://gracious-caring-development.up.railway.app`（可手动覆盖、可恢复默认）。
 
 ## 5. dev 跑通验证链
 
-1. `https://gracious-caring-development.up.railway.app/health` → 200
-2. `https://app.candelbot.app` 打开 → 登录 → 连接扩展（externally_connectable 白名单已含 dev 域名）
-3. DeepSeek 对话页点采集 → 导入 dev API → site 出现草稿 → 编辑工作台处理
+1. `https://api.candelbot.app/health` → 200；`https://candelbot.app` 打开 → 正常渲染
+2. 新对话初始化：`pnpm editor --env dev auth-status` → 端点可用 → 配对 → list 出队列
+3. 本地投稿（site `dailog.orb.local` /submit）→ dev 队列可见 → 编辑制作 → 发布 → 站点播放
 4. 全部通过后：`dev → master` 合并触发生产部署

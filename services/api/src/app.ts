@@ -3,23 +3,15 @@ import type { Context } from "hono";
 import type { Env } from "./config/env";
 import { createAuthMiddleware, type AuthEnv, type AuthLike } from "./middleware/auth";
 import { createCorsMiddleware } from "./middleware/cors";
-import { episodesRoutes, type EpisodesDeps } from "./routes/episodes";
-import { importRoutes, type ImportDeps } from "./routes/import";
-import { polishesRoutes, type PolishesDeps } from "./routes/polishes";
-import { transcriptsRoutes, type TranscriptsDeps } from "./routes/transcripts";
 import { profileRoutes } from "./routes/profile";
 import { submissionsRoutes } from "./routes/submissions";
 import { notificationsRoutes } from "./routes/notifications";
-import { importerRoutes } from "./routes/importer";
 import { authExtRoutes } from "./routes/auth-ext";
-import { jobRoutes, type JobDeps } from "./routes/job";
 import { voiceRoutes, type VoiceDeps } from "./routes/voice";
 import { favoritesRoutes, type FavoritesRepo } from "./routes/favorites";
-import { tokenRoutes } from "./routes/token";
-import { adminRoutes, type AdminDeps } from "./routes/admin";
 import { editorRoutes, type EditorDeps } from "./routes/editor";
-import { sendEmail } from "./email/resend";
-import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
+import { devicePublicRoutes, deviceApproveRoutes, createDeviceStore, type DeviceStore } from "./routes/device";
+import { ttsRoutes, type TtsDeps } from "./routes/tts";
 import type { Repos } from "./repo";
 
 export type { AuthLike };
@@ -27,34 +19,27 @@ export type AppDeps = {
   env: Env;
   auth: AuthLike; // better-auth 实例（/api/auth/* 处理器 + 认证中间件）
   repo: Repos;
-  importDeps: ImportDeps;
-  polishesDeps: PolishesDeps;
-  transcriptsDeps: TranscriptsDeps;
-  episodesDeps: EpisodesDeps;
-  job: JobDeps;
-  voice: VoiceDeps;
+  voice: VoiceDeps; // 声音采样（用户上传/回读）+ 公开音频/封面读取共用 storage
   favorites: FavoritesRepo; // 消费端互动（收藏/点赞）
-  admin: AdminDeps; // 管理端点（ADMIN_EMAILS 白名单判定）
-  /** importer 服务地址（测试注入用；缺省读 IMPORTER_URL env） */
-  shareCollectUrl?: () => string | null;
+  editor: EditorDeps; // 编辑端（本地 Agent 工作流）
   /** auth-ext 统一登录/注册端点依赖（缺省由 app 内 db + auth 组装） */
   authExt?: { env: unknown; db: unknown; auth: unknown };
+  /** 设备授权存储（编辑本地 Agent 登录；缺省 app 内建） */
+  deviceStore?: DeviceStore;
+  /** 统一 TTS（编辑本地不直连 Fish——密钥只在服务端） */
+  tts: TtsDeps;
 };
 
 export function createApp(deps: AppDeps): Hono<AuthEnv> {
   const app = new Hono<AuthEnv>();
+  const deviceStore = deps.deviceStore ?? createDeviceStore();
 
-  // 工作台 SPA 跨域（本地 dev + 生产 app.dailog.fm）；OPTIONS 预检在此统一 204。
+  // 跨域（本地 dev + 生产 app.dailog.fm）；OPTIONS 预检在此统一 204。
   // 必须先于其它路由注册（Hono middleware 顺序敏感），否则先注册的路由不经 CORS
   const appOrigins = deps.env.APP_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean);
   app.use("*", createCorsMiddleware(appOrigins));
 
   app.get("/health", (c) => c.json({ ok: true }));
-
-  // 自定义 /api/auth/token（cookie 会话 → session token，供扩展注入）必须先于
-  // better-auth 全捕获注册：下面 /api/auth/* 通配会吞掉一切子路径（未知子路由返回空 404），
-  // 后注册的同路径路由永远轮不到。其余 /api/auth/* 仍全部交 better-auth 处理。
-  app.route("/", tokenRoutes(deps.auth));
 
   // 统一登录/注册（老用户密码登录 / 新用户验证码注册）——必须先于 better-auth
   // 的 /api/auth/* 全捕获注册（Hono 先注册先匹配，否则被吞返回 404）
@@ -62,6 +47,14 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
 
   // better-auth 会话路由（注册/登录/登出/get-session）：挂在认证中间件之前，免鉴权
   app.on(["POST", "GET"], "/v1/auth/*", (c) => deps.auth.handler(c.req.raw));
+
+  // 设备授权流公开端点（创建授权码 / 授权页 / 配对码换 token）：免鉴权——必须在认证中间件之前注册
+  app.route("/", devicePublicRoutes(
+    deviceStore,
+    deps.env,
+    deps.auth,
+    async (userId) => (await deps.repo.episodes.getRole?.(userId)) ?? null,
+  ));
 
   // 主站公开端点（免鉴权）：仅已发布公开节目可读——必须在鉴权中间件之前注册
   app.get("/v1/public/episodes/:id/cover", async (c) => {
@@ -80,7 +73,7 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   app.get("/v1/public/episodes/:id/audio", async (c) => {
     const audio = await deps.repo.episodes.getPublicAudioKey(c.req.param("id"));
     if (!audio) return c.json({ error: "not_found" }, 404);
-    // ETag 按音轨创建时间：重试重新生成后内容变化 → 浏览器重新拉取；未变 → 304 省流量
+    // ETag 按发布时间：重新制作发布是新 episode → 内容变化 → 浏览器重新拉取；未变 → 304 省流量
     const etag = `"${audio.version}"`;
     if (c.req.header("If-None-Match") === etag) {
       return new Response(null, { status: 304, headers: { ETag: etag } });
@@ -99,42 +92,22 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
 
   app.get("/v1/me", async (c) => {
     const userId = c.get("userId");
-    // 邀请码机制已移除：频道自动开通（channelActive 恒 true，兼容前端守卫）
     const sample = await deps.repo.episodes.getVoiceSample(userId);
     const role = (await deps.repo.episodes.getRole?.(userId)) ?? "user";
     return c.json({ userId, role, channelActive: true, hasVoiceSample: sample !== null });
   });
 
-  // import/polishes/transcripts 路由内部自带 /api 前缀（挂根）；importer 路由无前缀（挂 /api）
-  app.route("/", importRoutes(deps.importDeps));
-  app.route("/", polishesRoutes(deps.polishesDeps));
-  app.route("/", transcriptsRoutes(deps.transcriptsDeps));
-  app.route("/", profileRoutes({ repo: deps.repo }));
   app.route("/", submissionsRoutes(deps.repo));
+  app.route("/", profileRoutes({ repo: deps.repo }));
   app.route("/", notificationsRoutes(deps.repo));
-  app.route("/v1", importerRoutes(() => deps.shareCollectUrl?.() ?? process.env.IMPORTER_URL ?? null));
-  app.route("/v1", episodesRoutes(deps.episodesDeps, (c) => (c as Context<AuthEnv>).get("userId"), deps.voice.storage));
-  // polish/generate/job/voice 路由自带 /api 前缀（与各自 test.ts 直接对裸 app 请求 /api/... 一致），故挂载在根路径；
-  // 上面的 /api/* 鉴权中间件依然覆盖
-  app.route("/", jobRoutes(deps.job, (c) => (c as unknown as { get: (k: string) => string }).get("userId")));
   app.route("/", voiceRoutes(deps.voice));
   app.route("/", favoritesRoutes(deps.favorites));
-  app.route("/", adminRoutes(deps.admin));
-  // 编辑端（P2）：requireRole(editor|admin) 守卫在 editorRoutes 内部施加
-  app.route("/", editorRoutes({
-    repo: deps.repo,
-    llm: deps.transcriptsDeps.llm,
-    guestsByPlatform: deps.transcriptsDeps.guestsByPlatform,
-    safetyCheck: deps.episodesDeps.safetyCheck,
-    createJob: deps.episodesDeps.createJob,
-    enqueueJob: deps.episodesDeps.enqueueJob,
-    getLatestJob: deps.episodesDeps.getLatestJob,
-    pexelsApiKey: deps.env.PEXELS_API_KEY || null,
-    notifyEmail: (input) => sendEmail(deps.env, input),
-    storage: deps.voice.storage,
-    ffmpegPath: ffmpegInstaller.path,
-    siteBaseUrl: deps.env.SITE_BASE_URL || null,
-  } satisfies EditorDeps));
+  // 设备授权确认（cookie 会话 + editor/admin 角色）——挂在认证中间件之后
+  app.route("/", deviceApproveRoutes(deviceStore, deps.auth));
+  // 编辑端（本质版）：队列/详情/拒审/发布/嘉宾/采样下载——requireRole(editor|admin) 在 editorRoutes 内部施加
+  app.route("/", editorRoutes(deps.editor));
+  // 统一 TTS（编辑本地合成语音走此端点；requireRole 在 ttsRoutes 内部施加）
+  app.route("/", ttsRoutes(deps.tts));
 
   app.notFound((c) => c.json({ error: "not_found" }, 404));
   app.onError((err, c) => {

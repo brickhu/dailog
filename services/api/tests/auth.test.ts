@@ -9,154 +9,49 @@ import * as schema from "../src/db/schema";
 // 认证全链路测试：真实 better-auth + 本地 PG（门控；无 DATABASE_URL 时跳过）
 const hasDb = Boolean(process.env.DATABASE_URL);
 
-function fakeImportDeps(): AppDeps["importDeps"] {
-  return {
-    getSnapshotByUrl: async () => null,
-    createSnapshot: async (row) => ({ id: "snap-1", platform: row.platform, sourceTitle: row.sourceTitle, sourceConversationId: row.sourceConversationId, parsedDialogue: row.parsedDialogue, quality: null, status: "ok", retryAfter: null, lastError: null }),
-    updateSnapshotContent: async () => {},
-    markSnapshotUnreachable: async () => {},
-    markSnapshotParseFailed: async () => {},
-    findPolishByUserSnapshot: async () => null,
-      parseShareHtml: async () => null,
-      listTraceableSnapshots: async () => [],
-      setSnapshotSourceTrace: async () => {},
-      findPublishedEpisodeBySnapshot: async () => null,
-    getPlatformRules: async () => [
-      { id: "claude", label: "Claude", sharePattern: "^https?:\\/\\/(www\\.)?claude\\.ai\\/share\\/[0-9a-f-]{36}" },
-      { id: "deepseek", label: "DeepSeek", sharePattern: "^https?:\\/\\/chat\\.deepseek\\.com\\/share\\/[A-Za-z0-9]+" },
-      { id: "chatgpt", label: "ChatGPT", sharePattern: "^https?:\\/\\/(www\\.)?chatgpt\\.com\\/share\\/[A-Za-z0-9-]+" },
-      { id: "kimi", label: "Kimi", sharePattern: "^https?:\\/\\/(www\\.)?kimi\\.com\\/share\\/[0-9a-f-]{36}" },
-    ],
-  };
-}
-function fakePolishesDeps(): AppDeps["polishesDeps"] {
-  return {
-    findPolishByUserSnapshot: async () => null,
-
-    createPolish: async () => ({ id: "polish-1" }),
-    getPolishDetail: async () => null,
-      listByUser: async () => [],
-  };
-}
-function fakeTranscriptsDeps(): AppDeps["transcriptsDeps"] {
-  return {
-    getDialogueForPolish: async () => null,
-    getTranscriptCount: async () => 0,
-    getPolishLimit: async () => 5,
-          guestsByPlatform: {},
-createTranscript: async () => ({ id: "transcript-1" }),
-    getOwnedTranscript: async () => null,
-    updateTranscriptSegments: async () => {},
-    llm: { complete: async () => "", stream: async () => "" },
-  };
-}
-function fakeEpisodesDeps(): AppDeps["episodesDeps"] {
-  return {
-    listByUser: async () => [],
-    getOwned: async () => null,
-    getEpisodeAudio: async () => null,
-    getOwnedTranscript: async () => null,
-    getEpisodeByTranscript: async () => null,
-    createEpisode: async () => ({ id: "ep-1" }),
-    safetyCheck: async () => ({ pass: true }),
-    getChannelActive: async () => true,
-    getQuota: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
-    consumeQuota: async () => {},
-    createJob: async (episodeId: string) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
-    getLatestJob: async () => null,
-    enqueueJob: async () => {},
-    setPublished: async () => {},
-    getChannelActivatedAt: async () => new Date(),
-    getHostModelId: async () => null,
-    getVoiceSampleKey: async () => null,
-    getVoiceSample: async () => null,
-    getVoiceSampleByLanguage: async () => null,
-    markUsed: async () => {},
-    saveVoiceSample: async () => {},
-  };
-}
-
 function fakeRepo(): AppDeps["repo"] {
   return {
-        notifications: {
-          create: async () => {},
-          listByUser: async () => [],
-          unreadCount: async () => 0,
-          markAllRead: async () => {},
-          getEmailByUserId: async () => null,
-          existsAfter: async () => false,
-          existsByLink: async () => false,
-        },
-        guests: {
+    notifications: {
+      create: async () => {},
+      listByUser: async () => [],
+      unreadCount: async () => 0,
+      markAllRead: async () => {},
+      getEmailByUserId: async () => null,
+      existsAfter: async () => false,
+      existsByLink: async () => false,
+    },
+    guests: {
       getByPlatform: async () => null,
       list: async () => [],
       voiceSampleByLanguage: async () => null,
       voiceSampleAny: async () => null,
       upsertVoiceSample: async () => {},
+      update: async () => {},
       listVoiceSamples: async () => [],
     },
-    snapshots: {
-      getByUrl: async () => null,
-      getById: async () => null,
-      create: async () => ({ id: "snap-1" }),
-      updateContent: async () => {},
-      updateQuality: async () => {},
-      markUnreachable: async () => {},
-            markParseFailed: async () => {},
-      listTraceable: async () => [],
-      setSourceTrace: async () => {},
-    },
-    polishes: {
-      findByUserSnapshot: async () => null,
-
-      create: async () => ({ id: "polish-1" }),
-      createSubmission: async () => ({ id: "sub-1" }),
+    submissions: {
+      create: async () => ({ id: "sub-1" }),
+      findByUserUrl: async () => null,
       countPendingByUser: async () => 0,
-      listSubmissionsByUser: async () => [],
-      listQueue: async () => [],
-      getById: async () => null,
-      setStatus: async () => {},
-      listAccepted: async () => [],
-      overviewStats: async () => ({ reviews: { submitted: 0, accepted: 0, rejected: 0 }, scripts: { pending: 0, generated: 0, failed: 0 }, episodes: { published: 0, failed: 0 } }),
-      getOwned: async () => null,
-      getPolishDetail: async () => null,
       listByUser: async () => [],
-    },
-    transcripts: {
-      create: async () => ({ id: "transcript-1" }),
-      listByPolish: async () => [],
-      getOwned: async () => null,
-      updateSegments: async () => {},
-      markUsed: async () => {},
-      getById: async () => null,
+      listQueue: async () => [],
+      getDetail: async () => null,
+      reject: async () => {},
+      markPublished: async () => {},
     },
     episodes: {
-      create: async () => ({ id: "ep-1" }),
-      listByUser: async () => [],
-      getOwned: async () => null,
-      getEpisodeAudio: async () => null,
-      getByTranscript: async () => null,
-      listByPolish: async () => [],
-      getEpisodeScript: async () => null,
-      getEpisodeGuest: async () => null,
+      createPublished: async () => ({ id: "ep-1", number: 1 }),
       getPublicAudioKey: async () => null,
       getPublicCoverKey: async () => null,
-      getPublishedDialogue: async () => null,
-      setPublished: async () => {},
       getById: async () => null,
-      publish: async () => ({ number: 1 }),
       updatePublished: async () => {},
       listPublished: async () => [],
-      findPublishedEpisodeBySnapshot: async () => null,
+      listBySubmission: async () => [],
       getEpisodeUserId: async () => null,
-      getEpisodeLanguage: async () => null,
-      getHostModelId: async () => null,
-      getVoiceSampleKey: async () => null,
       getVoiceSample: async () => null,
       getVoiceSampleByLanguage: async () => null,
+      getVoiceSampleKey: async () => null,
       saveVoiceSample: async () => {},
-      insertTrack: async () => {},
-      getChannelActivatedAt: async () => new Date(),
       getProfile: async () => null,
       updateUserNickname: async () => {},
       updatePersona: async () => {},
@@ -164,27 +59,6 @@ function fakeRepo(): AppDeps["repo"] {
       isUsernameTaken: async () => false,
       syncAdminRoles: async () => 0,
     },
-    jobs: {
-      getQuotaInfo: async () => ({ plan: "free", generatedCount: 0, creditBalance: 0 }),
-      consumeQuota: async () => {},
-      createJob: async (episodeId) => ({ id: "job-1", episodeId, status: "queued", progress: 0 }),
-      getLatestJob: async () => null,
-      getOwnedEpisode: async () => ({ id: "ep-1" }),
-      listRecoverableJobs: async () => [],
-      markJobProgress: async () => {},
-      markJobDone: async () => {},
-
-      markJobFailed: async () => {},
-    },
-  };
-}
-
-
-
-function fakeJob(): AppDeps["job"] {
-  return {
-    getOwnedEpisode: async () => ({ id: "ep-1" }),
-    getLatestJob: async () => null,
   };
 }
 
@@ -209,20 +83,14 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
       BETTER_AUTH_SECRET: "test-secret",
       BETTER_AUTH_URL: "http://localhost:8787",
       PORT: 8787,
-      DEEPSEEK_API_KEY: "",
-      DEEPSEEK_BASE_URL: "https://api.deepseek.com/v1",
-      DEEPSEEK_MODEL: "deepseek-chat",
       FISH_API_KEY: "",
       STORAGE_DRIVER: "fs" as const,
       STORAGE_DIR: "./data",
-      ASSETS_DIR: "assets/audio",
       APP_ORIGINS: "",
-      POLISH_MAX_VERSIONS: 5,
       RESEND_API_KEY: "",
       EMAIL_FROM: "dailog <no-reply@dailog.fm>",
       ADMIN_EMAILS: "",
-      PEXELS_API_KEY: "",
-    SITE_BASE_URL: "https://site.dailog.fm",
+    SITE_BASE_URL: "https://dailog.fm",
 
     };
 
@@ -231,26 +99,26 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
       env: testEnv,
       auth,
       repo: fakeRepo(),
-    importDeps: fakeImportDeps(),
-    polishesDeps: fakePolishesDeps(),
-    transcriptsDeps: fakeTranscriptsDeps(),
-    episodesDeps: fakeEpisodesDeps(),
-      job: fakeJob(),
       voice: fakeVoice(),
-    favorites: {
-      getPublishableEpisode: async () => null,
-      toggleFavorite: async () => ({ favorited: true }),
-      toggleLike: async () => ({ liked: true }),
-      listFavorites: async () => [],
-    },
-    admin: {
-      isAdmin: async () => false,
-      storage: { put: async () => {} },
-      upsertGuestVoiceSample: async () => {},
-      listGuestVoiceSamples: async () => [],
-      listGuests: async () => [],
-    },
-  });
+      editor: {
+        repo: fakeRepo(),
+        env: testEnv,
+        storage: { put: async () => {}, get: async () => new Uint8Array() },
+        siteBaseUrl: null,
+      },
+      tts: {
+        repo: fakeRepo(),
+        storage: { get: async () => new Uint8Array() },
+        ffmpegPath: "/fake/ffmpeg",
+        fish: null,
+      },
+      favorites: {
+        getPublishableEpisode: async () => null,
+        toggleFavorite: async () => ({ favorited: true }),
+        toggleLike: async () => ({ liked: true }),
+        listFavorites: async () => [],
+      },
+    });
   });
 
   afterAll(async () => {
@@ -288,10 +156,9 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
       headers: { Authorization: `Bearer ${json.token}` },
     });
     expect(me.status).toBe(200);
-    expect((await me.json()) as { userId: string; channelActive: boolean }).toEqual({
-      userId: json.user!.id,
-      channelActive: true,
-    });
+    const meBody = (await me.json()) as { userId: string; channelActive: boolean };
+    expect(meBody.userId).toBe(json.user!.id);
+    expect(meBody.channelActive).toBe(true);
   });
 
   it("signs in and get-session restores via bearer token", async () => {

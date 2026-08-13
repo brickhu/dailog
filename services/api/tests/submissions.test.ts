@@ -1,158 +1,198 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { Hono } from "hono";
 import { submissionsRoutes } from "../src/routes/submissions";
 import type { Repos } from "../src/repo";
 
-// 投稿端点单测（ARC：API 契约 Vitest + Hono app 直测）：fake repo 注入行为，
-// 覆盖校验/快照缺失/重复提交/成功/列表分支。鉴权由测试中间件注入 userId（与 profile.test 的 auth mock 等价）。
+// 投稿端点（本质版）测试：fake repo 注入 + fetch mock（触达性探活）。
+// 覆盖：URL 合法性 / 触达性 / 并发上限 / 重复提交 / 成功入库
 
-function makeRepo(overrides: { snapshots?: Partial<Repos["snapshots"]>; polishes?: Partial<Repos["polishes"]> } = {}): Repos {
-  return {
-    snapshots: {
-      getByUrl: async () => null,
-      getById: async () => null,
-      create: async () => ({ id: "snap-1" }),
-      updateContent: async () => {},
-      updateQuality: async () => {},
-      markUnreachable: async () => {},
-            markParseFailed: async () => {},
-      listTraceable: async () => [],
-      setSourceTrace: async () => {},
-      ...overrides.snapshots,
-    },
-    polishes: {
-      findByUserSnapshot: async () => null,
-      create: async () => ({ id: "polish-1" }),
-      createSubmission: async () => ({ id: "sub-1" }),
-      countPendingByUser: async () => 0,
-      listSubmissionsByUser: async () => [],
-      listQueue: async () => [],
-      setStatus: async () => {},
-      getOwned: async () => null,
-      getPolishDetail: async () => null,
-      listByUser: async () => [],
-      ...overrides.polishes,
-    },
-  } as unknown as Repos;
-}
-
-function makeApp(repo: Repos) {
-  const app = submissionsRoutes(repo);
+function makeApp(repo: Partial<Repos["submissions"]> = {}) {
+  const app = new Hono<{ Variables: { userId: string } }>();
   app.use("*", async (c, next) => {
     c.set("userId", "user-1");
     await next();
   });
+  app.route("/", submissionsRoutes({
+    guests: {
+      getByPlatform: async () => null,
+      list: async () => [],
+      voiceSampleByLanguage: async () => null,
+      voiceSampleAny: async () => null,
+      upsertVoiceSample: async () => {},
+      update: async () => {},
+      listVoiceSamples: async () => [],
+    },
+    notifications: {
+      create: async () => {},
+      listByUser: async () => [],
+      unreadCount: async () => 0,
+      markAllRead: async () => {},
+      getEmailByUserId: async () => null,
+      existsAfter: async () => false,
+      existsByLink: async () => false,
+    },
+    episodes: {
+      createPublished: async () => ({ id: "ep-1", number: 1 }),
+      getPublicAudioKey: async () => null,
+      getPublicCoverKey: async () => null,
+      getById: async () => null,
+      updatePublished: async () => {},
+      listPublished: async () => [],
+      listBySubmission: async () => [],
+      getEpisodeUserId: async () => null,
+      getVoiceSample: async () => null,
+      getVoiceSampleByLanguage: async () => null,
+      getVoiceSampleKey: async () => null,
+      saveVoiceSample: async () => {},
+      getProfile: async () => null,
+      updateUserNickname: async () => {},
+      updatePersona: async () => {},
+      updateChannel: async () => ({ ok: true } as const),
+      isUsernameTaken: async () => false,
+      syncAdminRoles: async () => 0,
+    },
+    submissions: {
+      create: async () => ({ id: "sub-1" }),
+      findByUserUrl: async () => null,
+      countPendingByUser: async () => 0,
+      listByUser: async () => [],
+      listQueue: async () => [],
+      getDetail: async () => null,
+      reject: async () => {},
+      markPublished: async () => {},
+      ...repo,
+    },
+  } as Repos));
   return app;
 }
 
-describe("POST /v1/submissions", () => {
-  it("缺少 snapshotId → 400 invalid_snapshot", async () => {
-    const res = await makeApp(makeRepo()).request("/v1/submissions", {
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("POST /v1/submissions —— URL 合法性与触达性", () => {
+  it("rejects missing url with 400", async () => {
+    const res = await makeApp().request("/v1/submissions", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ error: "invalid_snapshot" });
+    expect((await res.json()) as { error: string }).toMatchObject({ error: "invalid_url" });
   });
 
-  it("快照不存在 → 404", async () => {
-    const repo = makeRepo({ snapshots: { getById: async () => null } });
-    const res = await makeApp(repo).request("/v1/submissions", {
+  it("rejects non-http(s) URLs（javascript:/ftp:）", async () => {
+    const res = await makeApp().request("/v1/submissions", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ snapshotId: "snap-missing" }),
+      body: JSON.stringify({ url: "javascript:alert(1)" }),
     });
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: "not_found" });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: "invalid_url" });
   });
 
-  it("已提交过同一对话 → existing 返回已有容器", async () => {
-    const repo = makeRepo({
-      snapshots: { getById: async () => ({ parsedDialogue: null, sourceTitle: null, platform: "claude", prefixSourceId: null, url: "https://chatgpt.com/share/x" }) },
-      polishes: { findByUserSnapshot: async () => ({ id: "sub-old", title: null, status: "submitted" }) },
-    });
-    const res = await makeApp(repo).request("/v1/submissions", {
+  it("rejects unreachable URL with 422（网络层失败）", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    }));
+    const res = await makeApp().request("/v1/submissions", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ snapshotId: "snap-1" }),
+      body: JSON.stringify({ url: "https://example.com/share/abc" }),
     });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ existing: true, submissionId: "sub-old", status: "submitted" });
+    expect(res.status).toBe(422);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: "url_unreachable" });
   });
 
-  it("提交成功 → 201 submitted", async () => {
-    const repo = makeRepo({
-      snapshots: { getById: async () => ({ parsedDialogue: null, sourceTitle: "一次关于 AI 的对话", platform: "claude", prefixSourceId: null, url: "https://chatgpt.com/share/x" }) },
-      polishes: { createSubmission: async () => ({ id: "sub-new" }) },
-    });
-    const res = await makeApp(repo).request("/v1/submissions", {
+  it("accepts reachable URL（任意响应码 = 可达，含 403 反爬）", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 403 })));
+    const res = await makeApp().request("/v1/submissions", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ snapshotId: "snap-1", title: "我的投稿标题" }),
+      body: JSON.stringify({ url: "https://example.com/share/abc" }),
     });
     expect(res.status).toBe(201);
-    expect(await res.json()).toMatchObject({ submissionId: "sub-new", status: "submitted" });
+    expect(await res.json()).toEqual({ submissionId: "sub-1", status: "submitted" });
   });
 
-  it("并发撞唯一约束 → 409 already_submitted", async () => {
-    const repo = makeRepo({
-      snapshots: { getById: async () => ({ parsedDialogue: null, sourceTitle: null, platform: "claude", prefixSourceId: null, url: "https://chatgpt.com/share/x" }) },
-      polishes: { createSubmission: async () => ({ id: "" }) },
-    });
-    const res = await makeApp(repo).request("/v1/submissions", {
+  it("falls back to GET when HEAD is rejected（405 → GET 成功）", async () => {
+    let headTried = false;
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      if (!headTried) {
+        headTried = true;
+        return new Response(null, { status: 405 });
+      }
+      return new Response("body", { status: 200 });
+    }));
+    const res = await makeApp().request("/v1/submissions", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ snapshotId: "snap-1" }),
+      body: JSON.stringify({ url: "https://example.com/share/abc" }),
     });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: "already_submitted" });
+    expect(res.status).toBe(201);
+  });
+});
+
+describe("POST /v1/submissions —— 并发上限 / 重复 / 入库", () => {
+  it("rejects when pending count at limit with 429", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
+    const app = makeApp({ countPendingByUser: async () => 5 });
+    const res = await app.request("/v1/submissions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/share/abc" }),
+    });
+    expect(res.status).toBe(429);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: "pending_limit" });
+  });
+
+  it("returns existing submission when same user+url already submitted", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
+    const app = makeApp({ findByUserUrl: async () => ({ id: "sub-old", status: "submitted" }) });
+    const res = await app.request("/v1/submissions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/share/abc" }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ existing: true, submissionId: "sub-old", status: "submitted" });
+  });
+
+  it("creates submission with url + optional title", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
+    const create = vi.fn(async (_u: string, _url: string, _t: string | null) => ({ id: "sub-new" }));
+    const app = makeApp({ create });
+    const res = await app.request("/v1/submissions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/share/abc", title: "我的对话" }),
+    });
+    expect(res.status).toBe(201);
+    expect(create).toHaveBeenCalledWith("user-1", "https://example.com/share/abc", "我的对话");
+  });
+
+  it("does not call create when URL unreachable（探活失败不落库）", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    }));
+    const create = vi.fn(async () => ({ id: "sub-x" }));
+    await makeApp({ create }).request("/v1/submissions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/share/abc" }),
+    });
+    expect(create).not.toHaveBeenCalled();
   });
 });
 
 describe("GET /v1/me/submissions", () => {
-  it("返回我的投稿列表", async () => {
-    const repo = makeRepo({
-      polishes: { listSubmissionsByUser: async () => [
-        { id: "sub-1", title: "投稿一", status: "submitted", snapshotTitle: "对话A", platform: "claude", episodeStatus: null, rejectedReason: null, createdAt: new Date() },
-        { id: "sub-2", title: "投稿二", status: "rejected", snapshotTitle: "对话B", platform: "chatgpt", episodeStatus: null, rejectedReason: null, createdAt: new Date() },
-      ] },
-    });
-    const res = await makeApp(repo).request("/v1/me/submissions");
+  it("returns my submissions list", async () => {
+    const listByUser = vi.fn(async () => [
+      { id: "sub-1", url: "https://example.com/share/abc", title: null, status: "submitted", rejectedReason: null, episodeStatus: null, createdAt: new Date() },
+    ]);
+    const res = await makeApp({ listByUser }).request("/v1/me/submissions");
     expect(res.status).toBe(200);
-    const list = await res.json();
-    expect(list).toHaveLength(2);
-    expect(list[0]).toMatchObject({ id: "sub-1", status: "submitted" });
-  });
-});
-
-describe("待审批投稿上限（pending_limit）", () => {
-  it("待审批 >= 5 → 429 pending_limit，不创建投稿", async () => {
-    let created = 0;
-    const repo2 = makeRepo({
-      polishes: {
-        countPendingByUser: async () => 5,
-        createSubmission: async () => { created++; return { id: "sub-x" }; },
-      },
-    });
-    const res = await makeApp(repo2).request("/v1/submissions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ snapshotId: "snap-1" }),
-    });
-    expect(res.status).toBe(429);
-    expect(await res.json()).toMatchObject({ error: "pending_limit", detail: { count: 5, limit: 5 } });
-    expect(created).toBe(0);
-  });
-
-  it("待审批 4 条 → 正常创建", async () => {
-    const res = await makeApp(makeRepo({
-      snapshots: { getById: async () => ({ parsedDialogue: [], sourceTitle: "对话", platform: "claude", prefixSourceId: null, url: "https://chatgpt.com/share/x" }) },
-      polishes: { countPendingByUser: async () => 4 },
-    })).request("/v1/submissions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ snapshotId: "snap-1" }),
-    });
-    expect(res.status).toBe(201);
+    const rows = (await res.json()) as Array<{ id: string; status: string }>;
+    expect(rows[0]).toMatchObject({ id: "sub-1", status: "submitted" });
   });
 });

@@ -108,14 +108,13 @@ export function createFavoritesRepo(db: PostgresJsDatabase<typeof schema>): Favo
         .select({
           episodeId: schema.episodes.id,
           title: schema.episodes.title,
-          audioUrl: schema.tracks.audioUrl,
-          durationSeconds: schema.tracks.durationSeconds,
+          audioUrl: schema.episodes.audioUrl,
+          durationSeconds: schema.episodes.durationSeconds,
           publishedAt: schema.episodes.publishedAt,
           favoritedAt: schema.favorites.createdAt,
         })
         .from(schema.favorites)
         .innerJoin(schema.episodes, eq(schema.favorites.episodeId, schema.episodes.id))
-        .leftJoin(schema.tracks, eq(schema.tracks.episodeId, schema.episodes.id))
         .where(eq(schema.favorites.userId, userId))
         .orderBy(desc(schema.favorites.createdAt));
     },

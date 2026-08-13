@@ -8,17 +8,13 @@ const baseEnv = {
   BETTER_AUTH_SECRET: "test-secret",
   BETTER_AUTH_URL: "http://localhost:8787",
   PORT: 8787,
-  DEEPSEEK_API_KEY: "",
-  DEEPSEEK_BASE_URL: "https://api.deepseek.com/v1",
-  DEEPSEEK_MODEL: "deepseek-chat",
-  FISH_API_KEY: "",
   STORAGE_DRIVER: "fs" as const,
   STORAGE_DIR: "./data",
-  ASSETS_DIR: "assets/audio",
   APP_ORIGINS: "",
-  POLISH_MAX_VERSIONS: 5,
   RESEND_API_KEY: "",
   EMAIL_FROM: "dailog <no-reply@dailog.fm>",
+  ADMIN_EMAILS: "",
+  SITE_BASE_URL: "https://dailog.fm",
 };
 
 afterEach(() => {

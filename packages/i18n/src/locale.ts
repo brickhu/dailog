@@ -38,11 +38,16 @@ export function setLocaleCookie(locale: Locale): void {
  *  - 兜底 "en"
  */
 export function detectLocale(opts?: { cookie?: string | null; acceptLanguage?: string | null }): Locale {
-  // ① cookie（手动选择持久化）
-  const cookie =
+  // ① cookie（手动选择持久化；支持两种入参：值 "zh" 或完整 cookie 头 "dailog_locale=zh"——
+  //    SSR 传 request 的 cookie 头，client 走 getLocaleCookie 已解析）
+  let cookie =
     opts?.cookie ??
     (typeof document !== "undefined" ? getLocaleCookie() : null);
-  if (cookie) return cookie;
+  if (cookie && cookie.includes("=")) {
+    const m = cookie.match(new RegExp(`(?:^|;\\s*)${LOCALE_COOKIE}=([^;]+)`));
+    cookie = m ? m[1] : null;
+  }
+  if (cookie) return resolveLocale(cookie);
   // ② 浏览器/请求语言
   if (opts?.acceptLanguage) return resolveLocale(opts.acceptLanguage.split(",")[0]);
   if (typeof navigator !== "undefined" && navigator.language) {

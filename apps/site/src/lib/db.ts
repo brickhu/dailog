@@ -55,24 +55,18 @@ async function withDb<T>(fn: (sql: postgres.Sql) => Promise<T>): Promise<T> {
 /** 最新已发布节目（首页/发现页）。
  *  lang 可选（"zh"|"en"）：语言偏好分流——同语言内容优先（ORDER BY 匹配降序），
  *  数量不足时按时间自然 fallback 到其他语言（推荐层数据分流，不做独立 tab）。
- *  语言字段来自 transcripts（脚本语言，发布时固化）。 */
+ *  语言字段来自 episodes（编辑提交成品时固化）。 */
 export async function listLatestEpisodes(limit = 20, lang?: "zh" | "en"): Promise<EpisodeSummary[]> {
     return withDb((db) => db`
       SELECT e.id, e.slug, e.title, e.description,
              e.duration_seconds AS "durationSeconds",
              e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
-             t.language, tr.audio_url AS "audioUrl",
+             e.language, e.audio_url AS "audioUrl",
              p.username, p.display_name AS "displayName"
       FROM episodes e
-      JOIN transcripts t ON t.id = e.transcript_id
       JOIN profiles p ON p.id = e.user_id
-      LEFT JOIN LATERAL (
-        SELECT tr.audio_url FROM tracks tr
-        WHERE tr.episode_id = e.id
-        ORDER BY tr.created_at DESC LIMIT 1
-      ) tr ON true
       WHERE e.status = 'published' AND e.is_public = true
-      ${lang ? db`ORDER BY (t.language = ${lang}) DESC, e.published_at DESC` : db`ORDER BY e.published_at DESC`}
+      ${lang ? db`ORDER BY (e.language = ${lang}) DESC, e.published_at DESC` : db`ORDER BY e.published_at DESC`}
       LIMIT ${limit}
     ` as unknown as Promise<EpisodeSummary[]>);
 }
@@ -96,13 +90,8 @@ export async function listFeedEpisodes(limit = 200): Promise<FeedEpisode[]> {
            e.published_at AS "publishedAt",
            e.cover_url AS "coverUrl",
            e.number AS "episodeNumber",
-           tr.size AS "audioSize"
+           e.audio_size AS "audioSize"
     FROM episodes e
-    LEFT JOIN LATERAL (
-      SELECT tr.size FROM tracks tr
-      WHERE tr.episode_id = e.id
-      ORDER BY tr.created_at DESC LIMIT 1
-    ) tr ON true
     WHERE e.status = 'published' AND e.is_public = true
     ORDER BY e.published_at DESC
     LIMIT ${limit}
@@ -115,16 +104,10 @@ export async function getEpisode(id: string): Promise<EpisodeSummary | null> {
       SELECT e.id, e.slug, e.title, e.description,
              e.duration_seconds AS "durationSeconds",
              e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
-             t.language, tr.audio_url AS "audioUrl",
+             e.language, e.audio_url AS "audioUrl",
              p.username, p.display_name AS "displayName"
       FROM episodes e
-      JOIN transcripts t ON t.id = e.transcript_id
       JOIN profiles p ON p.id = e.user_id
-      LEFT JOIN LATERAL (
-        SELECT tr.audio_url FROM tracks tr
-        WHERE tr.episode_id = e.id
-        ORDER BY tr.created_at DESC LIMIT 1
-      ) tr ON true
       WHERE e.id = ${id} AND e.status = 'published' AND e.is_public = true
       LIMIT 1
     `);
@@ -155,16 +138,10 @@ export async function getChannel(username: string): Promise<{ channel: ChannelSu
       SELECT e.id, e.slug, e.title, e.description,
              e.duration_seconds AS "durationSeconds",
              e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
-             t.language, tr.audio_url AS "audioUrl",
+             e.language, e.audio_url AS "audioUrl",
              p.username, p.display_name AS "displayName"
       FROM episodes e
-      JOIN transcripts t ON t.id = e.transcript_id
       JOIN profiles p ON p.id = e.user_id
-      LEFT JOIN LATERAL (
-        SELECT tr.audio_url FROM tracks tr
-        WHERE tr.episode_id = e.id
-        ORDER BY tr.created_at DESC LIMIT 1
-      ) tr ON true
       WHERE p.username = ${username} AND e.status = 'published' AND e.is_public = true
       ORDER BY e.published_at DESC
     `;

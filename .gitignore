@@ -28,3 +28,12 @@ poc-profile/
 
 # 容器内 pnpm install 生成的 store（误入挂载工作区）
 .pnpm-store/
+
+# 编辑本地 Agent 配置（密钥）与草稿（中间产物/音频）——不上传
+.dailog-editor/
+
+# dailog-editor 子工程打包产物（构建生成；构建命令见 tools/dailog-editor）
+.agents/skills/dailog-editor/
+
+# vinxi 运行时生成的配置临时文件
+apps/site/app.config.timestamp_*.js
