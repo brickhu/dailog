@@ -108,6 +108,7 @@ const SUBMITTED_DETAIL = {
   createdAt: new Date(),
   userEmail: "submitter@test.local",
   displayName: "投稿人",
+  callName: "小北",
   voiceSample: { audioUrl: "voices/user-1/zh.webm", transcript: "大家好", language: "zh", status: "ready" },
 };
 

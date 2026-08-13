@@ -109,6 +109,7 @@ const SUBMITTED_DETAIL = {
   createdAt: new Date("2026-08-01T00:00:00Z"),
   userEmail: "submitter@test.local",
   displayName: "投稿人",
+  callName: "小北",
   voiceSample: { audioUrl: "voices/user-1/zh.webm", transcript: "大家好", language: "zh", status: "ready" },
 };
 
@@ -146,8 +147,9 @@ describe("队列与详情", () => {
       }),
     }).request("/v1/editor/submissions/sub-1");
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { url: string; episodes: unknown[] };
+    const body = (await res.json()) as { url: string; callName: string | null; episodes: unknown[] };
     expect(body.url).toBe("https://claude.ai/share/abc-123");
+    expect(body.callName).toBe("小北");
     expect(body.episodes).toHaveLength(1);
   });
 

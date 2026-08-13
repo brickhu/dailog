@@ -19,6 +19,8 @@ export interface EpisodeSummary {
   // 频道信息
   username: string | null;
   displayName: string | null;
+  /** 主持人节目中的称呼（人设 callName；无则回退 displayName/username） */
+  callName: string | null;
 }
 
 export interface ChannelSummary {
@@ -108,7 +110,8 @@ export async function getEpisode(id: string): Promise<EpisodeSummary | null> {
              e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
              e.language, e.audio_url AS "audioUrl",
              s.url AS "sourceUrl",
-             p.username, p.display_name AS "displayName"
+             p.username, p.display_name AS "displayName",
+             p.persona->>'callName' AS "callName"
       FROM episodes e
       JOIN submissions s ON s.id = e.submission_id
       JOIN profiles p ON p.id = e.user_id

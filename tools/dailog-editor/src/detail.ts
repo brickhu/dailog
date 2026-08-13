@@ -16,6 +16,8 @@ export async function detail(config: EditorConfig, args: string[]): Promise<void
     rejectedReason: string | null;
     userEmail: string;
     displayName: string;
+    /** 投稿人人设 callName（节目中的主持人称呼；无则脚本用「主持人」） */
+    callName: string | null;
     voiceSample: { audioUrl: string; transcript: string | null; language: string; status: string } | null;
     episodes: Array<{ id: string; title: string | null; status: string; number: number | null }>;
   };
@@ -23,6 +25,7 @@ export async function detail(config: EditorConfig, args: string[]): Promise<void
   console.log(`  标题：${d.title ?? "—"}`);
   console.log(`  URL：${d.url}`);
   console.log(`  投稿人：${d.displayName} <${d.userEmail}>`);
+  console.log(`  主持人称呼：${d.callName ?? "无（脚本用「主持人」）"}`);
   console.log(`  拒审原因：${d.rejectedReason ?? "—"}`);
   console.log(`  采样：${d.voiceSample ? `✅ ${d.voiceSample.language}（transcript: ${(d.voiceSample.transcript ?? "无").slice(0, 40)}…）` : "❌ 无（无法克隆主持人音色）"}`);
   if (d.episodes.length > 0) {

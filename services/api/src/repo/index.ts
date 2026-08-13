@@ -67,6 +67,8 @@ export interface SubmissionsRepo {
     createdAt: Date;
     userEmail: string;
     displayName: string;
+    /** 投稿人人设（节目中的主持人称呼，脚本生成规范注入用） */
+    callName: string | null;
     voiceSample: { audioUrl: string; transcript: string | null; language: string; status: string } | null;
   } | null>;
   /** 拒审（reason 必填） */
@@ -492,6 +494,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             createdAt: schema.submissions.createdAt,
             userEmail: schema.authUsers.email,
             displayName: schema.profiles.displayName,
+            persona: schema.profiles.persona,
           })
           .from(schema.submissions)
           .innerJoin(schema.profiles, eq(schema.submissions.userId, schema.profiles.id))
@@ -522,6 +525,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           createdAt: row.createdAt,
           userEmail: row.userEmail,
           displayName: row.displayName,
+          callName: row.persona?.callName ?? null,
           voiceSample: sampleRows[0] ?? null,
         };
       },

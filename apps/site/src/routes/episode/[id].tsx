@@ -159,7 +159,7 @@ export default function EpisodePage() {
           </Show>
           <div {...stylex.props(styles.title)}>{ep()!.title || t("common.unnamed")}</div>
           <div {...stylex.props(styles.meta)}>
-            @{ep()!.username} · {new Date(ep()!.publishedAt ?? 0).toLocaleDateString("zh-CN")} ·{" "}
+            {ep()!.callName ?? ep()!.displayName ?? ep()!.username} · {new Date(ep()!.publishedAt ?? 0).toLocaleDateString("zh-CN")} ·{" "}
             {Math.floor((ep()!.durationSeconds ?? 0) / 60)} 分钟
           </div>
           <Show when={audioUrl()}>
