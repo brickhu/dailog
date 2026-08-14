@@ -1,5 +1,28 @@
 import { defineConfig } from "@solidjs/start/config";
 import stylex from "@stylexjs/unplugin";
+import type { Plugin } from "vite";
+
+// 修复 unplugin 0.19 与 vinxi base 的兼容问题：unplugin 注入的 stylex css link 带 base
+// 前缀（/_build/virtual:stylex.css），但其 dev 中间件只匹配无前缀的 /virtual:stylex.css
+// → link 变死链（SPA fallback 返回 HTML）→ 首帧无样式 + 闪烁（FOUC，样式全靠 JS 注入）。
+// 重写为无前缀路径：浏览器 render-blocking 加载真实 CSS，首帧即有样式。
+function fixStylexCssLink(): Plugin {
+  return {
+    name: "fix-stylex-css-link",
+    // 仅 dev：生产构建走 unplugin 的构建期 CSS 提取，不需要
+    transformIndexHtml() {
+      if (process.env.NODE_ENV === "production") return null;
+      // unplugin 注入的死链（/_build/virtual:stylex.css，base 前缀不命中其中间件）由
+      // 其 runtime 脚本自动禁用；这里补一个无前缀的可服务 link → 浏览器 render-blocking
+      // 加载真实 CSS（/virtual:stylex.css），首帧即有样式，消除 FOUC 闪烁。
+      return [{
+        tag: "link",
+        attrs: { rel: "stylesheet", href: "/virtual:stylex.css" },
+        injectTo: "head",
+      }];
+    },
+  };
+}
 
 // 消费端 SSR 站（dailogues.com）：
 // - Nitro preset cloudflare-pages（SolidStart 1.x 部署方式，输出 dist）
@@ -20,9 +43,13 @@ export default defineConfig({
     plugins: [
       stylex.vite({
         dev: true,
-        runtimeInjection: true,
+        // runtimeInjection=true（默认）时样式编译成 JS 注入调用，dev CSS 收集为空
+        // （/virtual:stylex.css 返回 0 字节）→ 首帧无样式 + FOUC 闪烁。
+        // false → 样式提取为 CSS 文本（中间件可服务），配合下方 link 修复实现首帧有样式。
+        runtimeInjection: false,
         treeshakeCompensation: false,
       }),
+      fixStylexCssLink(),
     ],
     ssr: {
       // 共享设计包是 TS 源码分发（不预编译）：Nitro 必须打包它，不能 externalize

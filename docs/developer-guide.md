@@ -10,16 +10,19 @@
 dev 环境（dailog.orb.local，vinxi dev）下每次加载页面，先出现无样式的 DOM 结构，
 "晃一下"才渲染为有样式效果。
 
-### 根因（两层问题叠加）
-1. **CSS 链接是死链**：`@stylexjs/unplugin` 0.19 通过 transformIndexHtml 注入
+### 根因（两层问题叠加，dev 与生产**同样存在**）
+1. **CSS 链接是死链（仅 dev）**：`@stylexjs/unplugin` 0.19 通过 transformIndexHtml 注入
    `<link rel="stylesheet" href="/_build/virtual:stylex.css">`（带 vinxi base 前缀 `/_build`），
    但它自己的 dev 中间件只匹配**无前缀**的 `/virtual:stylex.css`
    （`lib/consts.js` 的 `DEV_CSS_PATH`）→ 请求永远命中不了中间件，
    落到 vinxi 的 SPA fallback（返回 HTML 页面）→ 浏览器加载"CSS"失败、
    不阻塞渲染 → 首帧只有 stylex 类名、没有样式规则。
-2. **样式收集为空**：`runtimeInjection: true`（默认）时模块样式被编译成 JS 注入调用，
-   dev CSS 收集（`__stylexCollectCss`）为空 → 中间件返回 **0 字节** →
-   样式只能等 `virtual:stylex:runtime` 脚本执行后注入 → 出现闪烁延迟。
+2. **样式收集为空（dev + 生产都中招）**：`runtimeInjection: true`（默认）时样式被编译成
+   JS 注入调用（每个模块运行时 `stylex.inject`），CSS 收集（`__stylexCollectCss`）为空：
+   - dev：中间件返回 **0 字节**，样式只能等 `virtual:stylex:runtime` 脚本注入 → 闪烁；
+   - **生产**：构建产物 CSS 只剩 app.css reset（约 1.2KB，stylex 规则 0 条）——SSR HTML
+     的 `<link rel="stylesheet" href="/_build/assets/client-*.css">` 引用的是这份空壳 CSS
+     → 首帧无组件样式，等客户端 JS 逐条注入样式 → 同样 FOUC。
 
 ### 修复（`apps/site/app.config.ts`）
 - `stylex.vite({ dev: true, runtimeInjection: false, treeshakeCompensation: false })`
@@ -34,15 +37,17 @@ dev 环境（dailog.orb.local，vinxi dev）下每次加载页面，先出现无
 
 ### 验证方法
 ```bash
-curl -s http://dailog.orb.local/virtual:stylex.css | wc -c   # 应为非空（约 40KB）
-curl -s http://dailog.orb.local/ | grep -o '<link[^>]*stylex[^>]*>'
-# 应看到两个 link：/_build/virtual:stylex.css（死链，runtime 会禁用）+ /virtual:stylex.css（生效）
+# dev：中间件应返回完整 CSS（约 40KB，此前 0 字节）
+curl -s http://dailog.orb.local/virtual:stylex.css | wc -c
+# 生产构建产物：client-*.css 应含 stylex 规则（约 48KB；runtimeInjection:true 时仅 1.2KB）
+pnpm --filter @dailogues/site build && wc -c apps/site/dist/_build/assets/client-*.css
 ```
 
 ### 勿回退
-- `runtimeInjection` 改回 `true` → 中间件又返回 0 字节，FOUC 复发。
-- 删除 `fixStylexCssLink` 插件 → link 又变死链。
-- 该修复只影响 dev；生产构建走 unplugin 构建期 CSS 提取（generateBundle 合并进 CSS asset），无此问题。
+- `runtimeInjection` 改回 `true` → dev 中间件返回 0 字节、**生产 CSS 只剩 1.2KB**，FOUC 复发。
+- 删除 `fixStylexCssLink` 插件 → dev 的 link 又变死链。
+- **修复后必须重新部署生产**（`wrangler pages deploy`）：旧部署的 CSS 产物是空壳，
+  重新构建部署后 CSS 才含完整样式。
 
 ## 2. CSS Grid `1fr` 轨道的 min-content 陷阱（卡片被裁）
 
