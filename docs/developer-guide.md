@@ -133,3 +133,25 @@ grid-template-columns: repeat(4, minmax(0, 1fr));   /* 移动端同理 repeat(2,
 ### 修复
 左右内边距移到**每个分页（pagePane）内部**，视口自身无左右 padding →
 裁剪边界 = 容器边缘 = 分页边缘，相邻分页整体在裁剪边界之外。
+
+## 6. vite HMR websocket 端口与 TLS（dev 环境）
+
+### 现象
+https://dailog.orb.local 控制台刷屏：
+`WebSocket connection to 'wss://dailog.orb.local:38123/_build/...' failed` + `[vite] failed to connect to websocket`。
+
+### 根因
+vinxi 0.5.11 对每个 router 的 vite server 用 `getRandomPort()` 分配 **HMR ws 端口**
+（`lib/dev-server.js` createViteHandler）→ 随机端口（如 38123）无 TLS（OrbStack 只对 443
+自动 TLS）→ https 页面 wss 连接失败。compose 注释里的旧教训（"3001 无 TLS"）同源。
+
+### 修复
+1. **pnpm patch vinxi**（`patches/vinxi@0.5.11.patch`，`pnpm.patchedDependencies` 固化）：
+   HMR 端口支持 `VINXI_HMR_PORT` 环境变量覆盖，不再随机。
+2. compose：`VINXI_HMR_PORT=24680` + publish `24680:24680`。
+
+### 现状与访问指引
+- **`http://dailog.orb.local`（推荐开发访问）**：HMR 完整工作（ws://24680，握手 101 已验证）
+- **`https://dailog.orb.local`**：功能正常，但 wss 仍会报错（OrbStack 对非 443 publish 端口
+  无 TLS，属平台限制）——改代码后手动刷新即可；需要安全上下文的功能（录音/登录）用 https。
+- 换机器/重装依赖：`pnpm install` 自动应用 patch；compose 环境变量已配置。

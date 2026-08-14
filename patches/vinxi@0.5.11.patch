@@ -1,0 +1,13 @@
+diff --git a/lib/dev-server.js b/lib/dev-server.js
+index ff72b45a9929c23d19de67950cd584e0320dbd3e..a9c9c22a1612151bf63214e02fbbf7bccf4fc1b0 100644
+--- a/lib/dev-server.js
++++ b/lib/dev-server.js
+@@ -50,7 +50,7 @@ export async function createViteDevServer(config) {
+ export async function createViteHandler(router, app, serveConfig) {
+ 	const vite = await import("vite");
+ 	const { getRandomPort } = await import("get-port-please");
+-	const port = router.server?.hmr?.port ?? (await getRandomPort());
++	const port = router.server?.hmr?.port ?? Number(process.env.VINXI_HMR_PORT) ?? (await getRandomPort());
+ 	const plugins = [
+ 		// ...(serveConfig.devtools ? [inspect()] : []),
+ 		...(((await router.internals.type.dev.plugins?.(router, app)) ?? []).filter(
