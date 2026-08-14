@@ -42,13 +42,12 @@ services:
       # 容器内 127.0.0.1 是容器自身——出网代理经 host.docker.internal 指向宿主 socks 代理
       # （宿主直跑时用 .env.local 的 127.0.0.1:1081；compose 环境变量覆盖 .env.local）
       FISH_PROXY_URL: socks5://host.docker.internal:1081
-      # 本地用 http：better-auth 按 baseURL scheme 决定 cookie Secure 标志——
-      # https 下 cookie 带 Secure，http 页面登录"成功"但 cookie 不落地（表现为登录失败）。
-      # 生产（api.dailog.fm）用 https 不受影响；录音功能仍需 https 访问（安全上下文）
+      # https（OrbStack 自动 TLS）：cookie 带 Secure，登录/录音全可用
       BETTER_AUTH_URL: https://api.dailog.orb.local
       # 子域共享会话（SSO）：site 登录态互通（Domain=.dailog.orb.local）。
       # localhost:3000 不再可用（host-only 才匹配）——统一用 https://dailog.orb.local（录音/登录均可）
       BETTER_AUTH_COOKIE_DOMAIN: .dailog.orb.local
+      # CORS/CSRF 白名单：http 项保留兼容（本地 http 直连/端口访问来源）
       APP_ORIGINS: https://dailog.orb.local,http://dailog.orb.local,https://api.dailog.orb.local
       # 本地开发放宽认证限流（容器内请求共享 local 桶）；生产不配，用默认 5 次/分钟
       AUTH_RATE_MAX: 30
