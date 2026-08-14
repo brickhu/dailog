@@ -196,7 +196,6 @@ const styles = stylex.create({
   box: {
     padding: dimensions.spacing4,
     borderRadius: dimensions.radiusMd,
-    border: `1px solid ${colors.ink}`,
     backgroundColor: colors.background,
   },
   waveform: {

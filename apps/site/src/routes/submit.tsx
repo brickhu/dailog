@@ -39,7 +39,6 @@ const styles = stylex.create({
   },
   card: {
     borderRadius: dimensions.radiusMd,
-    border: `1px solid ${colors.ink}`,
     backgroundColor: colors.surface,
     padding: dimensions.spacing5,
     display: "flex",
@@ -61,7 +60,6 @@ const styles = stylex.create({
     boxSizing: "border-box",
     padding: dimensions.spacing3,
     borderRadius: dimensions.radiusSm,
-    border: `1px solid ${colors.ink}`,
     backgroundColor: colors.background,
     color: colors.foreground,
     fontSize: dimensions.fontSizeMd,
@@ -77,7 +75,6 @@ const styles = stylex.create({
   },
   readingScript: {
     fontSize: dimensions.fontSizeMd,
-    borderLeft: `3px solid ${colors.brand}`,
     paddingLeft: dimensions.spacing3,
     margin: 0,
   },

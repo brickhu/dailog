@@ -10,7 +10,6 @@ import { UserMenu, type NavUser } from "./user-menu";
 const styles = stylex.create({
   header: {
     padding: `${dimensions.spacing4} ${dimensions.spacing8}`,
-    borderBottom: `1px solid ${colors.ink}`,
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
@@ -37,7 +36,6 @@ const styles = stylex.create({
   },
   hamburger: {
     display: "none",
-    border: `1px solid ${colors.ink}`,
     borderRadius: dimensions.radiusSm,
     background: "transparent",
     color: colors.foreground,
@@ -59,7 +57,6 @@ const styles = stylex.create({
       gap: dimensions.spacing1,
       padding: `${dimensions.spacing3} ${dimensions.spacing6} ${dimensions.spacing5}`,
       backgroundColor: colors.surface,
-      borderBottom: `1px solid ${colors.ink}`,
     },
   },
   drawerItem: {
@@ -67,7 +64,6 @@ const styles = stylex.create({
     color: colors.foreground,
     fontSize: dimensions.fontSizeMd,
     textDecoration: "none",
-    borderBottom: `1px solid ${colors.ink}`,
     display: "flex",
     alignItems: "center",
     gap: dimensions.spacing3,

@@ -1,7 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import { Show } from "solid-js";
 import { hashAvatar } from "../lib/hash-avatar";
-import { colors } from "../theme.stylex";
 
 /**
  * 圆形头像：有 image（better-auth user.image）显示图片；
@@ -24,7 +23,6 @@ const styles = stylex.create({
     borderRadius: "50%",
     objectFit: "cover",
     flexShrink: 0,
-    border: `1px solid ${colors.ink}`,
   },
 });
 

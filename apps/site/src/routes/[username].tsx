@@ -24,7 +24,6 @@ const styles = stylex.create({
   },
   header: {
     padding: `${dimensions.spacing8} ${dimensions.spacing4}`,
-    borderBottom: `1px solid ${colors.ink}`,
     marginBottom: dimensions.spacing6,
   },
   avatar: {
@@ -33,7 +32,6 @@ const styles = stylex.create({
     borderRadius: "50%",
     objectFit: "cover",
     marginBottom: dimensions.spacing3,
-    border: `1px solid ${colors.ink}`,
   },
   name: {
     fontSize: dimensions.fontSize2xl,
@@ -54,7 +52,6 @@ const styles = stylex.create({
     marginTop: dimensions.spacing3,
     padding: `${dimensions.spacing1} ${dimensions.spacing3}`,
     borderRadius: dimensions.radiusFull,
-    border: `1px solid ${colors.ink}`,
     color: colors.warning,
     fontSize: dimensions.fontSizeSm,
     textDecoration: "none",
@@ -64,7 +61,6 @@ const styles = stylex.create({
     padding: dimensions.spacing4,
     borderRadius: dimensions.radiusMd,
     backgroundColor: colors.surface,
-    border: `1px solid ${colors.ink}`,
     marginBottom: dimensions.spacing3,
     textDecoration: "none",
     color: "inherit",

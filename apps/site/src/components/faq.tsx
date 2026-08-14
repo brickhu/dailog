@@ -19,7 +19,6 @@ const styles = stylex.create({
     marginBottom: dimensions.spacing4,
   },
   item: {
-    border: `1px solid ${colors.ink}`,
     borderRadius: dimensions.radiusMd,
     backgroundColor: colors.surface,
     marginBottom: dimensions.spacing3,
@@ -60,6 +59,12 @@ const styles = stylex.create({
     fontWeight: dimensions.fontWeightMedium,
     color: colors.neutralWeak, // 引用文字用浅灰
     lineHeight: 1.5,
+  },
+  quoteAuthor: {
+    margin: `${dimensions.spacing2} 0 0`,
+    textAlign: "center",
+    fontSize: dimensions.fontSizeSm,
+    color: colors.neutralWeak,
   },
 });
 
@@ -103,8 +108,9 @@ export function Faq() {
           );
         }}
       </For>
-      {/* 底部品牌金句：大字号居中 */}
+      {/* 底部品牌金句：大字号居中 + 署名 */}
       <p {...stylex.props(styles.quote)}>{t("home.faq.quote")}</p>
+      <p {...stylex.props(styles.quoteAuthor)}>— {t("home.faq.quoteAuthor")}</p>
     </section>
   );
 }

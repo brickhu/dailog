@@ -16,7 +16,6 @@ const styles = stylex.create({
     boxSizing: "border-box",
     padding: `${dimensions.spacing2} ${dimensions.spacing3}`,
     borderRadius: dimensions.radiusMd,
-    border: `1px solid ${colors.ink}`,
     backgroundColor: colors.background,
     color: colors.foreground,
     fontSize: dimensions.fontSizeMd,

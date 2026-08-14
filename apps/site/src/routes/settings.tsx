@@ -60,7 +60,6 @@ const styles = stylex.create({
     padding: dimensions.spacing6,
     borderRadius: dimensions.radiusMd,
     backgroundColor: colors.surface,
-    border: `1px solid ${colors.ink}`,
     marginBottom: dimensions.spacing4,
   },
   row: {
@@ -93,7 +92,6 @@ const styles = stylex.create({
     color: colors.neutral,
     fontSize: dimensions.fontSizeSm,
     lineHeight: 1.7,
-    borderLeft: `3px solid ${colors.brand}`,
     paddingLeft: dimensions.spacing3,
     marginBottom: dimensions.spacing3,
   },

@@ -48,13 +48,11 @@ const styles = stylex.create({
     padding: dimensions.spacing4,
     borderRadius: dimensions.radiusMd,
     backgroundColor: colors.surface,
-    border: `1px solid ${colors.ink}`,
     marginBottom: dimensions.spacing3,
     textDecoration: "none",
     color: "inherit",
   },
   cardUnread: {
-    borderLeft: `3px solid ${colors.brand}`,
   },
   notifTitle: {
     fontWeight: dimensions.fontWeightMedium,

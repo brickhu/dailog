@@ -101,7 +101,6 @@ const styles = stylex.create({
     flexDirection: "column",
     gap: dimensions.spacing2,
     borderRadius: dimensions.radiusMd,
-    border: `1px solid ${colors.ink}`,
     backgroundColor: colors.surface,
     padding: dimensions.spacing3,
     cursor: "pointer",
@@ -130,7 +129,6 @@ const styles = stylex.create({
     alignSelf: "flex-start",
     padding: `${dimensions.spacing1} ${dimensions.spacing4}`,
     borderRadius: dimensions.radiusFull,
-    border: `1px solid ${colors.brand}`,
     backgroundColor: "transparent",
     color: colors.brandStrong,
     fontSize: dimensions.fontSizeSm,
@@ -178,7 +176,6 @@ const styles = stylex.create({
     padding: dimensions.spacing5,
     borderRadius: dimensions.radiusLg,
     backgroundColor: colors.surface, // 与节目卡片统一灰
-    border: `1px solid ${colors.ink}`,
     textDecoration: "none",
     color: "inherit",
     textAlign: "center",
@@ -194,7 +191,6 @@ const styles = stylex.create({
     height: "52px",
     borderRadius: "50%",
     objectFit: "cover",
-    border: `1px solid ${colors.ink}`,
   },
   statLogoFallback: {
     width: "52px",
@@ -217,7 +213,6 @@ const styles = stylex.create({
     height: "40px",
     borderRadius: "50%",
     objectFit: "cover",
-    border: `1px solid ${colors.ink}`,
   },
   statLogoFallbackSmall: {
     width: "40px",
@@ -240,7 +235,6 @@ const styles = stylex.create({
     padding: "2px 10px",
     borderRadius: dimensions.radiusFull,
     backgroundColor: colors.surface, // 与节目卡片同色（surface 底 + ink 描边）
-    border: `1px solid ${colors.ink}`,
     fontSize: "13px",
     color: colors.foreground,
   },

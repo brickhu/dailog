@@ -38,13 +38,14 @@ const styles = stylex.create({
     padding: dimensions.spacing5,
     borderRadius: dimensions.radiusMd,
     backgroundColor: colors.surface,
-    border: `1px solid ${colors.ink}`,
     textDecoration: "none",
     color: "inherit",
     textAlign: "center",
     ":hover": { borderColor: colors.primary },
   },
-  avatar: { width: "64px", height: "64px", borderRadius: "50%", objectFit: "cover", border: `1px solid ${colors.ink}` },
+  avatar: {
+    width: "64px", height: "64px", borderRadius: "50%", objectFit: "cover",
+  },
   avatarFallback: {
     width: "64px", height: "64px", borderRadius: "50%", backgroundColor: colors.ink,
     display: "flex", alignItems: "center", justifyContent: "center", fontSize: dimensions.fontSize2xl,

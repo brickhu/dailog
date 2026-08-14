@@ -21,7 +21,6 @@ const styles = stylex.create({
     backgroundColor: "rgba(219, 219, 219, 0.72)", // surface 半透明（#dbdbdb）
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
-    borderTop: `1px solid ${colors.ink}`,
   },
   cover: {
     width: "44px",
@@ -61,7 +60,6 @@ const styles = stylex.create({
     width: "36px",
     height: "36px",
     borderRadius: "50%",
-    border: `1px solid ${colors.ink}`,
     backgroundColor: "transparent",
     color: colors.foreground,
     fontSize: dimensions.fontSizeMd,

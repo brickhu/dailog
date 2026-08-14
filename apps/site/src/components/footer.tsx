@@ -6,6 +6,11 @@ import { A } from "@solidjs/router";
 
 const styles = stylex.create({
   footer: {
+    backgroundColor: colors.surface, // 通栏背景
+    // stylex 不支持模板字符串内插 token（`1px solid ${colors.ink}` 会被静默丢弃），
+    // 单边边框必须拆 longhand + 直接 token 引用
+  },
+  inner: {
     maxWidth: "1080px",
     margin: "0 auto",
     padding: `${dimensions.spacing6} ${dimensions.spacing8} 88px`, // 底部 88px 预留播放条
@@ -13,7 +18,6 @@ const styles = stylex.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: dimensions.spacing4,
-    borderTop: `1px solid ${colors.ink}`,
     "@media (max-width: 640px)": {
       padding: `${dimensions.spacing5} ${dimensions.spacing4} 88px`,
     },
@@ -38,8 +42,9 @@ const styles = stylex.create({
 export function Footer() {
   return (
     <footer {...stylex.props(styles.footer)}>
-      <p {...stylex.props(styles.copyright)}>© 2026 dailog.fm</p>
-      <div {...stylex.props(styles.links)}>
+      <div {...stylex.props(styles.inner)}>
+        <p {...stylex.props(styles.copyright)}>© 2026 dailog.fm</p>
+        <div {...stylex.props(styles.links)}>
         {/* X */}
         <a href="https://x.com/" target="_blank" rel="noopener noreferrer" {...stylex.props(styles.icon)} aria-label="X">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -60,6 +65,7 @@ export function Footer() {
             <path d="M4 4a16 16 0 0 1 16 16h-2.7A13.3 13.3 0 0 0 4 6.7V4Z" />
           </svg>
         </A>
+        </div>
       </div>
     </footer>
   );

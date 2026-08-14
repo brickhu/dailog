@@ -29,7 +29,6 @@ const styles = stylex.create({
     padding: dimensions.spacing8,
     borderRadius: dimensions.radiusXl,
     backgroundColor: colors.surface,
-    border: `1px solid ${colors.ink}`,
   },
   title: {
     fontSize: dimensions.fontSizeLg,

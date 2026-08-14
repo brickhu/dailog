@@ -32,7 +32,6 @@ const styles = stylex.create({
     display: "flex",
     gap: dimensions.spacing2,
     marginBottom: dimensions.spacing6,
-    borderBottom: `1px solid ${colors.ink}`,
   },
   tab: {
     padding: `${dimensions.spacing2} ${dimensions.spacing4}`,
@@ -56,7 +55,6 @@ const styles = stylex.create({
     padding: dimensions.spacing4,
     borderRadius: dimensions.radiusMd,
     backgroundColor: colors.surface,
-    border: `1px solid ${colors.ink}`,
     marginBottom: dimensions.spacing3,
     textDecoration: "none",
     color: "inherit",
@@ -83,7 +81,6 @@ const styles = stylex.create({
     marginLeft: dimensions.spacing2,
     padding: "1px 6px",
     borderRadius: dimensions.radiusSm,
-    border: `1px solid ${colors.ink}`,
     fontSize: "11px",
     lineHeight: 1.4,
   },

@@ -14,7 +14,6 @@ const styles = stylex.create({
   actionBtn: {
     padding: "6px 14px",
     borderRadius: "999px",
-    border: `1px solid ${colors.ink}`,
     backgroundColor: "transparent",
     color: colors.foreground,
     fontSize: "13px",

@@ -14,7 +14,6 @@ const styles = stylex.create({
     borderRadius: dimensions.radiusLg,
     overflow: "hidden",
     backgroundColor: colors.surface,
-    border: `1px solid ${colors.ink}`,
     userSelect: "none",
     flexShrink: 0,
   },
