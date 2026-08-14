@@ -1,6 +1,6 @@
-import { Router, useIsRouting } from "@solidjs/router";
+import { Router, useIsRouting, useLocation } from "@solidjs/router";
 import { FileRoutes } from "@solidjs/start/router";
-import { For, Show, Suspense, type JSX } from "solid-js";
+import { createEffect, For, Show, Suspense, type JSX } from "solid-js";
 import { MetaProvider } from "@solidjs/meta";
 import { getRequestEvent } from "solid-js/web";
 import * as stylex from "@stylexjs/stylex";
@@ -100,8 +100,49 @@ function RouterOutlet(props: { children: JSX.Element }) {
 }
 
 // 消费端应用根：文件路由（src/routes/* 自动生成路由）+ 语言上下文 + 全局播放器。
-// 传统博客路由架构：各页面正常渲染；全局播放条（PlayerBar）贯通全站，播放不中断。
+// 应用壳布局：fixed 100vw×100vh 容器（导航/播放条固定），页面内容在壳内内容区滚动——
+// 路由切换、骨架屏、滚动行为都稳定在壳内，不引发页面级跳动。
 // SSR 首帧语言：由 request 的 accept-language/cookie 检测（entry-server 同步用于 <html lang>）
+const shell = stylex.create({
+  root: {
+    position: "fixed",
+    top: "0",
+    left: "0",
+    width: "100vw",
+    height: "100vh",
+    display: "flex",
+    flexDirection: "column",
+    backgroundColor: colors.background,
+  },
+  content: {
+    flex: "1",
+    minHeight: "0", // 允许 flex 子项收缩，内容区独立滚动
+    overflowY: "auto",
+    overscrollBehavior: "contain", // 滚动链限制在壳内
+  },
+});
+
+function AppShell(props: { children: JSX.Element }) {
+  const location = useLocation();
+  let contentRef: HTMLDivElement | undefined;
+  // 路由切换后内容区回顶（window 不再滚动，滚动发生在内容区）
+  createEffect(() => {
+    location.pathname;
+    if (contentRef) contentRef.scrollTop = 0;
+  });
+  return (
+    <div {...stylex.props(shell.root)}>
+      {/* 全局导航单实例（路由切换不重挂载——避免会话/头像重复加载跳动） */}
+      <SiteNav />
+      <div ref={contentRef} {...stylex.props(shell.content)}>
+        <RouterOutlet>{props.children}</RouterOutlet>
+        <Footer />
+      </div>
+      <PlayerBar />
+    </div>
+  );
+}
+
 export default function App() {
   const event = getRequestEvent();
   const initialLocale = event
@@ -114,17 +155,7 @@ export default function App() {
     <I18nProvider initialLocale={initialLocale}>
       <PlaybackProvider>
         <MetaProvider>
-          <Router root={(props) => (
-            <>
-              {/* 全局导航单实例（路由切换不重挂载——避免会话/头像重复加载跳动） */}
-              <SiteNav />
-              {/* 路由级 loading：点击跳转立即生效（transition 期间 isRouting=true），
-                  数据加载期间内容区显示通用 spinner */}
-              <RouterOutlet>{props.children}</RouterOutlet>
-              <Footer />
-              <PlayerBar />
-            </>
-          )}>
+          <Router root={(props) => <AppShell>{props.children}</AppShell>}>
             <FileRoutes />
           </Router>
         </MetaProvider>

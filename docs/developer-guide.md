@@ -103,7 +103,24 @@ grid-template-columns: repeat(4, minmax(0, 1fr));   /* 移动端同理 repeat(2,
 ```
 轨道真正等分，长标题走省略号。这是 grid 布局的通用坑，任何"等分 + 不换行文本"场景都适用。
 
-## 4. `overflow: hidden` 的裁剪边界是 padding 外缘（相邻分页冒头）
+## 4. 应用壳布局（fixed 100vw×100vh）—— 页面滚动在内容区
+
+### 结构（`apps/site/src/app.tsx` AppShell + app.css）
+- `html, body { overflow: hidden }` —— **页面级滚动禁用**
+- 壳容器 `position: fixed; width: 100vw; height: 100vh; display: flex; column`：
+  顶部导航（固定）→ 内容区（`flex: 1; min-height: 0; overflow-y: auto`）→ 播放条（fixed bottom）
+- 路由出口（RouterOutlet/骨架屏）与 Footer 都在内容区内
+
+### 影响与注意
+- **滚动发生在内容区**，不在 window：路由切换回顶用 `contentRef.scrollTop = 0`
+  （AppShell 里 `createEffect` 监听 `location.pathname`）；不要在页面代码里依赖
+  `window.scrollTo` / `window.scrollY`。
+- 页面组件 `minHeight: 100vh` 语义不变（内容区高度 < 视口，页面仍充满一屏，
+  超出部分在内容区滚动）。
+- 骨架屏/加载态都在内容区内 → 切换页面无页面级跳动。
+- 移动端注意：100vh 在 iOS 地址栏收起/展开时变化（如需可后续改 `dvh`）。
+
+## 5. `overflow: hidden` 的裁剪边界是 padding 外缘（相邻分页冒头）
 
 ### 现象
 滚屏展示中，第 2 屏的第 1 张卡片会从右侧露出一条（"第 5 期冒头"）。

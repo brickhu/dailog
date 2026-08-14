@@ -42,6 +42,9 @@ footer, header, hgroup, menu, nav, section {
 /* 3. Typographic and layout defaults */
 html, body {
   height: 100%;
+  /* 应用壳布局：页面滚动发生在壳内内容区（app.tsx AppShell），
+     body 不滚动——路由切换/骨架屏不引发页面级跳动 */
+  overflow: hidden;
   scroll-behavior: smooth;
 }
 
