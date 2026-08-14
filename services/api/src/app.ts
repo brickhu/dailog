@@ -6,6 +6,7 @@ import { createCorsMiddleware } from "./middleware/cors";
 import { profileRoutes } from "./routes/profile";
 import { submissionsRoutes } from "./routes/submissions";
 import { notificationsRoutes } from "./routes/notifications";
+import { meEpisodesRoutes } from "./routes/me-episodes";
 import { authExtRoutes } from "./routes/auth-ext";
 import { voiceRoutes, type VoiceDeps } from "./routes/voice";
 import { favoritesRoutes, type FavoritesRepo } from "./routes/favorites";
@@ -182,6 +183,7 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   app.route("/", submissionsRoutes(deps.repo));
   app.route("/", profileRoutes({ repo: deps.repo }));
   app.route("/", notificationsRoutes(deps.repo));
+  app.route("/", meEpisodesRoutes(deps.repo));
   app.route("/", voiceRoutes(deps.voice));
   app.route("/", favoritesRoutes(deps.favorites));
   // 设备授权确认（cookie 会话 + editor/admin 角色）——挂在认证中间件之后

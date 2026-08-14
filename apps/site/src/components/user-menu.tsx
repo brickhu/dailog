@@ -40,7 +40,6 @@ const styles = stylex.create({
     padding: dimensions.spacing1,
     borderRadius: dimensions.radiusMd,
     backgroundColor: colors.surface,
-    border: `1px solid ${colors.ink}`,
     boxShadow: shadows.shadowMed,
     display: "flex",
     flexDirection: "column",
@@ -48,7 +47,6 @@ const styles = stylex.create({
   },
   identity: {
     padding: `${dimensions.spacing2} ${dimensions.spacing3}`,
-    borderBottom: `1px solid ${colors.ink}`,
     marginBottom: dimensions.spacing1,
     display: "flex",
     flexDirection: "column",
@@ -84,7 +82,6 @@ const styles = stylex.create({
     ":hover": { backgroundColor: colors.surfaceStrong },
   },
   signOut: {
-    borderTop: `1px solid ${colors.ink}`,
     marginTop: dimensions.spacing1,
     paddingTop: dimensions.spacing2,
     color: colors.danger,
@@ -123,8 +120,9 @@ export function UserMenu(props: { user: NavUser; onSignOut: () => void }) {
             <span {...stylex.props(styles.email)}>{props.user.email}</span>
           </div>
           <A role="menuitem" href="/me" {...stylex.props(styles.item)}>{t("nav.profile")}</A>
+          <a role="menuitem" href="/me/episodes" {...stylex.props(styles.item)}>{t("me.episodes")}</a>
           <a role="menuitem" href="/me/submits" {...stylex.props(styles.item)}>{t("nav.submissions")}</a>
-          <a role="menuitem" href="/me" {...stylex.props(styles.item)}>{t("nav.favorites")}</a>
+          <a role="menuitem" href="/me/favorites" {...stylex.props(styles.item)}>{t("nav.favorites")}</a>
           <a role="menuitem" href="/account" {...stylex.props(styles.item)}>{t("nav.settings")}</a>
           <button
             type="button"

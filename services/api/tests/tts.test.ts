@@ -56,6 +56,8 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       listTopHosts: async () => [],
       getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),
       getPersonaSnapshot: async () => ({ displayName: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
+      listByUser: async () => [],
+      setPublic: async () => 0,
     },
     submissions: {
       create: async () => ({ id: "sub-1" }),

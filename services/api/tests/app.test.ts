@@ -49,6 +49,8 @@ function fakeRepo(): AppDeps["repo"] {
       updateUserNickname: async () => {},
       updateChannel: async () => ({ ok: true } as const),
       syncAdminRoles: async () => 0,
+      listByUser: async () => [],
+      setPublic: async () => 0,
       recordStat: async () => {},
       getStats: async () => ({ plays: 0, completions: 0 }),
       listRecommended: async () => [],

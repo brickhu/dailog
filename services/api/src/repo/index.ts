@@ -192,6 +192,19 @@ export interface EpisodesRepo {
   getRole?(userId: string): Promise<"user" | "editor" | "admin" | null>;
   /** 管理员同步（部署自动预留）：把 ADMIN_EMAILS 列出的邮箱提升为 admin；返回更新数 */
   syncAdminRoles(emails: string[]): Promise<number>;
+  /** 用户自己的节目（/me/episodes）：按 user_id 全量（含已下架 isPublic=false），发布时间倒序 */
+  listByUser(userId: string): Promise<Array<{
+    id: string;
+    slug: string;
+    title: string | null;
+    number: number | null;
+    durationSeconds: number | null;
+    publishedAt: Date | null;
+    isPublic: boolean;
+    isPicked: boolean;
+  }>>;
+  /** 切换节目公开状态（仅归属人可操作）：UPDATE 行数（0 = 不存在或非本人） */
+  setPublic(id: string, userId: string, isPublic: boolean): Promise<number>;
   // ---- 声音采样（voice 路由沿用） ----
   getVoiceSample(userId: string): Promise<VoiceSampleRow | null>;
   /** 按语种取采样（编辑本地 TTS 按脚本语言取用）；无该语种 → null（调用方用兜底） */
@@ -842,6 +855,31 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .where(eq(schema.episodes.id, episodeId))
           .limit(1);
         return rows[0]?.userId ?? null;
+      },
+      async listByUser(userId) {
+        return db
+          .select({
+            id: schema.episodes.id,
+            slug: schema.episodes.slug,
+            title: schema.episodes.title,
+            number: schema.episodes.number,
+            durationSeconds: schema.episodes.durationSeconds,
+            publishedAt: schema.episodes.publishedAt,
+            isPublic: schema.episodes.isPublic,
+            isPicked: schema.episodes.isPicked,
+          })
+          .from(schema.episodes)
+          .where(eq(schema.episodes.userId, userId))
+          .orderBy(desc(schema.episodes.publishedAt));
+      },
+      async setPublic(id, userId, isPublic) {
+        // postgres.js 驱动 update 不带 .returning() 返回空数组——必须 returning 才能判断行数
+        const rows = await db
+          .update(schema.episodes)
+          .set({ isPublic })
+          .where(and(eq(schema.episodes.id, id), eq(schema.episodes.userId, userId)))
+          .returning({ id: schema.episodes.id });
+        return rows.length;
       },
       async getRole(userId) {
         const rows = await db
