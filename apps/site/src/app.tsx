@@ -20,6 +20,10 @@ const routeSkeleton = stylex.create({
     maxWidth: "1080px",
     margin: "0 auto",
     padding: `${dimensions.spacing8}`,
+    // 页面组件被替换期间必须自带背景：否则透出 app.css 的 body 白色（全站背景由
+    // 页面容器提供，骨架阶段没有页面容器）→ 骨架屏与全站背景色不一致。
+    backgroundColor: colors.background,
+    minHeight: "60vh", // 骨架高度与常见页面接近，避免内容高度骤变引起滚动跳动
     display: "flex",
     flexDirection: "column",
     gap: dimensions.spacing4,
