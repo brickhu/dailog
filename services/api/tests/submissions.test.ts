@@ -63,6 +63,7 @@ function makeApp(repo: Partial<Repos["submissions"]> = {}) {
       create: async () => ({ id: "sub-1" }),
       findByUserUrl: async () => null,
       countPendingByUser: async () => 0,
+      hasReadyVoiceSample: async () => true,
       listByUser: async () => [],
       listQueue: async () => [],
       getDetail: async () => null,
@@ -154,6 +155,18 @@ describe("POST /v1/submissions —— 并发上限 / 重复 / 入库", () => {
     expect((await res.json()) as { error: string }).toMatchObject({ error: "pending_limit" });
   });
 
+  it("rejects when user has no ready voice sample with 422（voice_sample_required）", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
+    const app = makeApp({ hasReadyVoiceSample: async () => false });
+    const res = await app.request("/v1/submissions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/share/abc" }),
+    });
+    expect(res.status).toBe(422);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: "voice_sample_required" });
+  });
+
   it("returns existing submission when same user+url already submitted", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
     const app = makeApp({ findByUserUrl: async () => ({ id: "sub-old", status: "submitted" }) });
@@ -163,22 +176,25 @@ describe("POST /v1/submissions —— 并发上限 / 重复 / 入库", () => {
       body: JSON.stringify({ url: "https://example.com/share/abc" }),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ existing: true, submissionId: "sub-old", status: "submitted" });
+    expect(await res.json()).toEqual({ existing: true, submissionId: "sub-old", status: "submitted", episode: null });
   });
 
-  it("creates submission with url + optional title + callNameInEpisode", async () => {
+  it("creates submission with url + optional title + callName + suggestion + voiceSampleId（采样校验传参、trim 入库）", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
-    const create = vi.fn(async (_u: string, _url: string, _t: string | null, _cn?: string | null) => ({ id: "sub-new" }));
-    const app = makeApp({ create });
+    const create = vi.fn(async (_u: string, _url: string, _t: string | null, _cn?: string | null, _pi?: unknown, _vs?: string | null, _sug?: string | null) => ({ id: "sub-new" }));
+    const hasReadyVoiceSample = vi.fn(async () => true);
+    const app = makeApp({ create, hasReadyVoiceSample });
     const res = await app.request("/v1/submissions", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: "https://example.com/share/abc", title: "我的对话", callNameInEpisode: "飞" }),
+      body: JSON.stringify({ url: "https://example.com/share/abc", title: "我的对话", callNameInEpisode: "飞", suggestion: "  想聊聊 AI 编程的实际用法  ", voiceSampleId: "11111111-1111-4111-8111-111111111111" }),
     });
     expect(res.status).toBe(201);
+    // 采样归属校验：传入的 voiceSampleId 必须原样交给校验（防引用他人采样）
+    expect(hasReadyVoiceSample).toHaveBeenCalledWith("user-1", "11111111-1111-4111-8111-111111111111");
     expect(create).toHaveBeenCalledWith(
       "user-1", "https://example.com/share/abc", "我的对话", "飞",
-      expect.objectContaining({ displayName: "测试员" }), null,
+      expect.objectContaining({ displayName: "测试员" }), "11111111-1111-4111-8111-111111111111", "想聊聊 AI 编程的实际用法",
     );
   });
 

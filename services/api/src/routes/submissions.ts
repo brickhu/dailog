@@ -1,5 +1,6 @@
 // 投稿端点（本质版，2026-08-13）：
-//  POST /api/v1/submissions  { url, title? } → 校验 URL 合法性 + 触达性 → 创建 submitted 投稿
+//  POST /api/v1/submissions  { url, title?, callNameInEpisode?, voiceSampleId?, suggestion? }
+//    → 校验 URL 合法性 + 触达性 → 创建 submitted 投稿
 //  GET  /api/v1/me/submissions → 我的投稿及状态（submitted/rejected/published + 最新节目状态）
 // 投稿 = 分享链接 + 声音采样（采样走 /v1/me/voice-sample，投稿仅关联 userId）。
 // 服务端不做内容采集——只做「基本合法性（http/https 格式）与触达性（网络可达）检查」，
@@ -54,9 +55,29 @@ export async function isReachable(url: string): Promise<boolean> {
 export function submissionsRoutes(repo: Repos) {
   const app = new Hono<{ Variables: { userId: string } }>();
 
+  // 预检：同 URL 是否已投稿/已生成节目（输入地址即提示，无需采样/触达检查）
+  app.post("/v1/submissions/check", async (c) => {
+    const userId = c.get("userId") as string;
+    const body = (await c.req.json().catch(() => null)) as { url?: unknown } | null;
+    const url = typeof body?.url === "string" ? body.url.trim() : "";
+    if (!isValidUrl(url)) {
+      return c.json({ error: "invalid_url", detail: "链接格式不合法（仅支持 http/https 分享链接）" }, 400);
+    }
+    const existing = await repo.submissions.findByUserUrl(userId, url);
+    if (!existing) return c.json({ existing: false });
+    const episodes = await repo.episodes.listBySubmission(existing.id).catch(() => []);
+    const published = episodes.find((e) => e.status === "published" && e.isPublic) ?? null;
+    return c.json({
+      existing: true,
+      submissionId: existing.id,
+      status: existing.status,
+      episode: published ? { id: published.id, slug: published.slug, title: published.title, coverUrl: published.coverUrl, number: published.number } : null,
+    });
+  });
+
   app.post("/v1/submissions", async (c) => {
     const userId = c.get("userId") as string;
-    const body = (await c.req.json().catch(() => null)) as { url?: unknown; title?: unknown; callNameInEpisode?: unknown; voiceSampleId?: unknown } | null;
+    const body = (await c.req.json().catch(() => null)) as { url?: unknown; title?: unknown; callNameInEpisode?: unknown; voiceSampleId?: unknown; suggestion?: unknown } | null;
     if (!body) return c.json({ error: "invalid_body", detail: "请求体缺失" }, 400);
     const url = typeof body.url === "string" ? body.url.trim() : "";
     if (!url) {
@@ -68,6 +89,13 @@ export function submissionsRoutes(repo: Repos) {
     if (url.length > 2048) {
       return c.json({ error: "invalid_url", detail: "链接过长" }, 400);
     }
+    // 声音采样严格要求：投稿必须关联一条属于该用户的 ready 采样（前端按钮已禁用，接口兜底防绕过）
+    const voiceSampleId = typeof body.voiceSampleId === "string" && /^[0-9a-f-]{36}$/i.test(body.voiceSampleId)
+      ? body.voiceSampleId
+      : null;
+    if (!(await repo.submissions.hasReadyVoiceSample(userId, voiceSampleId))) {
+      return c.json({ error: "voice_sample_required", detail: "投稿必须提供声音采样（请先完成录音）" }, 422);
+    }
     // 触达性检查：网络不可达 → 提示稍后重试（不落库）
     if (!(await isReachable(url))) {
       return c.json({ error: "url_unreachable", detail: "链接当前无法访问，请确认链接有效后重试" }, 422);
@@ -77,23 +105,30 @@ export function submissionsRoutes(repo: Repos) {
     if (pending >= PENDING_LIMIT) {
       return c.json({ error: "pending_limit", detail: { count: pending, limit: PENDING_LIMIT } }, 429);
     }
-    // 重复提交同一链接 → 返回已有投稿（前端提示继续或去查看状态）
+    // 重复提交同一链接 → 返回已有投稿 + 该投稿已生成的节目（前端提示"只能生成一期"并展示节目横条）
     const existing = await repo.submissions.findByUserUrl(userId, url);
     if (existing) {
-      return c.json({ existing: true, submissionId: existing.id, status: existing.status });
+      const episodes = await repo.episodes.listBySubmission(existing.id).catch(() => []);
+      const published = episodes.find((e) => e.status === "published" && e.isPublic) ?? null;
+      return c.json({
+        existing: true,
+        submissionId: existing.id,
+        status: existing.status,
+        episode: published ? { id: published.id, slug: published.slug, title: published.title, coverUrl: published.coverUrl, number: published.number } : null,
+      });
     }
     const title = typeof body.title === "string" && body.title.trim() ? body.title.trim().slice(0, 200) : null;
     // 本次节目称呼（默认 displayName 填充，可改；脚本生成时按脚本语言改写）
     const callNameInEpisode = typeof body.callNameInEpisode === "string" && body.callNameInEpisode.trim()
       ? body.callNameInEpisode.trim().slice(0, 20)
       : null;
-    // 投稿时使用的采样（仅记录；TTS 仍按语言匹配）——uuid 格式校验，无效忽略
-    const voiceSampleId = typeof body.voiceSampleId === "string" && /^[0-9a-f-]{36}$/i.test(body.voiceSampleId)
-      ? body.voiceSampleId
+    // 投稿人节目建议（可选；编辑生成脚本时仅供选题视角参考，无参考价值可忽略）
+    const suggestion = typeof body.suggestion === "string" && body.suggestion.trim()
+      ? body.suggestion.trim().slice(0, 500)
       : null;
     // 主持人档案快照（编辑 getDetail 免查库；脚本生成注入画像）
     const personaInfo = await repo.episodes.getPersonaSnapshot(userId).catch(() => null);
-    const created = await repo.submissions.create(userId, url, title, callNameInEpisode, personaInfo, voiceSampleId);
+    const created = await repo.submissions.create(userId, url, title, callNameInEpisode, personaInfo, voiceSampleId, suggestion);
     if (!created.id) {
       return c.json({ error: "already_submitted", detail: "该链接已提交过投稿" }, 409);
     }

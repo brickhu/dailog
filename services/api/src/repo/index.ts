@@ -21,12 +21,17 @@ export interface SubmissionsRepo {
   /** 投稿入库（唯一约束 user×url 兜底；重复提交由路由层查 findByUserUrl）。
    *  callNameInEpisode：本次节目称呼（可为 null，脚本生成时按脚本语言改写）；
    *  personaInfo：主持人档案快照（路由层从 getPersonaSnapshot 取，编辑侧免查库）；
-   *  voiceSampleId：投稿时使用的采样（仅记录，TTS 仍按语言匹配） */
-  create(userId: string, url: string, title: string | null, callNameInEpisode?: string | null, personaInfo?: PersonaSnapshot | null, voiceSampleId?: string | null): Promise<{ id: string }>;
+   *  voiceSampleId：投稿时使用的采样（仅记录，TTS 仍按语言匹配）；
+   *  suggestion：投稿人节目建议（可为 null；编辑生成脚本时仅供选题视角参考） */
+  create(userId: string, url: string, title: string | null, callNameInEpisode?: string | null, personaInfo?: PersonaSnapshot | null, voiceSampleId?: string | null, suggestion?: string | null): Promise<{ id: string }>;
   /** 重复投稿检测（同用户同 URL → 已存在） */
   findByUserUrl(userId: string, url: string): Promise<{ id: string; status: string } | null>;
   /** 待审核投稿数（status=submitted）——投稿并发限制（pending_limit）用 */
   countPendingByUser(userId: string): Promise<number>;
+  /** 声音采样严格要求：投稿必须关联一条属于该用户的 ready 采样。
+   *  sampleId 给定时 → 校验该采样属于该用户且 ready（防引用他人采样）；
+   *  未给定时 → 用户须至少拥有一条 ready 采样（任意语种）。 */
+  hasReadyVoiceSample(userId: string, sampleId?: string | null): Promise<boolean>;
   /** 我的投稿列表（submitted/rejected/published + 最新节目状态 + 本次称呼）；按投稿时间倒序 */
   listByUser(userId: string): Promise<Array<{
     id: string;
@@ -72,6 +77,8 @@ export interface SubmissionsRepo {
     } | null;
     /** 投稿时配置的本次节目称呼（脚本生成时按脚本语言改写：匹配原样/英文通用/小语种转英文） */
     callName: string | null;
+    /** 投稿人节目建议（可选；脚本生成时仅供选题视角参考，无参考价值可忽略） */
+    suggestion: string | null;
     /** 投稿时使用的采样（仅记录） */
     voiceSampleId: string | null;
     /** 投稿人全部 ready 采样（按语种；编辑端展示 + 服务端 TTS 按规则匹配） */
@@ -187,11 +194,14 @@ export interface EpisodesRepo {
     username: string;
     displayName: string | null;
   }>>;
-  /** 按投稿列节目（编辑端详情用，无归属校验） */
+  /** 按投稿列节目（编辑端详情用，无归属校验；含 slug/coverUrl——重复投稿提示已生成节目用） */
   listBySubmission(submissionId: string): Promise<Array<{
     id: string;
+    slug: string;
     title: string | null;
+    coverUrl: string | null;
     status: string;
+    isPublic: boolean;
     number: number | null;
     isPicked: boolean;
     createdAt: Date;
@@ -476,13 +486,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
 
     submissions: {
       /** 投稿入库（唯一约束 user×url 兜底；重复提交由路由层查 existing） */
-      async create(userId, url, title, callNameInEpisode, personaInfo, voiceSampleId) {
+      async create(userId, url, title, callNameInEpisode, personaInfo, voiceSampleId, suggestion) {
         try {
           const rows = await db.insert(schema.submissions).values({
             userId,
             url,
             title: title ?? null,
             callName: callNameInEpisode ?? null,
+            suggestion: suggestion ?? null,
             personaInfo: personaInfo ?? null,
             voiceSampleId: voiceSampleId ?? null,
             status: "submitted",
@@ -507,6 +518,18 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .from(schema.submissions)
           .where(and(eq(schema.submissions.userId, userId), eq(schema.submissions.status, "submitted")));
         return rows[0]?.n ?? 0;
+      },
+      /** 声音采样严格要求（投稿前置校验）——sampleId 给定须归属且 ready；否则须有任意 ready 采样 */
+      async hasReadyVoiceSample(userId, sampleId) {
+        const cond = sampleId
+          ? and(eq(schema.voiceSamples.userId, userId), eq(schema.voiceSamples.id, sampleId), eq(schema.voiceSamples.status, "ready"))
+          : and(eq(schema.voiceSamples.userId, userId), eq(schema.voiceSamples.status, "ready"));
+        const rows = await db
+          .select({ id: schema.voiceSamples.id })
+          .from(schema.voiceSamples)
+          .where(cond)
+          .limit(1);
+        return rows.length > 0;
       },
       async listByUser(userId) {
         const subRows = await db
@@ -573,6 +596,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             url: schema.submissions.url,
             title: schema.submissions.title,
             callName: schema.submissions.callName,
+            suggestion: schema.submissions.suggestion,
             personaInfo: schema.submissions.personaInfo,
             voiceSampleId: schema.submissions.voiceSampleId,
             status: schema.submissions.status,
@@ -610,6 +634,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           userEmail: row.userEmail,
           personaInfo: row.personaInfo as typeof row.personaInfo,
           callName: row.callName,
+          suggestion: row.suggestion,
           voiceSampleId: row.voiceSampleId,
           voiceSamples: sampleRows,
         };
@@ -867,8 +892,11 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return db
           .select({
             id: schema.episodes.id,
+            slug: schema.episodes.slug,
             title: schema.episodes.title,
+            coverUrl: schema.episodes.coverUrl,
             status: schema.episodes.status,
+            isPublic: schema.episodes.isPublic,
             number: schema.episodes.number,
             isPicked: schema.episodes.isPicked,
             createdAt: schema.episodes.createdAt,

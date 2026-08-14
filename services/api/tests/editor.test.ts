@@ -62,6 +62,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       create: async () => ({ id: "sub-1" }),
       findByUserUrl: async () => null,
       countPendingByUser: async () => 0,
+      hasReadyVoiceSample: async () => true,
       listByUser: async () => [],
       listQueue: async () => [],
       getDetail: async () => null,
@@ -118,6 +119,7 @@ const SUBMITTED_DETAIL = {
   userEmail: "submitter@test.local",
   personaInfo: { displayName: "投稿人", gender: null, profession: null, age: null, bio: null, nationality: null },
   callName: "小北",
+  suggestion: null,
   voiceSampleId: null,
   voiceSamples: [{ audioUrl: "voices/user-1/zh.webm", transcript: "大家好", language: "zh", status: "ready", duration: 5 }],
 };
@@ -152,7 +154,7 @@ describe("队列与详情", () => {
     const res = await makeApp({
       repo: fakeRepo({
         submissions: { ...fakeRepo().submissions, getDetail: async () => SUBMITTED_DETAIL },
-        episodes: { ...fakeRepo().episodes, listBySubmission: async () => [{ id: "ep-9", title: "第 9 期", status: "published", number: 9, isPicked: false, createdAt: new Date(), publishedAt: new Date() }] },
+        episodes: { ...fakeRepo().episodes, listBySubmission: async () => [{ id: "ep-9", slug: "slug-9", title: "第 9 期", coverUrl: null, status: "published", isPublic: true, number: 9, isPicked: false, createdAt: new Date(), publishedAt: new Date() }] },
       }),
     }).request("/v1/editor/submissions/sub-1");
     expect(res.status).toBe(200);

@@ -7,6 +7,7 @@ import { Button } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../components/auth-gate";
 import Recorder from "../components/recorder";
+import { episodeCoverUrl } from "../lib/env";
 
 // 投稿流程（本质版，2026-08-13）：
 //   input   输入态：分享链接（前端基本 http/https 校验）→ [继续]
@@ -101,6 +102,49 @@ const styles = stylex.create({
     gap: dimensions.spacing3,
     alignItems: "center",
   },
+  // 重复投稿：已生成节目横条（封面缩略图 + 标题 + 期号，点击进详情）
+  epBar: {
+    display: "flex",
+    alignItems: "center",
+    gap: dimensions.spacing3,
+    padding: dimensions.spacing3,
+    borderRadius: dimensions.radiusMd,
+    backgroundColor: colors.surface,
+    textDecoration: "none",
+    color: colors.foreground,
+    ":hover": { borderColor: colors.primary },
+  },
+  epThumb: {
+    width: "48px",
+    height: "48px",
+    borderRadius: dimensions.radiusSm,
+    objectFit: "cover",
+    flexShrink: 0,
+    backgroundColor: colors.surfaceStrong,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "20px",
+  },
+  epTitle: {
+    fontWeight: dimensions.fontWeightMedium,
+    fontSize: dimensions.fontSizeMd,
+    margin: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  epMeta: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    margin: 0,
+  },
+  epText: {
+    minWidth: "0", // 标题省略号生效前提（flex 子项允许收缩）
+  },
+  epListen: {
+    textDecoration: "underline",
+  },
 });
 
 /** 前端基本校验：http/https + 有域名（后端仍会做完整合法性 + 触达性检查） */
@@ -119,14 +163,46 @@ export default function SubmitPage() {
   const [url, setUrl] = createSignal("");
   const urlInvalid = () => url().trim().length > 0 && !isUrlLike(url().trim());
   const [existing, setExisting] = createSignal<string | null>(null);
+  // 重复投稿时该投稿已生成的节目（published 才有；横条展示用）
+  const [existingEpisode, setExistingEpisode] = createSignal<{ id: string; slug: string; title: string | null; coverUrl: string | null; number: number | null } | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   // 人设（可选）+ 采样（必填；已有采样自动填充可沿用）
   const [callName, setCallName] = createSignal("");   // callNameInEpisode：本次节目称呼（默认 displayName）
+  const [suggestion, setSuggestion] = createSignal(""); // 节目建议（可选；仅供编辑部选题参考）
   const [hasVoiceSample, setHasVoiceSample] = createSignal(false);
   const [voiceLang, setVoiceLang] = createSignal("zh"); // 已有采样语种（展示用）
   const [voiceSampleId, setVoiceSampleId] = createSignal<string | null>(null); // 已有采样 id（投稿记录用）
   const [voiceBlob, setVoiceBlob] = createSignal<Blob | null>(null);
   const [submitting, setSubmitting] = createSignal(false);
+
+  // 输入 URL 防抖预检：同链接已投稿/已生成节目 → 立即提示（无需等到确认投稿）
+  let checkTimer: ReturnType<typeof setTimeout> | undefined;
+  const checkUrlDuplicate = (value: string) => {
+    clearTimeout(checkTimer);
+    if (!isUrlLike(value)) {
+      setExisting(null);
+      setExistingEpisode(null);
+      return;
+    }
+    checkTimer = setTimeout(async () => {
+      try {
+        const res = await fetch("/v1/submissions/check", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url: value.trim() }),
+        });
+        const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+        if (data?.existing) {
+          setExisting(String((data as { status?: string })?.status ?? "submitted"));
+          const ep = (data as { episode?: { id?: string; slug?: string; title?: string | null; coverUrl?: string | null; number?: number | null } | null })?.episode;
+          setExistingEpisode(ep && ep.slug ? { id: ep.id ?? "", slug: ep.slug, title: ep.title ?? null, coverUrl: ep.coverUrl ?? null, number: ep.number ?? null } : null);
+        } else {
+          setExisting(null);
+          setExistingEpisode(null);
+        }
+      } catch { /* 网络失败静默：提交时仍会兜底检测 */ }
+    }, 500);
+  };
 
   onMount(() => {
     // 剪贴板弹层跳转预填：/submit?url=…
@@ -165,10 +241,13 @@ export default function SubmitPage() {
   const readingScript = () =>
     t("submit.readingScript", { name: callName().trim() || t("submit.hostFallback") });
 
+  /** 是否具备声音采样（已有采样或本次新录）——无采样时禁用提交按钮（接口同样严格校验） */
+  const hasSample = () => hasVoiceSample() || voiceBlob() !== null;
+
   /** 确认投稿：上传声音采样（沿用/重录/换语言）+ 提交投稿（URL + 本次称呼 + 采样） */
   const confirmSubmit = async () => {
     setError(null);
-    // 声音采样：已有采样可直接提交（重录则覆盖上传）；两者皆无才拦截
+    // 声音采样：已有采样可直接提交（重录则覆盖上传）；两者皆无才拦截（按钮已禁用，双保险）
     if (!voiceBlob() && !hasVoiceSample()) {
       setError(t("submit.error.needVoice"));
       return;
@@ -197,6 +276,7 @@ export default function SubmitPage() {
         body: JSON.stringify({
           url: url().trim(),
           callNameInEpisode: callName().trim().slice(0, 20) || undefined,
+          suggestion: suggestion().trim().slice(0, 500) || undefined,
           voiceSampleId: sampleId || undefined,
         }),
       });
@@ -204,6 +284,8 @@ export default function SubmitPage() {
       if (!res.ok) {
         if (data?.existing) {
           setExisting(String((data as { status?: string })?.status ?? "submitted"));
+          const ep = (data as { episode?: { id?: string; slug?: string; title?: string | null; coverUrl?: string | null; number?: number | null } | null })?.episode;
+          setExistingEpisode(ep && ep.slug ? { id: ep.id ?? "", slug: ep.slug, title: ep.title ?? null, coverUrl: ep.coverUrl ?? null, number: ep.number ?? null } : null);
           return;
         }
         // 错误码映射友好文案；未知码显示后端 detail
@@ -238,22 +320,44 @@ export default function SubmitPage() {
               type="url"
               placeholder={t("submit.urlPlaceholder")}
               value={url()}
-              onInput={(e) => setUrl(e.currentTarget.value)}
+              onInput={(e) => { setUrl(e.currentTarget.value); checkUrlDuplicate(e.currentTarget.value); }}
             />
             <Show when={urlInvalid()}>
               <p {...stylex.props(styles.error)}>{t("submit.error.invalid_url")}</p>
             </Show>
             <Show when={existing()}>
-              <p {...stylex.props(styles.error)}>
-                {t("submit.existing", { status: t(`status.${existing()}` as never) })} ·
-                <A href="/me/submits"> {t("submit.viewSubmissions")}</A>
+              <p {...stylex.props(styles.error)}>{t("submit.existing")}</p>
+              {/* 已生成节目横条：点击进详情 */}
+              <Show when={existingEpisode()}>
+                <A href={`/episode/${existingEpisode()!.slug}`} {...stylex.props(styles.epBar)}>
+                  <Show
+                    when={episodeCoverUrl(existingEpisode()!.id, existingEpisode()!.coverUrl)}
+                    fallback={<div {...stylex.props(styles.epThumb)}>🎙</div>}
+                  >
+                    <img
+                      src={episodeCoverUrl(existingEpisode()!.id, existingEpisode()!.coverUrl)!}
+                      alt=""
+                      {...stylex.props(styles.epThumb)}
+                    />
+                  </Show>
+                  <div {...stylex.props(styles.epText)}>
+                    <p {...stylex.props(styles.epTitle)}>{existingEpisode()!.title || t("common.unnamed")}</p>
+                    <p {...stylex.props(styles.epMeta)}>
+                      {t("submit.episodeNumber", { number: existingEpisode()!.number ?? "?" })} ·{" "}
+                      <span {...stylex.props(styles.epListen)}>{t("submit.viewEpisode")}</span>
+                    </p>
+                  </div>
+                </A>
+              </Show>
+              <p {...stylex.props(styles.hint)}>
+                <A href="/me/submits">{t("submit.viewSubmissions")}</A>
               </p>
             </Show>
             <Show when={error()}>
               <p {...stylex.props(styles.error)}>{error()}</p>
             </Show>
             <div {...stylex.props(styles.actions)}>
-              <Button onClick={() => setStep("confirm")} disabled={urlInvalid() || !url().trim()}>
+              <Button onClick={() => setStep("confirm")} disabled={urlInvalid() || !url().trim() || existing() !== null}>
                 {t("submit.import")}
               </Button>
               <A href="/"><Button appear="ghost">{t("submit.backHome")}</Button></A>
@@ -273,6 +377,16 @@ export default function SubmitPage() {
               value={callName()}
               onInput={(e) => setCallName(e.currentTarget.value)}
             />
+            <label {...stylex.props(styles.label)}>{t("submit.suggestion")}</label>
+            <textarea
+              {...stylex.props(styles.input)}
+              rows={3}
+              maxLength={500}
+              placeholder={t("submit.suggestionPlaceholder")}
+              value={suggestion()}
+              onInput={(e) => setSuggestion(e.currentTarget.value)}
+            />
+            <p {...stylex.props(styles.hint)}>{t("submit.suggestionHint")}</p>
             <Show when={hasVoiceSample() && !voiceBlob()}>
               <p {...stylex.props(styles.ok)}>{t("submit.voiceFilled")}</p>
               <p {...stylex.props(styles.hint)}>{t("submit.voiceLang", { lang: t(`lang.${voiceLang()}` as never) })}</p>
@@ -288,8 +402,11 @@ export default function SubmitPage() {
             <Show when={error()}>
               <p {...stylex.props(styles.error)}>{error()}</p>
             </Show>
+            <Show when={!hasSample()}>
+              <p {...stylex.props(styles.error)}>{t("submit.error.needVoice")}</p>
+            </Show>
             <div {...stylex.props(styles.actions)}>
-              <Button onClick={confirmSubmit} disabled={submitting()}>
+              <Button onClick={confirmSubmit} disabled={submitting() || !hasSample()}>
                 {submitting() ? t("submit.submitting") : t("submit.confirm")}
               </Button>
               <Button appear="ghost" onClick={() => { setStep("input"); setError(null); }}>{t("common.cancel")}</Button>
