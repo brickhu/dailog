@@ -133,7 +133,8 @@ export async function getEpisode(slug: string): Promise<EpisodeSummary | null> {
              e.duration_seconds AS "durationSeconds",
              e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
              e.language, e.audio_url AS "audioUrl",
-             e.raw_conversation_url AS "sourceUrl",
+             -- 对话原文链接：优先节目字段，缺省回退投稿链接（存量节目未写 raw_conversation_url 时仍可显示）
+             COALESCE(e.raw_conversation_url, s.url) AS "sourceUrl",
              e.transcript,
              u.name AS username, p.display_name AS "displayName",
              s.call_name AS "callName"
