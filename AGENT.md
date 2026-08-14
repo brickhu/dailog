@@ -1,8 +1,9 @@
 # AGENT — 项目总览
 
 > 本项目所有文档的入口与汇总。任何 Agent / 协作者先读本文件。
-> 最后更新：2026-08-13（**架构极简改造完成**：投稿 = URL + 声音采样，制作 = 编辑本地 Agent。
-> 服务端不再有采集/LLM/TTS/ffmpeg/队列代码；admin/studio/extension/importer 四个 app 删除；
+> 最后更新：2026-08-14（**架构极简改造完成**：投稿 = URL + 声音采样，制作 = 编辑本地 Agent。
+> 服务端无采集/LLM/队列代码，TTS 收敛为服务端统一端点 `/v1/editor/tts`；
+> admin/studio/extension/importer 四个 app 删除；
 > 编辑工作流落地为 `tools/dailog-editor` 子工程（源码 → 打包产物 `.agents/skills/dailog-editor`）
 
 ## 项目一句话
@@ -32,9 +33,9 @@
 | [ARC.md](./ARC.md) | 技术架构：栈、拓扑、API、数据模型、成本、测试 | ✅ 已确认 |
 | [MRD.md](./MRD.md) | 产品定位、市场策略、商业模式、竞争优势、风险 | 🟡 初稿待审 |
 | [docs/market-payments.md](./docs/market-payments.md) | 市场与收款策略：国际优先 GTM、v1 无收款、v2 听众侧路线 | ✅ 调研定稿 |
-| [docs/refactor-assessment.md](./docs/refactor-assessment.md) | 改造评估与实施计划（历史文档，本质版已落地） | ✅ 定稿（2026-08-11） |
-| [docs/pitch-narrative.md](./docs/pitch-narrative.md) | 融资叙事 | 🟡 v2 |
-| [docs/pitch-deck.md](./docs/pitch-deck.md) | Pitch Deck 大纲 | 🟡 v2 |
+| [docs/console-setup.md](./docs/console-setup.md) | 控制台配置：Railway / CF Pages / Resend / 域名 / 环境变量 | ✅ 当前 |
+| [docs/local-dev.md](./docs/local-dev.md) | 本地开发：OrbStack compose（site/api/postgres，orb.local 域名） | ✅ 当前 |
+| [docs/archive/](./docs/archive/) | 历史文档归档（旧计划 / 已删功能 spike / 本质版前清单） | 🗄️ 归档 |
 
 ## 工程目录（monorepo）
 
@@ -66,8 +67,8 @@ dailog/
 
 | | 本地（dev 分支） | 开发环境 | 生产环境 |
 |---|---|---|---|
-| 后端 API | `http://api.dailog.orb.local`（OrbStack 容器，`pnpm dev:orb`） | `https://api.candelbot.app` | `https://api.dailog.fm` |
-| 内容站 SSR | `http://dailog.orb.local` | `https://candelbot.app`（CF Pages） | `https://dailog.fm`（Pages/Workers） |
+| 后端 API | `https://api.dailog.orb.local`（OrbStack 容器，`pnpm dev:orb`） | `https://api.candelbot.app` | `https://api.dailog.fm` |
+| 内容站 SSR | `https://dailog.orb.local` | `https://candelbot.app`（CF Pages） | `https://dailog.fm`（Pages/Workers） |
 | Postgres | `dailog-pg` 容器（5432） | Railway Dev 实例 | Railway Prod 实例 |
 
 > API 路径统一 `/v1/` 前缀（认证 `/v1/auth/*` 为 better-auth basePath）。
@@ -78,7 +79,8 @@ dailog/
 
 - 前端：SolidJS + Solid Router + StyleX（设计 token 与基础组件在 `packages/ui`）
 - 后端：Node + TypeScript + Hono + Drizzle + better-auth（自托管邮箱+密码会话）
-- **服务端无采集/LLM/TTS/ffmpeg**——内容拉取、脚本生成、语音合成全部在编辑本地完成
+- **服务端无采集/LLM**——内容拉取、脚本生成、音频拼接、封面在编辑本地完成；
+  **含统一 TTS 端点** `/v1/editor/tts`（Fish TTS + ffmpeg 转 wav，编辑本地一次调用）
 - 存储：R2/fs（voice_samples / episodes 音频 / covers）；`STORAGE_DRIVER=fs|r2`
 - 数据模型（本质版五表核心）：`submissions`（投稿：URL + 状态 submitted/rejected/published）
   → `episodes`（成品：submissionId 关联、audioUrl 直读、期号 max+1、published 即公开）；
@@ -118,8 +120,8 @@ dailog/
 - [x] M5：better-auth + Railway Postgres + 投稿制状态机（本质版简化：submitted/rejected/published）
 - [x] P1–P3（2026-08-11/12）：首页 landing + 投稿流程 + 编辑端审核/生成/发布（旧实现，已重构）
 - [x] **架构极简改造（2026-08-13）**：投稿 = URL + 采样；编辑 = 本地 Agent（skill + scripts）；
-      服务端删采集/LLM/TTS/队列；admin/studio/extension/importer 删除；0026 迁移落地
-- [ ] M6：内容站完善（投稿人主页/发现页/播放页打磨）
+      服务端删采集/LLM/队列；TTS 收敛回服务端统一端点；admin/studio/extension/importer 删除；0026 迁移落地
+- [x] M6：内容站完善（播放器化重构：全局播放条 + 个人中心 + 统计卡片 + FAQ + 主播/嘉宾入口 + 我的节目下架上架）
 - [ ] M7：成本与风控（质量门前置、用稿率观察；编辑本地按量可控）
 - [ ] M8：E2E + 上线（首期节目制作 + 分发验证）
 

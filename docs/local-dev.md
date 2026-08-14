@@ -6,8 +6,8 @@
 ## 架构
 
 ```
-浏览器 ── http://dailog.orb.local ──────────┐
-       ── http://api.dailog.orb.local ──────┤
+浏览器 ── https://dailog.orb.local ──────────┐
+       ── https://api.dailog.orb.local ──────┤
                                             ▼
 ┌──────────────── OrbStack（docker compose，项目名 dailog）────────────────┐
 │  dailog 容器（site，vinxi，:80）         api 容器（:8787）                │
@@ -35,12 +35,13 @@ docker compose down      # 停止（数据保留）
 
 | 域名 | 服务 | 容器内端口 | 宿主映射 |
 |---|---|---|---|
-| `http://dailog.orb.local` | site（vinxi dev） | 80（HTTP）+ 3001（HMR） | localhost:3000 → 80 |
-| `http://api.dailog.orb.local` | API（tsx watch） | 8787 | localhost:8787 |
+| `https://dailog.orb.local` | site（vinxi dev） | 80（HTTP）+ 3001（HMR） | localhost:3000 → 80 |
+| `https://api.dailog.orb.local` | API（tsx watch） | 8787 | localhost:8787 |
 | `dailog-pg` | postgres | 5432 | localhost:5432 |
 
-> **不要用 https**：OrbStack 容器名域名的 443 路由会把请求导向容器内非 HTTP 端口（返回 426）。
-> 统一 http——cookie 无 Secure 属性，SSO 跨子域不受影响。
+> **统一 https**（OrbStack 自动 TLS）：compose 已给 site/api 加 `dev.orbstack.http-port`
+> / `dev.orbstack.domains` label 强制端口路由；cookie 带 Secure（BETTER_AUTH_URL 为 https），
+> SSO 跨子域不受影响。容器间调用仍走 http 服务名（api/postgres），不经 OrbStack 域名。
 
 ## API 路径约定：`/v1/` 前缀
 
@@ -61,9 +62,9 @@ docker compose down      # 停止（数据保留）
 
 | 变量 | 值 | 说明 |
 |---|---|---|
-| `BETTER_AUTH_URL` | `http://api.dailog.orb.local` | 回调/重定向基址 |
+| `BETTER_AUTH_URL` | `https://api.dailog.orb.local` | 回调/重定向基址 |
 | `BETTER_AUTH_COOKIE_DOMAIN` | `.dailog.orb.local` | SSO 跨子域 cookie（site 登录态） |
-| `APP_ORIGINS` | `http://dailog.orb.local` | CORS/CSRF 白名单 |
+| `APP_ORIGINS` | `https://dailog.orb.local,https://api.dailog.orb.local,...`（http 项保留兼容本地直连来源） | CORS/CSRF 白名单 |
 | `DATABASE_URL`（api/site） | `postgres://dailogues:dailogues@postgres:5432/dailogues` | 容器内服务名 |
 | `PORT=80`（site） | 容器内监听 80 | OrbStack 域名 80 → 容器 80 |
 | `ADMIN_EMAILS` | 编辑账号邮箱 | 部署自动预留管理员（启动/注册时提升为 admin） |

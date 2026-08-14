@@ -15,9 +15,10 @@
 | 邮件 | Resend（拒审/上线通知） | 免费 3000 封/月 |
 | **编辑本地** | ZCode Agent + `tools/dailog-editor` 工程（skill + CLI） + 本机 ffmpeg | 编辑机器本地（无需部署） |
 
-**服务端不包含任何采集 / LLM / TTS / ffmpeg / 队列代码**——内容拉取、脚本生成、语音合成、
-音频合成、封面制作全部由编辑本地 Agent 完成（服务端曾实现 importer 采集服务与生成管线，
-2026-08-13 已删除）。
+**服务端职责：API 校验落库 + 认证 + 统一 TTS 端点 + 公开内容服务**——内容拉取、脚本生成、
+音频合成拼接、封面制作由编辑本地 Agent 完成（服务端曾实现 importer 采集服务与生成管线，
+2026-08-13 已删除）；语音合成收敛为服务端统一端点 `/v1/editor/tts`（Fish TTS + ffmpeg 转 wav，
+编辑本地一次调用，multi-speaker 整集合成）。
 
 ## 2. 部署拓扑
 
@@ -40,7 +41,8 @@
          ┌───────────────▼──────────────────────────────────────────────┐
          │  编辑本地 Agent（ZCode + tools/dailog-editor + ffmpeg）    │
          │  list → detail → download 采样 → 拉取网页 → 生成脚本         │
-         │  → Fish TTS → ffmpeg 合成 → Pexels 封面 → publish 一次性上传  │
+         │  → TTS（服务端 /v1/editor/tts 统一端点）→ ffmpeg 合成        │
+         │  → Pexels 封面 → publish 一次性上传                          │
          └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -55,7 +57,7 @@ published + 期号 max+1）→ 投稿人收到通知（站内 + 邮件）。内�
 - Node.js + TypeScript + **Hono**（轻量路由）
 - **Drizzle ORM** + Railway Postgres（迁移 + 类型安全）
 - **better-auth**（自托管，邮箱 + 密码 + 会话；后端中间件验证会话）
-- **无任务队列 / 无 LLM / 无 ffmpeg**（本地编辑管线的存在使服务端保持极简）
+- **无任务队列 / 无 LLM**（本地编辑管线的存在使服务端保持极简）；**含统一 TTS 端点**（`/v1/editor/tts`：Fish TTS 代理 + ffmpeg 转 wav，`requireRole(editor|admin)`）
 - 认证：`/v1/auth/*`（better-auth）+ 自定义 `login-or-otp` / `otp-complete`（统一登录注册）
 
 ### 3.2 API 端点
@@ -71,15 +73,21 @@ published + 期号 max+1）→ 投稿人收到通知（站内 + 邮件）。内�
 | `GET/POST /v1/me/voice-sample`、`GET /v1/me/voice-sample/audio` | ✓ | 声音采样上传/回读/试听（R2） |
 | `GET/PATCH /v1/me/profile`、`PATCH /v1/me/persona` | ✓ | 账号档案 + 主持人默认人设 |
 | `GET /v1/me/notifications*` | ✓ | 站内通知（拒审/上线） |
-| `POST/DELETE /v1/episodes/:id/favorite\|like`、`GET /v1/me/favorites` | ✓ | 消费端互动 |
+| `POST/DELETE /v1/episodes/:id/favorite\|like`、`GET /v1/episodes/:id/interactions`、`GET /v1/me/favorites` | ✓ | 消费端互动（toggle 返回最新计数；interactions = 当前用户状态，未登录 401 → 客户端跳登录） |
 | `GET /v1/public/episodes/:id/audio\|cover` | — | 公开播放（仅 published + is_public；音频 ETag 缓存） |
+| `GET /v1/public/episodes/:id/stats`、`POST /v1/public/episodes/:id/stats/:type` | — | 播放/完播统计（播放器上报）+ **点赞/收藏计数**（实时 COUNT，详情页按钮展示） |
+| `GET /v1/public/episodes/recommended` | — | 推荐队列（热度分排序 + 语言优先；首页滚屏每屏 4 条 × 最多 5 屏 / 发现页） |
+| `GET /v1/public/stats`、`/hosts`、`/guests`、`/guests/:id` | — | 站点头部数据 / 热门主播 / 嘉宾列表 / 嘉宾详情（含参与节目） |
+| `GET /v1/me/episodes`、`PATCH /v1/me/episodes/:id` | ✓ | **我的节目**（列表含已下架）/ 下架·重新上架（切换 is_public，仅归属人） |
 | `GET /v1/editor/submissions?status=` | editor | **待审队列**（先到先审；含投稿人邮箱/显示名/采样就绪标记） |
 | `GET /v1/editor/submissions/:id` | editor | 投稿详情（URL/投稿人/**采样 transcript**/已上线节目） |
 | `POST /v1/editor/submissions/:id/reject` | editor | 拒审（reason 必填 → rejected + 通知 + 邮件） |
 | `POST /v1/editor/submissions/:id/publish` | editor | **一次性上传发布**（multipart：audio + cover? + meta JSON）→ 音频/封面存 R2 → episode 创建（published + 期号 max+1）→ 投稿 published + 通知 + 邮件 |
 | `GET /v1/editor/guests` | editor | 嘉宾列表（品牌声线宿主） |
 | `GET /v1/editor/samples/host/:userId/audio`、`/guest/:guestId/audio` | editor | 主持人/嘉宾采样音频下载（本地 TTS 参考） |
+| `POST /v1/editor/tts` | editor | **统一 TTS 端点**：Fish TTS 合成（multi-speaker，msgpack references）+ ffmpeg 转 wav（编辑本地一次调用） |
 | `GET /v1/editor/episodes`、`PUT /v1/editor/episodes/:id` | editor | 已发布节目清单 / 微调（tags/精选/标题/简介/封面） |
+| `POST/GET /v1/device/approve` 等 `/v1/device/*` | ✓ | 设备配对授权（编辑/管理员角色，自包含授权页） |
 
 ### 3.3 数据模型（本质版）
 
@@ -89,7 +97,7 @@ published + 期号 max+1）→ 投稿人收到通知（站内 + 邮件）。内�
 | `episodes` | `submission_id`, `user_id`, `host_id`, `guest_id`, `slug`, `title`, `description`, `cover_url`, `audio_url`(R2), `audio_size`, `duration_seconds`, `language`, `tags`, `number`(期号), `is_picked`, `status`(published), `is_public`, `published_at` | **成品节目**：编辑上传即发布（published + isPublic）；期号发布时 max+1 分配——"dailog 第 N 期" |
 | `guests` / `guest_voice_samples` | `platform`(枚举), `name`, `intro` + `audio_key`, `reference_id`, `transcript` | **AI 平台嘉宾库 + 品牌声线采样**（编辑本地 TTS 的嘉宾音色来源；guest×language 唯一） |
 | `voice_samples` | `user_id`, `language`, `audio_url`(R2), `transcript`, `duration`, `status` | 投稿人声音采样（一人多语种各一条；主持人克隆音色参考） |
-| `profiles` | `id`(=auth.users), `username`, `display_name`, `bio`, `role`(user/editor/admin), `persona`(JSONB) | 用户（投稿人/编辑）+ 主持人默认人设 |
+| `profiles` | `id`(=auth.users), `display_name`, `bio`, `persona`(JSONB) | 主持人档案（账号级属性在 user 表：`name`=@slug、`role`(user/editor/admin)、`image`） |
 | `notifications` | `user_id`, `type`(rejected/published), `title`, `body`, `link` | 站内通知（拒审/上线） |
 | `favorites` / `likes` | `user_id`, `episode_id` | 消费端互动 |
 | auth 表（`user`/`session`/`account`/`verification`） | better-auth 官方字段 | 认证 |
@@ -113,11 +121,12 @@ covers/{submissionId}.jpg                  ← 封面（可选；无封面播放
 - **认证**：编辑账号登录（better-auth sign-in/email）→ bearer token（内存缓存）
 - **工作流规范**（脚本生成标准/情绪标签/开场白结构）：`.agents/skills/dailog-editor/SKILL.md`
 
-### 4.1 TTS（Fish Audio，编辑本地调用）
+### 4.1 TTS（统一服务端端点，编辑本地调用）
 
 形态实测知识（`docs/spikes/fish-audio.md`，服务端集成时实测）：
-- **逐段合成**（tools/dailog-editor/src/tts.ts）：每段一个请求；host 段 = 投稿人采样零样本克隆
+- **整集合成**（tools/dailog-editor/src/tts.ts 调用 `/v1/editor/tts`）：multi-speaker 一次调用
   （msgpack `references` 内联音频 + transcript，必须 msgpack——JSON 无 base64 字段）；
+  host 段 = 投稿人采样零样本克隆，guest 段 = 品牌声线（guests 采样克隆，服务端取用）
   guest 段 = 品牌声线（guests 采样克隆或 `GUEST_REFERENCE_ID` 音色模型）
 - 端点：`POST https://api.fish.audio/v1/tts`（msgpack body）；`format=mp3`、`streaming=false`
 - 计费：官方 $15/百万字节（实测账单 ≈$9.7/M 字节 → 10 分钟期 ≈ ¥0.63）；免费模型 `s2.1-pro-free`（$0）实测全功能可用
@@ -136,13 +145,15 @@ covers/{submissionId}.jpg                  ← 封面（可选；无封面播放
 ## 5. 前端（apps/site）
 
 - SolidStart + Cloudflare adapter，SSR 部署于 CF Pages/Workers
-- 路由：`/`（landing）、`/discover`、`/submit`（URL 输入 + 采样录音 + 提交）、`/me/*`（submits/notifications/favorites）、
-  `/account/*`、`/login`、`/@<username>`、`/episode/<id>`（播放页）、`/feed.xml`（单 feed RSS）
+- 路由：`/`（landing：hero + **推荐滚屏**——每屏 4 条、最多 5 屏、末屏灰块补齐、加载骨架屏——+ 统计卡片 + FAQ）、`/discover`（四 tab：最新/热门/精选/榜单）、
+  `/submit`（URL 输入 + 采样录音 + 提交）、`/hosts`（热门主播）、`/guests`（嘉宾列表）、`/guest/<id>`（嘉宾详情）、
+  `/me/*`（个人中心 / episodes 我的节目·下架上架 / submits / favorites / notifications）、`/settings`、`/login`、
+  `/subscribe`（订阅页）、`/@<username>`（主持人主页）、`/episode/<slug|id>`（播放页）、`/feed.xml`（单 feed RSS）
 - **投稿页 = URL（前端基本 http/https 校验）+ 声音采样（必填）+ 人设（可选）→ POST /v1/submissions**；
   错误码映射（invalid_url / url_unreachable / pending_limit / existing）
 - RSS：itunes 元数据 + 封面 + 节目列表（audio_size 直读 episodes，Apple enclosure 要求）
 - 直连 Railway Postgres 读公开数据（只读查询 + 服务端只暴露公开字段）
-- 站内 v1 代理（`/v1/*` → API）：submissions / me/* / notifications / favorites / auth
+- 站内 v1 代理（`/v1/*` → API）：submissions / me/* / notifications / favorites / episodes 互动（favorite·like·interactions）/ auth
 
 ## 6. 计费与成本（v1 无收款）
 
