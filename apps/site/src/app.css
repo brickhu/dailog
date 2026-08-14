@@ -49,8 +49,17 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #fff;
-  color: #000;
+  /* 与 packages/ui/src/theme.stylex.ts 的 colors.background / foreground 保持一致：
+     body 是全局底色兜底（骨架屏/加载态/页面容器缺失时透出），主题色改动需同步此处 */
+  background-color: #f9f9f9;
+  color: #0e1116;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #0e1116;
+    color: #e6e9ef;
+  }
 }
 
 ol, ul {
