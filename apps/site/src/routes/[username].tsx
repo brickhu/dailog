@@ -1,12 +1,15 @@
 import { A, createAsync } from "@solidjs/router";
 import { For, Show } from "solid-js";
 import { useParams } from "@solidjs/router";
-import { getChannel, type EpisodeSummary } from "../lib/db";
+import { getRequestEvent, isServer } from "solid-js/web";
+import { getChannel, type ChannelSummary, type EpisodeSummary } from "../lib/db";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 
-// 频道页：/@username（简介 + 节目列表 + RSS 订阅入口）
+// 主持人主页：/@<username>（简介 + 节目列表 + RSS 订阅入口）
+// 路由文件为 [username].tsx（/:username，radix3 限制无法用 @[username].tsx 生成 /@:username），
+// 不带 @ 前缀的 /<username> 由组件内守卫拒绝（404）
 const styles = stylex.create({
   page: {
     minHeight: "100vh",
@@ -91,9 +94,17 @@ function fmtDuration(sec: number | null): string {
 export default function ChannelPage() {
   const { t } = useI18n();
   const params = useParams<{ username: string }>();
-  // URL /@username → 路由参数含 @ 前缀，查询前归一化
+  // 主持人主页统一 /@<username>（PRD）。radix3 不支持 /@:username 这种
+  // 「字面 @ + 参数」混合段（segment 只能全字面或全参数），故路由只能是 /:username，
+  // 在这里做 @ 前缀守卫：不带 @ 的 /<username> 视为无效路径 → 404（不查库）。
   const username = () => params.username.replace(/^@/, "");
-  const data = createAsync(() => getChannel(username()));
+  const isChannel = () => params.username.startsWith("@");
+  if (isServer && !isChannel()) {
+    getRequestEvent()!.response.status = 404;
+  }
+  const data = createAsync<{ channel: ChannelSummary | null; episodes: EpisodeSummary[] } | null>(() =>
+    isChannel() ? getChannel(username()) : Promise.resolve(null)
+  );
 
   return (
     <div {...stylex.props(styles.page)}>
@@ -109,7 +120,7 @@ export default function ChannelPage() {
             <div {...stylex.props(styles.name)}>@{data()!.channel!.username}</div>
             <div {...stylex.props(styles.bio)}>{data()!.channel!.bio || t("channel.noBio")}</div>
             <div {...stylex.props(styles.meta)}>{t("channel.episodeCount", { count: data()!.channel!.episodeCount })}</div>
-            <A  href={`/@${username()}/feed.xml`} {...stylex.props(styles.rss)}>
+            <A  href="/feed.xml" {...stylex.props(styles.rss)}>
               RSS 订阅
             </A>
           </div>

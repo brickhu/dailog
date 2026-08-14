@@ -14,7 +14,7 @@ export interface NavUser {
   name: string | null;
   email: string;
   image: string | null;
-  /** 主持人主页地址（@slug = user.name；profile 菜单项跳 /<username> 用） */
+  /** 主持人主页地址（@slug = user.name；公开主页为 /@<username>，v2 预留入口用） */
   username: string | null;
 }
 

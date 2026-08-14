@@ -148,7 +148,7 @@ export async function getChannel(username: string): Promise<{ channel: ChannelSu
       JOIN "user" u ON u.id = p.id
       LEFT JOIN episodes e ON e.user_id = p.id AND e.status = 'published' AND e.is_public = true
       WHERE u.name = ${username}
-      GROUP BY u.name, p.display_name, p.bio
+      GROUP BY u.name, u.image, p.display_name, p.bio
       LIMIT 1
     `;
     if (rows.length === 0) return { channel: null, episodes: [] };
