@@ -49,7 +49,41 @@ pnpm --filter @dailogues/site build && wc -c apps/site/dist/_build/assets/client
 - **修复后必须重新部署生产**（`wrangler pages deploy`）：旧部署的 CSS 产物是空壳，
   重新构建部署后 CSS 才含完整样式。
 
-## 2. CSS Grid `1fr` 轨道的 min-content 陷阱（卡片被裁）
+## 2. 路由导航 transition 无反馈 —— useIsRouting 方案（全站点击 loading 过渡）
+
+### 现象
+点击链接后 URL 已变化，但页面保持旧内容、没有任何 loading 反馈，
+等 chunk/数据加载完才"突然"跳到新页面 —— 体验像"点了没反应"。
+
+### 根因
+@solidjs/router 1.x 的导航用 Solid 的 `transition` **延迟提交**：URL 立即变，
+但 UI 保持旧值，直到目标路由 chunk + 数据（createAsync/server fn RPC）全部就绪
+才一次性切换。等待期没有 Suspense 参与 → 全局 `<Suspense fallback>` 覆盖不到。
+
+### 修复（`apps/site/src/app.tsx`）
+用 router 官方提供的 `useIsRouting()`（导航 transition 进行中 = true）驱动 loading：
+
+```tsx
+function RouterOutlet(props: { children: JSX.Element }) {
+  const isRouting = useIsRouting();
+  return (
+    <Show when={isRouting()} fallback={<Suspense fallback={<RouteLoading />}>{props.children}</Suspense>}>
+      <RouteLoading />
+    </Show>
+  );
+}
+```
+- `isRouting=true`（点击后立即）→ 内容区显示通用 Spinner（RouteLoading）
+- transition 提交后 → 交给 Suspense（createAsync 若仍挂起则继续 spinner）→ 全程有过渡
+- 导航栏/播放条在出口外，不中断
+
+### 注意事项
+- `useIsRouting` 必须在 Router 上下文内使用（Router root 里可以）。
+- SSR 首帧 `isRouting=false`，不影响首屏。
+- hover 预取（A 组件默认 hover preload + 首页卡片 onPointerEnter）后导航
+  transition 极快，spinner 一闪或几乎不出现 —— 符合"立即"预期。
+
+## 3. CSS Grid `1fr` 轨道的 min-content 陷阱（卡片被裁）
 
 ### 现象
 首页推荐滚屏每屏 4 张卡片，桌面第 4 张 / 移动端第 2 列被裁掉一部分。
@@ -65,7 +99,7 @@ grid-template-columns: repeat(4, minmax(0, 1fr));   /* 移动端同理 repeat(2,
 ```
 轨道真正等分，长标题走省略号。这是 grid 布局的通用坑，任何"等分 + 不换行文本"场景都适用。
 
-## 3. `overflow: hidden` 的裁剪边界是 padding 外缘（相邻分页冒头）
+## 4. `overflow: hidden` 的裁剪边界是 padding 外缘（相邻分页冒头）
 
 ### 现象
 滚屏展示中，第 2 屏的第 1 张卡片会从右侧露出一条（"第 5 期冒头"）。
