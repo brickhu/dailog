@@ -1,11 +1,11 @@
 import { Show, onMount } from "solid-js";
-import { createAsync, useParams } from "@solidjs/router";
-import { Title } from "@solidjs/meta";
+import { cache, createAsync, useParams } from "@solidjs/router";
+import { Meta, Title } from "@solidjs/meta";
 import { CoverPlayer } from "../../components/cover-player";
 import { EpisodeDetail } from "../../components/episode-detail";
 import { usePlayback, type QueueEpisode } from "../../lib/playback";
 import { getEpisode, getSlugById, type EpisodeSummary } from "../../lib/db";
-import { env } from "../../lib/env";
+import { env, episodeCoverUrl } from "../../lib/env";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
@@ -57,23 +57,34 @@ const styles = stylex.create({
   },
 });
 
+// cache()：SSR 渲染前预取（head 先于流式 body flush——OG 标签必须此时已有数据，
+// 社交爬虫不执行 JS，只读 SSR HTML）
+const getEpisodeCached = cache(async (slug: string) => {
+  const bySlug = await getEpisode(slug);
+  if (bySlug) return bySlug;
+  // 兼容旧 /episode/<uuid>：按 id 查 slug，命中则跳转到新路径（客户端）
+  if (typeof window !== "undefined") {
+    const realSlug = await getSlugById(slug);
+    if (realSlug) {
+      window.location.replace(`/episode/${realSlug}`);
+      return null;
+    }
+  }
+  return null;
+}, "episode-detail");
+
+// route.preload：SSR 渲染前预取节目数据（cache 命中 → createAsync 首帧即有值，head 的 OG 标签完整）
+export const route = {
+  preload: ({ params }: { params: { slug: string } }) => {
+    void getEpisodeCached(params.slug);
+  },
+};
+
 export default function EpisodeDetailPage() {
   const { t, locale } = useI18n();
   const params = useParams<{ slug: string }>();
   const playback = usePlayback();
-  const data = createAsync(async () => {
-    const bySlug = await getEpisode(params.slug);
-    if (bySlug) return bySlug;
-    // 兼容旧 /episode/<uuid>：按 id 查 slug，命中则跳转到新路径（客户端）
-    if (typeof window !== "undefined") {
-      const slug = await getSlugById(params.slug);
-      if (slug) {
-        window.location.replace(`/episode/${slug}`);
-        return null;
-      }
-    }
-    return null;
-  });
+  const data = createAsync(() => getEpisodeCached(params.slug));
   const ep = () => data();
 
   // EpisodeSummary（lib/db）→ QueueEpisode（播放器）
@@ -127,6 +138,14 @@ export default function EpisodeDetailPage() {
   return (
     <div {...stylex.props(styles.page)}>
       <Title>{ep()?.title || "dailog"}</Title>
+      {/* OG 标签：社交分享卡片（og:image = 封面，各平台抓取展示） */}
+      <Meta property="og:title" content={ep()?.title || "dailog"} />
+      <Meta property="og:type" content="article" />
+      <Meta property="og:url" content={`${env.siteBaseUrl}/episode/${ep()?.slug ?? ""}`} />
+      <Meta property="og:description" content={ep()?.description?.slice(0, 200) || ""} />
+      <Show when={ep() && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
+        <Meta property="og:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
+      </Show>
       <Show
         when={ep()}
         fallback={<div {...stylex.props(styles.notFound)}>{t("episode.notFound")}</div>}

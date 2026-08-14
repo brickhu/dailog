@@ -101,8 +101,10 @@ export interface FeedEpisode {
   episodeNumber: number | null;
 }
 
-export async function listFeedEpisodes(limit = 200): Promise<FeedEpisode[]> {
-  return withDb((db) => db`
+/** 单 feed 用（dailog 频道全部已发布节目 + 音频 size + 封面）。
+ *  lang 可选：按语言过滤；**该语言无内容时 fallback 全量**（避免订阅器拿到空 feed） */
+export async function listFeedEpisodes(limit = 200, lang?: "zh" | "en"): Promise<FeedEpisode[]> {
+  const q = (filter: string) => withDb((db) => db`
     SELECT e.id, e.slug, e.title, e.description,
            e.duration_seconds AS "durationSeconds",
            e.published_at AS "publishedAt",
@@ -112,9 +114,16 @@ export async function listFeedEpisodes(limit = 200): Promise<FeedEpisode[]> {
            e.audio_url AS "audioUrl"
     FROM episodes e
     WHERE e.status = 'published' AND e.is_public = true
+    ${lang && !filter ? db`AND e.language = ${lang}` : db``}
     ORDER BY e.published_at DESC
     LIMIT ${limit}
   ` as unknown as Promise<FeedEpisode[]>);
+  const rows = await q("");
+  if (lang && rows.length === 0) {
+    // 该语言暂无内容 → fallback 全量（保留 feed 可用性）
+    return q("fallback");
+  }
+  return rows;
 }
 
 /** 单集详情（仅 published 公开）——按 slug 查（路由 /episode/<slug>） */
@@ -174,4 +183,49 @@ export async function getChannel(username: string): Promise<{ channel: ChannelSu
     `;
     return { channel, episodes: episodes as unknown as EpisodeSummary[] };
     });
+}
+
+/** 嘉宾详情页（/guest/<id>）：嘉宾信息 + 参与的公开节目。id = platform 枚举值（chatgpt/claude/...） */
+export interface GuestDetail {
+  id: string;
+  platform: string;
+  name: string;
+  avatar: string | null;
+  intro: string | null;
+  url: string | null;
+  episodes: EpisodeSummary[];
+}
+
+export async function getGuest(id: string): Promise<GuestDetail | null> {
+  return withDb(async (db) => {
+    const rows = await db`
+      SELECT id, platform, name, avatar, intro, url
+      FROM guests
+      WHERE id = ${id}
+      LIMIT 1
+    `;
+    if (rows.length === 0) return null;
+    const raw = rows[0] as Record<string, unknown>;
+    const episodes = await db`
+      SELECT e.id, e.slug, e.title, e.description,
+             e.duration_seconds AS "durationSeconds",
+             e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
+             e.language, e.audio_url AS "audioUrl",
+             u.name AS username, p.display_name AS "displayName"
+      FROM episodes e
+      JOIN profiles p ON p.id = e.user_id
+      JOIN "user" u ON u.id = p.id
+      WHERE e.guest_id = ${id} AND e.status = 'published' AND e.is_public = true
+      ORDER BY e.published_at DESC
+    `;
+    return {
+      id: String(raw.id),
+      platform: String(raw.platform),
+      name: String(raw.name),
+      avatar: raw.avatar == null ? null : String(raw.avatar),
+      intro: raw.intro == null ? null : String(raw.intro),
+      url: raw.url == null ? null : String(raw.url),
+      episodes: episodes as unknown as EpisodeSummary[],
+    };
+  });
 }

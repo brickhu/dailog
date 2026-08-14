@@ -1,11 +1,13 @@
 // 节目详情面板（首页详情态 + /<episode_id> 直链复用）：
-// 标题/主持人/日期时长/简介/台本（折叠）/原始对话/点赞收藏
-import { Show, createSignal } from "solid-js";
+// 标题/主持人/日期时长/播放统计/简介/台本（折叠）/原始对话/点赞收藏
+import { Show, createSignal, onMount } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
+import { env } from "../lib/env";
 import type { QueueEpisode } from "../lib/playback";
 import { InteractButtons } from "./interact-buttons";
+import { ShareButtons } from "./share-buttons";
 
 const styles = stylex.create({
   root: {
@@ -79,6 +81,14 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
   const ep = () => props.episode;
   const hostName = () => ep().callName ?? ep().displayName ?? ep().username;
   const [showTranscript, setShowTranscript] = createSignal(false);
+  // 播放/完播统计（公开端点；播放器上报后下次加载刷新）
+  const [stats, setStats] = createSignal<{ plays: number; completions: number } | null>(null);
+  onMount(() => {
+    void fetch(`${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/episodes/${ep().id}/stats`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setStats(d))
+      .catch(() => {});
+  });
 
   return (
     <div {...stylex.props(styles.root)}>
@@ -89,7 +99,13 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
           return `${hostName()} · ${pub ? new Date(pub).toLocaleDateString("zh-CN") : ""}${ep().durationSeconds ? ` · ${fmtDuration(ep().durationSeconds)}` : ""}`;
         })()}
       </p>
+      <Show when={stats()}>
+        <p {...stylex.props(styles.meta)}>
+          {t("episode.plays", { count: stats()!.plays })} · {t("episode.completions", { count: stats()!.completions })}
+        </p>
+      </Show>
       <InteractButtons episodeId={ep().id} />
+      <ShareButtons episode={ep()} />
       <Show when={ep().description} fallback={<p {...stylex.props(styles.noDesc)}>{t("episode.noDescription")}</p>}>
         <p {...stylex.props(styles.desc)}>{ep().description}</p>
       </Show>

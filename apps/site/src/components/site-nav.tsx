@@ -160,8 +160,8 @@ export function SiteNav() {
       <A href="/discover" {...stylex.props(styles.navLink)}>{t("nav.discover")}</A>
       <A href="/hosts" {...stylex.props(styles.navLink)}>{t("nav.hosts")}</A>
       <A href="/guests" {...stylex.props(styles.navLink)}>{t("nav.guests")}</A>
-      {/* RSS 订阅（Apple Podcasts / 小宇宙 / Spotify 等通用） */}
-      <A href="/feed.xml" {...stylex.props(styles.navLink)} title={t("nav.subscribe")}>
+      {/* 订阅页（各平台入口 + feed 地址） */}
+      <A href="/subscribe" {...stylex.props(styles.navLink)} title={t("nav.subscribe")}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <circle cx="6" cy="18" r="2.5" />
           <path d="M4 10.5a9.5 9.5 0 0 1 9.5 9.5h-2.6A6.9 6.9 0 0 0 4 13.1V10.5Z" />

@@ -75,7 +75,7 @@ export default function GuestsPage() {
           <div {...stylex.props(styles.grid)}>
             <For each={guests()}>
               {(g) => (
-                <A href={g.url ?? "#"} {...stylex.props(styles.card)}>
+                <A href={`/guest/${g.id}`} {...stylex.props(styles.card)}>
                   <Show when={g.avatar} fallback={<div {...stylex.props(styles.avatarFallback)}>{g.name.slice(0, 1)}</div>}>
                     <img src={g.avatar!} alt="" {...stylex.props(styles.avatar)} />
                   </Show>

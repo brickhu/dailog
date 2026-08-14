@@ -184,7 +184,7 @@ export function editorRoutes(deps: EditorDeps) {
       html: `<p>你好 ${detail.personaInfo?.displayName ?? detail.userEmail}，</p><p>你的投稿已发布为 <strong>dailog 第 ${created.number} 期「${escapeHtml(episodeTitle)}」</strong>！</p><p><a href="${deps.siteBaseUrl ?? ""}${link}">立即收听</a></p>`,
     }).catch(() => {});
 
-    return c.json({ episodeId: created.id, number: created.number, status: "published" }, 201);
+    return c.json({ episodeId: created.id, slug: created.slug, number: created.number, status: "published" }, 201);
   });
 
   // ---- 已发布节目（编辑本地查看/微调） ----

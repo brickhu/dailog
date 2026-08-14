@@ -84,10 +84,12 @@ export async function publish(config: EditorConfig, args: string[]): Promise<voi
   console.log(`[publish] 上传 ${p.audio}（${(audioBytes.length / 1024 / 1024).toFixed(1)}MB）→ 发布投稿 ${p.submissionId}…`);
   const res = await api(config, `/v1/editor/submissions/${p.submissionId}/publish`, { method: "POST", formData: form });
   console.log(`[publish] ✅ 已发布：dailog 第 ${(res as { number?: number }).number ?? "?"} 期「${p.title}」`);
-  const episodeId = (res as { episodeId?: string }).episodeId ?? "";
+  // 节目地址用 slug（站点路由 /episode/<slug>，人类可读、SEO 友好）；旧服务端未返 slug 时回退 episodeId
+  // （站点对旧 /episode/<uuid> 路径有按 id 查 slug 的兼容跳转）
+  const { episodeId = "", slug = "" } = res as { episodeId?: string; slug?: string };
   writeProgress(p.submissionId, "published");
   const episodeUrl = config.siteUrl
-    ? `${config.siteUrl.replace(/\/$/, "")}/episode/${episodeId}`
+    ? `${config.siteUrl.replace(/\/$/, "")}/episode/${slug || episodeId}`
     : null;
   console.log(`[publish] 🎙 节目地址：${episodeUrl ?? "(未配置 siteUrl，请检查 .dailog-editor/envs.json)"}`);
   clearArtifacts(p.submissionId); // 发布是终态：清理语音/封面文件（文本草稿保留——对话/脚本可查阅/重做）

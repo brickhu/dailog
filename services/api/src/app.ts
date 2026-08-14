@@ -170,6 +170,14 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   app.get("/v1/public/guests", async (c) => {
     return c.json(await deps.repo.guests.list());
   });
+  // 嘉宾详情 + 参与的节目（公开详情页 /guest/<id>）——不存在 404
+  app.get("/v1/public/guests/:id", async (c) => {
+    const id = c.req.param("id");
+    const guest = await deps.repo.guests.getById(id);
+    if (!guest) return c.json({ error: "not_found" }, 404);
+    const episodes = await deps.repo.episodes.listByGuest(id);
+    return c.json({ guest, episodes });
+  });
 
   app.use("/v1/*", createAuthMiddleware(deps.auth, async (userId) => (await deps.repo.episodes.getRole?.(userId)) ?? null));
 
