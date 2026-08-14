@@ -118,8 +118,8 @@ export interface EpisodesRepo {
   getPublicAudioKey(episodeId: string): Promise<{ audioKey: string; version: string } | null>;
   /** 播放/完播计数 +1（upsert；公开播放器上报） */
   recordStat(episodeId: string, type: "play" | "completion"): Promise<void>;
-  /** 公开读取播放/完播统计（未统计过 → 0/0） */
-  getStats(episodeId: string): Promise<{ plays: number; completions: number }>;
+  /** 公开读取播放/完播/点赞/收藏统计（未统计过 → 0；like/favorite 计数实时 COUNT） */
+  getStats(episodeId: string): Promise<{ plays: number; completions: number; likes: number; favorites: number }>;
   /** 站点头部数据（公开）：主播数/嘉宾数/节目期数/最热主播——首页宣传语用 */
   getSiteStats(): Promise<{ hostCount: number; guestCount: number; episodeCount: number; topHost: string | null; topHostAvatar: string | null; topTags: string[] }>;
   /** 热门主播（公开）：按节目播放总量 + 期数排序（个人主页入口展示） */
@@ -175,6 +175,17 @@ export interface EpisodesRepo {
     tags: string[] | null;
     durationSeconds: number | null;
     publishedAt: Date | null;
+  }>>;
+  /** 嘉宾参与的公开节目（嘉宾详情页）：按发布时间倒序，带主持人名 */
+  listByGuest(guestId: string): Promise<Array<{
+    id: string;
+    slug: string;
+    title: string | null;
+    coverUrl: string | null;
+    durationSeconds: number | null;
+    publishedAt: Date | null;
+    username: string;
+    displayName: string | null;
   }>>;
   /** 按投稿列节目（编辑端详情用，无归属校验） */
   listBySubmission(submissionId: string): Promise<Array<{
@@ -246,6 +257,8 @@ export interface GuestVoiceSampleRow {
 export interface GuestsRepo {
   getByPlatform(platform: string): Promise<{ id: string; name: string } | null>;
   list(): Promise<{ id: string; platform: string; name: string; avatar: string | null; intro: string | null; url: string | null }[]>;
+  /** 嘉宾详情（按 id = platform 值，公开详情页用） */
+  getById(id: string): Promise<{ id: string; platform: string; name: string; avatar: string | null; intro: string | null; url: string | null } | null>;
   /** 嘉宾音频采样：按语种取（本地 TTS 同语种优先注入）；无该语种 → null（调用方兜底任意语种） */
   voiceSampleByLanguage(guestId: string, language: string): Promise<GuestVoiceSampleRow | null>;
   /** 兜底：该嘉宾任意语种采样（缺目标语种时用） */
@@ -377,6 +390,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .select({ id: schema.guests.id, platform: schema.guests.platform, name: schema.guests.name, avatar: schema.guests.avatar, intro: schema.guests.intro, url: schema.guests.url })
           .from(schema.guests)
           .orderBy(schema.guests.platform);
+      },
+      async getById(id) {
+        const rows = await db
+          .select({ id: schema.guests.id, platform: schema.guests.platform, name: schema.guests.name, avatar: schema.guests.avatar, intro: schema.guests.intro, url: schema.guests.url })
+          .from(schema.guests)
+          .where(eq(schema.guests.id, id))
+          .limit(1);
+        return rows[0] ?? null;
       },
       async voiceSampleByLanguage(guestId, language) {
         const rows = await db
@@ -674,14 +695,23 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           },
         });
       },
-      /** 公开读取播放/完播统计（未统计过 → 0/0） */
+      /** 公开读取播放/完播/点赞/收藏统计（未统计过 → 0） */
       async getStats(episodeId) {
-        const rows = await db
-          .select({ plays: schema.episodeStats.plays, completions: schema.episodeStats.completions })
-          .from(schema.episodeStats)
-          .where(eq(schema.episodeStats.episodeId, episodeId))
-          .limit(1);
-        return { plays: rows[0]?.plays ?? 0, completions: rows[0]?.completions ?? 0 };
+        const [stats, like, fav] = await Promise.all([
+          db
+            .select({ plays: schema.episodeStats.plays, completions: schema.episodeStats.completions })
+            .from(schema.episodeStats)
+            .where(eq(schema.episodeStats.episodeId, episodeId))
+            .limit(1),
+          db.select({ n: count() }).from(schema.likes).where(eq(schema.likes.episodeId, episodeId)),
+          db.select({ n: count() }).from(schema.favorites).where(eq(schema.favorites.episodeId, episodeId)),
+        ]);
+        return {
+          plays: stats[0]?.plays ?? 0,
+          completions: stats[0]?.completions ?? 0,
+          likes: like[0]?.n ?? 0,
+          favorites: fav[0]?.n ?? 0,
+        };
       },
       /** 站点头部数据：主播/嘉宾/节目计数 + 最热主播 */
       async getSiteStats() {
@@ -847,6 +877,28 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .from(schema.episodes)
           .where(eq(schema.episodes.submissionId, submissionId))
           .orderBy(desc(schema.episodes.createdAt));
+      },
+      async listByGuest(guestId) {
+        return db
+          .select({
+            id: schema.episodes.id,
+            slug: schema.episodes.slug,
+            title: schema.episodes.title,
+            coverUrl: schema.episodes.coverUrl,
+            durationSeconds: schema.episodes.durationSeconds,
+            publishedAt: schema.episodes.publishedAt,
+            username: schema.authUsers.name,
+            displayName: schema.profiles.displayName,
+          })
+          .from(schema.episodes)
+          .innerJoin(schema.profiles, eq(schema.profiles.id, schema.episodes.userId))
+          .innerJoin(schema.authUsers, eq(schema.authUsers.id, schema.profiles.id))
+          .where(and(
+            eq(schema.episodes.guestId, guestId),
+            eq(schema.episodes.status, "published"),
+            eq(schema.episodes.isPublic, true),
+          ))
+          .orderBy(desc(schema.episodes.publishedAt));
       },
       async getEpisodeUserId(episodeId) {
         const rows = await db

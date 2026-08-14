@@ -17,6 +17,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
   return {
     guests: {
       getByPlatform: async () => null,
+      getById: async () => null,
       list: async () => [],
       voiceSampleByLanguage: async () => null,
       voiceSampleAny: async () => null,
@@ -41,6 +42,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       updatePublished: async () => {},
       listPublished: async () => [],
       listBySubmission: async () => [],
+      listByGuest: async () => [],
       getEpisodeUserId: async () => null,
       getVoiceSample: async () => null,
       getVoiceSampleByLanguage: async () => null,
@@ -51,7 +53,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       updateChannel: async () => ({ ok: true } as const),
       syncAdminRoles: async () => 0,
       recordStat: async () => {},
-      getStats: async () => ({ plays: 0, completions: 0 }),
+      getStats: async () => ({ plays: 0, completions: 0, likes: 0, favorites: 0 }),
       listRecommended: async () => [],
       listTopHosts: async () => [],
       getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),

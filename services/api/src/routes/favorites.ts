@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "../db/schema";
 
@@ -9,8 +9,11 @@ import * as schema from "../db/schema";
 export interface FavoritesRepo {
   /** episode 存在校验（任意用户视角：published 才可互动） */
   getPublishableEpisode(id: string): Promise<{ id: string; userId: string } | null>;
-  toggleFavorite(userId: string, episodeId: string): Promise<{ favorited: boolean }>;
-  toggleLike(userId: string, episodeId: string): Promise<{ liked: boolean }>;
+  /** toggle 后返回最终状态 + 该 episode 的最新计数（供按钮直接展示） */
+  toggleFavorite(userId: string, episodeId: string): Promise<{ favorited: boolean; favorites: number }>;
+  toggleLike(userId: string, episodeId: string): Promise<{ liked: boolean; likes: number }>;
+  /** 当前用户对该 episode 的互动状态（未互动 → false/false） */
+  getInteractions(userId: string, episodeId: string): Promise<{ liked: boolean; favorited: boolean }>;
   listFavorites(userId: string): Promise<
     Array<{
       episodeId: string;
@@ -60,6 +63,13 @@ export function favoritesRoutes(repo: FavoritesRepo) {
     return c.json(rows);
   });
 
+  // 当前用户互动状态（like/favorite）：详情页按钮初始化用（未登录 401）
+  app.get("/v1/episodes/:id/interactions", async (c) => {
+    const ep = await repo.getPublishableEpisode(c.req.param("id"));
+    if (!ep) return c.json({ error: "not_found" }, 404);
+    return c.json(await repo.getInteractions(c.get("userId") as string, ep.id));
+  });
+
   return app;
 }
 
@@ -83,10 +93,14 @@ export function createFavoritesRepo(db: PostgresJsDatabase<typeof schema>): Favo
         .limit(1);
       if (existing.length > 0) {
         await db.delete(schema.favorites).where(eq(schema.favorites.id, existing[0].id));
-        return { favorited: false };
+      } else {
+        await db.insert(schema.favorites).values({ userId, episodeId });
       }
-      await db.insert(schema.favorites).values({ userId, episodeId });
-      return { favorited: true };
+      const [row] = await db
+        .select({ n: count() })
+        .from(schema.favorites)
+        .where(eq(schema.favorites.episodeId, episodeId));
+      return { favorited: existing.length === 0, favorites: row?.n ?? 0 };
     },
 
     async toggleLike(userId, episodeId) {
@@ -97,10 +111,30 @@ export function createFavoritesRepo(db: PostgresJsDatabase<typeof schema>): Favo
         .limit(1);
       if (existing.length > 0) {
         await db.delete(schema.likes).where(eq(schema.likes.id, existing[0].id));
-        return { liked: false };
+      } else {
+        await db.insert(schema.likes).values({ userId, episodeId });
       }
-      await db.insert(schema.likes).values({ userId, episodeId });
-      return { liked: true };
+      const [row] = await db
+        .select({ n: count() })
+        .from(schema.likes)
+        .where(eq(schema.likes.episodeId, episodeId));
+      return { liked: existing.length === 0, likes: row?.n ?? 0 };
+    },
+
+    async getInteractions(userId, episodeId) {
+      const [like, fav] = await Promise.all([
+        db
+          .select({ id: schema.likes.id })
+          .from(schema.likes)
+          .where(and(eq(schema.likes.userId, userId), eq(schema.likes.episodeId, episodeId)))
+          .limit(1),
+        db
+          .select({ id: schema.favorites.id })
+          .from(schema.favorites)
+          .where(and(eq(schema.favorites.userId, userId), eq(schema.favorites.episodeId, episodeId)))
+          .limit(1),
+      ]);
+      return { liked: like.length > 0, favorited: fav.length > 0 };
     },
 
     async listFavorites(userId) {

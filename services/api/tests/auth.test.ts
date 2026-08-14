@@ -22,6 +22,7 @@ function fakeRepo(): AppDeps["repo"] {
     },
     guests: {
       getByPlatform: async () => null,
+      getById: async () => null,
       list: async () => [],
       voiceSampleByLanguage: async () => null,
       voiceSampleAny: async () => null,
@@ -47,6 +48,7 @@ function fakeRepo(): AppDeps["repo"] {
       updatePublished: async () => {},
       listPublished: async () => [],
       listBySubmission: async () => [],
+      listByGuest: async () => [],
       getEpisodeUserId: async () => null,
       getVoiceSample: async () => null,
       getVoiceSampleByLanguage: async () => null,
@@ -59,7 +61,7 @@ function fakeRepo(): AppDeps["repo"] {
       listByUser: async () => [],
       setPublic: async () => 0,
       recordStat: async () => {},
-      getStats: async () => ({ plays: 0, completions: 0 }),
+      getStats: async () => ({ plays: 0, completions: 0, likes: 0, favorites: 0 }),
       listRecommended: async () => [],
       listTopHosts: async () => [],
       getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),
@@ -120,9 +122,10 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
       },
       favorites: {
         getPublishableEpisode: async () => null,
-        toggleFavorite: async () => ({ favorited: true }),
-        toggleLike: async () => ({ liked: true }),
+        toggleFavorite: async () => ({ favorited: true, favorites: 0 }),
+        toggleLike: async () => ({ liked: true, likes: 0 }),
         listFavorites: async () => [],
+      getInteractions: async () => ({ liked: false, favorited: false }),
       },
     });
   });

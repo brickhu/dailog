@@ -67,7 +67,7 @@ function makeApp(overrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
       updateChannel: async () => ({ ok: true as const }),
       syncAdminRoles: async () => 0,
       recordStat: async () => {},
-      getStats: async () => ({ plays: 0, completions: 0 }),
+      getStats: async () => ({ plays: 0, completions: 0, likes: 0, favorites: 0 }),
       listRecommended: async () => [],
       listTopHosts: async () => [],
       getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),
@@ -137,10 +137,10 @@ describe("POST /v1/public/episodes/:id/stats/:type（免鉴权上报 + 限频）
   });
 
   it("GET stats → { plays, completions }", async () => {
-    const app = makeApp({ getStats: async () => ({ plays: 42, completions: 7 }) });
+    const app = makeApp({ getStats: async () => ({ plays: 42, completions: 7, likes: 3, favorites: 4 }) });
     const res = await app.request("/v1/public/episodes/ep-5/stats");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ plays: 42, completions: 7 });
+    expect(await res.json()).toEqual({ plays: 42, completions: 7, likes: 3, favorites: 4 });
   });
 });
 

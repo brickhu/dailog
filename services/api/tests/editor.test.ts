@@ -12,6 +12,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
   return {
     guests: {
       getByPlatform: async () => null,
+      getById: async () => null,
       list: async () => [
         { id: "claude", platform: "claude", name: "Claude", avatar: null, intro: "Anthropic 的 AI 助手", url: null },
       ],
@@ -38,6 +39,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       updatePublished: async () => {},
       listPublished: async () => [],
       listBySubmission: async () => [],
+      listByGuest: async () => [],
       getEpisodeUserId: async () => null,
       getVoiceSample: async () => null,
       getVoiceSampleByLanguage: async () => null,
@@ -50,7 +52,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       listByUser: async () => [],
       setPublic: async () => 0,
       recordStat: async () => {},
-      getStats: async () => ({ plays: 0, completions: 0 }),
+      getStats: async () => ({ plays: 0, completions: 0, likes: 0, favorites: 0 }),
       listRecommended: async () => [],
       listTopHosts: async () => [],
       getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),
@@ -241,7 +243,7 @@ describe("发布（编辑本地制作完成后一次性上传）", () => {
     }).request("/v1/editor/submissions/sub-1/publish", { method: "POST", body: form });
 
     expect(res.status).toBe(201);
-    expect(await res.json()).toEqual({ episodeId: "ep-7", number: 7, status: "published" });
+    expect(await res.json()).toEqual({ episodeId: "ep-7", slug: "abc12345", number: 7, status: "published" });
     // 音频与封面各落一次 storage
     expect(storagePut).toHaveBeenCalledWith("episodes/user-1/sub-1.mp3", new Uint8Array([1, 2, 3]));
     expect(storagePut).toHaveBeenCalledWith("covers/sub-1.jpg", new Uint8Array([9]));
