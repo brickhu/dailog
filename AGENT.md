@@ -35,6 +35,7 @@
 | [docs/market-payments.md](./docs/market-payments.md) | 市场与收款策略：国际优先 GTM、v1 无收款、v2 听众侧路线 | ✅ 调研定稿 |
 | [docs/console-setup.md](./docs/console-setup.md) | 控制台配置：Railway / CF Pages / Resend / 域名 / 环境变量 | ✅ 当前 |
 | [docs/local-dev.md](./docs/local-dev.md) | 本地开发：OrbStack compose（site/api/postgres，orb.local 域名） | ✅ 当前 |
+| [docs/developer-guide.md](./docs/developer-guide.md) | **开发指南（避坑手册）**：StyleX dev FOUC 修复、Grid minmax、overflow 裁剪边界——接手前必读 | ✅ 当前 |
 | [docs/archive/](./docs/archive/) | 历史文档归档（旧计划 / 已删功能 spike / 本质版前清单） | 🗄️ 归档 |
 
 ## 工程目录（monorepo）
