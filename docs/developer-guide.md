@@ -61,27 +61,31 @@ pnpm --filter @dailogues/site build && wc -c apps/site/dist/_build/assets/client
 才一次性切换。等待期没有 Suspense 参与 → 全局 `<Suspense fallback>` 覆盖不到。
 
 ### 修复（`apps/site/src/app.tsx`）
-用 router 官方提供的 `useIsRouting()`（导航 transition 进行中 = true）驱动 loading：
+用 router 官方提供的 `useIsRouting()`（导航 transition 进行中 = true）驱动：
+**点击后立即渲染全局骨架屏**（结构化 shimmer：标题条/段落条/卡片网格），不在原页面停留；
+transition 提交后真实页面接管（数据已就绪），createAsync 若仍挂起则由 Suspense
+fallback 继续显示骨架 —— 全程"骨架屏 + 局部懒加载"。
 
 ```tsx
 function RouterOutlet(props: { children: JSX.Element }) {
   const isRouting = useIsRouting();
   return (
-    <Show when={isRouting()} fallback={<Suspense fallback={<RouteLoading />}>{props.children}</Suspense>}>
-      <RouteLoading />
+    <Show when={isRouting()} fallback={<Suspense fallback={<RouteSkeleton />}>{props.children}</Suspense>}>
+      <RouteSkeleton />
     </Show>
   );
 }
 ```
-- `isRouting=true`（点击后立即）→ 内容区显示通用 Spinner（RouteLoading）
-- transition 提交后 → 交给 Suspense（createAsync 若仍挂起则继续 spinner）→ 全程有过渡
-- 导航栏/播放条在出口外，不中断
+- 骨架屏复用首页卡片的 shimmer 模式（`stylex.keyframes` 内联 + surface 灰块，自动适配暗色）
+- 设计决策：**不能**用"旧内容 + 遮罩"或"内容区替换成 spinner 容器"——用户明确要求
+  "点击立即进入目标页面、骨架屏过渡，不在原页面停留"。
 
 ### 注意事项
 - `useIsRouting` 必须在 Router 上下文内使用（Router root 里可以）。
 - SSR 首帧 `isRouting=false`，不影响首屏。
 - hover 预取（A 组件默认 hover preload + 首页卡片 onPointerEnter）后导航
-  transition 极快，spinner 一闪或几乎不出现 —— 符合"立即"预期。
+  transition 极快，骨架一闪或几乎不出现 —— 符合"立即"预期。
+- 不要用全局 spinner/遮罩方案替换骨架屏：路由切换体验以骨架屏为准。
 
 ## 3. CSS Grid `1fr` 轨道的 min-content 陷阱（卡片被裁）
 
