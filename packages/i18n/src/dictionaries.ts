@@ -226,6 +226,22 @@ export const zh = {
   "home.hero.playerTitle": "精选节目",
   "home.hero.playerFallback": "暂无已发布节目",
 
+  // ---- 首页常见问题 ----
+  "home.faq.title": "常见问题",
+  "home.faq.q1": "dailog 是什么？",
+  "home.faq.a1": "dailog 是一档将「AI 聊天记录」模拟为真人采访 AI 的访谈式播客：单期 5-10 分钟，呈现原始对话里的精华——交锋、新知、情感与经验。",
+  "home.faq.q2": "这些节目是真人录音吗？",
+  "home.faq.a2": "不是。节目基于你与 AI 的真实聊天记录，经编辑与合成模拟出采访对话——AI 受访、人类提问，是「模拟真人采访 AI」，而非真实录制的访谈。",
+  "home.faq.q3": "怎么投稿，我能成为主播吗？",
+  "home.faq.a3": "提交你与 AI 的聊天记录（分享链接或文件），编辑审稿通过后即制作发布。人人都能成为主播。",
+  "home.faq.q4": "投稿和收录收费吗？",
+  "home.faq.a4": "我们欢迎大家投递高质量的AI聊天记录，脚本剪辑和音频合成完全免费，不过脚本筛选器对对话质量有较高的质量要求，如对话质量太差，您的投稿将被拒绝。",
+  "home.faq.q5": "在哪里可以收听？",
+  "home.faq.a5": "站内直接播放，或通过 dailog 单 feed RSS 订阅（Apple Podcasts、Spotify、小宇宙等平台）。",
+  "home.faq.q6": "我的聊天记录会被怎么处理？",
+  "home.faq.a6": "制作时会做隐私模糊化处理，节目仅呈现对话内容本身，不展示你的账号信息。",
+  "home.faq.quote": "我们想留下人类和AI在思想交融中的回响，这可能就是历史的痕迹。",
+
   // ---- 管理员工作台（admin） ----
   "admin.denied": "无权限访问",
   "admin.deniedDesc": "dailog 管理端仅对编辑（editor）和管理员（admin）开放。如需投稿，请前往 dailog.fm 主站。",
@@ -875,6 +891,22 @@ export const en: Dictionary = {
   "home.hero.browse": "Browse episodes",
   "home.hero.playerTitle": "Featured episodes",
   "home.hero.playerFallback": "No published episodes yet",
+
+  // ---- Home FAQ ----
+  "home.faq.title": "FAQ",
+  "home.faq.q1": "What is dailog?",
+  "home.faq.a1": "dailog is an interview-style podcast that turns your AI chat records into simulated human-AI interviews: 5–10 minutes of the essence of raw conversations — clashes, insights, feelings & experience.",
+  "home.faq.q2": "Are these episodes real recordings?",
+  "home.faq.a2": "No. Episodes are built from your real conversations with AI, edited and produced into simulated interviews — the AI is the interviewee, a human asks the questions. It's \"simulated human interviewing AI\", not a real recorded interview.",
+  "home.faq.q3": "How do I submit? Can I become a host?",
+  "home.faq.a3": "Submit your conversation with AI (a share link or file); once approved by our editors, it gets produced and published. Everyone can become a host.",
+  "home.faq.q4": "Does it cost anything to submit or get published?",
+  "home.faq.a4": "We welcome high-quality AI conversations — script editing and audio synthesis are completely free. However, our script filter holds a high quality bar for conversations; if the quality is too poor, your submission will be rejected.",
+  "home.faq.q5": "Where can I listen?",
+  "home.faq.a5": "Stream directly on this site, or subscribe via the dailog single-feed RSS (Apple Podcasts, Spotify, 小宇宙 and more).",
+  "home.faq.q6": "What happens to my chat records?",
+  "home.faq.a6": "Privacy redaction is applied during production; episodes only present the conversation itself and never expose your account details.",
+  "home.faq.quote": "We want to keep the echoes of human and AI minds — perhaps a trace of history.",
 
   // ---- Admin workbench ----
   "admin.denied": "Access denied",

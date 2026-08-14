@@ -2,6 +2,7 @@ import { createSignal, Show, For, onMount } from "solid-js";
 import { A, useNavigate } from "@solidjs/router";
 import { usePlayback, type QueueEpisode } from "../lib/playback";
 import { env, episodeCoverUrl } from "../lib/env";
+import { Faq } from "../components/faq";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
@@ -385,6 +386,9 @@ export default function HomePage() {
           </A>
         </div>
       </Show>
+
+      {/* 常见问题（互斥手风琴，双语跟随语言切换） */}
+      <Faq />
     </div>
   );
 }
