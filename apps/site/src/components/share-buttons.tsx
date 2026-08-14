@@ -1,6 +1,6 @@
 // 分享按钮（客户端）：X / Facebook / 微博 / Telegram / WhatsApp + 复制链接 + 系统分享。
 // 封面展示依赖节目页 OG 标签（og:image），各平台抓取分享卡片。
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createSignal, onMount } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { colors } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
@@ -106,8 +106,13 @@ export function ShareButtons(props: { episode: QueueEpisode }) {
   const [showWechat, setShowWechat] = createSignal(false);
   const url = () => `${env.siteBaseUrl}/episode/${props.episode.slug}`;
   const text = () => props.episode.title || "dailog";
-  // 是否支持 Web Share API（移动端系统分享面板）
-  const canNativeShare = () => typeof navigator !== "undefined" && !!navigator.share;
+  // 是否支持 Web Share API（移动端系统分享面板）。
+  // ⚠️ 不能 SSR 同步判断（SSR 无 navigator）→ 初始 false 与 SSR 一致，
+  // onMount（hydration 完成后）再检测追加按钮，避免 Hydration Mismatch。
+  const [nativeSupported, setNativeSupported] = createSignal(false);
+  onMount(() => {
+    if (typeof navigator !== "undefined" && !!navigator.share) setNativeSupported(true);
+  });
 
   const targets: ShareTarget[] = [
     {
@@ -173,7 +178,7 @@ export function ShareButtons(props: { episode: QueueEpisode }) {
       <button type="button" {...stylex.props(styles.copyBtn)} onClick={copyLink}>
         {copied() ? t("episode.copied") : t("episode.copyLink")}
       </button>
-      <Show when={canNativeShare()}>
+      <Show when={nativeSupported()}>
         <button type="button" {...stylex.props(styles.copyBtn)} onClick={nativeShare}>
           {t("episode.shareNative")}
         </button>
