@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { createSignal, createUniqueId, splitProps, Show, type JSX } from "solid-js";
 import { type StyleXStyles } from "@stylexjs/stylex";
-import { Icon } from "@iconify-icon/solid";
+import { Icon } from "./icon";
 import { colors, dimensions, durations, easings, shadows } from "../theme.stylex";
 import { Button } from "./button";
 

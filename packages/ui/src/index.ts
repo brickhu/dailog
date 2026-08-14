@@ -12,8 +12,23 @@ export {
 } from "./components/button";
 export { ButtonGroup, useButtonGroup, type ButtonGroupProps, type ButtonGroupOrientation } from "./components/button-group";
 export { Banner, type BannerProps, type BannerStatus, type BannerContainer, type BannerElevation } from "./components/banner";
+export {
+  Dialog,
+  DialogContext,
+  useDialogContext,
+  pushEscapeLayer,
+  isTopEscapeLayer,
+  type DialogProps,
+  type DialogVariant,
+  type DialogPurpose,
+  type DialogPosition,
+  type DialogContextValue,
+  type SpacingStep,
+} from "./components/dialog";
 export { Card } from "./components/card";
+export { Skeleton, type SkeletonProps, type SkeletonRadius } from "./components/skeleton";
 export { TextField, type TextFieldProps } from "./components/text-field";
 export { Spinner } from "./components/spinner";
 export { Avatar, type AvatarProps } from "./components/avatar";
 export { default as Examples } from "./examples";
+export { Icon, type IconProps } from "./components/icon";
