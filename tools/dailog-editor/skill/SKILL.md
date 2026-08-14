@@ -216,7 +216,9 @@ pnpm editor detail <submissionId> # URL/投稿人/主持人称呼(callName)/采�
     → [happy] 大家好，我是{嘉宾}，很高兴回到这里！
   · [calm] 各位好，我是{主持人}，欢迎收听我的 Dailog，今天想和 {嘉宾} 好好聊聊。
     → [soft tone] 大家好，我是{嘉宾}，能回来真好。
-- 主持人称呼：投稿人人设 callName（详情可查，无则"主持人"）；嘉宾名：guests 表 name
+- 主持人称呼：投稿时配置的 callName（详情可查，无则"主持人"）；嘉宾名：guests 表 name
+- 称呼改写（脚本语言 ≠ 称呼语言时，一律按此规则）：称呼为英文 → 原样（全球通用）；称呼为中文等小语种 → 改写为英文形式（中文→拼音，如 飞→Fei；日/韩→罗马字）——改写由你完成，开场自我介绍用改写后的名字，不得虚构或意译
+- 主持人画像：detail 的 personaInfo 快照（displayName/性别/职业/年龄/国籍/bio）——注入主持人介绍做补充，有是补充没有也没关系，不得编造画像外细节
 
 **6. 内容价值四维**（选题标准——脚本聚焦四类价值，纯寒暄/无实质内容 → 不生成脚本）：
 - 交锋：观点/立场的碰撞与反转（含 AI 出人意料的回应——戏剧性来源）
@@ -398,8 +400,12 @@ pnpm editor reject <id> --reason "拒审原因（必填，投稿人可见）"
   publish/guest-voice 报 400 `audio_required`/`invalid_body`。`api()` 已接上自定义编码
   （字节流 + 手写 boundary + 显式 content-type）。**改 api()/加上传端点时别再把 formData
   直接当 body 传**——回归测试：multipart 请求后服务端能读到文件字段。
-- **detail 已含主持人称呼**：`getDetail` 返回 `callName`（profiles.persona.callName），
-  detail.ts 展示「主持人称呼」行；脚本生成时用它替换 {主持人称呼}，无则「主持人」。
+- **detail 已含主持人称呼与画像**：`getDetail` 返回 `callName`（submissions.call_name，投稿时配置、
+  默认 displayName 可改）与 `personaInfo` 快照（displayName/性别/职业/年龄/国籍/bio），
+  detail.ts 展示「主持人称呼」与「画像」行；脚本生成时用 callName 替换 {主持人称呼}，
+  无则「主持人」。脚本语言与称呼语言不同时按 5.1 改写规则转英文形式（如 飞→Fei）。
+- **采样匹配（服务端自动）**：TTS 按脚本语言取采样 → 无则英文采样 → 无则最近一条采样兜底；
+  `detail` 返回 voiceSamples 列表（全部语种），供编辑确认。
 - **测试红线**：`publish` 端点无 dry-run——curl/脚本直打真实 submission 就是真实发布
   （2026-08-13 事故：curl 探测把投稿发布成带测试元数据的期）。探测 multipart 用本地回环
   服务器解析结构，或打已 published 的投稿（状态检查在 formData 解析前，不污染数据）。

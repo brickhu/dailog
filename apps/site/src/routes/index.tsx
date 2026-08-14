@@ -1,31 +1,26 @@
-import { createAsync } from "@solidjs/router";
-import { Show } from "solid-js";
-import { listLatestEpisodes, type EpisodeSummary } from "../lib/db";
-import { SiteNav } from "../components/site-nav";
+import { createSignal, Show, For, onMount } from "solid-js";
+import { A, useNavigate } from "@solidjs/router";
+import { usePlayback, type QueueEpisode } from "../lib/playback";
 import { env, episodeCoverUrl } from "../lib/env";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 
-// 首页：landing 首屏（左：tagline + what it is + 立即投稿 CTA；右：精选节目播放器）
-// 播放器过渡期取最新已发布节目（is_picked 精选随编辑端上线后切换，refactor-assessment P2/P3）
+// 首页（传统博客式）：hero 品牌区 + 推荐节目列表。
+// 播放由全局播放条（PlayerBar）接管——点卡片播放按钮即入队连播，播完自动切下一期；
+// 点卡片进详情页（/<episode_id>）。列表数据 = 推荐队列 API（热度分排序 + 语言优先）。
 const styles = stylex.create({
   page: {
     minHeight: "100vh",
     backgroundColor: colors.background,
     color: colors.foreground,
     fontFamily: "system-ui, -apple-system, sans-serif",
+    paddingBottom: "72px", // 播放条高度预留
   },
   hero: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    gap: dimensions.spacing8,
-    alignItems: "center",
     maxWidth: "1080px",
     margin: "0 auto",
-    padding: `${dimensions.spacing12} ${dimensions.spacing8} ${dimensions.spacing12}`,
-  },
-  heroLeft: {
+    padding: `${dimensions.spacing12} ${dimensions.spacing8} ${dimensions.spacing8}`,
     display: "flex",
     flexDirection: "column",
     gap: dimensions.spacing4,
@@ -41,11 +36,18 @@ const styles = stylex.create({
     fontSize: dimensions.fontSizeLg,
     lineHeight: 1.6,
     margin: 0,
+    maxWidth: "640px",
   },
   ctaHint: {
     color: colors.neutral,
-    fontSize: dimensions.fontSizeXs,
+    fontSize: dimensions.fontSizeSm,
     margin: 0,
+  },
+  ctaRow: {
+    display: "flex",
+    gap: dimensions.spacing3,
+    alignItems: "center",
+    flexWrap: "wrap",
   },
   cta: {
     display: "inline-block",
@@ -56,112 +58,197 @@ const styles = stylex.create({
     color: colors.onBrand,
     fontWeight: dimensions.fontWeightMedium,
     textDecoration: "none",
-    fontSize: dimensions.fontSizeLg,
+    fontSize: dimensions.fontSizeMd,
   },
-  ctaGhost: {
-    display: "inline-block",
-    width: "fit-content",
-    padding: `${dimensions.spacing3} ${dimensions.spacing6}`,
+
+  listTitleRow: {
+    maxWidth: "1080px",
+    margin: "0 auto",
+    padding: `${dimensions.spacing8} ${dimensions.spacing8} ${dimensions.spacing4}`,
+    display: "flex",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    "@media (max-width: 640px)": {
+      padding: `${dimensions.spacing6} ${dimensions.spacing4} ${dimensions.spacing3}`,
+    },
+  },
+  listTitle: {
+    fontSize: dimensions.fontSizeXl,
+    fontWeight: dimensions.fontWeightBold,
+  },
+  moreLink: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    textDecoration: "none",
+    ":hover": { color: colors.primary },
+  },
+  list: {
+    maxWidth: "1080px",
+    margin: "0 auto",
+    padding: `0 ${dimensions.spacing8} ${dimensions.spacing12}`,
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+    gap: dimensions.spacing5,
+    "@media (max-width: 640px)": {
+      gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
+      padding: `0 ${dimensions.spacing4} ${dimensions.spacing8}`,
+      gap: dimensions.spacing4,
+    },
+  },
+  card: {
+    display: "flex",
+    flexDirection: "column",
+    gap: dimensions.spacing2,
     borderRadius: dimensions.radiusMd,
     border: `1px solid ${colors.ink}`,
-    color: colors.foreground,
-    fontWeight: dimensions.fontWeightMedium,
-    textDecoration: "none",
-    fontSize: dimensions.fontSizeLg,
-  },
-  ctaRow: {
-    display: "flex",
-    gap: dimensions.spacing3,
-    alignItems: "center",
-    flexWrap: "wrap",
+    backgroundColor: colors.surface,
+    padding: dimensions.spacing3,
+    cursor: "pointer",
+    ":hover": { borderColor: colors.primary },
   },
   cover: {
     width: "100%",
-    borderRadius: dimensions.radiusMd,
     aspectRatio: "1 / 1",
     objectFit: "cover",
-  },
-  thumb: {
-    width: "48px",
-    height: "48px",
     borderRadius: dimensions.radiusSm,
-    objectFit: "cover",
-    float: "left",
-    marginRight: dimensions.spacing3,
   },
-  playerCard: {
-    borderRadius: dimensions.radiusLg,
-    border: `1px solid ${colors.ink}`,
-    backgroundColor: colors.surface,
-    padding: dimensions.spacing5,
-    display: "flex",
-    flexDirection: "column",
-    gap: dimensions.spacing3,
-  },
-  playerTitle: {
-    fontSize: dimensions.fontSizeLg,
-    fontWeight: dimensions.fontWeightMedium,
-    margin: 0,
-  },
-  playerEpTitle: {
+  title: {
     fontSize: dimensions.fontSizeMd,
     fontWeight: dimensions.fontWeightMedium,
     margin: 0,
-  },
-  playerMeta: {
-    color: colors.neutral,
-    fontSize: dimensions.fontSizeSm,
-  },
-  audio: {
-    width: "100%",
-  },
-  content: {
-    maxWidth: "720px",
-    margin: "0 auto",
-    padding: dimensions.spacing8,
-  },
-  title: {
-    fontSize: dimensions.fontSize2xl,
-    fontWeight: dimensions.fontWeightBold,
-    marginBottom: dimensions.spacing6,
-  },
-  card: {
-    display: "block",
-    padding: dimensions.spacing4,
-    borderRadius: dimensions.radiusMd,
-    backgroundColor: colors.surface,
-    border: `1px solid ${colors.ink}`,
-    marginBottom: dimensions.spacing3,
-    textDecoration: "none",
-    color: "inherit",
-  },
-  epTitle: {
-    fontWeight: dimensions.fontWeightMedium,
-    marginBottom: dimensions.spacing1,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   },
   meta: {
     color: colors.neutral,
     fontSize: dimensions.fontSizeSm,
+    margin: 0,
   },
-  langTag: {
-    display: "inline-block",
-    marginLeft: dimensions.spacing2,
-    padding: "1px 6px",
-    borderRadius: dimensions.radiusSm,
-    border: `1px solid ${colors.ink}`,
-    fontSize: "11px",
-    lineHeight: 1.4,
+  playBtn: {
+    alignSelf: "flex-start",
+    padding: `${dimensions.spacing1} ${dimensions.spacing4}`,
+    borderRadius: dimensions.radiusFull,
+    border: `1px solid ${colors.brand}`,
+    backgroundColor: "transparent",
+    color: colors.brandStrong,
+    fontSize: dimensions.fontSizeSm,
+    cursor: "pointer",
+  },
+  playBtnActive: {
+    backgroundColor: colors.brand,
+    color: colors.onBrand,
+  },
+  cardActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: dimensions.spacing2,
+    flexWrap: "wrap",
+  },
+  playingTime: {
+    color: colors.neutral,
+    fontSize: "12px",
+    fontVariantNumeric: "tabular-nums",
   },
   empty: {
     color: colors.neutral,
     textAlign: "center",
     padding: dimensions.spacing12,
   },
+  statCards: {
+    maxWidth: "1080px",
+    margin: "0 auto",
+    padding: `0 ${dimensions.spacing8} ${dimensions.spacing12}`,
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: dimensions.spacing4,
+    "@media (max-width: 640px)": {
+      gridTemplateColumns: "1fr",
+      padding: `0 ${dimensions.spacing4} ${dimensions.spacing8}`,
+    },
+  },
+  statCard: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: dimensions.spacing2,
+    minHeight: "160px",
+    padding: dimensions.spacing5,
+    borderRadius: dimensions.radiusLg,
+    backgroundColor: colors.surface, // 与节目卡片统一灰
+    border: `1px solid ${colors.ink}`,
+    textDecoration: "none",
+    color: "inherit",
+    textAlign: "center",
+    ":hover": { borderColor: colors.primary },
+  },
+  statTitle: {
+    fontSize: "20px",
+    fontWeight: dimensions.fontWeightBold,
+    color: colors.foreground,
+  },
+  statLogo: {
+    width: "52px",
+    height: "52px",
+    borderRadius: "50%",
+    objectFit: "cover",
+    border: `1px solid ${colors.ink}`,
+  },
+  statLogoFallback: {
+    width: "52px",
+    height: "52px",
+    borderRadius: "50%",
+    backgroundColor: colors.ink,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "22px",
+    color: colors.foreground,
+  },
+  statLogos: {
+    display: "flex",
+    gap: dimensions.spacing2,
+    alignItems: "center",
+  },
+  statLogoSmall: {
+    width: "40px",
+    height: "40px",
+    borderRadius: "50%",
+    objectFit: "cover",
+    border: `1px solid ${colors.ink}`,
+  },
+  statLogoFallbackSmall: {
+    width: "40px",
+    height: "40px",
+    borderRadius: "50%",
+    backgroundColor: colors.ink,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "16px",
+    color: colors.foreground,
+  },
+  statTags: {
+    display: "flex",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: dimensions.spacing2,
+  },
+  statTag: {
+    padding: "2px 10px",
+    borderRadius: dimensions.radiusFull,
+    backgroundColor: colors.surface, // 与节目卡片同色（surface 底 + ink 描边）
+    border: `1px solid ${colors.ink}`,
+    fontSize: "13px",
+    color: colors.foreground,
+  },
+  statText: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    margin: 0,
+  },
 });
-
-function fmtDate(d: Date | null): string {
-  return d ? new Date(d).toLocaleDateString("zh-CN") : "";
-}
 
 function fmtDuration(sec: number | null): string {
   if (!sec) return "";
@@ -170,74 +257,134 @@ function fmtDuration(sec: number | null): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-export default function Home() {
+export default function HomePage() {
   const { t, locale } = useI18n();
-  // 语言偏好分流：界面语言即内容偏好（中文界面 → 中文节目优先，不足时 fallback 其他语言）
-  const episodes = createAsync<EpisodeSummary[]>(() => listLatestEpisodes(20, locale() === "zh" ? "zh" : "en"));
-  const featured = () => episodes()?.[0] ?? null;
-  const audioUrl = () => {
-    const ep = featured();
-    return ep ? `${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/episodes/${ep.id}/audio` : null;
+  const playback = usePlayback();
+  const navigate = useNavigate();
+  const [list, setList] = createSignal<QueueEpisode[]>([]);
+  const [stats, setStats] = createSignal<{ hostCount: number; guestCount: number; episodeCount: number; topHost: string | null; topHostAvatar: string | null; topTags: string[] } | null>(null);
+  const [guestLogos, setGuestLogos] = createSignal<Array<{ name: string; avatar: string | null }>>([]);
+
+  // 拉推荐队列（热度分 + 语言优先）：填充播放器队列 + 首页列表
+  onMount(() => {
+    const lang = locale() === "en" ? "en" : "zh";
+    void fetch(`${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/episodes/recommended?lang=${lang}&limit=24`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((eps: unknown) => {
+        if (Array.isArray(eps) && eps.length > 0) {
+          setList(eps as QueueEpisode[]);
+          // 播放器未激活才初始化队列；已激活（播放中）只刷新列表，不打断播放
+          if (!playback.activated()) playback.setQueue(eps as QueueEpisode[]);
+        }
+      })
+      .catch(() => {});
+    // 站点头部数据（三个统计卡片）
+    void fetch(`${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/stats`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setStats(d))
+      .catch(() => {});
+    void fetch(`${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/guests`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => Array.isArray(d) && setGuestLogos(d.slice(0, 4)))
+      .catch(() => {});
+  });
+
+  const hostName = (ep: QueueEpisode) => ep.callName ?? ep.displayName ?? ep.username;
+  // 当前播放中的节目：卡片显示「暂停」+ 已播放时间（进度由全局播放器驱动）
+  const isCurrent = (id: string) => playback.current()?.id === id;
+  const fmt = (sec: number) => {
+    if (!Number.isFinite(sec) || sec < 0) return "0:00";
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${String(s).padStart(2, "0")}`;
   };
 
   return (
     <div {...stylex.props(styles.page)}>
-      <SiteNav />
       <section {...stylex.props(styles.hero)}>
-        <div {...stylex.props(styles.heroLeft)}>
-          <h1 {...stylex.props(styles.tagline)}>{t("home.hero.tagline")}</h1>
-          <p {...stylex.props(styles.what)}>{t("home.hero.what")}</p>
-          <p {...stylex.props(styles.ctaHint)}>{t("home.hero.ctaHint")}</p>
-          <div {...stylex.props(styles.ctaRow)}>
-            <a href="/submit" {...stylex.props(styles.cta)}>{t("home.hero.submit")}</a>
-            <a href="/discover" {...stylex.props(styles.ctaGhost)}>{t("home.hero.browse")}</a>
-          </div>
+        <h1 {...stylex.props(styles.tagline)}>{t("home.hero.tagline")}</h1>
+        <p {...stylex.props(styles.what)}>{t("home.hero.what")}</p>
+        <div {...stylex.props(styles.ctaRow)}>
+          <A href="/submit" {...stylex.props(styles.cta)}>{t("home.hero.submit")}</A>
         </div>
-        <div {...stylex.props(styles.playerCard)}>
-          <div {...stylex.props(styles.playerTitle)}>{t("home.hero.playerTitle")}</div>
-          <Show
-            when={featured()}
-            fallback={<div {...stylex.props(styles.empty)}>{t("home.hero.playerFallback")}</div>}
-          >
-            <Show when={episodeCoverUrl(featured()!.id, featured()!.coverUrl)}>
-              <img
-                src={episodeCoverUrl(featured()!.id, featured()!.coverUrl)!}
-                alt={featured()!.title || ""}
-                {...stylex.props(styles.cover)}
-              />
-            </Show>
-            <div {...stylex.props(styles.playerEpTitle)}>{featured()!.title || t("common.unnamed")}</div>
-            <div {...stylex.props(styles.playerMeta)}>
-              @{featured()!.username} · {fmtDate(featured()!.publishedAt)} · {fmtDuration(featured()!.durationSeconds)}
-            </div>
-            <Show when={audioUrl()}>
-              <audio controls src={audioUrl()!} {...stylex.props(styles.audio)} />
-            </Show>
-          </Show>
-        </div>
+        <p {...stylex.props(styles.ctaHint)}>{t("home.hero.ctaHint")}</p>
       </section>
-      {/* <div {...stylex.props(styles.content)}>
-        <div {...stylex.props(styles.title)}>{t("home.latest")}</div>
-        <Show
-          when={episodes()?.length}
-          fallback={<div {...stylex.props(styles.empty)}>{t("home.empty")}</div>}
-        >
-          <For each={episodes()}>
+
+      <div {...stylex.props(styles.listTitleRow)}>
+        <div {...stylex.props(styles.listTitle)}>{t("home.recommended")}</div>
+        <A href="/discover" {...stylex.props(styles.moreLink)}>{t("home.hero.browse")}</A>
+      </div>
+      <Show
+        when={list().length > 0}
+        fallback={<div {...stylex.props(styles.empty)}>{t("common.loading")}</div>}
+      >
+        <div {...stylex.props(styles.list)}>
+          <For each={list()}>
             {(ep) => (
-              <a href={`/episode/${ep.id}`} {...stylex.props(styles.card)}>
+              <div {...stylex.props(styles.card)} onClick={() => navigate(`/episode/${ep.slug}`)}>
                 <Show when={episodeCoverUrl(ep.id, ep.coverUrl)}>
-                  <img src={episodeCoverUrl(ep.id, ep.coverUrl)!} alt={ep.title || ""} {...stylex.props(styles.thumb)} />
+                  <img src={episodeCoverUrl(ep.id, ep.coverUrl)!} alt={ep.title || ""} {...stylex.props(styles.cover)} />
                 </Show>
-                <div {...stylex.props(styles.epTitle)}>{ep.title || t("common.unnamed")}</div>
-                <div {...stylex.props(styles.meta)}>
-                  @{ep.username} · {fmtDate(ep.publishedAt)} · {fmtDuration(ep.durationSeconds)}
-                  {ep.language ? <span {...stylex.props(styles.langTag)}>{ep.language === "en" ? "EN" : "中"}</span> : null}
+                <p {...stylex.props(styles.title)}>{ep.title || t("common.unnamed")}</p>
+                <p {...stylex.props(styles.meta)}>
+                  {hostName(ep)} · {fmtDuration(ep.durationSeconds)}
+                </p>
+                <div {...stylex.props(styles.cardActions)}>
+                  <button
+                    {...stylex.props(styles.playBtn, isCurrent(ep.id) && playback.playing() && styles.playBtnActive)}
+                    onClick={(e) => { e.stopPropagation(); isCurrent(ep.id) ? playback.toggle() : playback.play(ep); }}
+                  >
+                    {/* 正在播放 → 暂停（实底高亮）；其余（含当前曲目暂停时）→ 播放（普通样式） */}
+                    {isCurrent(ep.id) && playback.playing() ? "⏸" : "▶"}{" "}
+                    {isCurrent(ep.id) && playback.playing() ? t("common.pause") : t("common.play")}
+                  </button>
+                  {/* 正在播放：已播放时间 / 总时长（实时跟随播放器进度）——未播放时所有卡片一致 */}
+                  <Show when={isCurrent(ep.id) && playback.playing()}>
+                    <span {...stylex.props(styles.playingTime)}>
+                      {fmt(playback.progress())} / {fmt(playback.duration())}
+                    </span>
+                  </Show>
                 </div>
-              </a>
+              </div>
             )}
           </For>
-        </Show>
-      </div> */}
+        </div>
+      </Show>
+
+      {/* 站点头部统计卡片：主播 / AI 嘉宾 / 访谈期数（等宽等高灰色区块） */}
+      <Show when={stats()}>
+        <div {...stylex.props(styles.statCards)}>
+          <A href="/hosts" {...stylex.props(styles.statCard)}>
+            <div {...stylex.props(styles.statTitle)}>{t("home.statHosts", { count: stats()!.hostCount })}</div>
+            <Show when={stats()!.topHostAvatar} fallback={<div {...stylex.props(styles.statLogoFallback)}>{stats()!.topHost?.slice(0, 1) || "?"}</div>}>
+              <img src={stats()!.topHostAvatar!} alt="" {...stylex.props(styles.statLogo)} />
+            </Show>
+            <div {...stylex.props(styles.statText)}>{stats()!.topHost || ""}</div>
+          </A>
+          <A href="/guests" {...stylex.props(styles.statCard)}>
+            <div {...stylex.props(styles.statTitle)}>{t("home.statGuests", { count: stats()!.guestCount })}</div>
+            <div {...stylex.props(styles.statLogos)}>
+              <For each={guestLogos()}>
+                {(g) => (
+                  <Show when={g.avatar} fallback={<div {...stylex.props(styles.statLogoFallbackSmall)}>{g.name.slice(0, 1)}</div>}>
+                    <img src={g.avatar!} alt={g.name} {...stylex.props(styles.statLogoSmall)} />
+                  </Show>
+                )}
+              </For>
+            </div>
+            <div {...stylex.props(styles.statText)}>{t("home.statGuestsSub")}</div>
+          </A>
+          <A href="/discover" {...stylex.props(styles.statCard)}>
+            <div {...stylex.props(styles.statTitle)}>{t("home.statEpisodes", { count: stats()!.episodeCount })}</div>
+            <div {...stylex.props(styles.statTags)}>
+              <For each={stats()!.topTags}>
+                {(tag) => <span {...stylex.props(styles.statTag)}>{tag}</span>}
+              </For>
+            </div>
+            <div {...stylex.props(styles.statText)}>{t("home.statEpisodesSub")}</div>
+          </A>
+        </div>
+      </Show>
     </div>
   );
 }

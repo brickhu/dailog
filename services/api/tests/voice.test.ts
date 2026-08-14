@@ -10,7 +10,7 @@ function makeVoice(deps: Partial<VoiceDeps> = {}) {
     await next();
   });
   app.route("/", voiceRoutes({
-    saveVoiceSample: async () => {},
+    saveVoiceSample: async () => ({ id: "" }),
     getVoiceSample: async () => null,
     storage: { put: async () => {}, get: vi.fn() } as never,
     ...deps,
@@ -47,7 +47,7 @@ describe("GET /api/me/voice-sample", () => {
 
 describe("POST /api/me/voice-sample（样本直传：只保存，不训练）", () => {
   it("stores sample file and marks ready without training", async () => {
-    const saveVoiceSample = vi.fn(async () => {});
+    const saveVoiceSample = vi.fn(async () => ({ id: "vs-1" }));
     const storagePut = vi.fn(async (_key: string, _data: Uint8Array) => {});
     const app = makeVoice({
       saveVoiceSample,
@@ -58,7 +58,7 @@ describe("POST /api/me/voice-sample（样本直传：只保存，不训练）", 
     const res = await app.request("/v1/me/voice-sample", { method: "POST", body: form });
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json).toEqual({ ok: true });
+    expect(json).toEqual({ ok: true, sampleId: "vs-1" });
     const call = storagePut.mock.calls[0];
     expect(call[0]).toBe("voices/user-1/zh.webm");
     expect(call[1]).toEqual(new Uint8Array([1, 2, 3])); // Uint8Array 按值深度比较

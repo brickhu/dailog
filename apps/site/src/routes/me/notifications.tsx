@@ -5,7 +5,6 @@ import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { Button } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
-import { SiteNav } from "../../components/site-nav";
 import { AuthGate } from "../../components/auth-gate";
 
 // 我的通知（/me/notifications）：投稿状态变化（收录/拒绝/上线）
@@ -129,7 +128,6 @@ export default function NotificationsPage() {
   return (
     <div {...stylex.props(styles.page)}>
       <Title>{t("notif.title")} · dailog</Title>
-      <SiteNav />
       <AuthGate redirect="/me/notifications">
         <NotificationsList />
       </AuthGate>

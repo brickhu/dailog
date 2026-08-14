@@ -61,7 +61,7 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
     const cover = await deps.repo.episodes.getPublicCoverKey(c.req.param("id"));
     if (!cover) return c.json({ error: "not_found" }, 404);
     try {
-      const data = await deps.voice.storage.get(cover);
+      const { data } = await deps.voice.storage.get(cover);
       if (!data) return c.json({ error: "not_found" }, 404);
       return new Response(data as unknown as BodyInit, {
         headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" },
@@ -79,13 +79,95 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
       return new Response(null, { status: 304, headers: { ETag: etag } });
     }
     try {
-      const data = await deps.voice.storage.get(audio.audioKey);
-      return new Response(new Uint8Array(data), {
-        headers: { "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=3600", ETag: etag },
+      // Content-Type 按存储 key 后缀（mp3/m4a 双格式兼容；已发布老节目是 mp3）
+      const audioContentType = audio.audioKey.endsWith(".m4a") ? "audio/mp4" : "audio/mpeg";
+      const baseHeaders = {
+        "Content-Type": audioContentType,
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "public, max-age=604800",
+        ETag: etag,
+      };
+      // Range 分片（浏览器流式播放/seek 依赖 206）：storage 层有磁盘缓存——
+      // 命中本地直读（毫秒）；未命中小分片 R2 直读快速响应 + 后台落盘；无 range 全量落盘后返回
+      const range = c.req.header("range");
+      const m = range ? /^bytes=(\d*)-(\d*)$/.exec(range.trim()) : null;
+      if (m) {
+        const start = m[1] ? parseInt(m[1], 10) : 0;
+        const end = m[2] ? parseInt(m[2], 10) : start + 1024 * 1024;
+        const r = await deps.voice.storage.get(audio.audioKey, { start, end });
+        const total = r.total;
+        if (!Number.isFinite(start) || start > end || start >= total) {
+          return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${total}` } });
+        }
+        return new Response(r.data as unknown as BodyInit, {
+          status: 206,
+          headers: {
+            ...baseHeaders,
+            "Content-Range": `bytes ${start}-${start + r.data.length - 1}/${total}`,
+            "Content-Length": String(r.data.length),
+          },
+        });
+      }
+      // 无 Range：全量（storage 磁盘缓存层落盘后本地直读）
+      const full = await deps.voice.storage.get(audio.audioKey);
+      return new Response(full.data as unknown as BodyInit, {
+        headers: { ...baseHeaders, "Content-Length": String(full.total) },
       });
     } catch {
       return c.json({ error: "not_found" }, 404);
     }
+  });
+
+  // 播放/完播上报 + 统计读取（公开播放器；仅已发布公开节目）。
+  // 鉴权策略：免登录（未登录听众也计入，保证统计口径）；防刷 = 前端 session 级去重
+  // + 服务端同 IP 同节目 5 分钟窗口限频（内存表；服务重启清空可接受，防 curl 连刷）
+  const statCooldown = new Map<string, number>();
+  const STAT_WINDOW_MS = 5 * 60 * 1000;
+  const statKey = (ip: string, id: string, type: string) => `${ip}:${id}:${type}`;
+  app.post("/v1/public/episodes/:id/stats/:type", async (c) => {
+    const type = c.req.param("type");
+    if (type !== "play" && type !== "completion") return c.json({ error: "invalid_type" }, 400);
+    const id = c.req.param("id");
+    const exists = await deps.repo.episodes.getPublicAudioKey(id);
+    if (!exists) return c.json({ error: "not_found" }, 404);
+    // 限频：同 IP 同 episode 同事件 5 分钟内只计一次（CF 代理头优先；本地无头 → 空串）
+    const ip = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
+    const key = statKey(ip, id, type);
+    const now = Date.now();
+    const last = statCooldown.get(key) ?? 0;
+    if (now - last < STAT_WINDOW_MS) return c.json({ ok: true }); // 窗口内重复：静默忽略不计数
+    statCooldown.set(key, now);
+    await deps.repo.episodes.recordStat(id, type);
+    return c.json({ ok: true });
+  });
+  app.get("/v1/public/episodes/:id/stats", async (c) => {
+    const exists = await deps.repo.episodes.getPublicAudioKey(c.req.param("id"));
+    if (!exists) return c.json({ error: "not_found" }, 404);
+    return c.json(await deps.repo.episodes.getStats(c.req.param("id")));
+  });
+
+  // 推荐队列（首页播放器/抖音流）：热度分排序；lang 优先、exclude 排除已播
+  app.get("/v1/public/episodes/recommended", async (c) => {
+    const lang = typeof c.req.query("lang") === "string" && /^[a-z]{2,3}$/i.test(c.req.query("lang") ?? "")
+      ? (c.req.query("lang") as string).toLowerCase()
+      : undefined;
+    const limit = Math.min(Number(c.req.query("limit") ?? 20) || 20, 50);
+    const exclude = (c.req.query("exclude") ?? "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 100);
+    return c.json(await deps.repo.episodes.listRecommended({ lang, limit, exclude: exclude.length > 0 ? exclude : undefined }));
+  });
+
+  // 站点头部数据（首页宣传语）——公开
+  app.get("/v1/public/stats", async (c) => {
+    return c.json(await deps.repo.episodes.getSiteStats());
+  });
+  // 热门主播（个人主页入口）——公开
+  app.get("/v1/public/hosts", async (c) => {
+    const limit = Math.min(Number(c.req.query("limit") ?? 8) || 8, 20);
+    return c.json(await deps.repo.episodes.listTopHosts(limit));
+  });
+  // 常驻 AI 嘉宾（品牌声线宿主）——公开
+  app.get("/v1/public/guests", async (c) => {
+    return c.json(await deps.repo.guests.list());
   });
 
   app.use("/v1/*", createAuthMiddleware(deps.auth, async (userId) => (await deps.repo.episodes.getRole?.(userId)) ?? null));

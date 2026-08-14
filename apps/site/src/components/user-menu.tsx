@@ -1,3 +1,4 @@
+import { A } from "@solidjs/router";
 import { Show, createSignal, onCleanup, onMount } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions, shadows } from "@dailogues/ui/theme.stylex";
@@ -5,7 +6,7 @@ import { Avatar } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 
 // 用户菜单：圆形头像（有图用图，无图 hash-avatar）+ 下拉菜单
-// profile → /<username>（频道主页，无 username 时回落 /me）、submissions → /me/submits、
+// profile → /me（个人中心）、submissions → /me/submits、
 // favorites → /me（收藏）、settings → /account、logout → 登出。点击外部自动收起。
 
 export interface NavUser {
@@ -13,7 +14,7 @@ export interface NavUser {
   name: string | null;
   email: string;
   image: string | null;
-  /** 频道地址（profiles.username；profile 菜单项跳 /<username> 用） */
+  /** 主持人主页地址（@slug = user.name；profile 菜单项跳 /<username> 用） */
   username: string | null;
 }
 
@@ -121,7 +122,7 @@ export function UserMenu(props: { user: NavUser; onSignOut: () => void }) {
             <span {...stylex.props(styles.name)}>{props.user.name || t("common.unnamed")}</span>
             <span {...stylex.props(styles.email)}>{props.user.email}</span>
           </div>
-          <a role="menuitem" href={props.user.username ? `/${props.user.username}` : "/me"} {...stylex.props(styles.item)}>{t("nav.profile")}</a>
+          <A role="menuitem" href="/me" {...stylex.props(styles.item)}>{t("nav.profile")}</A>
           <a role="menuitem" href="/me/submits" {...stylex.props(styles.item)}>{t("nav.submissions")}</a>
           <a role="menuitem" href="/me" {...stylex.props(styles.item)}>{t("nav.favorites")}</a>
           <a role="menuitem" href="/account" {...stylex.props(styles.item)}>{t("nav.settings")}</a>

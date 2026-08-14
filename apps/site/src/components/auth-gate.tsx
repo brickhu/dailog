@@ -1,4 +1,5 @@
 import { createSignal, createEffect, onMount, Show, type ParentProps } from "solid-js";
+import { useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { Spinner } from "@dailogues/ui";
@@ -23,6 +24,7 @@ const styles = stylex.create({
 });
 
 export function AuthGate(props: ParentProps & { redirect?: string }) {
+  const navigate = useNavigate();
   const { t } = useI18n();
   const [session, setSession] = createSignal<{ id: string } | null>(null);
   const [checked, setChecked] = createSignal(false);
@@ -42,7 +44,7 @@ export function AuthGate(props: ParentProps & { redirect?: string }) {
 
   createEffect(() => {
     if (checked() && session() === null) {
-      window.location.href = `/login?redirect=${encodeURIComponent(props.redirect ?? "/")}`;
+      navigate(`/login?redirect=${encodeURIComponent(props.redirect ?? "/")}`);
     }
   });
 

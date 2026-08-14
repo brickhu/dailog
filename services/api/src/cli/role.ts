@@ -1,6 +1,6 @@
 // 角色设置 CLI：pnpm role:set <email> <user|editor|admin>
 // 用法：pnpm --filter @dailogues/api role:set you@example.com editor
-// 说明：注册开放后默认 role=user；管理员/编辑由本 CLI 提升（或直接 UPDATE profiles）
+// 说明：注册开放后默认 role=user；管理员/编辑由本 CLI 提升（或直接 UPDATE "user".role）
 
 import postgres from "postgres";
 import { z } from "zod";
@@ -18,8 +18,8 @@ const env = z.object({ DATABASE_URL: z.string().min(1) }).parse(process.env);
 const sql = postgres(env.DATABASE_URL, { max: 1 });
 try {
   const rows = await sql`
-    UPDATE profiles SET role = ${role}
-    WHERE id = (SELECT id FROM "user" WHERE email = ${email.toLowerCase()})
+    UPDATE "user" SET role = ${role}
+    WHERE email = ${email.toLowerCase()}
     RETURNING id, role
   `;
   if (rows.length === 0) {

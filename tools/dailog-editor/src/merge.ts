@@ -90,9 +90,10 @@ export async function merge(config: EditorConfig, args: string[]): Promise<void>
 
   const listFile = join(dir, "_concat.txt");
   writeFileSync(listFile, parts.map((p) => `file '${p}'`).join("\n"));
-  const finalPath = join(dir, "final.mp3");
+  // AAC 80k（Apple 播客推荐格式；比 MP3 96k 再省 30%）——旧 final.mp3 兼容发布
+  const finalPath = join(dir, "final.m4a");
   console.log(`[merge] 拼接 ${parts.length} 个音频（intro+对话+outro）…`);
-  execFileSync("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", listFile, "-c:a", "libmp3lame", "-b:a", "192k", finalPath], { stdio: "ignore" });
+  execFileSync("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", listFile, "-c:a", "aac", "-b:a", "80k", finalPath], { stdio: "ignore" });
 
   const duration = ffprobeDuration(finalPath);
   writeProgress(submissionId, "merged");

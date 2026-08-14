@@ -37,7 +37,7 @@
 ### 4.1 账户与角色
 
 - better-auth（自托管）：邮箱 + 密码 + 会话；**注册开放 + 邮箱验证**，验证通过即获得投稿资格（**无邀请码**）
-- **角色**：`profiles.role` = user（投稿人）/ editor（编辑）/ admin（管理员）；**投稿人端在 dailog.fm（site）**，注册即可投稿；**编辑在本地 Agent 工作**（dailog-editor skill + `pnpm editor`），不部署任何编辑前端
+- **角色**：`user.role` = user（投稿人）/ editor（编辑）/ admin（管理员）（账号级字段在 user 表）；**投稿人端在 dailog.fm（site）**，注册即可投稿；**编辑在本地 Agent 工作**（dailog-editor skill + `pnpm editor`），不部署任何编辑前端
 - 边界：垃圾投稿的兜底 = 邮箱验证 + 人工审核队列；v1 不做投稿频率限制，观察队列垃圾率后再加（配置化）
 
 ### 4.2 人设（主持人信息 + 声音采样）
@@ -111,7 +111,7 @@
 | `/me/favorites` | 我的收藏 |
 | `/account` | 账户与设置（邮箱/昵称/档案/声音采样/密码） |
 | `/login` | 登录/注册（邮箱验证） |
-| `/@<username>` | 投稿人主页（默认邮箱前缀为用户名，冲突加后缀） |
+| `/@<name>` | 投稿人主页（@slug = 账号昵称 user.name，注册时应用层强制唯一，冲突加随机后缀） |
 | `/episode/<id>` | 播放页（单集） |
 | `/feed.xml` | 播客 RSS（单 feed，进 Apple/Spotify/小宇宙） |
 

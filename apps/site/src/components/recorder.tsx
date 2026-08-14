@@ -3,6 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { Button } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
+import { usePlayback } from "../lib/playback";
 
 // ---------------------------------------------------------------------------
 // 录音状态机（纯函数，可单测）
@@ -42,6 +43,7 @@ export interface RecorderProps {
 
 export default function Recorder(props: RecorderProps) {
   const { t } = useI18n();
+  const playback = usePlayback();
   const minSeconds = props.minSeconds ?? 8;
   const maxSeconds = props.maxSeconds ?? 30;
   const [phase, setPhase] = createSignal<RecorderPhase>("idle");
@@ -78,6 +80,7 @@ export default function Recorder(props: RecorderProps) {
       setError(t("recorder.envUnsupported"));
       return;
     }
+    playback.pause(); // 录音防串音：暂停全局播放（resume 见 stop/discard）
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (e) {
@@ -117,6 +120,7 @@ export default function Recorder(props: RecorderProps) {
     mediaRecorder?.stop();
     setPhase(recorderReducer(phase(), { type: "stop" }));
     stopTracks();
+    playback.resume(); // 录音结束恢复播放（仅当录音前在播时）
   };
 
   const discard = () => {
@@ -124,6 +128,7 @@ export default function Recorder(props: RecorderProps) {
     cleanupPreview();
     setSeconds(0);
     setPhase(recorderReducer(phase(), { type: "discard" }));
+    playback.resume(); // 取消录音恢复播放
   };
 
   const drawWaveform = () => {

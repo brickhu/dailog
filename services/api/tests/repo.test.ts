@@ -39,7 +39,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       { id: REPO_USER, name: "Repo Test", email: "repo-test@test.local", emailVerified: true, createdAt: now, updatedAt: now },
     ]).onConflictDoNothing();
     await db.insert(profiles).values([
-      { id: REPO_USER, username: "repo-test-user", displayName: "Repo Test", channelActivatedAt: new Date() },
+      { id: REPO_USER, displayName: "Repo Test", channelActivatedAt: new Date() },
     ]).onConflictDoNothing();
   });
 
@@ -114,7 +114,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       const first = await repo.episodes.createPublished({
         submissionId: subId,
         userId: REPO_USER,
-        hostId: REPO_USER,
+        profileId: REPO_USER,
         title: "第一期",
         audioUrl: `episodes/${REPO_USER}/${subId}.mp3`,
         audioSize: 100,
@@ -172,12 +172,17 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
     });
   });
 
-  describe("profile persona + voice sample", () => {
-    it("updatePersona 读写", async () => {
-      await repo.episodes.updatePersona(REPO_USER, { callName: "小北", traits: "风趣" });
+  describe("profile 档案 + voice sample", () => {
+    it("updateChannel（档案字段）读写 + personaSnapshot 快照", async () => {
+      await repo.episodes.updateChannel(REPO_USER, { displayName: "小北", gender: "男", profession: "产品经理", nationality: "中国", socialLinks: { github: "fei" } });
       const profile = await repo.episodes.getProfile(REPO_USER);
-      expect(profile?.persona?.callName).toBe("小北");
-      await repo.episodes.updatePersona(REPO_USER, null);
+      expect(profile?.displayName).toBe("小北");
+      expect(profile?.gender).toBe("男");
+      expect(profile?.nationality).toBe("中国");
+      expect(profile?.socialLinks?.github).toBe("fei");
+      const snap = await repo.episodes.getPersonaSnapshot(REPO_USER);
+      expect(snap?.displayName).toBe("小北");
+      expect(snap?.profession).toBe("产品经理");
     });
 
     it("saveVoiceSample + getVoiceSample（user×language upsert）", async () => {

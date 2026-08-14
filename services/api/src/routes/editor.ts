@@ -6,6 +6,7 @@
 import { Hono } from "hono";
 import { requireRole, type AuthEnv } from "../middleware/auth";
 import type { Repos } from "../repo";
+import type { AudioStorage } from "../storage";
 import { sendEmail } from "../email/resend";
 import type { Env } from "../config/env";
 
@@ -13,7 +14,7 @@ export interface EditorDeps {
   repo: Repos;
   env: Env;
   /** 成品音频与封面存储（R2/fs） */
-  storage: { get(key: string): Promise<Uint8Array>; put(key: string, bytes: Uint8Array): Promise<void> };
+  storage: AudioStorage;
   /** 消费站基址（节目 URL /episode/{id} 拼全链接用；未配置 → 通知里不带链接） */
   siteBaseUrl?: string | null;
 }
@@ -26,6 +27,8 @@ interface PublishMeta {
   language?: string;
   guestId?: string;
   durationSeconds?: number;
+  /** 无情绪标签的完整台本（节目页展示用；可选） */
+  transcript?: string;
 }
 
 // 成品音频大小上限（100MB——单期 5-10 分钟 MP3 远小于此，纯防滥用）
@@ -81,7 +84,7 @@ export function editorRoutes(deps: EditorDeps) {
     await sendEmail(deps.env, {
       to: detail.userEmail,
       subject: "dailog：你的投稿未通过",
-      html: `<p>你好 ${detail.displayName}，</p><p>很遗憾，你的投稿未能通过编辑审核：</p><blockquote>${escapeHtml(reason)}</blockquote><p>投稿链接：<a href="${escapeHtml(detail.url)}">${escapeHtml(detail.url)}</a></p><p>你可以在 <a href="${deps.siteBaseUrl ?? ""}/me/submits">投稿状态页</a> 查看。</p>`,
+      html: `<p>你好 ${detail.personaInfo?.displayName ?? detail.userEmail}，</p><p>很遗憾，你的投稿未能通过编辑审核：</p><blockquote>${escapeHtml(reason)}</blockquote><p>投稿链接：<a href="${escapeHtml(detail.url)}">${escapeHtml(detail.url)}</a></p><p>你可以在 <a href="${deps.siteBaseUrl ?? ""}/me/submits">投稿状态页</a> 查看。</p>`,
     }).catch(() => {});
     return c.json({ ok: true, status: "rejected" });
   });
@@ -125,9 +128,13 @@ export function editorRoutes(deps: EditorDeps) {
     const durationSeconds = typeof meta.durationSeconds === "number" && Number.isFinite(meta.durationSeconds) && meta.durationSeconds > 0
       ? Math.round(meta.durationSeconds)
       : null;
+    // 无情绪标签的完整台本（节目页展示用；可选）
+    const transcript = typeof meta.transcript === "string" && meta.transcript.trim() ? meta.transcript.trim().slice(0, 50000) : null;
 
-    // 音频落 R2（R2 目录规划：episodes/{userId}/{submissionId}.mp3）
-    const audioKey = `episodes/${detail.userId}/${id}.mp3`;
+    // 音频落 R2（R2 目录规划：episodes/{userId}/{submissionId}.{ext}——ext 按上传格式 mp3/m4a，
+    // 决定 Content-Type 与 RSS enclosure type）
+    const ext = /\.(mp3|m4a)$/i.test(audioFile.name) ? audioFile.name.toLowerCase().split(".").pop() : "mp3";
+    const audioKey = `episodes/${detail.userId}/${id}.${ext}`;
     await deps.storage.put(audioKey, new Uint8Array(await audioFile.arrayBuffer()));
 
     // 封面可选：cover 文件 → covers/{submissionId}.jpg（无封面 → null，播放页自适应）
@@ -142,10 +149,11 @@ export function editorRoutes(deps: EditorDeps) {
     }
 
     // 创建节目（published + 期号）+ 投稿状态流转，同事务
+    // rawConversationUrl 服务端自动填投稿链接（节目页「原始对话」跳转用）
     const created = await deps.repo.episodes.createPublished({
       submissionId: id,
       userId: detail.userId,
-      hostId: detail.userId,
+      profileId: detail.userId,
       guestId,
       title,
       description,
@@ -155,12 +163,14 @@ export function editorRoutes(deps: EditorDeps) {
       durationSeconds,
       language,
       tags,
+      transcript,
+      rawConversationUrl: detail.url,
     });
     await deps.repo.submissions.markPublished(id);
 
-    // 站内通知 + 邮件（「dailog 第 N 期」）
+    // 站内通知 + 邮件（「dailog 第 N 期」）——链接用 slug（人类可读、SEO 友好）
     const episodeTitle = title ?? `dailog 第 ${created.number} 期`;
-    const link = `/episode/${created.id}`;
+    const link = `/episode/${created.slug}`;
     await deps.repo.notifications.create({
       userId: detail.userId,
       type: "published",
@@ -171,7 +181,7 @@ export function editorRoutes(deps: EditorDeps) {
     await sendEmail(deps.env, {
       to: detail.userEmail,
       subject: `dailog 第 ${created.number} 期「${episodeTitle}」已上线`,
-      html: `<p>你好 ${detail.displayName}，</p><p>你的投稿已发布为 <strong>dailog 第 ${created.number} 期「${escapeHtml(episodeTitle)}」</strong>！</p><p><a href="${deps.siteBaseUrl ?? ""}${link}">立即收听</a></p>`,
+      html: `<p>你好 ${detail.personaInfo?.displayName ?? detail.userEmail}，</p><p>你的投稿已发布为 <strong>dailog 第 ${created.number} 期「${escapeHtml(episodeTitle)}」</strong>！</p><p><a href="${deps.siteBaseUrl ?? ""}${link}">立即收听</a></p>`,
     }).catch(() => {});
 
     return c.json({ episodeId: created.id, number: created.number, status: "published" }, 201);
@@ -255,7 +265,7 @@ export function editorRoutes(deps: EditorDeps) {
   app.get("/v1/editor/samples/guest/:guestId/audio", async (c) => {
     const sample = await deps.repo.guests.voiceSampleAny(c.req.param("guestId"));
     if (!sample) return c.json({ error: "not_found" }, 404);
-    const bytes = await deps.storage.get(sample.audioKey).catch(() => null);
+    const bytes = await deps.storage.get(sample.audioKey).then((r) => r.data).catch(() => null);
     if (!bytes) return c.json({ error: "not_found" }, 404);
     return new Response(bytes as unknown as BodyInit, {
       headers: { "Content-Type": "audio/mpeg", "Cache-Control": "private, max-age=300" },
@@ -266,7 +276,7 @@ export function editorRoutes(deps: EditorDeps) {
   app.get("/v1/editor/samples/host/:userId/audio", async (c) => {
     const sample = await deps.repo.episodes.getVoiceSample(c.req.param("userId"));
     if (!sample) return c.json({ error: "not_found" }, 404);
-    const bytes = await deps.storage.get(sample.audioUrl).catch(() => null);
+    const bytes = await deps.storage.get(sample.audioUrl).then((r) => r.data).catch(() => null);
     if (!bytes) return c.json({ error: "not_found" }, 404);
     return new Response(bytes as unknown as BodyInit, {
       headers: { "Content-Type": "audio/webm", "Cache-Control": "private, max-age=300" },

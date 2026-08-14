@@ -34,7 +34,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       existsByLink: async () => false,
     },
     episodes: {
-      createPublished: async () => ({ id: "ep-1", number: 1 }),
+      createPublished: async () => ({ id: "ep-1", number: 1, slug: "abc12345" }),
       getPublicAudioKey: async () => null,
       getPublicCoverKey: async () => null,
       getById: async () => null,
@@ -45,13 +45,17 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       getVoiceSample: async () => null,
       getVoiceSampleByLanguage: async () => null,
       getVoiceSampleKey: async () => null,
-      saveVoiceSample: async () => {},
+      saveVoiceSample: async () => ({ id: "" }),
       getProfile: async () => null,
       updateUserNickname: async () => {},
-      updatePersona: async () => {},
       updateChannel: async () => ({ ok: true } as const),
-      isUsernameTaken: async () => false,
       syncAdminRoles: async () => 0,
+      recordStat: async () => {},
+      getStats: async () => ({ plays: 0, completions: 0 }),
+      listRecommended: async () => [],
+      listTopHosts: async () => [],
+      getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),
+      getPersonaSnapshot: async () => ({ displayName: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
     },
     submissions: {
       create: async () => ({ id: "sub-1" }),
@@ -86,7 +90,7 @@ function makeApp(deps: Partial<TtsDeps> = {}, role: "user" | "editor" | "admin" 
   });
   app.route("/", ttsRoutes({
     repo: fakeRepo(),
-    storage: { get: async () => new Uint8Array() },
+    storage: { get: async () => ({ data: new Uint8Array(), total: 0 }), put: async () => {}, delete: async () => {} },
     ffmpegPath: ffmpegInstaller.path,
     fish: {
       synthesizeSingle: async () => new Uint8Array([1, 2, 3]),
@@ -107,9 +111,10 @@ const SUBMITTED_DETAIL = {
   reviewedAt: null,
   createdAt: new Date(),
   userEmail: "submitter@test.local",
-  displayName: "投稿人",
+  personaInfo: { displayName: "投稿人", gender: null, profession: null, age: null, bio: null, nationality: null },
   callName: "小北",
-  voiceSample: { audioUrl: "voices/user-1/zh.webm", transcript: "大家好", language: "zh", status: "ready" },
+  voiceSampleId: null,
+  voiceSamples: [{ audioUrl: "voices/user-1/zh.webm", transcript: "大家好", language: "zh", status: "ready", duration: 5 }],
 };
 
 const SEGMENTS = [
@@ -132,7 +137,7 @@ function baseDeps(): Partial<TtsDeps> {
         voiceSampleByLanguage: async () => ({ id: "gvs-1", guestId: "claude", language: "zh", audioKey: "guests/claude/zh.mp3", referenceId: null, transcript: "声线文案" }),
       },
     }),
-    storage: { get: async () => wav },
+    storage: { get: async () => ({ data: wav, total: wav.length }), put: async () => {}, delete: async () => {} },
     fish: {
       synthesizeSingle: async () => new Uint8Array([1]),
       synthesizeMultiSpeaker: async () => new Uint8Array([9, 9, 9]),
@@ -211,7 +216,7 @@ describe("POST /v1/editor/tts（multi speaker 整集合成）", () => {
         submissions: { ...fakeRepo().submissions, getDetail: async () => SUBMITTED_DETAIL },
         episodes: { ...fakeRepo().episodes, getVoiceSampleByLanguage: async () => ({ userId: "user-1", language: "zh", audioUrl: "v", transcript: "t", duration: 5, status: "ready" }) },
       }),
-      storage: { get: async () => makeTestWav() },
+      storage: { get: async () => ({ data: makeTestWav(), total: 5 }), put: async () => {}, delete: async () => {} },
     });
     const res = await postJson(app, { submissionId: "sub-1", guestId: "claude", segments: SEGMENTS });
     expect(res.status).toBe(422);
@@ -220,7 +225,9 @@ describe("POST /v1/editor/tts（multi speaker 整集合成）", () => {
 
   it("host 无采样 → 422", async () => {
     const app = makeApp({
-      repo: fakeRepo({ submissions: { ...fakeRepo().submissions, getDetail: async () => SUBMITTED_DETAIL } }),
+      repo: fakeRepo({
+        submissions: { ...fakeRepo().submissions, getDetail: async () => ({ ...SUBMITTED_DETAIL, voiceSamples: [] }) },
+      }),
     });
     const res = await postJson(app, { submissionId: "sub-1", segments: [{ speaker: "host", text: "大家好" }] });
     expect(res.status).toBe(422);

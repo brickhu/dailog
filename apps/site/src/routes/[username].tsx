@@ -1,8 +1,7 @@
-import { createAsync } from "@solidjs/router";
+import { A, createAsync } from "@solidjs/router";
 import { For, Show } from "solid-js";
 import { useParams } from "@solidjs/router";
 import { getChannel, type EpisodeSummary } from "../lib/db";
-import { SiteNav } from "../components/site-nav";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
@@ -24,6 +23,14 @@ const styles = stylex.create({
     padding: `${dimensions.spacing8} ${dimensions.spacing4}`,
     borderBottom: `1px solid ${colors.ink}`,
     marginBottom: dimensions.spacing6,
+  },
+  avatar: {
+    width: "72px",
+    height: "72px",
+    borderRadius: "50%",
+    objectFit: "cover",
+    marginBottom: dimensions.spacing3,
+    border: `1px solid ${colors.ink}`,
   },
   name: {
     fontSize: dimensions.fontSize2xl,
@@ -90,29 +97,31 @@ export default function ChannelPage() {
 
   return (
     <div {...stylex.props(styles.page)}>
-      <SiteNav />
       <div {...stylex.props(styles.content)}>
         <Show
           when={data()?.channel}
           fallback={<div {...stylex.props(styles.notFound)}>{t("channel.notFound")}</div>}
         >
           <div {...stylex.props(styles.header)}>
+            <Show when={data()!.channel!.avatar}>
+              <img src={data()!.channel!.avatar!} alt="" {...stylex.props(styles.avatar)} />
+            </Show>
             <div {...stylex.props(styles.name)}>@{data()!.channel!.username}</div>
             <div {...stylex.props(styles.bio)}>{data()!.channel!.bio || t("channel.noBio")}</div>
             <div {...stylex.props(styles.meta)}>{t("channel.episodeCount", { count: data()!.channel!.episodeCount })}</div>
-            <a href={`/@${username()}/feed.xml`} {...stylex.props(styles.rss)}>
+            <A  href={`/@${username()}/feed.xml`} {...stylex.props(styles.rss)}>
               RSS 订阅
-            </a>
+            </A>
           </div>
           <For each={data()!.episodes as EpisodeSummary[]}>
             {(ep) => (
-              <a href={`/episode/${ep.id}`} {...stylex.props(styles.card)}>
+              <A  href={`/episode/${ep.slug}`} {...stylex.props(styles.card)}>
                 <div {...stylex.props(styles.epTitle)}>{ep.title || t("common.unnamed")}</div>
                 <div {...stylex.props(styles.meta2)}>
                   {new Date(ep.publishedAt ?? 0).toLocaleDateString("zh-CN")} ·{" "}
                   {fmtDuration(ep.durationSeconds)}
                 </div>
-              </a>
+              </A>
             )}
           </For>
         </Show>

@@ -2,20 +2,11 @@ import { and, asc, count, desc, eq, gte, inArray, isNull, ne, sql } from "drizzl
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { randomBytes } from "node:crypto";
 import * as schema from "../db/schema";
+import type { PersonaSnapshot } from "../db/schema";
 import type { VoiceSampleRow } from "../routes/voice";
 
 function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "23505";
-}
-
-/** slug 占用查询（排除用户自己）：updateChannel 与 isUsernameTaken 共用 */
-function usernameTaken(db: PostgresJsDatabase<typeof schema>, userId: string, username: string): Promise<boolean> {
-  return db
-    .select({ id: schema.profiles.id })
-    .from(schema.profiles)
-    .where(and(eq(schema.profiles.username, username), ne(schema.profiles.id, userId)))
-    .limit(1)
-    .then((rows) => rows.length > 0);
 }
 
 function randomSlug(): string {
@@ -27,17 +18,21 @@ function randomSlug(): string {
 // ---------------------------------------------------------------------------
 
 export interface SubmissionsRepo {
-  /** 投稿入库（唯一约束 user×url 兜底；重复提交由路由层查 findByUserUrl） */
-  create(userId: string, url: string, title: string | null): Promise<{ id: string }>;
+  /** 投稿入库（唯一约束 user×url 兜底；重复提交由路由层查 findByUserUrl）。
+   *  callNameInEpisode：本次节目称呼（可为 null，脚本生成时按脚本语言改写）；
+   *  personaInfo：主持人档案快照（路由层从 getPersonaSnapshot 取，编辑侧免查库）；
+   *  voiceSampleId：投稿时使用的采样（仅记录，TTS 仍按语言匹配） */
+  create(userId: string, url: string, title: string | null, callNameInEpisode?: string | null, personaInfo?: PersonaSnapshot | null, voiceSampleId?: string | null): Promise<{ id: string }>;
   /** 重复投稿检测（同用户同 URL → 已存在） */
   findByUserUrl(userId: string, url: string): Promise<{ id: string; status: string } | null>;
   /** 待审核投稿数（status=submitted）——投稿并发限制（pending_limit）用 */
   countPendingByUser(userId: string): Promise<number>;
-  /** 我的投稿列表（submitted/rejected/published + 最新节目状态）；按投稿时间倒序 */
+  /** 我的投稿列表（submitted/rejected/published + 最新节目状态 + 本次称呼）；按投稿时间倒序 */
   listByUser(userId: string): Promise<Array<{
     id: string;
     url: string;
     title: string | null;
+    callName: string | null;
     status: string;
     rejectedReason: string | null;
     episodeStatus: string | null;
@@ -55,7 +50,7 @@ export interface SubmissionsRepo {
     displayName: string;
     hasVoiceSample: boolean;
   }>>;
-  /** 编辑详情（无归属校验）：投稿 + 投稿人 + 最新声音采样（transcript 供本地 TTS 克隆） */
+  /** 编辑详情（无归属校验）：投稿 + 主持人档案快照 + 采样（TTS 按 脚本语言→en→唯一 匹配） */
   getDetail(id: string): Promise<{
     id: string;
     userId: string;
@@ -66,10 +61,21 @@ export interface SubmissionsRepo {
     reviewedAt: Date | null;
     createdAt: Date;
     userEmail: string;
-    displayName: string;
-    /** 投稿人人设（节目中的主持人称呼，脚本生成规范注入用） */
+    /** 主持人档案快照（投稿时写入；脚本生成注入画像用） */
+    personaInfo: {
+      displayName: string;
+      gender: string | null;
+      profession: string | null;
+      age: string | null;
+      bio: string | null;
+      nationality: string | null;
+    } | null;
+    /** 投稿时配置的本次节目称呼（脚本生成时按脚本语言改写：匹配原样/英文通用/小语种转英文） */
     callName: string | null;
-    voiceSample: { audioUrl: string; transcript: string | null; language: string; status: string } | null;
+    /** 投稿时使用的采样（仅记录） */
+    voiceSampleId: string | null;
+    /** 投稿人全部 ready 采样（按语种；编辑端展示 + 服务端 TTS 按规则匹配） */
+    voiceSamples: Array<{ audioUrl: string; transcript: string | null; language: string; status: string; duration: number | null }>;
   } | null>;
   /** 拒审（reason 必填） */
   reject(id: string, reason: string): Promise<void>;
@@ -84,7 +90,8 @@ export interface SubmissionsRepo {
 export interface EpisodeCreateRow {
   submissionId: string;
   userId: string;
-  hostId?: string | null;
+  /** 主持人档案（1:1 用户；publish 时由路由层传 userId） */
+  profileId?: string | null;
   guestId?: string | null;
   title: string | null;
   description?: string | null;
@@ -95,16 +102,54 @@ export interface EpisodeCreateRow {
   durationSeconds?: number | null;
   language?: string;
   tags?: string[] | null;
+  /** 无情绪标签的完整台本（节目页展示用） */
+  transcript?: string | null;
+  /** 原始对话链接（服务端自动填 submission.url） */
+  rawConversationUrl?: string | null;
 }
 
 export interface EpisodesRepo {
   /** 编辑一次性上传发布：slug + 期号（max+1，事务）+ published + isPublic，单事务 */
-  createPublished(row: EpisodeCreateRow): Promise<{ id: string; number: number }>;
+  createPublished(row: EpisodeCreateRow): Promise<{ id: string; number: number; slug: string }>;
   /** 公开读封面（主站免鉴权端点用）：仅已发布且公开 */
   getPublicCoverKey(episodeId: string): Promise<string | null>;
   /** 公开读音频（主站免鉴权端点用）：仅已发布且公开；
    *  version = 发布时间（ETag 用） */
   getPublicAudioKey(episodeId: string): Promise<{ audioKey: string; version: string } | null>;
+  /** 播放/完播计数 +1（upsert；公开播放器上报） */
+  recordStat(episodeId: string, type: "play" | "completion"): Promise<void>;
+  /** 公开读取播放/完播统计（未统计过 → 0/0） */
+  getStats(episodeId: string): Promise<{ plays: number; completions: number }>;
+  /** 站点头部数据（公开）：主播数/嘉宾数/节目期数/最热主播——首页宣传语用 */
+  getSiteStats(): Promise<{ hostCount: number; guestCount: number; episodeCount: number; topHost: string | null; topHostAvatar: string | null; topTags: string[] }>;
+  /** 热门主播（公开）：按节目播放总量 + 期数排序（个人主页入口展示） */
+  listTopHosts(limit?: number): Promise<Array<{
+    username: string;
+    displayName: string;
+    avatar: string | null;
+    episodeCount: number;
+    totalPlays: number;
+  }>>;
+  /** 推荐队列（公开）：热度分排序；lang 匹配加分、exclude 排除已看 */
+  listRecommended(opts?: { lang?: string; limit?: number; exclude?: string[] }): Promise<Array<{
+    id: string;
+    slug: string;
+    title: string | null;
+    description: string | null;
+    coverUrl: string | null;
+    language: string;
+    audioUrl: string;
+    durationSeconds: number | null;
+    publishedAt: Date | null;
+    isPicked: boolean;
+    username: string;
+    displayName: string;
+    callName: string | null;
+    plays: number;
+    completions: number;
+    likes: number;
+    favorites: number;
+  }>>;
   /** 编辑端节目详情（无归属校验） */
   getById(id: string): Promise<{
     id: string;
@@ -152,28 +197,28 @@ export interface EpisodesRepo {
   /** 按语种取采样（编辑本地 TTS 按脚本语言取用）；无该语种 → null（调用方用兜底） */
   getVoiceSampleByLanguage(userId: string, language: string): Promise<VoiceSampleRow | null>;
   getVoiceSampleKey(userId: string): Promise<string | null>;
-  saveVoiceSample(row: VoiceSampleRow): Promise<void>;
+  saveVoiceSample(row: VoiceSampleRow): Promise<{ id: string }>;
   // ---- 账号/档案（/api/me/profile） ----
-  /** 账号 + 档案——昵称对外叫 nickname（列 user.name） */
+  /** 账号 + 主持人档案——昵称对外叫 nickname（列 user.name，= @slug） */
   getProfile(userId: string): Promise<{
     email: string | null;
     nickname: string | null;
     emailVerified: boolean;
     image: string | null;
-    username: string | null;
     displayName: string | null;
     bio: string | null;
+    gender: string | null;
+    profession: string | null;
+    age: string | null;
+    nationality: string | null;
+    socialLinks: Record<string, string> | null;
     channelActivatedAt: Date | null;
-    /** 主持人默认人设（编辑制作时取用） */
-    persona: schema.HostPersona | null;
   } | null>;
   updateUserNickname(userId: string, nickname: string): Promise<void>;
-  /** 保存默认人设（覆盖整体；null = 清除） */
-  updatePersona(userId: string, persona: schema.HostPersona | null): Promise<void>;
-  /** 档案设置（username/displayName/bio）；返回冲突：username 被占用 */
-  updateChannel(userId: string, row: { username?: string; displayName?: string; bio?: string | null }): Promise<{ ok: true } | { error: "username_taken" }>;
-  /** slug 占用检测（排除自己） */
-  isUsernameTaken(userId: string, username: string): Promise<boolean>;
+  /** 主持人档案快照（投稿时写入 submissions.persona_info；编辑 getDetail 免查库） */
+  getPersonaSnapshot(userId: string): Promise<PersonaSnapshot | null>;
+  /** 主持人档案设置（displayName/bio/gender/profession/age/nationality/socialLinks） */
+  updateChannel(userId: string, row: { displayName?: string; bio?: string | null; gender?: string | null; profession?: string | null; age?: string | null; nationality?: string | null; socialLinks?: Record<string, string> | null }): Promise<{ ok: true }>;
 }
 
 export interface GuestVoiceSampleRow {
@@ -397,12 +442,15 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
 
     submissions: {
       /** 投稿入库（唯一约束 user×url 兜底；重复提交由路由层查 existing） */
-      async create(userId, url, title) {
+      async create(userId, url, title, callNameInEpisode, personaInfo, voiceSampleId) {
         try {
           const rows = await db.insert(schema.submissions).values({
             userId,
             url,
             title: title ?? null,
+            callName: callNameInEpisode ?? null,
+            personaInfo: personaInfo ?? null,
+            voiceSampleId: voiceSampleId ?? null,
             status: "submitted",
           }).returning({ id: schema.submissions.id });
           return { id: rows[0].id };
@@ -432,6 +480,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             id: schema.submissions.id,
             url: schema.submissions.url,
             title: schema.submissions.title,
+            callName: schema.submissions.callName,
             status: schema.submissions.status,
             rejectedReason: schema.submissions.rejectedReason,
             createdAt: schema.submissions.createdAt,
@@ -453,6 +502,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           id: s.id,
           url: s.url,
           title: s.title,
+          callName: s.callName,
           status: s.status,
           rejectedReason: s.rejectedReason,
           episodeStatus: latestBySubmission.get(s.id)?.status ?? null,
@@ -475,8 +525,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             )`,
           })
           .from(schema.submissions)
-          .innerJoin(schema.profiles, eq(schema.submissions.userId, schema.profiles.id))
-          .innerJoin(schema.authUsers, eq(schema.profiles.id, schema.authUsers.id))
+          .innerJoin(schema.authUsers, eq(schema.submissions.userId, schema.authUsers.id))
+          .innerJoin(schema.profiles, eq(schema.profiles.id, schema.authUsers.id))
           .where(eq(schema.submissions.status, status))
           .orderBy(asc(schema.submissions.createdAt)); // inbox：先到先审
         return rows;
@@ -488,17 +538,17 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             userId: schema.submissions.userId,
             url: schema.submissions.url,
             title: schema.submissions.title,
+            callName: schema.submissions.callName,
+            personaInfo: schema.submissions.personaInfo,
+            voiceSampleId: schema.submissions.voiceSampleId,
             status: schema.submissions.status,
             rejectedReason: schema.submissions.rejectedReason,
             reviewedAt: schema.submissions.reviewedAt,
             createdAt: schema.submissions.createdAt,
             userEmail: schema.authUsers.email,
-            displayName: schema.profiles.displayName,
-            persona: schema.profiles.persona,
           })
           .from(schema.submissions)
-          .innerJoin(schema.profiles, eq(schema.submissions.userId, schema.profiles.id))
-          .innerJoin(schema.authUsers, eq(schema.profiles.id, schema.authUsers.id))
+          .innerJoin(schema.authUsers, eq(schema.submissions.userId, schema.authUsers.id))
           .where(eq(schema.submissions.id, id))
           .limit(1);
         const row = rows[0];
@@ -509,11 +559,11 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             transcript: schema.voiceSamples.transcript,
             language: schema.voiceSamples.language,
             status: schema.voiceSamples.status,
+            duration: schema.voiceSamples.duration,
           })
           .from(schema.voiceSamples)
           .where(and(eq(schema.voiceSamples.userId, row.userId), eq(schema.voiceSamples.status, "ready")))
-          .orderBy(desc(schema.voiceSamples.createdAt))
-          .limit(1);
+          .orderBy(desc(schema.voiceSamples.createdAt)); // 最近优先（编辑 TTS 兜底取第一条）
         return {
           id: row.id,
           userId: row.userId,
@@ -524,9 +574,10 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           reviewedAt: row.reviewedAt,
           createdAt: row.createdAt,
           userEmail: row.userEmail,
-          displayName: row.displayName,
-          callName: row.persona?.callName ?? null,
-          voiceSample: sampleRows[0] ?? null,
+          personaInfo: row.personaInfo as typeof row.personaInfo,
+          callName: row.callName,
+          voiceSampleId: row.voiceSampleId,
+          voiceSamples: sampleRows,
         };
       },
       async reject(id, reason) {
@@ -552,7 +603,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           const inserted = await tx.insert(schema.episodes).values({
             submissionId: row.submissionId,
             userId: row.userId,
-            hostId: row.hostId ?? null,
+            profileId: row.profileId ?? null,
             guestId: row.guestId ?? null,
             slug: randomSlug(),
             title: row.title,
@@ -563,12 +614,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             durationSeconds: row.durationSeconds ?? null,
             language: row.language ?? "zh",
             tags: row.tags ?? null,
+            transcript: row.transcript ?? null,
+            rawConversationUrl: row.rawConversationUrl ?? null,
             number,
             status: "published",
             isPublic: true, // 上传即公开（公开音频端点/RSS/首页依赖此标志）
             publishedAt: new Date(),
-          }).returning({ id: schema.episodes.id });
-          return { id: inserted[0].id, number };
+          }).returning({ id: schema.episodes.id, slug: schema.episodes.slug });
+          return { id: inserted[0].id, number, slug: inserted[0].slug };
         });
       },
       async getPublicCoverKey(episodeId) {
@@ -592,6 +645,134 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         const row = rows[0];
         // version = 发布时间（ETag 用——重新制作发布是新 episode，内容变化 → 浏览器重新拉取）
         return row && row.audioUrl ? { audioKey: row.audioUrl, version: (row.publishedAt ?? new Date(0)).toISOString() } : null;
+      },
+      /** 播放/完播计数 +1（upsert 行；仅已发布公开节目——调用方先校验存在） */
+      async recordStat(episodeId, type: "play" | "completion") {
+        await db.insert(schema.episodeStats).values({
+          episodeId,
+          plays: type === "play" ? 1 : 0,
+          completions: type === "completion" ? 1 : 0,
+        }).onConflictDoUpdate({
+          target: schema.episodeStats.episodeId,
+          set: {
+            plays: type === "play" ? sql`${schema.episodeStats.plays} + 1` : schema.episodeStats.plays,
+            completions: type === "completion" ? sql`${schema.episodeStats.completions} + 1` : schema.episodeStats.completions,
+            updatedAt: new Date(),
+          },
+        });
+      },
+      /** 公开读取播放/完播统计（未统计过 → 0/0） */
+      async getStats(episodeId) {
+        const rows = await db
+          .select({ plays: schema.episodeStats.plays, completions: schema.episodeStats.completions })
+          .from(schema.episodeStats)
+          .where(eq(schema.episodeStats.episodeId, episodeId))
+          .limit(1);
+        return { plays: rows[0]?.plays ?? 0, completions: rows[0]?.completions ?? 0 };
+      },
+      /** 站点头部数据：主播/嘉宾/节目计数 + 最热主播 */
+      async getSiteStats() {
+        const [epCount, hostCount, guestCount] = await Promise.all([
+          db.select({ n: count() }).from(schema.episodes)
+            .where(and(eq(schema.episodes.status, "published"), eq(schema.episodes.isPublic, true))),
+          db.select({ n: sql<number>`count(DISTINCT ${schema.episodes.userId})::int` }).from(schema.episodes)
+            .where(and(eq(schema.episodes.status, "published"), eq(schema.episodes.isPublic, true))),
+          db.select({ n: count() }).from(schema.guests),
+        ]);
+        const top = (await this.listTopHosts(1))[0] ?? null;
+        // 节目标签聚合（内容量小，JS 聚合取高频前 5）
+        const tagRows = await db
+          .select({ tags: schema.episodes.tags })
+          .from(schema.episodes)
+          .where(and(eq(schema.episodes.status, "published"), eq(schema.episodes.isPublic, true)));
+        const freq = new Map<string, number>();
+        for (const r of tagRows) {
+          for (const tag of r.tags ?? []) freq.set(tag, (freq.get(tag) ?? 0) + 1);
+        }
+        const topTags = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t]) => t);
+        return {
+          hostCount: hostCount[0]?.n ?? 0,
+          guestCount: guestCount[0]?.n ?? 0,
+          episodeCount: epCount[0]?.n ?? 0,
+          topHost: top?.displayName ?? null,
+          topHostAvatar: top?.avatar ?? null,
+          topTags,
+        };
+      },
+      /** 热门主播：按节目播放总量 + 期数排序 */
+      async listTopHosts(limit = 8) {
+        const rows = await db
+          .select({
+            username: schema.authUsers.name,
+            displayName: schema.profiles.displayName,
+            avatar: schema.authUsers.image,
+            episodeCount: sql<number>`count(DISTINCT ${schema.episodes.id})::int`,
+            totalPlays: sql<number>`COALESCE(sum(${schema.episodeStats.plays}), 0)::int`,
+          })
+          .from(schema.episodes)
+          .innerJoin(schema.profiles, eq(schema.profiles.id, schema.episodes.userId))
+          .innerJoin(schema.authUsers, eq(schema.authUsers.id, schema.profiles.id))
+          .leftJoin(schema.episodeStats, eq(schema.episodeStats.episodeId, schema.episodes.id))
+          .where(and(eq(schema.episodes.status, "published"), eq(schema.episodes.isPublic, true)))
+          .groupBy(schema.authUsers.name, schema.profiles.displayName, schema.authUsers.image)
+          .orderBy(desc(sql`COALESCE(sum(${schema.episodeStats.plays}), 0)`), desc(sql`count(DISTINCT ${schema.episodes.id})`))
+          .limit(Math.min(limit, 20));
+        return rows;
+      },
+      /** 推荐队列（抖音流/首页播放器用）：完播率/互动率/新鲜度/精选 加权热度分。
+       *  lang 匹配加分（不足时自然 fallback 其他语言）；exclude 排除已播/已看节目。 */
+      async listRecommended(opts: { lang?: string; limit?: number; exclude?: string[] } = {}) {
+        const rows = await db
+          .select({
+            id: schema.episodes.id,
+            slug: schema.episodes.slug,
+            title: schema.episodes.title,
+            description: schema.episodes.description,
+            coverUrl: schema.episodes.coverUrl,
+            language: schema.episodes.language,
+            audioUrl: schema.episodes.audioUrl,
+            durationSeconds: schema.episodes.durationSeconds,
+            publishedAt: schema.episodes.publishedAt,
+            isPicked: schema.episodes.isPicked,
+            username: schema.authUsers.name,
+            displayName: schema.profiles.displayName,
+            callName: schema.submissions.callName,
+            plays: sql<number>`COALESCE(${schema.episodeStats.plays}, 0)`,
+            completions: sql<number>`COALESCE(${schema.episodeStats.completions}, 0)`,
+            likes: sql<number>`(SELECT count(*) FROM ${schema.likes} l WHERE l.episode_id = ${schema.episodes.id})`,
+            favorites: sql<number>`(SELECT count(*) FROM ${schema.favorites} f WHERE f.episode_id = ${schema.episodes.id})`,
+          })
+          .from(schema.episodes)
+          .innerJoin(schema.submissions, eq(schema.submissions.id, schema.episodes.submissionId))
+          .innerJoin(schema.profiles, eq(schema.profiles.id, schema.episodes.userId))
+          .innerJoin(schema.authUsers, eq(schema.authUsers.id, schema.profiles.id))
+          .leftJoin(schema.episodeStats, eq(schema.episodeStats.episodeId, schema.episodes.id))
+          .where(and(
+            eq(schema.episodes.status, "published"),
+            eq(schema.episodes.isPublic, true),
+            opts.exclude && opts.exclude.length > 0
+              ? sql`${schema.episodes.id} NOT IN (${sql.join(opts.exclude.map((id) => sql`${id}::uuid`), sql`, `)})`
+              : undefined,
+          ));
+        const lang = opts.lang ?? null;
+        const now = Date.now();
+        const scored = rows
+          .map((r) => {
+            const plays = r.plays;
+            // 热度分：完播率为主信号，互动率次之，新鲜度衰减，精选加权，语言匹配加分
+            const completionRate = plays > 0 ? r.completions / plays : 0;
+            const likeRate = plays > 0 ? r.likes / plays : 0;
+            const favoriteRate = plays > 0 ? r.favorites / plays : 0;
+            const days = Math.max(0, (now - (r.publishedAt ?? new Date(0)).getTime()) / 86_400_000);
+            const recency = 1 / (1 + days / 30);
+            const langBoost = lang && r.language === lang ? 0.3 : 0;
+            const score = completionRate * 0.4 + likeRate * 0.15 + favoriteRate * 0.15 + recency * 0.2
+              + (r.isPicked ? 0.1 : 0) + langBoost;
+            return { ...r, score };
+          })
+          .sort((a, b) => b.score - a.score);
+        const limit = opts.limit ?? 20;
+        return scored.slice(0, limit).map(({ score, ...ep }) => ep);
       },
       async getById(id) {
         const rows = await db
@@ -664,22 +845,22 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       },
       async getRole(userId) {
         const rows = await db
-          .select({ role: schema.profiles.role })
-          .from(schema.profiles)
-          .where(eq(schema.profiles.id, userId))
+          .select({ role: schema.authUsers.role })
+          .from(schema.authUsers)
+          .where(eq(schema.authUsers.id, userId))
           .limit(1);
         return (rows[0]?.role as "user" | "editor" | "admin" | undefined) ?? null;
       },
       async syncAdminRoles(emails) {
         if (emails.length === 0) return 0;
         const rows = await db
-          .update(schema.profiles)
+          .update(schema.authUsers)
           .set({ role: "admin" })
           .where(and(
-            inArray(schema.profiles.id, db.select({ id: schema.authUsers.id }).from(schema.authUsers).where(inArray(schema.authUsers.email, emails))),
-            ne(schema.profiles.role, "admin"),
+            inArray(schema.authUsers.email, emails),
+            ne(schema.authUsers.role, "admin"),
           ))
-          .returning({ id: schema.profiles.id });
+          .returning({ id: schema.authUsers.id });
         return rows.length;
       },
       async getVoiceSample(userId) {
@@ -726,9 +907,9 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .limit(1);
         return rows[0]?.audioUrl ?? null;
       },
-      async saveVoiceSample(row: VoiceSampleRow) {
-        // 一人多语种各一条（upsert by user+language）
-        await db.insert(schema.voiceSamples).values({
+      async saveVoiceSample(row: VoiceSampleRow): Promise<{ id: string }> {
+        // 一人多语种各一条（upsert by user+language）；返回 id（投稿时记录 voiceSampleId 用）
+        const rows = await db.insert(schema.voiceSamples).values({
           userId: row.userId,
           language: row.language,
           audioUrl: row.audioUrl,
@@ -743,7 +924,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             duration: row.duration,
             status: row.status,
           },
-        });
+        }).returning({ id: schema.voiceSamples.id });
+        return { id: rows[0]?.id ?? "" };
       },
       async getProfile(userId) {
         const [userRows, profileRows] = await Promise.all([
@@ -753,7 +935,16 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             .where(eq(schema.authUsers.id, userId))
             .limit(1),
           db
-            .select({ username: schema.profiles.username, displayName: schema.profiles.displayName, bio: schema.profiles.bio, channelActivatedAt: schema.profiles.channelActivatedAt, persona: schema.profiles.persona })
+            .select({
+              displayName: schema.profiles.displayName,
+              bio: schema.profiles.bio,
+              gender: schema.profiles.gender,
+              profession: schema.profiles.profession,
+              age: schema.profiles.age,
+              nationality: schema.profiles.nationality,
+              socialLinks: schema.profiles.socialLinks,
+              channelActivatedAt: schema.profiles.channelActivatedAt,
+            })
             .from(schema.profiles)
             .where(eq(schema.profiles.id, userId))
             .limit(1),
@@ -763,37 +954,60 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         if (!user || !profile) return null;
         return {
           email: user.email,
-          nickname: user.name, // 对外契约 nickname；DB 列 user.name 是 better-auth 标准字段
+          nickname: user.name, // 对外契约 nickname = @slug；DB 列 user.name 是 better-auth 标准字段
           emailVerified: user.emailVerified,
           image: user.image,
-          username: profile.username,
           displayName: profile.displayName,
           bio: profile.bio,
+          gender: profile.gender,
+          profession: profile.profession,
+          age: profile.age,
+          nationality: profile.nationality,
+          socialLinks: profile.socialLinks ?? null,
           channelActivatedAt: profile.channelActivatedAt,
-          persona: profile.persona ?? null,
         };
       },
-      async updatePersona(userId, persona) {
-        await db.update(schema.profiles).set({ persona }).where(eq(schema.profiles.id, userId));
+      /** 主持人档案快照（投稿时写入 submissions.persona_info；编辑 getDetail 免查库） */
+      async getPersonaSnapshot(userId) {
+        const rows = await db
+          .select({
+            displayName: schema.profiles.displayName,
+            bio: schema.profiles.bio,
+            gender: schema.profiles.gender,
+            profession: schema.profiles.profession,
+            age: schema.profiles.age,
+            nationality: schema.profiles.nationality,
+          })
+          .from(schema.profiles)
+          .where(eq(schema.profiles.id, userId))
+          .limit(1);
+        const p = rows[0];
+        if (!p) return null;
+        return {
+          displayName: p.displayName,
+          gender: p.gender,
+          profession: p.profession,
+          age: p.age,
+          bio: p.bio,
+          nationality: p.nationality,
+        };
       },
       async updateUserNickname(userId, nickname) {
         await db.update(schema.authUsers).set({ name: nickname, updatedAt: new Date() }).where(eq(schema.authUsers.id, userId));
       },
       async updateChannel(userId, row) {
-        if (row.username !== undefined) {
-          if (await usernameTaken(db, userId, row.username)) return { error: "username_taken" };
-        }
         await db.update(schema.profiles)
           .set({
-            ...(row.username !== undefined ? { username: row.username } : {}),
             ...(row.displayName !== undefined ? { displayName: row.displayName } : {}),
             ...(row.bio !== undefined ? { bio: row.bio } : {}),
+            ...(row.gender !== undefined ? { gender: row.gender } : {}),
+            ...(row.profession !== undefined ? { profession: row.profession } : {}),
+            ...(row.age !== undefined ? { age: row.age } : {}),
+            ...(row.nationality !== undefined ? { nationality: row.nationality } : {}),
+            ...(row.socialLinks !== undefined ? { socialLinks: row.socialLinks } : {}),
           })
           .where(eq(schema.profiles.id, userId));
         return { ok: true };
-      },
-      async isUsernameTaken(userId, username) {
-        return usernameTaken(db, userId, username);
       },
     },
   };

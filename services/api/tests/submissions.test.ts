@@ -32,7 +32,7 @@ function makeApp(repo: Partial<Repos["submissions"]> = {}) {
       existsByLink: async () => false,
     },
     episodes: {
-      createPublished: async () => ({ id: "ep-1", number: 1 }),
+      createPublished: async () => ({ id: "ep-1", number: 1, slug: "abc12345" }),
       getPublicAudioKey: async () => null,
       getPublicCoverKey: async () => null,
       getById: async () => null,
@@ -43,13 +43,17 @@ function makeApp(repo: Partial<Repos["submissions"]> = {}) {
       getVoiceSample: async () => null,
       getVoiceSampleByLanguage: async () => null,
       getVoiceSampleKey: async () => null,
-      saveVoiceSample: async () => {},
+      saveVoiceSample: async () => ({ id: "" }),
       getProfile: async () => null,
       updateUserNickname: async () => {},
-      updatePersona: async () => {},
       updateChannel: async () => ({ ok: true } as const),
-      isUsernameTaken: async () => false,
       syncAdminRoles: async () => 0,
+      recordStat: async () => {},
+      getStats: async () => ({ plays: 0, completions: 0 }),
+      listRecommended: async () => [],
+      listTopHosts: async () => [],
+      getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),
+      getPersonaSnapshot: async () => ({ displayName: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
     },
     submissions: {
       create: async () => ({ id: "sub-1" }),
@@ -158,17 +162,20 @@ describe("POST /v1/submissions —— 并发上限 / 重复 / 入库", () => {
     expect(await res.json()).toEqual({ existing: true, submissionId: "sub-old", status: "submitted" });
   });
 
-  it("creates submission with url + optional title", async () => {
+  it("creates submission with url + optional title + callNameInEpisode", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
-    const create = vi.fn(async (_u: string, _url: string, _t: string | null) => ({ id: "sub-new" }));
+    const create = vi.fn(async (_u: string, _url: string, _t: string | null, _cn?: string | null) => ({ id: "sub-new" }));
     const app = makeApp({ create });
     const res = await app.request("/v1/submissions", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: "https://example.com/share/abc", title: "我的对话" }),
+      body: JSON.stringify({ url: "https://example.com/share/abc", title: "我的对话", callNameInEpisode: "飞" }),
     });
     expect(res.status).toBe(201);
-    expect(create).toHaveBeenCalledWith("user-1", "https://example.com/share/abc", "我的对话");
+    expect(create).toHaveBeenCalledWith(
+      "user-1", "https://example.com/share/abc", "我的对话", "飞",
+      expect.objectContaining({ displayName: "测试员" }), null,
+    );
   });
 
   it("does not call create when URL unreachable（探活失败不落库）", async () => {
@@ -188,7 +195,7 @@ describe("POST /v1/submissions —— 并发上限 / 重复 / 入库", () => {
 describe("GET /v1/me/submissions", () => {
   it("returns my submissions list", async () => {
     const listByUser = vi.fn(async () => [
-      { id: "sub-1", url: "https://example.com/share/abc", title: null, status: "submitted", rejectedReason: null, episodeStatus: null, createdAt: new Date() },
+      { id: "sub-1", url: "https://example.com/share/abc", title: null, callName: null, status: "submitted", rejectedReason: null, episodeStatus: null, createdAt: new Date() },
     ]);
     const res = await makeApp({ listByUser }).request("/v1/me/submissions");
     expect(res.status).toBe(200);

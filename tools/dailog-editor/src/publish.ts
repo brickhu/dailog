@@ -62,7 +62,9 @@ export async function publish(config: EditorConfig, args: string[]): Promise<voi
 
   const form = new FormData();
   const audioBytes = readFileSync(p.audio!);
-  form.append("audio", new Blob([new Uint8Array(audioBytes)], { type: "audio/mpeg" }), "final.mp3");
+  // 按文件后缀声明类型（merge 产出 final.m4a / 兼容旧 final.mp3）——服务端按扩展名存 R2 + 回 Content-Type
+  const isM4a = p.audio!.toLowerCase().endsWith(".m4a");
+  form.append("audio", new Blob([new Uint8Array(audioBytes)], { type: isM4a ? "audio/mp4" : "audio/mpeg" }), isM4a ? "final.m4a" : "final.mp3");
   if (p.cover) {
     const coverBytes = readFileSync(p.cover);
     form.append("cover", new Blob([new Uint8Array(coverBytes)], { type: "image/jpeg" }), "cover.jpg");

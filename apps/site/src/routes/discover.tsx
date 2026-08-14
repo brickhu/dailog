@@ -1,8 +1,7 @@
-import { createAsync } from "@solidjs/router";
+import { A, createAsync } from "@solidjs/router";
 import { For, Show, createSignal } from "solid-js";
 import { listLatestEpisodes, type EpisodeSummary } from "../lib/db";
 import { episodeCoverUrl } from "../lib/env";
-import { SiteNav } from "../components/site-nav";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
@@ -114,7 +113,6 @@ export default function DiscoverPage() {
 
   return (
     <div {...stylex.props(styles.page)}>
-      <SiteNav />
       <div {...stylex.props(styles.content)}>
         <div {...stylex.props(styles.title)}>{t("discover.title")}</div>
         <div {...stylex.props(styles.tabs)}>
@@ -136,7 +134,7 @@ export default function DiscoverPage() {
         >
           <For each={episodes()}>
             {(ep) => (
-              <a href={`/episode/${ep.id}`} {...stylex.props(styles.card)}>
+              <A  href={`/episode/${ep.slug}`} {...stylex.props(styles.card)}>
                 <Show when={episodeCoverUrl(ep.id, ep.coverUrl)}>
                   <img src={episodeCoverUrl(ep.id, ep.coverUrl)!} alt={ep.title || ""} {...stylex.props(styles.thumb)} />
                 </Show>
@@ -145,7 +143,7 @@ export default function DiscoverPage() {
                   @{ep.username} · {fmtDate(ep.publishedAt)} · {fmtDuration(ep.durationSeconds)}
                   {ep.language ? <span {...stylex.props(styles.langTag)}>{ep.language === "en" ? "EN" : "中"}</span> : null}
                 </div>
-              </a>
+              </A>
             )}
           </For>
         </Show>

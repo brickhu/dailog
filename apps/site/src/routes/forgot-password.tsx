@@ -1,3 +1,5 @@
+import { A } from "@solidjs/router";
+import { useNavigate } from "@solidjs/router";
 import { createSignal, Show } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
@@ -63,6 +65,7 @@ const styles = stylex.create({
 type Step = "email" | "code";
 
 export default function ForgotPasswordPage() {
+  const navigate = useNavigate();
   const { t } = useI18n();
   const [step, setStep] = createSignal<Step>("email");
   const [email, setEmail] = createSignal("");
@@ -108,7 +111,7 @@ export default function ForgotPasswordPage() {
       });
       if (res.ok) {
         setMsg({ ok: true, text: t("forgot.resetSuccess") });
-        setTimeout(() => (window.location.href = "/login"), 1200);
+        setTimeout(() => navigate("/login"), 1200);
       } else {
         const body = (await res.json().catch(() => null)) as { message?: string } | null;
         setMsg({ ok: false, text: body?.message ?? t("forgot.resetFailed") });
@@ -141,7 +144,7 @@ export default function ForgotPasswordPage() {
             <Show when={msg()}>
               <div {...stylex.props(msg()!.ok ? styles.success : styles.error)}>{msg()!.text}</div>
             </Show>
-            <a href="/forgot-password" {...stylex.props(styles.back)}>{t("forgot.resend")}</a>
+            <A href="/forgot-password" {...stylex.props(styles.back)}>{t("forgot.resend")}</A>
           </>
         }>
           <div {...stylex.props(styles.title)}>{t("forgot.title")}</div>
@@ -153,7 +156,7 @@ export default function ForgotPasswordPage() {
           <Show when={msg()}>
             <div {...stylex.props(msg()!.ok ? styles.success : styles.error)}>{msg()!.text}</div>
           </Show>
-          <a href="/login" {...stylex.props(styles.back)}>{t("forgot.backToLogin")}</a>
+          <A href="/login" {...stylex.props(styles.back)}>{t("forgot.backToLogin")}</A>
         </Show>
       </div>
     </div>

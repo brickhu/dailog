@@ -19,7 +19,7 @@ export default function LoginPage() {
         if (data?.user) {
           window.location.href = getLoginRedirect({
             allowedOrigins: [env.siteBaseUrl],
-            fallback: "/account",
+            fallback: "/settings",
           });
           return;
         }
@@ -30,14 +30,16 @@ export default function LoginPage() {
   });
 
   return (
-    <LoginForm
-      checkingSession={checking()}
-      config={{
-        loginOrOtpEndpoint: "/v1/auth/login-or-otp",
-        otpCompleteEndpoint: "/v1/auth/otp-complete",
-        forgotPasswordUrl: "/forgot-password",
-      }}
-      redirect={{ allowedOrigins: [env.siteBaseUrl] }}
-    />
+    <>
+      <LoginForm
+        checkingSession={checking()}
+        config={{
+          loginOrOtpEndpoint: "/v1/auth/login-or-otp",
+          otpCompleteEndpoint: "/v1/auth/otp-complete",
+          forgotPasswordUrl: "/forgot-password",
+        }}
+        redirect={{ allowedOrigins: [env.siteBaseUrl] }}
+      />
+    </>
   );
 }

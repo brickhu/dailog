@@ -40,7 +40,7 @@ function fakeRepo(): AppDeps["repo"] {
       markPublished: async () => {},
     },
     episodes: {
-      createPublished: async () => ({ id: "ep-1", number: 1 }),
+      createPublished: async () => ({ id: "ep-1", number: 1, slug: "abc12345" }),
       getPublicAudioKey: async () => null,
       getPublicCoverKey: async () => null,
       getById: async () => null,
@@ -51,21 +51,25 @@ function fakeRepo(): AppDeps["repo"] {
       getVoiceSample: async () => null,
       getVoiceSampleByLanguage: async () => null,
       getVoiceSampleKey: async () => null,
-      saveVoiceSample: async () => {},
+      saveVoiceSample: async () => ({ id: "" }),
       getProfile: async () => null,
       updateUserNickname: async () => {},
-      updatePersona: async () => {},
       updateChannel: async () => ({ ok: true } as const),
-      isUsernameTaken: async () => false,
       syncAdminRoles: async () => 0,
+      recordStat: async () => {},
+      getStats: async () => ({ plays: 0, completions: 0 }),
+      listRecommended: async () => [],
+      listTopHosts: async () => [],
+      getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),
+      getPersonaSnapshot: async () => ({ displayName: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
     },
   };
 }
 
 function fakeVoice(): AppDeps["voice"] {
   return {
-    saveVoiceSample: async () => {},
-    storage: { put: async () => {}, get: async () => new Uint8Array(), delete: async () => {} },
+    saveVoiceSample: async () => ({ id: "" }),
+    storage: { put: async () => {}, get: async () => ({ data: new Uint8Array(), total: 0 }), delete: async () => {} },
   };
 }
 
@@ -103,12 +107,12 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
       editor: {
         repo: fakeRepo(),
         env: testEnv,
-        storage: { put: async () => {}, get: async () => new Uint8Array() },
+        storage: { put: async () => {}, get: async () => ({ data: new Uint8Array(), total: 0 }), delete: async () => {} },
         siteBaseUrl: null,
       },
       tts: {
         repo: fakeRepo(),
-        storage: { get: async () => new Uint8Array() },
+        storage: { get: async () => ({ data: new Uint8Array(), total: 0 }), put: async () => {}, delete: async () => {} },
         ffmpegPath: "/fake/ffmpeg",
         fish: null,
       },

@@ -56,7 +56,7 @@ export function submissionsRoutes(repo: Repos) {
 
   app.post("/v1/submissions", async (c) => {
     const userId = c.get("userId") as string;
-    const body = (await c.req.json().catch(() => null)) as { url?: unknown; title?: unknown } | null;
+    const body = (await c.req.json().catch(() => null)) as { url?: unknown; title?: unknown; callNameInEpisode?: unknown; voiceSampleId?: unknown } | null;
     if (!body) return c.json({ error: "invalid_body", detail: "请求体缺失" }, 400);
     const url = typeof body.url === "string" ? body.url.trim() : "";
     if (!url) {
@@ -83,7 +83,17 @@ export function submissionsRoutes(repo: Repos) {
       return c.json({ existing: true, submissionId: existing.id, status: existing.status });
     }
     const title = typeof body.title === "string" && body.title.trim() ? body.title.trim().slice(0, 200) : null;
-    const created = await repo.submissions.create(userId, url, title);
+    // 本次节目称呼（默认 displayName 填充，可改；脚本生成时按脚本语言改写）
+    const callNameInEpisode = typeof body.callNameInEpisode === "string" && body.callNameInEpisode.trim()
+      ? body.callNameInEpisode.trim().slice(0, 20)
+      : null;
+    // 投稿时使用的采样（仅记录；TTS 仍按语言匹配）——uuid 格式校验，无效忽略
+    const voiceSampleId = typeof body.voiceSampleId === "string" && /^[0-9a-f-]{36}$/i.test(body.voiceSampleId)
+      ? body.voiceSampleId
+      : null;
+    // 主持人档案快照（编辑 getDetail 免查库；脚本生成注入画像）
+    const personaInfo = await repo.episodes.getPersonaSnapshot(userId).catch(() => null);
+    const created = await repo.submissions.create(userId, url, title, callNameInEpisode, personaInfo, voiceSampleId);
     if (!created.id) {
       return c.json({ error: "already_submitted", detail: "该链接已提交过投稿" }, 409);
     }

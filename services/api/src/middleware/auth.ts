@@ -12,7 +12,7 @@ export interface AuthLike {
 }
 
 /** 认证中间件（M5）：better-auth 会话校验——cookie 与 Authorization: Bearer 双通道；
- *  注入 getRole（读 profiles.role）时同时设置 c.get("role")，供 requireRole 守卫使用 */
+ *  注入 getRole（读 user.role）时同时设置 c.get("role")，供 requireRole 守卫使用 */
 export function createAuthMiddleware(auth: AuthLike, getRole?: (userId: string) => Promise<Role | null>) {
   return createMiddleware<AuthEnv>(async (c, next) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });

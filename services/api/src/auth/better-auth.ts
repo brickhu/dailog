@@ -96,13 +96,10 @@ export function createAuth(opts: CreateAuthOptions) {
             return { data: user };
           },
           after: async (user) => {
-            // 创建业务档案（quota/voice 等业务数据挂 profiles）
+            // 创建主持人档案（1:1；displayName 默认取注册昵称，可在设置页改）
             const email = user.email ?? "";
             await opts.db.insert(schema.profiles).values({
               id: user.id,
-              // 默认频道 slug：纯随机 hex（8 位；用户可在设置页改成自己的频道地址）
-              username: randomBytes(4).toString("hex"),
-              // GitHub 用户优先用 GitHub 昵称；邮箱用户取邮箱前缀
               displayName: user.name || email.split("@")[0] || "用户",
             });
           },

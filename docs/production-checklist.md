@@ -67,7 +67,7 @@
 
 ## ⑤ 初始化数据（生产库）
 
-- [ ] 初始化编辑角色（`profiles.role=editor`）：本地连生产库更新第一个账号（DATABASE_URL 指向生产库，临时用）
+- [ ] 初始化编辑角色（`user.role=editor`，0027 起账号级字段在 user 表）：本地连生产库更新第一个账号（DATABASE_URL 指向生产库，临时用）
 - [ ] 验证链路（自查清单）：
   - [ ] `https://api.dailog.fm/health` → `{"ok":true}`
   - [ ] `dailog.fm` 打开正常、登录页 brand 显示 "dailog"

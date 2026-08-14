@@ -144,11 +144,21 @@ export function authExtRoutes(deps: AuthExtDeps) {
 
     // 创建用户（带密码）+ 自动登录（透传 set-cookie——cookie 会话 SSO）
     try {
+      // name = @slug（主持人主页标识）：应用层强制唯一——重名自动追加随机后缀
+      const baseName = typeof body.name === "string" && body.name.trim() ? body.name.trim().slice(0, 50) : email.split("@")[0];
+      const existing = await deps.db
+        .select({ id: schema.authUsers.id })
+        .from(schema.authUsers)
+        .where(eq(schema.authUsers.name, baseName))
+        .limit(1);
+      const name = existing[0]
+        ? `${baseName}-${Math.random().toString(36).slice(2, 6) || "x"}` // 后缀防空兜底
+        : baseName;
       await deps.auth.api.signUpEmail({
         body: {
           email,
           password: body.password,
-          name: typeof body.name === "string" && body.name.trim() ? body.name.trim().slice(0, 50) : email.split("@")[0],
+          name,
         },
         asResponse: true,
       }).catch(() => null); // 竞态：可能已存在（不阻塞登录）
@@ -164,9 +174,9 @@ export function authExtRoutes(deps: AuthExtDeps) {
           .limit(1);
         if (adminUser[0]) {
           await deps.db
-            .update(schema.profiles)
+            .update(schema.authUsers)
             .set({ role: "admin" })
-            .where(eq(schema.profiles.id, adminUser[0].id))
+            .where(eq(schema.authUsers.id, adminUser[0].id))
             .catch(() => null);
         }
       }

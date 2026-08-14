@@ -1,21 +1,16 @@
-import { createAsync } from "@solidjs/router";
-import { For, Show } from "solid-js";
+import { For, Show, createSignal, onMount } from "solid-js";
+import { A } from "@solidjs/router";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../../components/auth-gate";
 
-// 消费端个人页：dailog.fm/me（收藏列表；登录态经 cookie 判定，未登录跳统一登录）
-interface FavoriteRow {
-  episodeId: string;
-  title: string | null;
-  audioUrl: string | null;
-  durationSeconds: number | null;
-  publishedAt: string | null;
-  favoritedAt: string;
-}
-
+// 个人中心（/me）：个人视角首页——用户信息 + 全部功能入口
+//   · 账户设置 /settings（资料/昵称/密码/主持人档案/声音采样）
+//   · 我的收藏 /me/favorites
+//   · 我的投稿 /me/submits
+//   · 通知 /me/notifications
 const styles = stylex.create({
   page: {
     minHeight: "100vh",
@@ -27,78 +22,120 @@ const styles = stylex.create({
     maxWidth: "720px",
     margin: "0 auto",
     padding: dimensions.spacing8,
+    paddingBottom: "72px", // 播放条高度预留
   },
   title: {
     fontSize: dimensions.fontSize2xl,
     fontWeight: dimensions.fontWeightBold,
-    marginBottom: dimensions.spacing6,
+    marginBottom: dimensions.spacing1,
   },
-  card: {
-    display: "block",
-    padding: dimensions.spacing4,
+  subtitle: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    margin: "0 0 24px",
+  },
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+    gap: dimensions.spacing4,
+  },
+  entry: {
+    display: "flex",
+    flexDirection: "column",
+    gap: dimensions.spacing2,
+    padding: dimensions.spacing5,
     borderRadius: dimensions.radiusMd,
     backgroundColor: colors.surface,
     border: `1px solid ${colors.ink}`,
-    marginBottom: dimensions.spacing3,
     textDecoration: "none",
     color: "inherit",
+    ":hover": { borderColor: colors.primary },
   },
-  epTitle: {
+  entryTitle: {
+    fontSize: dimensions.fontSizeLg,
     fontWeight: dimensions.fontWeightMedium,
-    marginBottom: dimensions.spacing1,
+    margin: 0,
   },
-  meta: {
+  entryDesc: {
     color: colors.neutral,
     fontSize: dimensions.fontSizeSm,
+    margin: 0,
+    lineHeight: 1.5,
   },
-  empty: {
-    color: colors.neutral,
+  avatar: {
+    width: "40px",
+    height: "40px",
+    borderRadius: "50%",
+    objectFit: "cover",
+    verticalAlign: "middle",
+    marginRight: "8px",
+  },
+  badge: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.brandStrong,
+    color: "#fff",
+    fontSize: "11px",
+    lineHeight: "16px",
+    minWidth: "16px",
     textAlign: "center",
-    padding: dimensions.spacing12,
+    borderRadius: "8px",
+    padding: "0 5px",
   },
 });
 
-// 收藏列表组件：仅在 AuthGate 放行后渲染（挂载时才 fetch）——
-// createAsync 在页面组件顶层执行会在登录判定前发起请求（401 → [] 缓存，放行后不再重取）
-function FavoritesList() {
-  const { t } = useI18n();
-  const favorites = createAsync<FavoriteRow[] | null>(async () => {
-    if (typeof window === "undefined") return null;
-    const res = await fetch("/v1/me/favorites");
-    if (!res.ok) return [];
-    return (await res.json()) as FavoriteRow[];
-  });
-
-  return (
-    <div {...stylex.props(styles.content)}>
-      <div {...stylex.props(styles.title)}>{t("me.title")}</div>
-      <Show
-        when={favorites()?.length}
-        fallback={<div {...stylex.props(styles.empty)}>{t("me.empty")}</div>}
-      >
-        <For each={favorites()}>
-          {(fav) => (
-            <a href={`/episode/${fav.episodeId}`} {...stylex.props(styles.card)}>
-              <div {...stylex.props(styles.epTitle)}>{fav.title || t("common.unnamed")}</div>
-              <div {...stylex.props(styles.meta)}>
-                {fav.publishedAt ? new Date(fav.publishedAt).toLocaleDateString("zh-CN") : ""} ·{" "}
-                {fav.durationSeconds ? `${Math.floor(fav.durationSeconds / 60)} 分钟` : ""}
-              </div>
-            </a>
-          )}
-        </For>
-      </Show>
-    </div>
-  );
-}
-
 export default function MePage() {
   const { t } = useI18n();
+  const [unread, setUnread] = createSignal(0);
+  const [profile, setProfile] = createSignal<{ nickname?: string | null; displayName?: string | null; image?: string | null } | null>(null);
+
+  onMount(() => {
+    void fetch("/v1/me/notifications/unread")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d?.count != null && setUnread(d.count))
+      .catch(() => {});
+    void fetch("/v1/me/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setProfile)
+      .catch(() => {});
+  });
+
+  const entries = () => [
+    { href: `/${profile()?.nickname ?? "me"}`, title: t("me.hostProfile"), desc: t("me.hostProfileDesc", { name: profile()?.nickname ?? "" }), icon: "🏠" },
+    { href: "/settings", title: t("me.settings"), desc: t("me.settingsDesc"), icon: "⚙️" },
+    { href: "/me/favorites", title: t("me.favorites"), desc: t("me.favoritesDesc"), icon: "⭐" },
+    { href: "/me/submits", title: t("me.submissions"), desc: t("me.submissionsDesc"), icon: "📮" },
+    { href: "/me/notifications", title: t("me.notifications"), desc: t("me.notificationsDesc"), icon: "🔔", badge: unread() > 0 ? (unread() > 99 ? "99+" : unread()) : null },
+  ];
+
   return (
     <div {...stylex.props(styles.page)}>
       <Title>{t("me.title")} · dailog</Title>
       <AuthGate redirect="/me">
-        <FavoritesList />
+        <div {...stylex.props(styles.content)}>
+          <div {...stylex.props(styles.title)}>{t("me.title")}</div>
+          <p {...stylex.props(styles.subtitle)}>
+            <Show when={profile()?.image}>
+              <img src={profile()!.image!} alt="" {...stylex.props(styles.avatar)} />
+            </Show>
+            {profile()?.displayName || profile()?.nickname || ""} · @{profile()?.nickname || ""}
+          </p>
+          <div {...stylex.props(styles.grid)}>
+            <For each={entries()}>
+              {(e) => (
+                <A href={e.href} {...stylex.props(styles.entry)}>
+                  <div style={{ "font-size": "22px" }}>{e.icon}</div>
+                  <div {...stylex.props(styles.entryTitle)}>
+                    {e.title}
+                    <Show when={e.badge}>
+                      <span {...stylex.props(styles.badge)} style={{ "margin-left": "6px" }}>{e.badge}</span>
+                    </Show>
+                  </div>
+                  <p {...stylex.props(styles.entryDesc)}>{e.desc}</p>
+                </A>
+              )}
+            </For>
+          </div>
+        </div>
       </AuthGate>
     </div>
   );

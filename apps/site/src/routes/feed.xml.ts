@@ -22,7 +22,7 @@ export async function GET(event: { request: Request }) {
     .map((ep) => {
       const audio = `${env.apiBaseUrl}/v1/public/episodes/${ep.id}/audio`;
       const cover = `${env.apiBaseUrl}/v1/public/episodes/${ep.id}/cover`;
-      const epUrl = `${env.siteBaseUrl}/episode/${ep.id}`;
+      const epUrl = `${env.siteBaseUrl}/episode/${ep.slug}`;
       const pubDate = ep.publishedAt ? new Date(ep.publishedAt).toUTCString() : new Date().toUTCString();
       const duration = ep.durationSeconds ? `\n      <itunes:duration>${ep.durationSeconds}</itunes:duration>` : "";
       // Podcasting 2.0：期号 + 季度（dailog 第 N 期）；enclosure length = 真实字节数
@@ -35,7 +35,7 @@ export async function GET(event: { request: Request }) {
       <guid isPermaLink="false">${ep.id}</guid>
       <pubDate>${pubDate}</pubDate>
       <description>${xmlEscape(ep.description || "")}</description>${duration}${podcastEpisode}${itunesImage}
-      <enclosure url="${audio}" type="audio/mpeg" length="${ep.audioSize ?? 0}"/>
+      <enclosure url="${audio}" type="${ep.audioUrl?.endsWith(".m4a") ? "audio/mp4" : "audio/mpeg"}" length="${ep.audioSize ?? 0}"/>
     </item>`;
     })
     .join("\n");

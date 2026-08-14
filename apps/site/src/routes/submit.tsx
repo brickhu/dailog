@@ -1,10 +1,10 @@
+import { A } from "@solidjs/router";
 import { createSignal, createEffect, onMount, Show } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { Button } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
-import { SiteNav } from "../components/site-nav";
 import { AuthGate } from "../components/auth-gate";
 import Recorder from "../components/recorder";
 
@@ -117,16 +117,17 @@ function isUrlLike(input: string): boolean {
 }
 
 export default function SubmitPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [step, setStep] = createSignal<Step>("input");
   const [url, setUrl] = createSignal("");
   const urlInvalid = () => url().trim().length > 0 && !isUrlLike(url().trim());
   const [existing, setExisting] = createSignal<string | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   // 人设（可选）+ 采样（必填；已有采样自动填充可沿用）
-  const [callName, setCallName] = createSignal("");
-  const [traits, setTraits] = createSignal("");
+  const [callName, setCallName] = createSignal("");   // callNameInEpisode：本次节目称呼（默认 displayName）
   const [hasVoiceSample, setHasVoiceSample] = createSignal(false);
+  const [voiceLang, setVoiceLang] = createSignal("zh"); // 已有采样语种（展示用）
+  const [voiceSampleId, setVoiceSampleId] = createSignal<string | null>(null); // 已有采样 id（投稿记录用）
   const [voiceBlob, setVoiceBlob] = createSignal<Blob | null>(null);
   const [submitting, setSubmitting] = createSignal(false);
 
@@ -146,21 +147,28 @@ export default function SubmitPage() {
       try {
         const profileRes = await fetch("/v1/me/profile");
         if (profileRes.ok) {
-          const profile = (await profileRes.json()) as { persona?: { callName?: string | null; traits?: string | null } | null };
-          if (profile.persona) {
-            if (profile.persona.callName) setCallName(profile.persona.callName);
-            if (profile.persona.traits) setTraits(profile.persona.traits);
-          }
+          const profile = (await profileRes.json()) as { displayName?: string | null };
+          // 称呼默认填充主持人昵称 displayName（callNameInEpisode；脚本生成时按脚本语言改写）
+          if (profile.displayName) setCallName(profile.displayName);
         }
       } catch { /* 静默 */ }
       try {
         const voiceRes = await fetch("/v1/me/voice-sample");
-        if (voiceRes.ok) setHasVoiceSample(true);
+        if (voiceRes.ok) {
+          const vs = (await voiceRes.json()) as { id?: string | null; language?: string } | null;
+          setHasVoiceSample(true);
+          if (vs?.language) setVoiceLang(vs.language);
+          if (vs?.id) setVoiceSampleId(vs.id);
+        }
       } catch { /* 静默 */ }
     })();
   });
 
-  /** 确认投稿：保存人设（可选字段）+ 上传声音采样（必填）→ 提交投稿（URL + 采样） */
+  /** 朗读文案：按界面语言插值称呼（文案语言=采样语言；脚本生成时按脚本语言改写称呼） */
+  const readingScript = () =>
+    t("submit.readingScript", { name: callName().trim() || t("submit.hostFallback") });
+
+  /** 确认投稿：上传声音采样（沿用/重录/换语言）+ 提交投稿（URL + 本次称呼 + 采样） */
   const confirmSubmit = async () => {
     setError(null);
     // 声音采样：已有采样可直接提交（重录则覆盖上传）；两者皆无才拦截
@@ -168,40 +176,32 @@ export default function SubmitPage() {
       setError(t("submit.error.needVoice"));
       return;
     }
-    // 人设信息（称呼/风格）——有填写才保存
-    const persona: Record<string, string> = {};
-    if (callName().trim()) persona.callName = callName().trim().slice(0, 20);
-    if (traits().trim()) persona.traits = traits().trim().slice(0, 100);
-    if (Object.keys(persona).length > 0) {
-      const personaRes = await fetch("/v1/me/persona", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ persona }),
-      });
-      if (!personaRes.ok) {
-        setError(t("submit.error.submitFailed", { error: `persona ${personaRes.status}` }));
-        return;
-      }
-    }
-    // 声音采样上传（有重录才上传；已有采样直接沿用）
+    // 声音采样上传（有重录才上传；已有采样直接沿用）——language 按界面语言（文案语言=采样语言）
+    let sampleId: string | null = voiceSampleId();
     if (voiceBlob()) {
       const form = new FormData();
       form.append("file", voiceBlob()!, "voice.webm");
-      form.append("transcript", t("submit.readingScript"));
-      form.append("language", "zh");
+      form.append("transcript", readingScript());
+      form.append("language", locale() === "en" ? "en" : "zh");
       const voiceRes = await fetch("/v1/me/voice-sample", { method: "POST", body: form });
       if (!voiceRes.ok) {
         setError(t("submit.error.submitFailed", { error: `voice ${voiceRes.status}` }));
         return;
       }
+      const vs = (await voiceRes.json().catch(() => null)) as { sampleId?: string } | null;
+      sampleId = vs?.sampleId ?? null;
     }
-    // 提交投稿（URL + 可选标题）
+    // 提交投稿（URL + 本次节目称呼 callNameInEpisode + 投稿使用的采样）
     setSubmitting(true);
     try {
       const res = await fetch("/v1/submissions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url: url().trim() }),
+        body: JSON.stringify({
+          url: url().trim(),
+          callNameInEpisode: callName().trim().slice(0, 20) || undefined,
+          voiceSampleId: sampleId || undefined,
+        }),
       });
       const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
       if (!res.ok) {
@@ -227,7 +227,6 @@ export default function SubmitPage() {
   return (
     <div {...stylex.props(styles.page)}>
       <Title>{t("submit.title")} · dailog</Title>
-      <SiteNav />
       <AuthGate redirect="/submit">
         <div {...stylex.props(styles.content)}>
         <h1 {...stylex.props(styles.title)}>{t("submit.title")}</h1>
@@ -250,7 +249,7 @@ export default function SubmitPage() {
             <Show when={existing()}>
               <p {...stylex.props(styles.error)}>
                 {t("submit.existing", { status: t(`status.${existing()}` as never) })} ·
-                <a href="/me/submits"> {t("submit.viewSubmissions")}</a>
+                <A href="/me/submits"> {t("submit.viewSubmissions")}</A>
               </p>
             </Show>
             <Show when={error()}>
@@ -260,7 +259,7 @@ export default function SubmitPage() {
               <Button onClick={() => setStep("confirm")} disabled={urlInvalid() || !url().trim()}>
                 {t("submit.import")}
               </Button>
-              <a href="/"><Button appear="ghost">{t("submit.backHome")}</Button></a>
+              <A href="/"><Button appear="ghost">{t("submit.backHome")}</Button></A>
             </div>
           </div>
         </Show>
@@ -277,22 +276,16 @@ export default function SubmitPage() {
               value={callName()}
               onInput={(e) => setCallName(e.currentTarget.value)}
             />
-            <label {...stylex.props(styles.label)}>{t("submit.traits")}</label>
-            <input
-              {...stylex.props(styles.input)}
-              placeholder={t("submit.traitsPlaceholder")}
-              value={traits()}
-              onInput={(e) => setTraits(e.currentTarget.value)}
-            />
             <Show when={hasVoiceSample() && !voiceBlob()}>
               <p {...stylex.props(styles.ok)}>{t("submit.voiceFilled")}</p>
+              <p {...stylex.props(styles.hint)}>{t("submit.voiceLang", { lang: t(`lang.${voiceLang()}` as never) })}</p>
               {/* 自动填充的采样：试听（同源代理——<audio> 跨域不带 cookie 会 401） */}
               <audio controls src="/v1/me/voice-sample/audio" {...stylex.props(styles.audio)} />
               <p {...stylex.props(styles.hint)}>{t("submit.voiceReRecord")}</p>
             </Show>
             <Show when={!hasVoiceSample() || voiceBlob()}>
               <p {...stylex.props(styles.hint)}>{t("submit.voiceHint")}</p>
-              <p {...stylex.props(styles.readingScript)}>{t("submit.readingScript")}</p>
+              <p {...stylex.props(styles.readingScript)}>{readingScript()}</p>
               <Recorder minSeconds={8} maxSeconds={30} onReady={(b) => setVoiceBlob(b)} />
             </Show>
             <Show when={error()}>
@@ -313,8 +306,8 @@ export default function SubmitPage() {
             <p {...stylex.props(styles.success)}>{t("submit.success")}</p>
             <p {...stylex.props(styles.stepDesc)}>{t("submit.successDesc")}</p>
             <div {...stylex.props(styles.actions)}>
-              <a href="/me/submits"><Button>{t("submit.viewSubmissions")}</Button></a>
-              <a href="/"><Button appear="ghost">{t("submit.backHome")}</Button></a>
+              <A href="/me/submits"><Button>{t("submit.viewSubmissions")}</Button></A>
+              <A href="/"><Button appear="ghost">{t("submit.backHome")}</Button></A>
             </div>
           </div>
         </Show>

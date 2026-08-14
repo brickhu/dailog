@@ -1,10 +1,9 @@
-import { createAsync } from "@solidjs/router";
+import { A, createAsync } from "@solidjs/router";
 import { For, Show } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
-import { SiteNav } from "../../components/site-nav";
 import { AuthGate } from "../../components/auth-gate";
 
 // 我的投稿（本质版，2026-08-13）：投稿状态列表（审核中/投稿失败/已发布 + 最新节目状态）
@@ -115,7 +114,7 @@ function SubmissionsList() {
         fallback={
           <div {...stylex.props(styles.empty)}>
             <span>{t("meSubmits.empty")}</span>
-            <a href="/submit" {...stylex.props(styles.submitLink)}>{t("meSubmits.submit")} →</a>
+            <A href="/submit" {...stylex.props(styles.submitLink)}>{t("meSubmits.submit")} →</A>
           </div>
         }
       >
@@ -150,7 +149,6 @@ export default function MeSubmitsPage() {
   return (
     <div {...stylex.props(styles.page)}>
       <Title>{t("meSubmits.title")} · dailog</Title>
-      <SiteNav />
       <AuthGate redirect="/me/submits">
         <SubmissionsList />
       </AuthGate>

@@ -14,7 +14,8 @@ export interface VoiceSampleRow {
 }
 
 export interface VoiceDeps {
-  saveVoiceSample(row: VoiceSampleRow): Promise<void>;
+  /** 保存采样（user×language upsert）；返回 id（投稿时记录 voiceSampleId 用） */
+  saveVoiceSample(row: VoiceSampleRow): Promise<{ id: string }>;
   /** 工作台回读最新样本（onboarding 守卫/设置页）；无记录返回 null */
   getVoiceSample?(userId: string): Promise<VoiceSampleRow | null>;
   storage: AudioStorage;
@@ -31,8 +32,10 @@ export function voiceRoutes(deps: VoiceDeps) {
     if (!row) return c.json({ error: "not_found" }, 404);
     return c.json({
       id: row.id ?? null,
+      language: row.language,
       status: row.status,
       duration: row.duration,
+      transcript: row.transcript,
       createdAt: row.createdAt,
     });
   });
@@ -42,7 +45,7 @@ export function voiceRoutes(deps: VoiceDeps) {
     const userId = c.get("userId") as string;
     const row = await deps.getVoiceSample?.(userId);
     if (!row) return c.json({ error: "not_found" }, 404);
-    const bytes = await deps.storage.get(row.audioUrl);
+    const { data: bytes } = await deps.storage.get(row.audioUrl);
     if (!bytes) return c.json({ error: "not_found" }, 404);
     return new Response(bytes as unknown as BodyInit, {
       headers: {
@@ -60,15 +63,15 @@ export function voiceRoutes(deps: VoiceDeps) {
     // 转录文本（用户朗读的固定文案，前端随上传提交；零样本克隆质量依赖它）
     const transcript = typeof form?.get("transcript") === "string" ? (form.get("transcript") as string).trim() || null : null;
     const bytes = new Uint8Array(await file.arrayBuffer());
-    // 采样语种（form 字段；缺省 zh）——一人多语种各一条
+    // 采样语种（form 字段，前端按界面语言显式传：文案语言=采样语言；缺省 zh）——一人多语种各一条
     const language = typeof form?.get("language") === "string" && /^[a-z]{2,3}$/i.test(form.get("language") as string)
       ? (form.get("language") as string).toLowerCase()
       : "zh";
     // R2 目录规划：voices/{userId}/{language}.webm
     const key = `voices/${userId}/${language}.webm`;
     await deps.storage.put(key, bytes);
-    await deps.saveVoiceSample({ userId, language, audioUrl: key, transcript, duration: 0, status: "ready" });
-    return c.json({ ok: true });
+    const saved = await deps.saveVoiceSample({ userId, language, audioUrl: key, transcript, duration: 0, status: "ready" });
+    return c.json({ ok: true, sampleId: saved.id }); // sampleId：投稿时记录 voiceSampleId 用
   });
   return app;
 }

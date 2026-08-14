@@ -2,29 +2,22 @@ import {
   boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
 } from "drizzle-orm/pg-core";
 
-/** 主持人结构化人设（profiles.persona；编辑本地制作时取用，注入生成规范）。
- *  核心是性格画像（traits，如"风趣幽默、雷厉风行"）——用户指定的风格，生成时遵循；
- *  旧版细碎字段（gender/profession/age/hobbies/extra）并入 traits 自由描述，不再单列。 */
-export interface HostPersona {
-  /** 节目中的称呼 */
-  callName?: string | null;
-  gender?: string | null;
-  profession?: string | null;
-  age?: string | null;
-  /** 性格/风格描述（自由文本；如"风趣幽默，雷厉风行，说话直来直去"）——用户指定，生成时遵循 */
-  traits?: string | null;
-}
-
 // ---------------------------------------------------------------------------
 // better-auth 核心表（官方字段，profiles.id 关联 user.id；M5 迁移）
 // ---------------------------------------------------------------------------
 
 export const authUsers = pgTable("user", {
   id: text("id").primaryKey(),
+  /** 昵称 = 主持人主页标识（@name，注册时应用层强制唯一；展示名另有 displayName 可独立） */
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
+  /** 账号级角色：user（投稿人）/ editor（编辑）/ admin（管理员）——编辑端点仅 editor/admin 可调用 */
+  role: text("role", { enum: ["user", "editor", "admin"] }).notNull().default("user"),
+  /** 预留：套餐档位 / 余额（无业务逻辑，仅结构占位） */
+  plan: text("plan", { enum: ["free", "pro"] }).notNull().default("free"),
+  creditBalance: integer("credit_balance").notNull().default(0),
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
 });
@@ -70,19 +63,24 @@ export const authAccounts = pgTable("account", {
 // 业务表（user_id 关联 better-auth user.id，text 类型；M5 迁移）
 // ---------------------------------------------------------------------------
 
+/** 主持人档案（1:1 关联 user；id 即用户 id）。
+ *  账号级属性（role/plan/credit）在 user 表；此处只留「主持人」信息。
+ *  display_name = 昵称 = 节目称呼配置源；主页标识 = user.name（@name，无独立 username）。
+ *  脚本生成时把 bio/gender/profession/age/nationality 注入主持人画像（有是补充，没有也没关系）。 */
 export const profiles = pgTable("profiles", {
   id: text("id").primaryKey().references(() => authUsers.id, { onDelete: "cascade" }),
-  username: text("username").notNull().unique(),
+  /** 主持人展示名/昵称（节目中的称呼配置源；投稿时填充 callNameInEpisode） */
   displayName: text("display_name").notNull(),
   bio: text("bio"),
-  plan: text("plan", { enum: ["free", "pro"] }).notNull().default("free"),
-  creditBalance: integer("credit_balance").notNull().default(0),
-  /** 角色：user（投稿人）/ editor（编辑）/ admin（管理员）——编辑端点仅 editor/admin 可调用 */
-  role: text("role", { enum: ["user", "editor", "admin"] }).notNull().default("user"),
-  /** 频道开通时间（授权码激活；null = 未开通，不能生成/发布） */
+  gender: text("gender"),
+  profession: text("profession"),
+  age: text("age"),
+  /** 国籍（脚本生成注入主持人画像） */
+  nationality: text("nationality"),
+  /** 社交媒体链接（自由键值对，如 {twitter, github, website}） */
+  socialLinks: jsonb("social_links").$type<Record<string, string>>(),
+  /** 主持人开通时间（null = 未开通，不能生成/发布） */
   channelActivatedAt: timestamp("channel_activated_at", { withTimezone: true }),
-  /** 主持人默认人设（编辑制作时取用） */
-  persona: jsonb("persona").$type<HostPersona>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -90,8 +88,9 @@ export const voiceSamples = pgTable(
   "voice_samples",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    /** 声音归属主持人档案（profiles.id = user.id 恒等） */
     userId: text("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
-    /** 采样语种（zh/en/…）：一人多语种各一条；编辑按脚本语言取用 */
+    /** 采样语种（zh/en/…）：一人多语种各一条；编辑按脚本语言匹配（对应语种 → en → 唯一兜底） */
     language: text("language").notNull().default("zh"),
     audioUrl: text("audio_url").notNull(),
   /** 参考音频转录文本（用户朗读的固定文案；零样本克隆用） */
@@ -103,6 +102,16 @@ export const voiceSamples = pgTable(
   (t) => [uniqueIndex("voice_samples_user_language").on(t.userId, t.language)],
 );
 
+/** 主持人档案快照（投稿时写入 submissions.persona_info；编辑 getDetail 免查库，脚本生成注入画像） */
+export interface PersonaSnapshot {
+  displayName: string;
+  gender: string | null;
+  profession: string | null;
+  age: string | null;
+  bio: string | null;
+  nationality: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // 投稿制（本质版）：submissions（投稿）→ episodes（成品节目）
 // 用户只提交 URL + 声音采样；内容采集/脚本/语音/合成全部由编辑本地 Agent 完成，
@@ -111,14 +120,24 @@ export const voiceSamples = pgTable(
 
 /** 投稿：用户提交的分享链接 + 采样（采样存 voiceSamples，投稿仅关联 userId）。
  *  状态机：submitted（待审核）→ rejected（拒审，附原因）/ published（已上线）。
- *  审核与制作在编辑本地 Agent 完成，此处不承载生成中间状态。 */
+ *  审核与制作在编辑本地 Agent 完成，此处不承载生成中间状态。
+ *  callNameInEpisode：本次节目的主持人自称（投稿确认页默认填 displayName，可改；
+ *  脚本生成时按脚本语言改写：匹配原样/英文通用/小语种转英文）。
+ *  personaInfo：投稿时对主持人档案的快照（displayName/gender/profession/age/bio/nationality），
+ *  编辑 getDetail 直接用快照，免查库；voiceSampleId：投稿时使用的采样（仅记录，TTS 仍按语言匹配）。 */
 export const submissions = pgTable(
   "submissions",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    userId: text("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
     /** 用户提交的对话分享链接（仅做合法性 + 触达性检查，不做内容采集） */
     url: text("url").notNull(),
+    /** 本次节目的主持人自称（≤20 字；脚本生成时按脚本语言改写） */
+    callName: text("call_name"),
+    /** 主持人档案快照（投稿时写入；编辑脚本生成注入画像用） */
+    personaInfo: jsonb("persona_info").$type<PersonaSnapshot>(),
+    /** 投稿时使用的采样（仅记录；TTS 按 脚本语言→en→兜底 重新匹配） */
+    voiceSampleId: uuid("voice_sample_id").references(() => voiceSamples.id, { onDelete: "set null" }),
     title: text("title"),
     status: text("status", { enum: ["submitted", "rejected", "published"] }).notNull().default("submitted"),
     /** 拒审原因（rejected 时必填，投稿人 /me/submits 可见） */
@@ -162,9 +181,10 @@ export const episodes = pgTable("episodes", {
   id: uuid("id").defaultRandom().primaryKey(),
   /** 来源投稿（submission 删除则节目级联删除） */
   submissionId: uuid("submission_id").notNull().references(() => submissions.id, { onDelete: "cascade" }),
-  /** 投稿人（主持人 = 自己的克隆音色） */
-  userId: text("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
-  hostId: text("host_id").references(() => profiles.id),
+  /** 投稿人账户（主持人 = 自己的克隆音色） */
+  userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+  /** 主持人档案（1:1 用户） */
+  profileId: text("profile_id").references(() => profiles.id),
   /** AI 嘉宾（品牌声线宿主，guests 表） */
   guestId: text("guest_id").references(() => guests.id),
   slug: text("slug").notNull().unique(),
@@ -175,6 +195,10 @@ export const episodes = pgTable("episodes", {
   audioUrl: text("audio_url").notNull(),
   audioSize: integer("audio_size"),
   durationSeconds: integer("duration_seconds"),
+  /** 无情绪标签的完整台本（publish 时编辑上传；节目页展示用） */
+  transcript: text("transcript"),
+  /** 原始对话链接（publish 时服务端自动填 submission.url；节目页跳转用） */
+  rawConversationUrl: text("raw_conversation_url"),
   /** 节目语言（编辑提交时判定；site 展示用） */
   language: text("language").notNull().default("zh"),
   /** 标签（编辑提交） */
@@ -188,6 +212,14 @@ export const episodes = pgTable("episodes", {
   isPublic: boolean("is_public").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   publishedAt: timestamp("published_at", { withTimezone: true }),
+});
+
+/** 播放/完播统计（每期一行计数；公开播放器上报，前端 session 级去重防刷） */
+export const episodeStats = pgTable("episode_stats", {
+  episodeId: uuid("episode_id").primaryKey().references(() => episodes.id, { onDelete: "cascade" }),
+  plays: integer("plays").notNull().default(0),
+  completions: integer("completions").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // 消费端互动：user_id 引用 better-auth user（未登录用户不能收藏/点赞）

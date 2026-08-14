@@ -31,7 +31,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       existsByLink: async () => false,
     },
     episodes: {
-      createPublished: async () => ({ id: "ep-1", number: 7 }),
+      createPublished: async () => ({ id: "ep-1", number: 7, slug: "abc12345" }),
       getPublicAudioKey: async () => null,
       getPublicCoverKey: async () => null,
       getById: async () => null,
@@ -42,13 +42,17 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       getVoiceSample: async () => null,
       getVoiceSampleByLanguage: async () => null,
       getVoiceSampleKey: async () => null,
-      saveVoiceSample: async () => {},
+      saveVoiceSample: async () => ({ id: "" }),
       getProfile: async () => null,
       updateUserNickname: async () => {},
-      updatePersona: async () => {},
       updateChannel: async () => ({ ok: true } as const),
-      isUsernameTaken: async () => false,
       syncAdminRoles: async () => 0,
+      recordStat: async () => {},
+      getStats: async () => ({ plays: 0, completions: 0 }),
+      listRecommended: async () => [],
+      listTopHosts: async () => [],
+      getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),
+      getPersonaSnapshot: async () => ({ displayName: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
     },
     submissions: {
       create: async () => ({ id: "sub-1" }),
@@ -91,7 +95,7 @@ function makeApp(deps: Partial<EditorDeps> = {}, role: "user" | "editor" | "admi
   app.route("/", editorRoutes({
     repo: fakeRepo(),
     env: fakeEnv(),
-    storage: { put: async () => {}, get: async () => new Uint8Array([1, 2, 3]) },
+    storage: { put: async () => {}, get: async () => ({ data: new Uint8Array([1, 2, 3]), total: 3 }), delete: async () => {} },
     siteBaseUrl: "https://dailog.fm",
     ...deps,
   }));
@@ -108,9 +112,10 @@ const SUBMITTED_DETAIL = {
   reviewedAt: null,
   createdAt: new Date("2026-08-01T00:00:00Z"),
   userEmail: "submitter@test.local",
-  displayName: "投稿人",
+  personaInfo: { displayName: "投稿人", gender: null, profession: null, age: null, bio: null, nationality: null },
   callName: "小北",
-  voiceSample: { audioUrl: "voices/user-1/zh.webm", transcript: "大家好", language: "zh", status: "ready" },
+  voiceSampleId: null,
+  voiceSamples: [{ audioUrl: "voices/user-1/zh.webm", transcript: "大家好", language: "zh", status: "ready", duration: 5 }],
 };
 
 describe("角色守卫", () => {
@@ -212,7 +217,7 @@ describe("发布（编辑本地制作完成后一次性上传）", () => {
 
   it("发布成功：音频落 R2 + episode 创建（期号）+ 投稿 published + 通知", async () => {
     const storagePut = vi.fn(async () => {});
-    const createPublished = vi.fn(async () => ({ id: "ep-7", number: 7 }));
+    const createPublished = vi.fn(async () => ({ id: "ep-7", number: 7, slug: "abc12345" }));
     const markPublished = vi.fn(async () => {});
     const notifyCreate = vi.fn(async () => {});
     const form = new FormData();
@@ -221,7 +226,7 @@ describe("发布（编辑本地制作完成后一次性上传）", () => {
     form.append("meta", JSON.stringify({ title: "AI 会取代程序员吗", description: "一次深入的对话", tags: ["AI", "职业"], language: "zh", guestId: "claude", durationSeconds: 420 }));
 
     const res = await makeApp({
-      storage: { put: storagePut, get: async () => new Uint8Array() },
+      storage: { put: storagePut, get: async () => ({ data: new Uint8Array(), total: 0 }), delete: async () => {} },
       repo: fakeRepo({
         submissions: {
           ...fakeRepo().submissions,
@@ -241,20 +246,21 @@ describe("发布（编辑本地制作完成后一次性上传）", () => {
     expect(createPublished).toHaveBeenCalledWith(expect.objectContaining({
       submissionId: "sub-1",
       userId: "user-1",
-      hostId: "user-1",
+      profileId: "user-1",
       guestId: "claude",
       title: "AI 会取代程序员吗",
       language: "zh",
       durationSeconds: 420,
       audioSize: 3,
       coverUrl: "covers/sub-1.jpg",
+      rawConversationUrl: "https://claude.ai/share/abc-123",
     }));
     expect(markPublished).toHaveBeenCalledWith("sub-1");
     expect(notifyCreate).toHaveBeenCalledWith(expect.objectContaining({
       userId: "user-1",
       type: "published",
       title: expect.stringContaining("dailog 第 7 期"),
-      link: "/episode/ep-7",
+      link: "/episode/abc12345",
     }));
   });
 

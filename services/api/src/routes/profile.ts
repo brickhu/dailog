@@ -1,9 +1,10 @@
-// 账号/频道管理端点：
-//  GET /api/me/profile    → 账号（email/name/GitHub 状态）+ 频道（username/displayName/bio）档案
-//  PATCH /api/me/profile  { nickname } → 账号昵称（user.name 列）
-//  PATCH /api/me/channel  { username?, displayName?, bio? } → 频道设置（slug 格式校验 + 唯一）
+// 账号/主持人档案管理端点：
+//  GET /v1/me/profile  → 账号（email/nickname/GitHub 状态）+ 主持人档案（displayName/bio/gender/profession/age/nationality/socialLinks）
+//  PATCH /v1/me/profile  { nickname? } → 账号昵称（user.name = @slug；注册时应用层唯一）
+//                      { displayName?, bio?, gender?, profession?, age?, nationality?, socialLinks? } → 主持人档案
 // 账号管理（改密码/GitHub 登录）走 better-auth 官方端点 /api/auth/*（change-password / sign-in/social）。
-// 划分：账号 = user 表（邮箱/密码/昵称），频道 = profiles 表（slug/频道名/简介）——site /account 分区块展示。
+// 划分：账号 = user 表（邮箱/密码/昵称=@slug），主持人档案 = profiles 表（displayName/画像/社交链接）。
+// 频道概念已废弃（无 username slug）；@主页 = user.name。
 
 import { Hono } from "hono";
 import type { Repos } from "../repo";
@@ -11,8 +12,6 @@ import type { Repos } from "../repo";
 export interface ProfileDeps {
   repo: Repos;
 }
-
-const USERNAME_RE = /^[a-z0-9-]{3,30}$/;
 
 export function profileRoutes(deps: ProfileDeps) {
   const app = new Hono<{ Variables: { userId: string } }>();
@@ -24,79 +23,74 @@ export function profileRoutes(deps: ProfileDeps) {
     return c.json(profile);
   });
 
-  /** 账号昵称（≤30 字，去空白）——接口字段 nickname（DB 列 user.name 为 better-auth 标准字段，内部映射） */
+  /** 账号昵称（≤30 字，去空白）——接口字段 nickname（DB 列 user.name = @slug；注册时应用层唯一） */
   app.patch("/v1/me/profile", async (c) => {
     const userId = c.get("userId") as string;
-    const body = (await c.req.json().catch(() => null)) as { nickname?: unknown } | null;
-    const nickname = typeof body?.nickname === "string" ? body.nickname.trim() : "";
-    if (!nickname || nickname.length > 30) return c.json({ error: "invalid_name" }, 400);
-    await deps.repo.episodes.updateUserNickname(userId, nickname);
-    return c.json({ ok: true, nickname });
-  });
-
-  /** 主持人默认人设（设置页维护；生成脚本前的初始值，改后仅本次生效） */
-  app.patch("/v1/me/persona", async (c) => {
-    const userId = c.get("userId") as string;
-    const body = (await c.req.json().catch(() => null)) as {
-      persona?: unknown | null;
-    } | null;
-    if (!body || !("persona" in body)) return c.json({ error: "invalid_input" }, 400);
-    const raw = body.persona;
-    if (raw === null) {
-      await deps.repo.episodes.updatePersona(userId, null);
-      return c.json({ ok: true });
-    }
-    if (typeof raw !== "object" || Array.isArray(raw)) return c.json({ error: "invalid_persona" }, 400);
-    const o = raw as Record<string, unknown>;
-    const str = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
-    const persona = {
-      callName: str(o.callName, 20),
-      gender: str(o.gender, 10),
-      profession: str(o.profession, 30),
-      age: str(o.age, 10),
-      traits: str(o.traits, 100),
-    };
-    await deps.repo.episodes.updatePersona(userId, persona);
-    return c.json({ ok: true, persona });
-  });
-
-  /** slug 占用检测（输入时实时校验；排除自己；保存时后端仍兜底 409） */
-  app.get("/v1/me/channel/check", async (c) => {
-    const userId = c.get("userId") as string;
-    const username = (c.req.query("username") ?? "").trim().toLowerCase();
-    if (!USERNAME_RE.test(username)) return c.json({ error: "invalid_username" }, 400);
-    const taken = await deps.repo.episodes.isUsernameTaken(userId, username);
-    return c.json({ available: !taken });
-  });
-
-  /** 频道设置：slug/频道名/简介（至少一项；slug 小写字母数字连字符） */
-  app.patch("/v1/me/channel", async (c) => {
-    const userId = c.get("userId") as string;
-    const body = (await c.req.json().catch(() => null)) as { username?: unknown; displayName?: unknown; bio?: unknown } | null;
+    const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body) return c.json({ error: "invalid_input" }, 400);
 
-    const row: { username?: string; displayName?: string; bio?: string | null } = {};
-    if (body.username !== undefined) {
-      const username = typeof body.username === "string" ? body.username.trim().toLowerCase() : "";
-      if (!USERNAME_RE.test(username)) {
-        return c.json({ error: "invalid_username", detail: "频道地址仅限 3-30 位小写字母、数字、连字符" }, 400);
-      }
-      row.username = username;
+    // 账号昵称（@slug）
+    if (body.nickname !== undefined) {
+      const nickname = typeof body.nickname === "string" ? body.nickname.trim() : "";
+      if (!nickname || nickname.length > 30) return c.json({ error: "invalid_name" }, 400);
+      await deps.repo.episodes.updateUserNickname(userId, nickname);
     }
-    if (body.displayName !== undefined) {
-      const displayName = typeof body.displayName === "string" ? body.displayName.trim() : "";
-      if (!displayName || displayName.length > 30) return c.json({ error: "invalid_display_name" }, 400);
+
+    // 主持人档案（displayName/bio/gender/profession/age/nationality/socialLinks）
+    const row: {
+      displayName?: string;
+      bio?: string | null;
+      gender?: string | null;
+      profession?: string | null;
+      age?: string | null;
+      nationality?: string | null;
+      socialLinks?: Record<string, string> | null;
+    } = {};
+    // 空/超长 → 400（不静默截断）；短字段截断兜底
+    const check = (v: unknown, max: number): string | null | undefined => {
+      if (v === undefined) return undefined;
+      if (typeof v !== "string") return null;
+      const t = v.trim();
+      return t.length > max ? null : t || null;
+    };
+    const displayName = check(body.displayName, 30);
+    if (displayName !== undefined) {
+      if (!displayName) return c.json({ error: "invalid_display_name" }, 400);
       row.displayName = displayName;
     }
-    if (body.bio !== undefined) {
-      const bio = typeof body.bio === "string" ? body.bio.trim() : null;
-      if (bio !== null && bio.length > 200) return c.json({ error: "invalid_bio" }, 400);
-      row.bio = bio;
+    const bio = check(body.bio, 200);
+    if (bio !== undefined && !bio) return c.json({ error: "invalid_bio" }, 400);
+    if (bio !== undefined) row.bio = bio;
+    const gender = check(body.gender, 10);
+    if (gender !== undefined && !gender) return c.json({ error: "invalid_gender" }, 400);
+    if (gender !== undefined) row.gender = gender;
+    const profession = check(body.profession, 30);
+    if (profession !== undefined && !profession) return c.json({ error: "invalid_profession" }, 400);
+    if (profession !== undefined) row.profession = profession;
+    const age = check(body.age, 10);
+    if (age !== undefined && !age) return c.json({ error: "invalid_age" }, 400);
+    if (age !== undefined) row.age = age;
+    const nationality = check(body.nationality, 20);
+    if (nationality !== undefined && !nationality) return c.json({ error: "invalid_nationality" }, 400);
+    if (nationality !== undefined) row.nationality = nationality;
+    if (body.socialLinks !== undefined) {
+      const raw = body.socialLinks;
+      if (raw !== null && (typeof raw !== "object" || Array.isArray(raw))) {
+        return c.json({ error: "invalid_social_links" }, 400);
+      }
+      const links: Record<string, string> = {};
+      if (raw && typeof raw === "object") {
+        for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+          const val = typeof v === "string" && v.trim() ? v.trim().slice(0, 200) : "";
+          if (val) links[k.slice(0, 20)] = val;
+        }
+      }
+      row.socialLinks = Object.keys(links).length > 0 ? links : null;
     }
-    if (Object.keys(row).length === 0) return c.json({ error: "invalid_input" }, 400);
+    if (Object.keys(row).length > 0) {
+      await deps.repo.episodes.updateChannel(userId, row);
+    }
 
-    const result = await deps.repo.episodes.updateChannel(userId, row);
-    if ("error" in result) return c.json({ error: "username_taken", detail: "该频道地址已被占用" }, 409);
     return c.json({ ok: true });
   });
 

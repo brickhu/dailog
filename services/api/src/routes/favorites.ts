@@ -107,6 +107,7 @@ export function createFavoritesRepo(db: PostgresJsDatabase<typeof schema>): Favo
       return db
         .select({
           episodeId: schema.episodes.id,
+          slug: schema.episodes.slug,
           title: schema.episodes.title,
           audioUrl: schema.episodes.audioUrl,
           durationSeconds: schema.episodes.durationSeconds,

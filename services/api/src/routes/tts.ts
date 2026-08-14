@@ -16,10 +16,11 @@ import { tmpdir } from "node:os";
 import { requireRole, type AuthEnv } from "../middleware/auth";
 import type { Repos } from "../repo";
 import type { TtsClient } from "../tts/client";
+import type { AudioStorage } from "../storage";
 
 export interface TtsDeps {
   repo: Repos;
-  storage: { get(key: string): Promise<Uint8Array> };
+  storage: AudioStorage;
   /** @ffmpeg-installer 二进制路径（webm/mp3 → wav，Fish 参考音频要求 wav） */
   ffmpegPath: string;
   /** Fish 客户端（FISH_API_KEY 未配置 → null，端点 503） */
@@ -94,12 +95,15 @@ export function ttsRoutes(deps: TtsDeps) {
     const detail = await deps.repo.submissions.getDetail(submissionId);
     if (!detail) return c.json({ error: "not_found" }, 404);
 
-    // host 参考（投稿人采样：服务端取，无需编辑上传）
-    const hostSample = await deps.repo.episodes.getVoiceSampleByLanguage(detail.userId, language);
+    // host 参考（投稿人采样）：按脚本语言匹配 → 英文采样兜底 → 最近一条采样兜底
+    // （架构支持多语种；无对应语种时降级，保证能出声音）
+    const samples = detail.voiceSamples; // getDetail 已过滤 ready、按最近排序
+    const byLang = (lang: string) => samples.find((s) => s.language === lang) ?? null;
+    const hostSample = byLang(language) ?? (language !== "en" ? byLang("en") : null) ?? samples[0] ?? null;
     if (!hostSample) {
-      return c.json({ error: "no_voice_sample", detail: `投稿人无 ${language} 声音采样` }, 422);
+      return c.json({ error: "no_voice_sample", detail: `投稿人无声音采样` }, 422);
     }
-    const hostBytes = await deps.storage.get(hostSample.audioUrl).catch(() => null);
+    const hostBytes = await deps.storage.get(hostSample.audioUrl).then((r) => r.data).catch(() => null);
     if (!hostBytes) return c.json({ error: "no_voice_sample", detail: "采样音频读取失败" }, 422);
 
     // guest 参考（声线服务端配置：同语种优先 → 任意语种兜底）
@@ -118,7 +122,7 @@ export function ttsRoutes(deps: TtsDeps) {
     try {
       hostWav = await toWav(deps.ffmpegPath, hostBytes);
       if (guestSample) {
-        const guestBytes = await deps.storage.get(guestSample.audioKey).catch(() => null);
+        const guestBytes = await deps.storage.get(guestSample.audioKey).then((r) => r.data).catch(() => null);
         if (!guestBytes) return c.json({ error: "no_guest_voice", detail: "嘉宾声线音频读取失败" }, 422);
         guestWav = await toWav(deps.ffmpegPath, guestBytes);
       }
