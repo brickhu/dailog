@@ -2,6 +2,7 @@ import { createSignal, Show, For, onMount } from "solid-js";
 import { A, useNavigate } from "@solidjs/router";
 import { usePlayback, type QueueEpisode } from "../lib/playback";
 import { env, episodeCoverUrl } from "../lib/env";
+import { getEpisodeCached } from "../lib/episode-cache";
 import { Faq } from "../components/faq";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
@@ -483,7 +484,12 @@ export default function HomePage() {
                 <div {...stylex.props(styles.pagePane)}>
                   <For each={pageItems(i)}>
                     {(ep) => (
-                      <div {...stylex.props(styles.card)} onClick={() => navigate(`/episode/${ep.slug}`)}>
+                      // hover 预取详情数据（点击进详情页即开；移动端无 hover → 走全局 spinner 过渡）
+                      <div
+                        {...stylex.props(styles.card)}
+                        onClick={() => navigate(`/episode/${ep.slug}`)}
+                        onPointerEnter={() => void getEpisodeCached(ep.slug)}
+                      >
                         <Show when={episodeCoverUrl(ep.id, ep.coverUrl)} fallback={<div {...stylex.props(styles.coverFallback)}>🎙</div>}>
                           <img src={episodeCoverUrl(ep.id, ep.coverUrl)!} alt={ep.title || ""} {...stylex.props(styles.cover)} />
                         </Show>
@@ -557,14 +563,14 @@ export default function HomePage() {
       <Show when={stats()}>
         <div {...stylex.props(styles.statCards)}>
           <A href="/hosts" {...stylex.props(styles.statCard)}>
-            <div {...stylex.props(styles.statTitle)}>{t("home.statHosts", { count: stats()!.hostCount })}</div>
+            <div {...stylex.props(styles.statTitle)}>{t("home.statHosts", { count: stats()!.hostCount, plural: stats()!.hostCount === 1 ? "" : "s" })}</div>
             <Show when={stats()!.topHostAvatar} fallback={<div {...stylex.props(styles.statLogoFallback)}>{stats()!.topHost?.slice(0, 1) || "?"}</div>}>
               <img src={stats()!.topHostAvatar!} alt="" {...stylex.props(styles.statLogo)} />
             </Show>
             <div {...stylex.props(styles.statText)}>{stats()!.topHost || ""}</div>
           </A>
           <A href="/guests" {...stylex.props(styles.statCard)}>
-            <div {...stylex.props(styles.statTitle)}>{t("home.statGuests", { count: stats()!.guestCount })}</div>
+            <div {...stylex.props(styles.statTitle)}>{t("home.statGuests", { count: stats()!.guestCount, plural2: stats()!.guestCount === 1 ? "" : "s" })}</div>
             <div {...stylex.props(styles.statLogos)}>
               <For each={guestLogos()}>
                 {(g) => (
@@ -577,7 +583,7 @@ export default function HomePage() {
             <div {...stylex.props(styles.statText)}>{t("home.statGuestsSub")}</div>
           </A>
           <A href="/discover" {...stylex.props(styles.statCard)}>
-            <div {...stylex.props(styles.statTitle)}>{t("home.statEpisodes", { count: stats()!.episodeCount })}</div>
+            <div {...stylex.props(styles.statTitle)}>{t("home.statEpisodes", { count: stats()!.episodeCount, plural3: stats()!.episodeCount === 1 ? "" : "s" })}</div>
             <div {...stylex.props(styles.statTags)}>
               <For each={stats()!.topTags}>
                 {(tag) => <span {...stylex.props(styles.statTag)}>{tag}</span>}
