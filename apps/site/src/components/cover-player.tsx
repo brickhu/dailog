@@ -1,6 +1,7 @@
 // 封面播放卡（极简）：封面图 + 居中的播放/暂停按钮。
 // 进度/标题/切换由全局播放条（PlayerBar）承载——封面只保留最核心的播放控制。
-import { Show } from "solid-js";
+// 封面加载：R2 首请求冷启动慢（API 已预热，仍可能失败）——加载中显示 🎙 占位，失败兜底。
+import { createSignal, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { episodeCoverUrl } from "../lib/env";
@@ -23,6 +24,17 @@ const styles = stylex.create({
     width: "100%",
     height: "100%",
     objectFit: "cover",
+    pointerEvents: "none",
+  },
+  placeholder: {
+    position: "absolute",
+    inset: "0",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceStrong,
+    fontSize: "56px",
+    color: colors.neutral,
     pointerEvents: "none",
   },
   shade: {
@@ -61,10 +73,22 @@ export function CoverPlayer(props: {
   playing: boolean;
   onToggle: () => void;
 }) {
+  const [state, setState] = createSignal<"loading" | "loaded" | "error">("loading");
+  const src = () => episodeCoverUrl(props.episode.id, props.episode.coverUrl);
   return (
     <div {...stylex.props(styles.wrap)}>
-      <Show when={episodeCoverUrl(props.episode.id, props.episode.coverUrl)}>
-        <img src={episodeCoverUrl(props.episode.id, props.episode.coverUrl)!} alt={props.episode.title || ""} {...stylex.props(styles.cover)} />
+      <Show when={src()} fallback={<div {...stylex.props(styles.placeholder)}>🎙</div>}>
+        <Show when={state() !== "loaded"}>
+          <div {...stylex.props(styles.placeholder)}>🎙</div>
+        </Show>
+        <img
+          src={src()!}
+          alt={props.episode.title || ""}
+          onLoad={() => setState("loaded")}
+          onError={() => setState("error")}
+          style={state() === "loaded" ? undefined : { display: "none" }}
+          {...stylex.props(styles.cover)}
+        />
       </Show>
       <div {...stylex.props(styles.shade)} />
       <div {...stylex.props(styles.btnWrap)}>
