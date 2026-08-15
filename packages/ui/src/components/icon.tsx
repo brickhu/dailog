@@ -1,54 +1,38 @@
-// 图标（iconify web component 封装）：
-// @iconify-icon/solid 3.0.3 的 Icon 组件把属性同时用 attr: 前缀与 {...props} 展开
-// → SSR 输出重复属性（icon=... width=... icon=...）→ Hydration Mismatch。
-// 这里直接用原生 <iconify-icon> 标签（属性单次渲染），注册由 iconify-icon 副作用完成。
-import "iconify-icon";
-import type { JSX } from "solid-js";
-
-declare module "solid-js" {
-  namespace JSX {
-    interface IntrinsicElements {
-      "iconify-icon": {
-        icon?: string;
-        width?: string | number;
-        height?: string | number;
-        mode?: string;
-        inline?: boolean;
-        rotate?: number | string;
-        flip?: string;
-        class?: string;
-        style?: JSX.CSSProperties;
-        // attr: 命名空间属性（Solid 对自定义元素的属性设置语法）
-        [key: `attr:${string}`]: unknown;
-      };
-    }
-  }
-}
+// 图标（内联 SVG，按需注入）：
+// - 无 web component（iconify 官方确认 Solid 对 web component 支持弱 + hydration 干扰）
+// - 无图标集打包：@iconify/utils 的 loadIcon 运行时从 iconify API 按需拉取单个图标
+// - SSR 渲染空占位（客户端 onMount 后加载注入）——SSR/客户端首帧一致，无 hydration 风险
+import { loadIcon } from "@iconify/utils";
+import { createSignal, onMount, type JSX } from "solid-js";
 
 export interface IconProps {
+  /** iconify 图标名（如 "mdi:alert"、"mdi-light:alert"） */
   icon: string;
   width?: string | number;
   height?: string | number;
-  mode?: "style" | "bg" | "mask";
-  inline?: boolean;
-  rotate?: number | string;
-  flip?: "horizontal" | "vertical" | "both";
   class?: string;
   style?: JSX.CSSProperties;
 }
 
 export function Icon(props: IconProps) {
+  const [svg, setSvg] = createSignal("");
+  onMount(async () => {
+    const idx = props.icon.indexOf(":");
+    if (idx <= 0) return;
+    const collection = props.icon.slice(0, idx);
+    const name = props.icon.slice(idx + 1);
+    setSvg((await loadIcon(collection, name).catch(() => undefined)) ?? "");
+  });
   return (
-    <iconify-icon
-      attr:icon={props.icon}
-      attr:width={props.width}
-      attr:height={props.height}
-      attr:mode={props.mode}
-      attr:inline={props.inline}
-      attr:rotate={props.rotate}
-      attr:flip={props.flip}
+    <span
+      innerHTML={svg()}
+      style={{
+        display: "inline-block",
+        "line-height": 0,
+        "font-size": props.width != null ? `${props.width}px` : undefined,
+        ...props.style,
+      }}
       class={props.class}
-      style={props.style}
     />
   );
 }

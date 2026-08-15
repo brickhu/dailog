@@ -12,10 +12,9 @@
   },
   "dependencies": {
     "@dailogues/i18n": "workspace:^",
-    "@iconify-icon/solid": "^3.0.3",
+    "@iconify/utils": "^3.1.4",
     "@stylexjs/stylex": "^0.19.0",
     "hash-avatar": "^0.0.2",
-    "iconify-icon": "^3.0.2",
     "solid-js": "^1.9.14"
   },
   "devDependencies": {
