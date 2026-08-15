@@ -56,7 +56,11 @@ interface InteractionsResp {
   favorites?: number;
 }
 
-export function InteractButtons(props: { episodeId: string }) {
+export function InteractButtons(props: {
+  episodeId: string;
+  /** 父级已请求的公开计数（如详情页统计行）；缺省时组件自行请求 */
+  counts?: { likes?: number; favorites?: number } | null;
+}) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [fav, setFav] = createSignal(false);
@@ -65,11 +69,12 @@ export function InteractButtons(props: { episodeId: string }) {
   const [likeCount, setLikeCount] = createSignal(0);
   const [busy, setBusy] = createSignal(false);
 
-  // createResource：公开计数 + 互动状态 —— 内置 loading/error 状态，组件级独立并行加载。
-  // 计数到达后填充（toggle 后以服务端返回的最新计数为准，resource 不重跑不覆盖）。
+  // 公开计数：父级已提供（详情页统计行同端点）则直接复用，避免重复请求；
+  // 否则组件自行请求。计数到达后填充（toggle 后以服务端返回的最新计数为准）。
   const [stats] = createResource(
     () => props.episodeId,
     async (episodeId) => {
+      if (props.counts) return props.counts;
       const r = await fetch(`${apiBaseForFetch}/v1/public/episodes/${episodeId}/stats`);
       return r.ok ? ((await r.json()) as { likes?: number; favorites?: number }) : null;
     },

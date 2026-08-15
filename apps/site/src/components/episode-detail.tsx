@@ -102,7 +102,7 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
     () => ep().id,
     async (id) => {
       const r = await fetch(`${apiBaseForFetch}/v1/public/episodes/${id}/stats`);
-      return r.ok ? ((await r.json()) as { plays: number; completions: number }) : null;
+      return r.ok ? ((await r.json()) as { plays: number; completions: number; likes?: number; favorites?: number }) : null;
     },
   );
 
@@ -123,7 +123,8 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
           </p>
         </Show>
       </Show>
-      <InteractButtons episodeId={ep().id} />
+      {/* 统计行已请求同一 stats 端点：like/fav 计数直接复用，避免重复请求 */}
+      <InteractButtons episodeId={ep().id} counts={stats()} />
       <ShareButtons episode={ep()} />
       <Show when={ep().description} fallback={<p {...stylex.props(styles.noDesc)}>{t("episode.noDescription")}</p>}>
         <p {...stylex.props(styles.desc)}>{ep().description}</p>
