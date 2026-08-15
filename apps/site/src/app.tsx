@@ -1,11 +1,12 @@
-import { Router, useIsRouting, useLocation } from "@solidjs/router";
+import { Router, RouterContext, useIsRouting, useLocation } from "@solidjs/router";
 import { FileRoutes } from "@solidjs/start/router";
-import { createEffect, For, Show, Suspense, type JSX } from "solid-js";
+import { createEffect, Show, Suspense, useContext, type JSX } from "solid-js";
 import { MetaProvider } from "@solidjs/meta";
 import { getRequestEvent } from "solid-js/web";
 import * as stylex from "@stylexjs/stylex";
-import { colors, dimensions } from "@dailogues/ui/theme.stylex";
+import { colors } from "@dailogues/ui/theme.stylex";
 import { I18nProvider, detectLocale } from "@dailogues/i18n";
+import { CardGridSkeleton, DetailSkeleton, ListSkeleton } from "./components/route-skeletons";
 import { PlaybackProvider } from "./lib/playback";
 import { PlayerBar } from "./components/player-bar";
 import { SiteNav } from "./components/site-nav";
@@ -15,86 +16,27 @@ import "./app.css";
 // 路由切换过渡：点击后立即"进入"目标页面 —— 内容区渲染全局骨架屏（结构化 shimmer），
 // chunk/数据就绪后真实页面接管（骨架屏 → 内容，局部懒加载填充），不在原页面停留。
 // 导航栏/播放条在过渡容器外，不中断。
-const routeSkeleton = stylex.create({
-  wrap: {
-    maxWidth: "1080px",
-    margin: "0 auto",
-    padding: `${dimensions.spacing8}`,
-    // 页面组件被替换期间必须自带背景：否则透出 app.css 的 body 白色（全站背景由
-    // 页面容器提供，骨架阶段没有页面容器）→ 骨架屏与全站背景色不一致。
-    backgroundColor: colors.background,
-    minHeight: "60vh", // 骨架高度与常见页面接近，避免内容高度骤变引起滚动跳动
-    display: "flex",
-    flexDirection: "column",
-    gap: dimensions.spacing4,
-    "@media (max-width: 640px)": {
-      padding: dimensions.spacing4,
-      gap: dimensions.spacing3,
-    },
-  },
-  block: {
-    backgroundColor: colors.surface,
-    animationName: stylex.keyframes({
-      from: { opacity: 0.55 },
-      to: { opacity: 1 },
-    }),
-    animationDuration: "0.9s",
-    animationTimingFunction: "ease-in-out",
-    animationIterationCount: "infinite",
-    animationDirection: "alternate",
-  },
-  title: {
-    height: "32px",
-    width: "55%",
-    borderRadius: dimensions.radiusSm,
-  },
-  line: {
-    height: "16px",
-    width: "90%",
-    borderRadius: dimensions.radiusSm,
-  },
-  lineShort: {
-    width: "65%",
-  },
-  cards: {
-    display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-    gap: dimensions.spacing5,
-    marginTop: dimensions.spacing4,
-    "@media (max-width: 640px)": {
-      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-      gap: dimensions.spacing4,
-    },
-  },
-  card: {
-    aspectRatio: "3 / 4",
-    borderRadius: dimensions.radiusMd,
-  },
-});
-
-function RouteSkeleton() {
-  return (
-    <div {...stylex.props(routeSkeleton.wrap)} role="status" aria-label="loading">
-      <div {...stylex.props(routeSkeleton.block, routeSkeleton.title)} />
-      <div {...stylex.props(routeSkeleton.block, routeSkeleton.line)} />
-      <div {...stylex.props(routeSkeleton.block, routeSkeleton.line, routeSkeleton.lineShort)} />
-      <div {...stylex.props(routeSkeleton.cards)}>
-        <For each={[0, 1, 2, 3]}>
-          {() => <div {...stylex.props(routeSkeleton.block, routeSkeleton.card)} />}
-        </For>
-      </div>
-    </div>
-  );
+// 路由出口：@solidjs/router 的导航是 transition（延迟提交）——chunk/数据加载完成前旧内容保持。
+// isRouting=true 期间立即渲染**目标页面排版对应的骨架屏**（pendingTarget 取目标路径），
+// 不在原页面停留；提交后真实页面接管。
+// 路由出口：@solidjs/router 的导航是 transition（延迟提交）——chunk/数据加载完成前旧内容保持。
+// isRouting=true 期间立即渲染**目标页面排版对应的骨架屏**（pendingTarget 取目标路径，
+// 复用页面自身使用的骨架组件，与页面内 Suspense fallback 视觉一致）。
+function PageSkeleton(props: { path: string }) {
+  if (props.path.startsWith("/episode/")) return <DetailSkeleton />;
+  if (["/discover", "/hosts", "/guests"].some((p) => props.path === p || props.path.startsWith(`${p}/`))) {
+    return <ListSkeleton />;
+  }
+  return <CardGridSkeleton />;
 }
 
-// 路由出口：@solidjs/router 的导航是 transition（延迟提交）——URL 已变但 chunk/数据
-// 加载完成前旧内容保持。isRouting=true 期间立即渲染目标页面骨架屏（不在原页面停留），
-// 提交后真实页面接管；createAsync 若仍挂起则由 Suspense fallback 继续显示骨架。
 function RouterOutlet(props: { children: JSX.Element }) {
   const isRouting = useIsRouting();
+  const router = useContext(RouterContext);
+  const targetPath = () => (isRouting() && router?.pendingTarget ? router.pendingTarget.value : "");
   return (
-    <Show when={isRouting()} fallback={<Suspense fallback={<RouteSkeleton />}>{props.children}</Suspense>}>
-      <RouteSkeleton />
+    <Show when={isRouting()} fallback={<Suspense fallback={<CardGridSkeleton />}>{props.children}</Suspense>}>
+      <PageSkeleton path={targetPath()} />
     </Show>
   );
 }

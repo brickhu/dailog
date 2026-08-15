@@ -1,10 +1,12 @@
-import { Show, onMount } from "solid-js";
-import { cache, createAsync, useParams } from "@solidjs/router";
+import { Show, Suspense, onMount } from "solid-js";
+import { createAsync, useParams } from "@solidjs/router";
 import { Meta, Title } from "@solidjs/meta";
 import { CoverPlayer } from "../../components/cover-player";
+import { DetailSkeleton } from "../../components/route-skeletons";
 import { EpisodeDetail } from "../../components/episode-detail";
 import { usePlayback, type QueueEpisode } from "../../lib/playback";
-import { getEpisode, getSlugById, type EpisodeSummary } from "../../lib/db";
+import { getEpisodeCached } from "../../lib/episode-cache";
+import type { EpisodeSummary } from "../../lib/db";
 import { env, episodeCoverUrl } from "../../lib/env";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
@@ -57,22 +59,8 @@ const styles = stylex.create({
   },
 });
 
-// cache()：SSR 渲染前预取（head 先于流式 body flush——OG 标签必须此时已有数据，
-// 社交爬虫不执行 JS，只读 SSR HTML）
-const getEpisodeCached = cache(async (slug: string) => {
-  const bySlug = await getEpisode(slug);
-  if (bySlug) return bySlug;
-  // 兼容旧 /episode/<uuid>：按 id 查 slug，命中则跳转到新路径（客户端）
-  if (typeof window !== "undefined") {
-    const realSlug = await getSlugById(slug);
-    if (realSlug) {
-      window.location.replace(`/episode/${realSlug}`);
-      return null;
-    }
-  }
-  return null;
-}, "episode-detail");
-
+// cache() 在 lib/episode-cache.ts（列表页 hover 预取共用同一缓存）：
+// SSR 渲染前预取（head 先于流式 body flush——OG 标签必须此时已有数据，社交爬虫只读 SSR HTML）
 // route.preload：SSR 渲染前预取节目数据（cache 命中 → createAsync 首帧即有值，head 的 OG 标签完整）
 export const route = {
   preload: ({ params }: { params: { slug: string } }) => {
@@ -146,6 +134,8 @@ export default function EpisodeDetailPage() {
       <Show when={ep() && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
         <Meta property="og:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
       </Show>
+      {/* 数据挂起（客户端导航/刷新）→ 详情页骨架；数据为空 → 未找到 */}
+      <Suspense fallback={<DetailSkeleton />}>
       <Show
         when={ep()}
         fallback={<div {...stylex.props(styles.notFound)}>{t("episode.notFound")}</div>}
@@ -163,6 +153,7 @@ export default function EpisodeDetailPage() {
           </div>
         </div>
       </Show>
+      </Suspense>
     </div>
   );
 }
