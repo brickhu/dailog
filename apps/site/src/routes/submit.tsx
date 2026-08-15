@@ -7,7 +7,7 @@ import { Button } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../components/auth-gate";
 import Recorder from "../components/recorder";
-import { episodeCoverUrl } from "../lib/env";
+import { EpisodeCover } from "../components/episode-cover";
 
 // 投稿流程（本质版，2026-08-13）：
 //   input   输入态：分享链接（前端基本 http/https 校验）→ [继续]
@@ -113,18 +113,6 @@ const styles = stylex.create({
     textDecoration: "none",
     color: colors.foreground,
     ":hover": { borderColor: colors.primary },
-  },
-  epThumb: {
-    width: "48px",
-    height: "48px",
-    borderRadius: dimensions.radiusSm,
-    objectFit: "cover",
-    flexShrink: 0,
-    backgroundColor: colors.surfaceStrong,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "20px",
   },
   epTitle: {
     fontWeight: dimensions.fontWeightMedium,
@@ -330,16 +318,9 @@ export default function SubmitPage() {
               {/* 已生成节目横条：点击进详情 */}
               <Show when={existingEpisode()}>
                 <A href={`/episode/${existingEpisode()!.slug}`} {...stylex.props(styles.epBar)}>
-                  <Show
-                    when={episodeCoverUrl(existingEpisode()!.id, existingEpisode()!.coverUrl)}
-                    fallback={<div {...stylex.props(styles.epThumb)}>🎙</div>}
-                  >
-                    <img
-                      src={episodeCoverUrl(existingEpisode()!.id, existingEpisode()!.coverUrl)!}
-                      alt=""
-                      {...stylex.props(styles.epThumb)}
-                    />
-                  </Show>
+                  <div style={{ width: "48px", height: "48px", "flex-shrink": "0" }}>
+                    <EpisodeCover id={existingEpisode()!.id} coverUrl={existingEpisode()!.coverUrl} style={{ width: "48px", height: "48px" }} />
+                  </div>
                   <div {...stylex.props(styles.epText)}>
                     <p {...stylex.props(styles.epTitle)}>{existingEpisode()!.title || t("common.unnamed")}</p>
                     <p {...stylex.props(styles.epMeta)}>

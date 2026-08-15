@@ -32,6 +32,10 @@ const storage = createStorage({
   },
 });
 
+// 预热 storage（R2 连接/代理握手）：首个封面请求冷启动 4s+（首页 8 张封面并发会更久），
+// 启动时异步探一次，连接池就绪后用户首请求毫秒级返回。
+void storage.get("covers/.warmup").catch(() => {});
+
 // 部署自动预留管理员：ADMIN_EMAILS（逗号分隔邮箱）列出的账号启动时提升为 admin（幂等，静默）
 void repo.episodes.syncAdminRoles?.(
   env.ADMIN_EMAILS.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
