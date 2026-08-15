@@ -164,16 +164,17 @@ vinxi 0.5.11 对每个 router 的 vite server 用 `getRandomPort()` 分配 **HMR
 
 ### 排查结论（2026-08 多轮二分定位）
 - **与图标实现无关**：web component 版（iconify-icon）、空 span 版、内联 SVG 版均复现
-  同一位置的 key 错位（SSR 渲染树比客户端少 1 个节点，key 012 缺失）。
-- **根因区域**：banner 关闭按钮（`tooltip` + `createUniqueId` + `aria-describedby` 组合）
-  附近 —— Solid 1.9 hydration 对该组合的节点匹配错位。所有相关条件均为 props 驱动
-  （代码审查无 SSR/客户端分支差异），属框架层兼容问题。
-- **影响范围**：`/example` 是 **dev-only** 页面（`import.meta.env.DEV`，生产构建不渲染，
-  `import.meta.env.DEV` 为 false 时整段不输出）——**生产无此问题**。
-  站点正常页面（首页/详情/列表等）不使用 banner + Button tooltip 组合，不受影响。
+  同一位置的 key 错位（SSR 渲染树比客户端少 1 个节点）。
+- **排除项**（均已验证非根因）：web component、span style 属性、banner 组件、
+  `createUniqueId`（tooltipId/contentId 固定后仍复现）、Button tooltip/status span、
+  图标组件本身（空 span 也复现）。错位源位于 example 页的某个组件组合
+  （Button 组区域嫌疑最大），属 Solid 1.9 hydration 的框架层兼容问题。
+- **影响范围**：`/example` 是 **dev-only** 页面（`import.meta.env.DEV`，生产构建不渲染）——
+  **生产无此问题**。站点正常页面（首页/详情/列表等）不使用 Icon 组件（nav 为内联 SVG），
+  完全不受影响。
 - **副作用**：example 页 hydration 中断 → 该页 onMount 不执行 → 图标不显示
-  （站点其他页面图标正常）。
+  （站点无 Icon 使用场景，无实际影响）。
 
 ### 处理建议
-- 接受现状（dev-only 展示页），或深挖 Button tooltip 区域（`createUniqueId`/aria 关联）。
-- 若 example 页报错干扰开发：可临时从 examples.tsx 移除 Banner 展示（移除后无 mismatch）。
+- 接受现状（dev-only 展示页），或后续深挖 example 页组件组合（Button 组区域）。
+- 注意：**注释实验不可靠**（多次修改后 HMR 状态会污染结果，需每次重启容器验证）。
