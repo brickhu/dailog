@@ -204,3 +204,36 @@ Icon 组件用 `loadIcon("mdi", "chevron-down")` 后，FAQ/CTA 的图标全部�
 - 不带尺寸参数时 SVG 以 `width="1em" height="1em"` 响应，继承外层 font-size；
   path 为 `fill="currentColor"`，颜色继承外层 color（Icon 的 style.color 可着色）。
 - 保留 `setTimeout(0)` 延迟注入（hydration 安全，见 §7）。
+
+## 9. 浏览器端直连 API 被 CORS 拦截 → 客户端导航后数据永远失败（骨架/白屏）
+
+### 现象
+点击链接跳转 hosts/guests 等页面后，骨架屏/空白**永久显示**，数据不出现；
+首页统计、详情页计数同理。控制台：`Access to fetch at 'http://localhost:8787/...'
+blocked by CORS policy: No 'Access-Control-Allow-Origin' header`。
+
+### 根因（两层）
+1. **CORS 白名单**：API 的 `APP_ORIGINS`（docker-compose）只含
+   `https://dailog.orb.local` 等，**不含 `http://localhost:3000`** —— localhost 直连被拦截。
+2. **fetch 基址**：`env.apiBaseForFetch` 在浏览器端返回
+   `apiBaseUrlPublic ?? apiBaseUrl` = `http://localhost:8787`（dev）→ 跨域直连。
+   SSR 端（node fetch 无 CORS）正常，所以首屏/直开没问题，只有**客户端导航**失败。
+   对比 discover：数据走 lib/db（server-only + `cache()` 序列化，客户端导航 cache 命中）
+   → 无浏览器 fetch → 无此问题。
+
+### 修复（提交 60c4aa16）
+- **浏览器端一律走同源代理**：`apiBaseForFetch` 浏览器端返回空串 →
+  `${base}/v1/public/hosts` 变成同源相对路径 → 新增 site 代理路由
+  `src/routes/v1/public/*`（hosts/guests/stats/episodes/recommended/episodes/[id]/stats）
+  用 `proxyApi()` 转发 API（服务端 node fetch，无 CORS）。
+- **CORS 白名单补 `http://localhost:3000`**（dev 直连双保险）。
+- hosts/guests 数据区包**页面级 `<Suspense fallback={<ListSkeleton/>}>`**：
+  资源挂起显示页面排版骨架（外层 RouterOutlet 的 CardGridSkeleton 只作兜底）。
+
+### 注意事项
+- 新增 site 端代理后，**所有**浏览器端 `/v1/*` 请求都走同源（与既有
+  interactions/submissions 代理一致）；SSR 端仍直连 API（保留 `apiBaseForFetch`）。
+- 页面数据加载统一模式：**createAsync + cache()**（SSR 序列化 + 客户端导航缓存命中，
+  体验最佳，discover 即此模式）；或 **createResource + 页面级 Suspense 骨架**。
+- 骨架屏样式依赖 stylex 客户端注入，页面骨架组件应放在入口可及模块（如
+  route-skeletons.tsx），避免懒加载 chunk 首用无样式。
