@@ -180,3 +180,27 @@ vinxi 0.5.11 对每个 router 的 vite server 用 `getRandomPort()` 分配 **HMR
 - 浏览器侧残余 mismatch 若复现，优先怀疑**浏览器缓存**（换新 tab + 无痕窗口验证），
   不要再用"浏览器目测"做二分判断；以 curl SSR + typecheck/build 为准。
 - 图标在 example 页的显示依赖客户端注入（onMount），hydration 正常时注入即可显示。
+
+## 8. @iconify/utils 的 loadIcon 不访问网络 —— 图标按需注入的正确姿势
+
+### 现象
+Icon 组件用 `loadIcon("mdi", "chevron-down")` 后，FAQ/CTA 的图标全部不显示。
+
+### 根因
+`@iconify/utils` 的 `loadIcon`（`lib/loader/loader.js`）**只处理两件事**：
+1. `options.customCollections`（自定义图标数据）
+2. `loadNodeIcon` 变体（`node-loader.js`）会从本地文件系统找 `@iconify-json/*` 包
+
+**两者都不访问网络**。无 customCollections、无本地图标集时 `loadIcon` 恒返回
+`undefined`（Node 实测确认），注入结果为 `""` → 图标空占位。它取名"loader"但实际
+是"从本地图标数据解析"器，不是"网络按需加载"器。
+
+### 修复（`packages/ui/src/components/icon.tsx`）
+按需注入直接请求 iconify API 的 SVG 端点：
+`https://api.iconify.design/{collection}/{name}.svg`（可选 `?height=` / `?width=`），
+`r.text()` 即完整 `<svg>` 字符串，`innerHTML` 注入。
+- 模块级 `Map<url, Promise<string>>` 缓存：同一图标只请求一次（FAQ 6 个相同 chevron 只发 1 个请求）；
+  空串（失败）不缓存，允许重试。
+- 不带尺寸参数时 SVG 以 `width="1em" height="1em"` 响应，继承外层 font-size；
+  path 为 `fill="currentColor"`，颜色继承外层 color（Icon 的 style.color 可着色）。
+- 保留 `setTimeout(0)` 延迟注入（hydration 安全，见 §7）。
