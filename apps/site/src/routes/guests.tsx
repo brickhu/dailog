@@ -1,7 +1,7 @@
-import { For, Show, createSignal, onMount } from "solid-js";
+import { For, Show, createResource } from "solid-js";
 import { A } from "@solidjs/router";
 import { Title } from "@solidjs/meta";
-import { env } from "../lib/env";
+import { apiBaseForFetch } from "../lib/env";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
@@ -58,12 +58,11 @@ const styles = stylex.create({
 
 export default function GuestsPage() {
   const { t } = useI18n();
-  const [guests, setGuests] = createSignal<GuestRow[]>([]);
-  onMount(() => {
-    void fetch(`${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/guests`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => Array.isArray(d) && setGuests(d))
-      .catch(() => {});
+  // 列表数据：createResource（SSR 服务端 fetch + 序列化，hydration 直接用）
+  const [guests] = createResource(async () => {
+    const r = await fetch(`${apiBaseForFetch}/v1/public/guests`);
+    const d: unknown = r.ok ? await r.json() : null;
+    return Array.isArray(d) ? (d as GuestRow[]) : [];
   });
 
   return (
@@ -72,9 +71,9 @@ export default function GuestsPage() {
       <div {...stylex.props(styles.content)}>
         <div {...stylex.props(styles.title)}>{t("guests.title")}</div>
         <p {...stylex.props(styles.desc)}>{t("guests.desc")}</p>
-        <Show when={guests().length > 0} fallback={<ListSkeleton />}>
+        <Show when={guests()?.length} fallback={<ListSkeleton />}>
           <div {...stylex.props(styles.grid)}>
-            <For each={guests()}>
+            <For each={guests() ?? []}>
               {(g) => (
                 <A href={`/guest/${g.id}`} {...stylex.props(styles.card)}>
                   <Show when={g.avatar} fallback={<div {...stylex.props(styles.avatarFallback)}>{g.name.slice(0, 1)}</div>}>
