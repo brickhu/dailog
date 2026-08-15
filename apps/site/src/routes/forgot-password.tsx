@@ -3,6 +3,7 @@ import { useNavigate } from "@solidjs/router";
 import { createSignal, Show } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
+import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { Button, TextField } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
@@ -121,9 +122,10 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div {...stylex.props(styles.page)}>
+    <div {...stylex.props(layouts.page)}>
       <Title>找回密码 · dailog</Title>
-      <div {...stylex.props(styles.card)}>
+      <div {...stylex.props(layouts.containerSm)}>
+      <div {...stylex.props(layouts.fullRow, styles.card)}>
         <Show when={step() === "email"} fallback={
           <>
             <div {...stylex.props(styles.title)}>{t("forgot.resetTitle")}</div>
@@ -157,6 +159,7 @@ export default function ForgotPasswordPage() {
           </Show>
           <A href="/login" {...stylex.props(styles.back)}>{t("forgot.backToLogin")}</A>
         </Show>
+      </div>
       </div>
     </div>
   );

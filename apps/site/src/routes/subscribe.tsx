@@ -2,6 +2,7 @@ import { For, Show, createSignal } from "solid-js";
 import { Title } from "@solidjs/meta";
 import { env } from "../lib/env";
 import * as stylex from "@stylexjs/stylex";
+import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 
@@ -148,13 +149,13 @@ export default function SubscribePage() {
   ];
 
   return (
-    <div {...stylex.props(styles.page)}>
+    <div {...stylex.props(layouts.page)}>
       <Title>{t("subscribe.title")} · dailog</Title>
-      <div {...stylex.props(styles.content)}>
-        <div {...stylex.props(styles.title)}>{t("subscribe.title")}</div>
-        <p {...stylex.props(styles.desc)}>{t("subscribe.desc")}</p>
+      <div {...stylex.props(layouts.containerLg)}>
+        <div {...stylex.props(layouts.fullRow, styles.title)}>{t("subscribe.title")}</div>
+        <p {...stylex.props(layouts.fullRow, styles.desc)}>{t("subscribe.desc")}</p>
 
-        <div {...stylex.props(styles.feedBox)}>
+        <div {...stylex.props(layouts.fullRow, styles.feedBox)}>
           <span {...stylex.props(styles.feedLabel)}>{t("subscribe.feedLabel")}</span>
           <span {...stylex.props(styles.feedUrl)}>{feedUrl()}</span>
           <button type="button" {...stylex.props(styles.copyBtn)} onClick={() => copy(feedUrl(), "feed")}>
@@ -162,7 +163,7 @@ export default function SubscribePage() {
           </button>
         </div>
 
-        <div {...stylex.props(styles.grid)}>
+        <div {...stylex.props(layouts.fullRow, styles.grid)}>
           <For each={platforms()}>
             {(p) => (
               <div {...stylex.props(styles.card)}>

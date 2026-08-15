@@ -9,6 +9,7 @@ import { getEpisodeCached } from "../../lib/episode-cache";
 import type { EpisodeSummary } from "../../lib/db";
 import { env, episodeCoverUrl } from "../../lib/env";
 import * as stylex from "@stylexjs/stylex";
+import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 
@@ -124,7 +125,8 @@ export default function EpisodeDetailPage() {
   };
 
   return (
-    <div {...stylex.props(styles.page)}>
+    <div {...stylex.props(layouts.page)}>
+      <div {...stylex.props(layouts.containerMd)}>
       <Title>{ep()?.title || "dailog"}</Title>
       {/* OG 标签：社交分享卡片（og:image = 封面，各平台抓取展示） */}
       <Meta property="og:title" content={ep()?.title || "dailog"} />
@@ -140,7 +142,7 @@ export default function EpisodeDetailPage() {
         when={ep()}
         fallback={<div {...stylex.props(styles.notFound)}>{t("episode.notFound")}</div>}
       >
-        <div {...stylex.props(styles.body)}>
+        <div {...stylex.props(layouts.fullRow, styles.body)}>
           <div {...stylex.props(styles.coverCol)}>
             <CoverPlayer
               episode={asQueue(ep()!)}
@@ -154,6 +156,7 @@ export default function EpisodeDetailPage() {
         </div>
       </Show>
       </Suspense>
+      </div>
     </div>
   );
 }

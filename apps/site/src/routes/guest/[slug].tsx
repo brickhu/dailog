@@ -3,6 +3,7 @@ import { For, Show } from "solid-js";
 import { useParams } from "@solidjs/router";
 import { getGuest } from "../../lib/db";
 import * as stylex from "@stylexjs/stylex";
+import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 
@@ -124,8 +125,9 @@ export default function GuestPage() {
   const data = createAsync<Awaited<ReturnType<typeof getGuest>>>(() => getGuestCached(params.slug));
 
   return (
-    <div {...stylex.props(styles.page)}>
-      <div {...stylex.props(styles.content)}>
+    <div {...stylex.props(layouts.page)}>
+      <div {...stylex.props(layouts.containerSm)}>
+        <div {...stylex.props(layouts.fullRow)}>
         <Show
           when={data()}
           fallback={<div {...stylex.props(styles.notFound)}>{t("guest.notFound")}</div>}
@@ -164,6 +166,7 @@ export default function GuestPage() {
             </For>
           </Show>
         </Show>
+        </div>
       </div>
     </div>
   );

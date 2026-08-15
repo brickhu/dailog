@@ -2,6 +2,7 @@ import { For, Show, createSignal, onMount } from "solid-js";
 import { A } from "@solidjs/router";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
+import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../../components/auth-gate";
@@ -108,18 +109,18 @@ export default function MePage() {
   ];
 
   return (
-    <div {...stylex.props(styles.page)}>
+    <div {...stylex.props(layouts.page)}>
       <Title>{t("me.title")} · dailog</Title>
       <AuthGate redirect="/me">
-        <div {...stylex.props(styles.content)}>
-          <div {...stylex.props(styles.title)}>{t("me.title")}</div>
-          <p {...stylex.props(styles.subtitle)}>
+        <div {...stylex.props(layouts.containerSm)}>
+          <div {...stylex.props(layouts.fullRow, styles.title)}>{t("me.title")}</div>
+          <p {...stylex.props(layouts.fullRow, styles.subtitle)}>
             <Show when={profile()?.image}>
               <img src={profile()!.image!} alt="" {...stylex.props(styles.avatar)} />
             </Show>
             {profile()?.displayName || profile()?.nickname || ""} · @{profile()?.nickname || ""}
           </p>
-          <div {...stylex.props(styles.grid)}>
+          <div {...stylex.props(layouts.fullRow, styles.grid)}>
             <For each={entries()}>
               {(e) => (
                 <A href={e.href} {...stylex.props(styles.entry)}>

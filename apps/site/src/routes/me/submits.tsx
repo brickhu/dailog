@@ -2,6 +2,7 @@ import { A, createAsync } from "@solidjs/router";
 import { For, Show } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
+import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../../components/auth-gate";
@@ -106,8 +107,8 @@ function SubmissionsList() {
   };
 
   return (
-    <div {...stylex.props(styles.content)}>
-      <div {...stylex.props(styles.title)}>{t("meSubmits.title")}</div>
+    <div {...stylex.props(layouts.containerSm)}>
+      <div {...stylex.props(layouts.fullRow, styles.title)}>{t("meSubmits.title")}</div>
       <Show
         when={submissions()?.length}
         fallback={
@@ -146,7 +147,7 @@ function SubmissionsList() {
 export default function MeSubmitsPage() {
   const { t } = useI18n();
   return (
-    <div {...stylex.props(styles.page)}>
+    <div {...stylex.props(layouts.page)}>
       <Title>{t("meSubmits.title")} · dailog</Title>
       <AuthGate redirect="/me/submits">
         <SubmissionsList />

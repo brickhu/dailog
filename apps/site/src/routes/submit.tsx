@@ -2,6 +2,7 @@ import { A } from "@solidjs/router";
 import { createSignal, createEffect, onMount, Show } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
+import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { Button } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
@@ -292,15 +293,15 @@ export default function SubmitPage() {
   };
 
   return (
-    <div {...stylex.props(styles.page)}>
+    <div {...stylex.props(layouts.page)}>
       <Title>{t("submit.title")} · dailog</Title>
       <AuthGate redirect="/submit">
-        <div {...stylex.props(styles.content)}>
+        <div {...stylex.props(layouts.containerSm)}>
         <h1 {...stylex.props(styles.title)}>{t("submit.title")}</h1>
 
         {/* 1. 输入态：分享链接（前端基本校验）→ [继续] */}
         <Show when={step() === "input"}>
-          <div {...stylex.props(styles.card)}>
+          <div {...stylex.props(layouts.fullRow, styles.card)}>
             <p {...stylex.props(styles.stepTitle)}>{t("submit.step1")}</p>
             <p {...stylex.props(styles.stepDesc)}>{t("submit.step1Desc")}</p>
             <input
@@ -348,7 +349,7 @@ export default function SubmitPage() {
 
         {/* 2. 确认投稿态：人设编辑（可选）+ 声音采样（必填）→ [确认投稿] */}
         <Show when={step() === "confirm"}>
-          <div {...stylex.props(styles.card)}>
+          <div {...stylex.props(layouts.fullRow, styles.card)}>
             <p {...stylex.props(styles.stepTitle)}>{t("submit.step2")}</p>
             <p {...stylex.props(styles.stepDesc)}>{t("submit.step2Desc")}</p>
             <label {...stylex.props(styles.label)}>{t("submit.callName")}</label>
@@ -397,7 +398,7 @@ export default function SubmitPage() {
 
         {/* 3. 提交成功：等待审核 */}
         <Show when={step() === "done"}>
-          <div {...stylex.props(styles.card)}>
+          <div {...stylex.props(layouts.fullRow, styles.card)}>
             <p {...stylex.props(styles.success)}>{t("submit.success")}</p>
             <p {...stylex.props(styles.stepDesc)}>{t("submit.successDesc")}</p>
             <div {...stylex.props(styles.actions)}>

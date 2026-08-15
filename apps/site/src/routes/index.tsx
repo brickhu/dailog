@@ -6,6 +6,7 @@ import { getEpisodeCached } from "../lib/episode-cache";
 import { Faq } from "../components/faq";
 import { Icon } from "@dailogues/ui";
 import * as stylex from "@stylexjs/stylex";
+import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 
@@ -441,8 +442,9 @@ export default function HomePage() {
   const curPage = () => Math.max(0, Math.min(page(), pageCount() - 1));
 
   return (
-    <div {...stylex.props(styles.page)}>
-      <section {...stylex.props(styles.hero)}>
+    <div {...stylex.props(layouts.page)}>
+      <div {...stylex.props(layouts.containerLg)}>
+      <section {...stylex.props(layouts.fullRow, styles.hero)}>
         <h1 {...stylex.props(styles.tagline)}>{t("home.hero.tagline")}</h1>
         <p {...stylex.props(styles.what)}>{t("home.hero.what")}</p>
         <div {...stylex.props(styles.ctaRow)}>
@@ -451,10 +453,11 @@ export default function HomePage() {
         <p {...stylex.props(styles.ctaHint)}>{t("home.hero.ctaHint")}</p>
       </section>
 
-      <div {...stylex.props(styles.listTitleRow)}>
+      <div {...stylex.props(layouts.fullRow, styles.listTitleRow)}>
         <div {...stylex.props(styles.listTitle)}>{t("home.recommended")}</div>
         <A href="/discover" {...stylex.props(styles.moreLink)}>{t("home.hero.browse")}</A>
       </div>
+      <div {...stylex.props(layouts.fullRow)}>
       <Show
         when={list()?.length}
         fallback={
@@ -557,8 +560,10 @@ export default function HomePage() {
           </div>
         </Show>
       </Show>
+      </div>
 
       {/* 站点头部统计卡片：主播 / AI 嘉宾 / 访谈期数（等宽等高灰色区块） */}
+      <div {...stylex.props(layouts.fullRow)}>
       <Show when={stats()}>
         <div {...stylex.props(styles.statCards)}>
           <A href="/hosts" {...stylex.props(styles.statCard)}>
@@ -592,9 +597,13 @@ export default function HomePage() {
           </A>
         </div>
       </Show>
+      </div>
 
       {/* 常见问题（互斥手风琴，双语跟随语言切换） */}
+      <div {...stylex.props(layouts.fullRow)}>
       <Faq />
+      </div>
+      </div>
     </div>
   );
 }

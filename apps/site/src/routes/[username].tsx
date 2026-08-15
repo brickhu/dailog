@@ -4,6 +4,7 @@ import { useParams } from "@solidjs/router";
 import { getRequestEvent, isServer } from "solid-js/web";
 import { getChannel, type ChannelSummary, type EpisodeSummary } from "../lib/db";
 import * as stylex from "@stylexjs/stylex";
+import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 
@@ -105,8 +106,9 @@ export default function ChannelPage() {
   );
 
   return (
-    <div {...stylex.props(styles.page)}>
-      <div {...stylex.props(styles.content)}>
+    <div {...stylex.props(layouts.page)}>
+      <div {...stylex.props(layouts.containerSm)}>
+        <div {...stylex.props(layouts.fullRow)}>
         <Show
           when={data()?.channel}
           fallback={<div {...stylex.props(styles.notFound)}>{t("channel.notFound")}</div>}
@@ -134,6 +136,7 @@ export default function ChannelPage() {
             )}
           </For>
         </Show>
+        </div>
       </div>
     </div>
   );

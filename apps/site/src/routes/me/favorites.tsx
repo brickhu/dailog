@@ -2,6 +2,7 @@ import { A, createAsync } from "@solidjs/router";
 import { For, Show } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
+import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../../components/auth-gate";
@@ -70,11 +71,11 @@ export default function FavoritesPage() {
   });
 
   return (
-    <div {...stylex.props(styles.page)}>
+    <div {...stylex.props(layouts.page)}>
       <Title>{t("me.favorites")} · dailog</Title>
       <AuthGate redirect="/me/favorites">
-        <div {...stylex.props(styles.content)}>
-          <div {...stylex.props(styles.title)}>{t("me.favorites")}</div>
+        <div {...stylex.props(layouts.containerSm)}>
+          <div {...stylex.props(layouts.fullRow, styles.title)}>{t("me.favorites")}</div>
           <Show
             when={favorites()?.length}
             fallback={<div {...stylex.props(styles.empty)}>{t("me.empty")}</div>}

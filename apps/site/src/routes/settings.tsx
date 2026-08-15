@@ -2,6 +2,7 @@ import { createSignal, createEffect, onMount, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
+import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { Button, TextField, Spinner } from "@dailogues/ui";
 import Recorder from "../components/recorder";
@@ -153,9 +154,10 @@ export default function AccountPage() {
   });
 
   return (
-    <div {...stylex.props(styles.page)}>
+    <div {...stylex.props(layouts.page)}>
       <Title>{t("account.title")} · dailog</Title>
-      <div {...stylex.props(styles.content)}>
+      <div {...stylex.props(layouts.containerSm)}>
+        <div {...stylex.props(layouts.fullRow)}>
         <Show when={session()}>
           <div {...stylex.props(styles.title)}>{t("account.title")}</div>
           <div {...stylex.props(styles.subtitle)}>{t("account.subtitle")}</div>
@@ -164,6 +166,7 @@ export default function AccountPage() {
             <AccountSection profile={profile()!} loadError={loadError()} />
           </Show>
         </Show>
+        </div>
       </div>
     </div>
   );

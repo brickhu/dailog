@@ -3,6 +3,7 @@ import { For, Show, Suspense, createSignal } from "solid-js";
 import { listLatestEpisodes, type EpisodeSummary } from "../lib/db";
 import { episodeCoverUrl } from "../lib/env";
 import * as stylex from "@stylexjs/stylex";
+import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { ListSkeleton } from "../components/route-skeletons";
@@ -112,10 +113,10 @@ export default function DiscoverPage() {
   const episodes = createAsync<EpisodeSummary[]>(() => getLatestCached(locale() === "zh" ? "zh" : "en"));
 
   return (
-    <div {...stylex.props(styles.page)}>
-      <div {...stylex.props(styles.content)}>
-        <div {...stylex.props(styles.title)}>{t("discover.title")}</div>
-        <div {...stylex.props(styles.tabs)}>
+    <div {...stylex.props(layouts.page)}>
+      <div {...stylex.props(layouts.containerSm)}>
+        <div {...stylex.props(layouts.fullRow, styles.title)}>{t("discover.title")}</div>
+        <div {...stylex.props(layouts.fullRow, styles.tabs)}>
           <For each={TABS}>
             {(key) => (
               <button
@@ -128,6 +129,7 @@ export default function DiscoverPage() {
             )}
           </For>
         </div>
+        <div {...stylex.props(layouts.fullRow)}>
         <Suspense fallback={<ListSkeleton />}>
         <Show
           when={episodes()?.length}
@@ -149,6 +151,7 @@ export default function DiscoverPage() {
           </For>
         </Show>
         </Suspense>
+        </div>
       </div>
     </div>
   );

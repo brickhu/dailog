@@ -2,6 +2,7 @@ import { createAsync } from "@solidjs/router";
 import { createSignal, For, Show } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
+import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { Button } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
@@ -89,8 +90,8 @@ function NotificationsList() {
   const typeLabel = (type: string) => t(`notif.type.${type}` as never);
 
   return (
-    <div {...stylex.props(styles.content)}>
-      <div {...stylex.props(styles.header)}>
+    <div {...stylex.props(layouts.containerSm)}>
+      <div {...stylex.props(layouts.fullRow, styles.header)}>
         <div {...stylex.props(styles.title)}>{t("notif.title")}</div>
         <Button appear="ghost" onClick={markAllRead} disabled={marked()}>
           {t("notif.readAll")}
@@ -124,7 +125,7 @@ function NotificationsList() {
 export default function NotificationsPage() {
   const { t } = useI18n();
   return (
-    <div {...stylex.props(styles.page)}>
+    <div {...stylex.props(layouts.page)}>
       <Title>{t("notif.title")} · dailog</Title>
       <AuthGate redirect="/me/notifications">
         <NotificationsList />

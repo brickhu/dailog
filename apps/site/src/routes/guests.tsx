@@ -3,6 +3,7 @@ import { A } from "@solidjs/router";
 import { Title } from "@solidjs/meta";
 import { apiBaseForFetch } from "../lib/env";
 import * as stylex from "@stylexjs/stylex";
+import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { ListSkeleton } from "../components/route-skeletons";
@@ -66,11 +67,12 @@ export default function GuestsPage() {
   });
 
   return (
-    <div {...stylex.props(styles.page)}>
+    <div {...stylex.props(layouts.page)}>
       <Title>{t("guests.title")} · dailog</Title>
-      <div {...stylex.props(styles.content)}>
-        <div {...stylex.props(styles.title)}>{t("guests.title")}</div>
-        <p {...stylex.props(styles.desc)}>{t("guests.desc")}</p>
+      <div {...stylex.props(layouts.containerLg)}>
+        <div {...stylex.props(layouts.fullRow, styles.title)}>{t("guests.title")}</div>
+        <p {...stylex.props(layouts.fullRow, styles.desc)}>{t("guests.desc")}</p>
+        <div {...stylex.props(layouts.fullRow)}>
         <Suspense fallback={<ListSkeleton />}>
         <Show when={guests()?.length} fallback={<ListSkeleton />}>
           <div {...stylex.props(styles.grid)}>
@@ -88,6 +90,7 @@ export default function GuestsPage() {
           </div>
         </Show>
         </Suspense>
+        </div>
       </div>
     </div>
   );

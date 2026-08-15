@@ -259,6 +259,8 @@ export const typography = stylex.create({
 // "A style value can only contain an array, string or number"）——typography.bodyMd
 // 的值（14px/400/1.5/body 字体）在此显式展开
 export const layouts = stylex.create({
+  // 页面根：全站统一（字号/颜色/背景/最小高度），内容横向防溢出。
+  // 滚动由应用壳内容区承担（AppShell），此处不声明 overflow-y 滚动。
   page: {
     fontFamily: fontfamilies.body,
     fontSize: dimensions.fontSizeSm,
@@ -268,13 +270,88 @@ export const layouts = stylex.create({
     backgroundColor: colors.background,
     minHeight: "100vh",
     minWidth: "320px",
-    width: "100vw",
     overflowX: "hidden",
-    overflowY: "scroll",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "start",
   },
 
+  // —— 内容容器（grid 布局）——
+  // 全部采用 CSS Grid（桌面 12 列 / 平板 6 / 手机 3）。
+  // 直接子项默认占 1 列 —— 常规全宽内容块须配合 fullRow（gridColumn: "span 12"，
+  // 在 6/3 列模板下自动换行占满整行）；需要多列排布的内容块自行声明列跨度
+  // （如 gridColumn: "span 4"）。
+
+  // 全宽行：内容块的默认跨度（跨满全部可见列）
+  fullRow: {
+    gridColumn: "span 12",
+  },
+
+  // 全屏容器：宽高 100%，单列结构（适合全屏应用/无宽度约束区块）
+  containerFull: {
+    width: "100%",
+    height: "100%",
+    minHeight: "100vh",
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    gridTemplateRows: "minmax(0, 1fr)",
+  },
+
+  // 大容器：max-width 1128px，桌面 12 列 / 平板 6 列 / 手机 3 列，居中（首页类宽页面）
+  containerLg: {
+    width: "100%",
+    maxWidth: "1128px",
+    margin: "0 auto",
+    paddingLeft: dimensions.spacing4,
+    paddingRight: dimensions.spacing4,
+    display: "grid",
+    gridTemplateColumns: "repeat(12, 1fr)",
+    columnGap: dimensions.spacing5,
+    alignItems: "start",
+    "@media (max-width: 1024px)": {
+      gridTemplateColumns: "repeat(6, 1fr)",
+    },
+    "@media (max-width: 640px)": {
+      gridTemplateColumns: "repeat(3, 1fr)",
+      columnGap: dimensions.spacing4,
+    },
+  },
+
+  // 中容器：max-width 960px，12 列 → 平板 6 → 手机 3，居中（详情/列表类页面）
+  containerMd: {
+    width: "100%",
+    maxWidth: "960px",
+    margin: "0 auto",
+    paddingLeft: dimensions.spacing4,
+    paddingRight: dimensions.spacing4,
+    display: "grid",
+    gridTemplateColumns: "repeat(12, 1fr)",
+    columnGap: dimensions.spacing5,
+    alignItems: "start",
+    "@media (max-width: 1024px)": {
+      gridTemplateColumns: "repeat(6, 1fr)",
+    },
+    "@media (max-width: 640px)": {
+      gridTemplateColumns: "repeat(3, 1fr)",
+      columnGap: dimensions.spacing4,
+    },
+  },
+
+  // 小容器：max-width 720px，6 列 → 手机 3，居中（表单/个人中心类窄页面）
+  containerSm: {
+    width: "100%",
+    maxWidth: "720px",
+    margin: "0 auto",
+    paddingLeft: dimensions.spacing4,
+    paddingRight: dimensions.spacing4,
+    display: "grid",
+    gridTemplateColumns: "repeat(6, 1fr)",
+    columnGap: dimensions.spacing5,
+    alignItems: "start",
+    "@media (max-width: 640px)": {
+      gridTemplateColumns: "repeat(3, 1fr)",
+      columnGap: dimensions.spacing4,
+    },
+  },
 })
