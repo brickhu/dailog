@@ -156,25 +156,27 @@ vinxi 0.5.11 对每个 router 的 vite server 用 `getRandomPort()` 分配 **HMR
   无 TLS，属平台限制）——改代码后手动刷新即可；需要安全上下文的功能（录音/登录）用 https。
 - 换机器/重装依赖：`pnpm install` 自动应用 patch；compose 环境变量已配置。
 
-## 7. /example 页（dev-only）Hydration Mismatch —— 已知问题，勿与图标混淆
+## 7. /example 页（dev-only）Hydration Mismatch —— 结论修正记录
 
 ### 现象
 访问 /example（UI 组件示例页）控制台报：
-`Hydration Mismatch. Unable to find DOM nodes for hydration key: ...a1201320120 <span></span>`
+`Hydration Mismatch. Unable to find DOM nodes for hydration key: ... <span></span>`
 
-### 排查结论（2026-08 多轮二分定位）
-- **与图标实现无关**：web component 版（iconify-icon）、空 span 版、内联 SVG 版均复现
-  同一位置的 key 错位（SSR 渲染树比客户端少 1 个节点）。
-- **排除项**（均已验证非根因）：web component、span style 属性、banner 组件、
-  `createUniqueId`（tooltipId/contentId 固定后仍复现）、Button tooltip/status span、
-  图标组件本身（空 span 也复现）。错位源位于 example 页的某个组件组合
-  （Button 组区域嫌疑最大），属 Solid 1.9 hydration 的框架层兼容问题。
-- **影响范围**：`/example` 是 **dev-only** 页面（`import.meta.env.DEV`，生产构建不渲染）——
-  **生产无此问题**。站点正常页面（首页/详情/列表等）不使用 Icon 组件（nav 为内联 SVG），
-  完全不受影响。
-- **副作用**：example 页 hydration 中断 → 该页 onMount 不执行 → 图标不显示
-  （站点无 Icon 使用场景，无实际影响）。
+### 2026-08-15 修正（前期结论作废）
+前期多轮"二分定位"**结论不可信**：当时一直误改 `packages/ui/src/examples.tsx` 并认为它是
+/example 页面 —— 实际路由渲染的是 `apps/site/src/routes/example.tsx`（`<Examples />`）。
+且浏览器侧验证受 **IAB 缓存**污染（curl 已是新版、浏览器仍显示旧页，"无 mismatch"假象多次出现）。
+**已修复项**（代码层面合理改进，非根因验证）：
+- **Icon 组件**（`packages/ui/src/components/icon.tsx`）：恢复完整版 —— SSR 渲染空 span、
+  客户端 hydration 结束后 `loadIcon` 从 iconify API 按需拉取内联 SVG 注入
+  （`setTimeout 0` 延迟注入，避免嵌套组件 onMount 早于父级 hydration 完成）。
+- **Banner 的 Dismiss/expand**（`banner.tsx`）：由 Button+Icon 嵌套改为原生 `<button>`
+  （减少组件嵌套；contentId 恢复 `createUniqueId()`）。
+- **/example 页**（`apps/site/src/routes/example.tsx`）：渲染 `@dailogues/ui` 的 `<Examples />`
+  完整组件示例（7 个 Banner 变体 + Button 组 + 图标 Icon demo），SSR 已验证输出完整。
 
-### 处理建议
-- 接受现状（dev-only 展示页），或后续深挖 example 页组件组合（Button 组区域）。
-- 注意：**注释实验不可靠**（多次修改后 HMR 状态会污染结果，需每次重启容器验证）。
+### 现状与建议
+- /example 为 **dev-only**（生产构建不渲染），站点正常页面不使用 Icon 组件，无生产影响。
+- 浏览器侧残余 mismatch 若复现，优先怀疑**浏览器缓存**（换新 tab + 无痕窗口验证），
+  不要再用"浏览器目测"做二分判断；以 curl SSR + typecheck/build 为准。
+- 图标在 example 页的显示依赖客户端注入（onMount），hydration 正常时注入即可显示。
