@@ -67,6 +67,22 @@ const styles = stylex.create({
     fontSize: dimensions.fontSizeSm,
     margin: 0,
   },
+  // 组件级骨架：统计行加载中占位（小灰条 + 脉冲）
+  statsSkeleton: {
+    display: "inline-block",
+    width: "120px",
+    height: "12px",
+    borderRadius: "4px",
+    backgroundColor: colors.surfaceStrong,
+    animationName: stylex.keyframes({
+      from: { opacity: 0.55 },
+      to: { opacity: 1 },
+    }),
+    animationDuration: "0.9s",
+    animationTimingFunction: "ease-in-out",
+    animationIterationCount: "infinite",
+    animationDirection: "alternate",
+  },
 });
 
 function fmtDuration(sec: number | null): string {
@@ -81,13 +97,15 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
   const ep = () => props.episode;
   const hostName = () => ep().callName ?? ep().displayName ?? ep().username;
   const [showTranscript, setShowTranscript] = createSignal(false);
-  // 播放/完播统计（公开端点；播放器上报后下次加载刷新）
+  // 播放/完播统计（公开端点；播放器上报后下次加载刷新）——组件级独立加载，不阻塞页面主体
   const [stats, setStats] = createSignal<{ plays: number; completions: number } | null>(null);
+  const [statsReady, setStatsReady] = createSignal(false);
   onMount(() => {
     void fetch(`${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/episodes/${ep().id}/stats`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setStats(d))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setStatsReady(true));
   });
 
   return (
@@ -99,10 +117,13 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
           return `${hostName()} · ${pub ? new Date(pub).toLocaleDateString("zh-CN") : ""}${ep().durationSeconds ? ` · ${fmtDuration(ep().durationSeconds)}` : ""}`;
         })()}
       </p>
-      <Show when={stats()}>
-        <p {...stylex.props(styles.meta)}>
-          {t("episode.plays", { count: stats()!.plays })} · {t("episode.completions", { count: stats()!.completions })}
-        </p>
+      {/* 统计行：组件级骨架（加载中灰条，独立于页面主体） */}
+      <Show when={statsReady()} fallback={<span {...stylex.props(styles.statsSkeleton)} />}>
+        <Show when={stats()}>
+          <p {...stylex.props(styles.meta)}>
+            {t("episode.plays", { count: stats()!.plays })} · {t("episode.completions", { count: stats()!.completions })}
+          </p>
+        </Show>
       </Show>
       <InteractButtons episodeId={ep().id} />
       <ShareButtons episode={ep()} />
