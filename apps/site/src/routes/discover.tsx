@@ -1,4 +1,4 @@
-import { A, createAsync } from "@solidjs/router";
+import { A, cache, createAsync } from "@solidjs/router";
 import { For, Show, Suspense, createSignal } from "solid-js";
 import { listLatestEpisodes, type EpisodeSummary } from "../lib/db";
 import { episodeCoverUrl } from "../lib/env";
@@ -107,7 +107,9 @@ export default function DiscoverPage() {
   const { t, locale } = useI18n();
   const [tab, setTab] = createSignal<Tab>("new");
   // 语言偏好分流（同首页）：界面语言即内容偏好，同语言优先 + 时间 fallback
-  const episodes = createAsync<EpisodeSummary[]>(() => listLatestEpisodes(50, locale() === "zh" ? "zh" : "en"));
+  // cache：客户端导航间复用（公开数据无新鲜度问题），减少重复 DB 查询
+  const getLatestCached = cache((lang: "zh" | "en") => listLatestEpisodes(50, lang), "discover-latest");
+  const episodes = createAsync<EpisodeSummary[]>(() => getLatestCached(locale() === "zh" ? "zh" : "en"));
 
   return (
     <div {...stylex.props(styles.page)}>

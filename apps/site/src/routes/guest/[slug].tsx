@@ -1,4 +1,4 @@
-import { A, createAsync } from "@solidjs/router";
+import { A, cache, createAsync } from "@solidjs/router";
 import { For, Show } from "solid-js";
 import { useParams } from "@solidjs/router";
 import { getGuest } from "../../lib/db";
@@ -119,7 +119,9 @@ export default function GuestPage() {
   const params = useParams<{ slug: string }>();
   // 嘉宾不存在 → 渲染 notFound（200，与频道页「用户不存在」行为一致；
   // SolidStart 流式渲染下依赖异步数据的 404 状态码无法在 flush 前设置）
-  const data = createAsync<Awaited<ReturnType<typeof getGuest>>>(() => getGuest(params.slug));
+  // cache：客户端导航间复用嘉宾数据（公开数据），减少重复 DB 查询
+  const getGuestCached = cache((slug: string) => getGuest(slug), "guest");
+  const data = createAsync<Awaited<ReturnType<typeof getGuest>>>(() => getGuestCached(params.slug));
 
   return (
     <div {...stylex.props(styles.page)}>

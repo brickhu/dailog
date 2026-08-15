@@ -23,6 +23,21 @@ export function profileRoutes(deps: ProfileDeps) {
     return c.json(profile);
   });
 
+  /** 导航栏聚合：一次请求替代 get-session + profile + 未读数三连（减少整页加载请求数） */
+  app.get("/v1/me/overview", async (c) => {
+    const userId = c.get("userId") as string;
+    const [profile, unread] = await Promise.all([
+      deps.repo.episodes.getProfile(userId).catch(() => null),
+      deps.repo.notifications.unreadCount(userId).catch(() => 0),
+    ]);
+    if (!profile) return c.json({ error: "not_found" }, 404);
+    return c.json({
+      user: { id: userId, name: profile.nickname ?? null, email: profile.email ?? null, image: profile.image ?? null },
+      nickname: profile.nickname ?? null, // user.name = @slug
+      unreadCount: unread,
+    });
+  });
+
   /** 账号昵称（≤30 字，去空白）——接口字段 nickname（DB 列 user.name = @slug；注册时应用层唯一） */
   app.patch("/v1/me/profile", async (c) => {
     const userId = c.get("userId") as string;

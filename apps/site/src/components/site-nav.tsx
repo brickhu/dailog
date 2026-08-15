@@ -129,20 +129,19 @@ export function SiteNav() {
     } catch { /* 静默 */ }
   };
   onMount(async () => {
-    const res = await fetch("/v1/auth/get-session");
+    // 聚合端点：一次请求替代 get-session + profile + 未读数三连
+    const res = await fetch("/v1/me/overview");
     if (!res.ok) return;
-    // better-auth 未登录返回 JSON null（代理透传）——必须整体可选链，否则 onMount 抛错、导航永不更新
-    const data = (await res.json()) as { user?: { id?: string; name?: string | null; email?: string; image?: string | null } | null } | null;
+    const data = (await res.json()) as {
+      user?: { id?: string; name?: string | null; email?: string; image?: string | null } | null;
+      nickname?: string | null;
+      unreadCount?: number;
+    } | null;
     const u = data?.user;
     if (!u?.email) return;
-    // 主持人主页地址 = 账号昵称（@slug = user.name）；session 里没有——补一次 /v1/me/profile
-    let username: string | null = null;
-    try {
-      const p = await fetch("/v1/me/profile");
-      if (p.ok) username = ((await p.json()) as { nickname?: string | null }).nickname ?? null;
-    } catch { /* 静默 */ }
-    setUser({ id: u.id ?? "", name: u.name ?? null, email: u.email, image: u.image ?? null, username });
-    void refreshUnread();
+    // 主持人主页地址 = 账号昵称（@slug = user.name）
+    setUser({ id: u.id ?? "", name: u.name ?? null, email: u.email, image: u.image ?? null, username: data?.nickname ?? null });
+    if (typeof data?.unreadCount === "number") setUnread(data.unreadCount);
   });
   onMount(() => {
     window.addEventListener("focus", refreshUnread);
@@ -160,6 +159,10 @@ export function SiteNav() {
       <A href="/discover" {...stylex.props(styles.navLink)}>{t("nav.discover")}</A>
       <A href="/hosts" {...stylex.props(styles.navLink)}>{t("nav.hosts")}</A>
       <A href="/guests" {...stylex.props(styles.navLink)}>{t("nav.guests")}</A>
+      {/* 组件示例页：仅本地 dev 可见（生产构建 import.meta.env.DEV=false，整段不渲染） */}
+      <Show when={import.meta.env.DEV}>
+        <A href="/example" {...stylex.props(styles.navLink)}>{t("nav.example")}</A>
+      </Show>
       {/* 订阅页（各平台入口 + feed 地址） */}
       <A href="/subscribe" {...stylex.props(styles.navLink)} title={t("nav.subscribe")}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

@@ -1,4 +1,4 @@
-import { A, createAsync } from "@solidjs/router";
+import { A, cache, createAsync } from "@solidjs/router";
 import { For, Show } from "solid-js";
 import { useParams } from "@solidjs/router";
 import { getRequestEvent, isServer } from "solid-js/web";
@@ -98,8 +98,10 @@ export default function ChannelPage() {
   if (isServer && !isChannel()) {
     getRequestEvent()!.response.status = 404;
   }
+  // cache：客户端导航间复用频道数据（公开数据），减少重复 DB 查询
+  const getChannelCached = cache((name: string) => getChannel(name), "channel");
   const data = createAsync<{ channel: ChannelSummary | null; episodes: EpisodeSummary[] } | null>(() =>
-    isChannel() ? getChannel(username()) : Promise.resolve(null)
+    isChannel() ? getChannelCached(username()) : Promise.resolve(null)
   );
 
   return (
