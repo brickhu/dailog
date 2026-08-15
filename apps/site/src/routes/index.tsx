@@ -1,8 +1,7 @@
 import { createSignal, Show, For, onMount } from "solid-js";
 import { A, useNavigate } from "@solidjs/router";
 import { usePlayback, type QueueEpisode } from "../lib/playback";
-import { env } from "../lib/env";
-import { EpisodeCover } from "../components/episode-cover";
+import { env, episodeCoverUrl } from "../lib/env";
 import { getEpisodeCached } from "../lib/episode-cache";
 import { Faq } from "../components/faq";
 import * as stylex from "@stylexjs/stylex";
@@ -226,6 +225,25 @@ const styles = stylex.create({
     cursor: "pointer",
     alignSelf: "flex-start", // 卡片不被网格行拉伸：不同高度的分页互不影响，避免空卡片被撑成大片空白
     ":hover": { borderColor: colors.primary },
+  },
+  cover: {
+    width: "100%",
+    aspectRatio: "1 / 1",
+    objectFit: "cover",
+    borderRadius: dimensions.radiusSm,
+  },
+  // 无封面节目：封面占位块（灰底 + 播客图标），保持卡片结构完整
+  coverFallback: {
+    width: "100%",
+    aspectRatio: "1 / 1",
+    borderRadius: dimensions.radiusSm,
+    backgroundColor: colors.surfaceStrong,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "40px",
+    color: colors.neutral,
+    userSelect: "none",
   },
   title: {
     fontSize: dimensions.fontSizeMd,
@@ -472,8 +490,9 @@ export default function HomePage() {
                         onClick={() => navigate(`/episode/${ep.slug}`)}
                         onPointerEnter={() => void getEpisodeCached(ep.slug)}
                       >
-                        {/* 封面：加载中灰底占位（R2 首请求冷启动慢），失败兜底 🎙 */}
-                        <EpisodeCover id={ep.id} coverUrl={ep.coverUrl} alt={ep.title || ""} />
+                        <Show when={episodeCoverUrl(ep.id, ep.coverUrl)} fallback={<div {...stylex.props(styles.coverFallback)}>🎙</div>}>
+                          <img src={episodeCoverUrl(ep.id, ep.coverUrl)!} alt={ep.title || ""} {...stylex.props(styles.cover)} />
+                        </Show>
                         <p {...stylex.props(styles.title)}>{ep.title || t("common.unnamed")}</p>
                         <p {...stylex.props(styles.meta)}>
                           {hostName(ep)} · {fmtDuration(ep.durationSeconds)}
