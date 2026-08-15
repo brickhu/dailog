@@ -1,10 +1,10 @@
 // 节目详情面板（首页详情态 + /<episode_id> 直链复用）：
 // 标题/主持人/日期时长/播放统计/简介/台本（折叠）/原始对话/点赞收藏
-import { Show, createSignal, onMount } from "solid-js";
+import { Show, createResource, createSignal } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
-import { env } from "../lib/env";
+import { apiBaseForFetch } from "../lib/env";
 import type { QueueEpisode } from "../lib/playback";
 import { InteractButtons } from "./interact-buttons";
 import { ShareButtons } from "./share-buttons";
@@ -97,16 +97,14 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
   const ep = () => props.episode;
   const hostName = () => ep().callName ?? ep().displayName ?? ep().username;
   const [showTranscript, setShowTranscript] = createSignal(false);
-  // 播放/完播统计（公开端点；播放器上报后下次加载刷新）——组件级独立加载，不阻塞页面主体
-  const [stats, setStats] = createSignal<{ plays: number; completions: number } | null>(null);
-  const [statsReady, setStatsReady] = createSignal(false);
-  onMount(() => {
-    void fetch(`${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/episodes/${ep().id}/stats`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d && setStats(d))
-      .catch(() => {})
-      .finally(() => setStatsReady(true));
-  });
+  // 播放/完播统计：createResource（内置 loading/error），组件级独立加载，不阻塞页面主体
+  const [stats] = createResource(
+    () => ep().id,
+    async (id) => {
+      const r = await fetch(`${apiBaseForFetch}/v1/public/episodes/${id}/stats`);
+      return r.ok ? ((await r.json()) as { plays: number; completions: number }) : null;
+    },
+  );
 
   return (
     <div {...stylex.props(styles.root)}>
@@ -118,7 +116,7 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
         })()}
       </p>
       {/* 统计行：组件级骨架（加载中灰条，独立于页面主体） */}
-      <Show when={statsReady()} fallback={<span {...stylex.props(styles.statsSkeleton)} />}>
+      <Show when={!stats.loading} fallback={<span {...stylex.props(styles.statsSkeleton)} />}>
         <Show when={stats()}>
           <p {...stylex.props(styles.meta)}>
             {t("episode.plays", { count: stats()!.plays })} · {t("episode.completions", { count: stats()!.completions })}

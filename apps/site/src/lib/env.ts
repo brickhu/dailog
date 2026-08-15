@@ -44,3 +44,9 @@ export function episodeCoverUrl(id: string, coverUrl: string | null | undefined)
 }
 
 export type SiteEnv = typeof env;
+
+/** 数据 fetch 基址：服务端 node fetch 必须 http（OrbStack 自签证书不被信任）；
+ *  浏览器用公开基址（https，mixed content 拦截）。配合 createResource 的服务端短路使用 */
+export const apiBaseForFetch =
+  typeof window === "undefined" ? env.apiBaseUrl : (env.apiBaseUrlPublic ?? env.apiBaseUrl);
+

@@ -1,11 +1,11 @@
 // 收藏/点赞交互（客户端）：图标 + 数字（公开计数 + 当前用户状态）。
 // 未登录点击 → 跳统一登录页（redirect 回当前页）；登录后刷新即恢复状态。
-import { createSignal, onMount, Show } from "solid-js";
+import { createEffect, createResource, createSignal, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { colors } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
-import { env } from "../lib/env";
+import { apiBaseForFetch } from "../lib/env";
 
 const styles = stylex.create({
   actions: {
@@ -64,30 +64,37 @@ export function InteractButtons(props: { episodeId: string }) {
   const [liked, setLiked] = createSignal(false);
   const [likeCount, setLikeCount] = createSignal(0);
   const [busy, setBusy] = createSignal(false);
-  // 组件级加载态：计数未就绪时显示小骨架（不阻塞页面主体，独立并行加载）
-  const [ready, setReady] = createSignal(false);
 
-  // 挂载：公开计数（点赞/收藏数）+ 当前用户互动状态（未登录 401 → 保持未选中）
-  onMount(() => {
-    void fetch(`${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/episodes/${props.episodeId}/stats`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d) {
-          setLikeCount(d.likes ?? 0);
-          setFavCount(d.favorites ?? 0);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setReady(true));
-    void fetch(`/v1/episodes/${props.episodeId}/interactions`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d) {
-          setLiked(!!d.liked);
-          setFav(!!d.favorited);
-        }
-      })
-      .catch(() => {});
+  // createResource：公开计数 + 互动状态 —— 内置 loading/error 状态，组件级独立并行加载。
+  // 计数到达后填充（toggle 后以服务端返回的最新计数为准，resource 不重跑不覆盖）。
+  const [stats] = createResource(
+    () => props.episodeId,
+    async (episodeId) => {
+      const r = await fetch(`${apiBaseForFetch}/v1/public/episodes/${episodeId}/stats`);
+      return r.ok ? ((await r.json()) as { likes?: number; favorites?: number }) : null;
+    },
+  );
+  const [interactions] = createResource(
+    () => props.episodeId,
+    async (episodeId) => {
+      // 未登录 401 → null → 保持未选中
+      const r = await fetch(`/v1/episodes/${episodeId}/interactions`);
+      return r.ok ? ((await r.json()) as { liked?: boolean; favorited?: boolean }) : null;
+    },
+  );
+  createEffect(() => {
+    const d = stats();
+    if (d) {
+      setLikeCount(d.likes ?? 0);
+      setFavCount(d.favorites ?? 0);
+    }
+  });
+  createEffect(() => {
+    const d = interactions();
+    if (d) {
+      setLiked(!!d.liked);
+      setFav(!!d.favorited);
+    }
   });
 
   const toggle = async (kind: "favorite" | "like") => {
@@ -123,7 +130,7 @@ export function InteractButtons(props: { episodeId: string }) {
       >
         <span aria-hidden="true">{liked() ? "♥" : "♡"}</span>
         {/* 组件级骨架：计数未加载完成时不显示 "0"（避免误导），灰条占位 */}
-        <Show when={ready()} fallback={<span {...stylex.props(styles.countSkeleton)} />}>
+        <Show when={!stats.loading} fallback={<span {...stylex.props(styles.countSkeleton)} />}>
           <span {...stylex.props(styles.count)}>{likeCount()}</span>
         </Show>
       </button>
@@ -133,7 +140,7 @@ export function InteractButtons(props: { episodeId: string }) {
         onClick={() => toggle("favorite")}
       >
         <span aria-hidden="true">{fav() ? "★" : "☆"}</span>
-        <Show when={ready()} fallback={<span {...stylex.props(styles.countSkeleton)} />}>
+        <Show when={!stats.loading} fallback={<span {...stylex.props(styles.countSkeleton)} />}>
           <span {...stylex.props(styles.count)}>{favCount()}</span>
         </Show>
       </button>

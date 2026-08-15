@@ -1,7 +1,7 @@
-import { createSignal, Show, For, onMount } from "solid-js";
+import { createEffect, createResource, createSignal, Show, For } from "solid-js";
 import { A, useNavigate } from "@solidjs/router";
 import { usePlayback, type QueueEpisode } from "../lib/playback";
-import { env, episodeCoverUrl } from "../lib/env";
+import { apiBaseForFetch, episodeCoverUrl } from "../lib/env";
 import { getEpisodeCached } from "../lib/episode-cache";
 import { Faq } from "../components/faq";
 import * as stylex from "@stylexjs/stylex";
@@ -389,37 +389,33 @@ export default function HomePage() {
   const { t, locale } = useI18n();
   const playback = usePlayback();
   const navigate = useNavigate();
-  const [list, setList] = createSignal<QueueEpisode[]>([]);
-  const [loading, setLoading] = createSignal(true); // 推荐列表异步加载中（骨架屏占位）
   const [page, setPage] = createSignal(0); // 推荐滚屏当前页
-  const [stats, setStats] = createSignal<{ hostCount: number; guestCount: number; episodeCount: number; topHost: string | null; topHostAvatar: string | null; topTags: string[] } | null>(null);
-  const [guestLogos, setGuestLogos] = createSignal<Array<{ name: string; avatar: string | null }>>([]);
 
-  // 拉推荐队列（热度分 + 语言优先）：填充播放器队列 + 首页滚屏。
-  // 每屏 4 条、最多 5 屏 → limit=20
-  onMount(() => {
+  // 数据加载统一 createResource（内置 loading/error 状态，各自独立并行）：
+  // 推荐队列（热度分 + 语言优先，每屏 4 条 × 最多 5 屏 → limit=20）
+  // 推荐队列：SSR 时服务端 fetch（http 基址，数据序列化进 HTML），客户端 hydration 直接用
+  const [list] = createResource(async () => {
     const lang = locale() === "en" ? "en" : "zh";
-    void fetch(`${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/episodes/recommended?lang=${lang}&limit=20`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((eps: unknown) => {
-        setLoading(false);
-        if (Array.isArray(eps) && eps.length > 0) {
-          setList(eps as QueueEpisode[]);
-          setPage(0); // 新数据回到第一屏
-          // 播放器未激活才初始化队列；已激活（播放中）只刷新列表，不打断播放
-          if (!playback.activated()) playback.setQueue(eps as QueueEpisode[]);
-        }
-      })
-      .catch(() => setLoading(false));
-    // 站点头部数据（三个统计卡片）
-    void fetch(`${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/stats`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d && setStats(d))
-      .catch(() => {});
-    void fetch(`${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/guests`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => Array.isArray(d) && setGuestLogos(d.slice(0, 4)))
-      .catch(() => {});
+    const r = await fetch(`${apiBaseForFetch}/v1/public/episodes/recommended?lang=${lang}&limit=20`);
+    const eps: unknown = r.ok ? await r.json() : null;
+    return Array.isArray(eps) && eps.length > 0 ? (eps as QueueEpisode[]) : null;
+  });
+  // 播放器队列：数据到达时初始化（未激活才灌入，不打断播放）；新数据回第一屏
+  createEffect(() => {
+    const eps = list();
+    if (!eps) return;
+    setPage(0);
+    if (!playback.activated()) playback.setQueue(eps);
+  });
+  // 站点头部数据（三个统计卡片）
+  const [stats] = createResource(async () => {
+    const r = await fetch(`${apiBaseForFetch}/v1/public/stats`);
+    return r.ok ? await r.json() : null;
+  });
+  const [guestLogos] = createResource(async () => {
+    const r = await fetch(`${apiBaseForFetch}/v1/public/guests`);
+    const d: unknown = r.ok ? await r.json() : null;
+    return Array.isArray(d) ? (d as Array<{ name: string; avatar: string | null }>).slice(0, 4) : [];
   });
 
   const hostName = (ep: QueueEpisode) => ep.callName ?? ep.displayName ?? ep.username;
@@ -436,9 +432,9 @@ export default function HomePage() {
   const PAGE_SIZE = 4;
   const MAX_PAGES = 5;
   const pageCount = () =>
-    list().length > 0 ? Math.min(MAX_PAGES, Math.ceil(list().length / PAGE_SIZE)) : 0;
+    list()?.length ? Math.min(MAX_PAGES, Math.ceil(list()!.length / PAGE_SIZE)) : 0;
   const pageIndexes = () => Array.from({ length: pageCount() }, (_, i) => i);
-  const pageItems = (i: number) => list().slice(i * PAGE_SIZE, (i + 1) * PAGE_SIZE);
+  const pageItems = (i: number) => list()!.slice(i * PAGE_SIZE, (i + 1) * PAGE_SIZE);
   const curPage = () => Math.max(0, Math.min(page(), pageCount() - 1));
 
   return (
@@ -457,9 +453,9 @@ export default function HomePage() {
         <A href="/discover" {...stylex.props(styles.moreLink)}>{t("home.hero.browse")}</A>
       </div>
       <Show
-        when={list().length > 0}
+        when={list()?.length}
         fallback={
-          <Show when={loading()} fallback={<div {...stylex.props(styles.empty)}>{t("common.empty")}</div>}>
+          <Show when={list.loading} fallback={<div {...stylex.props(styles.empty)}>{t("common.empty")}</div>}>
             {/* 异步加载中：骨架屏占位（与真实卡片同尺寸，桌面 4 列 / 移动 2 列） */}
             <div {...stylex.props(styles.skeletonGrid)}>
               <For each={Array.from({ length: 4 })}>
@@ -572,7 +568,7 @@ export default function HomePage() {
           <A href="/guests" {...stylex.props(styles.statCard)}>
             <div {...stylex.props(styles.statTitle)}>{t("home.statGuests", { count: stats()!.guestCount, plural2: stats()!.guestCount === 1 ? "" : "s" })}</div>
             <div {...stylex.props(styles.statLogos)}>
-              <For each={guestLogos()}>
+              <For each={guestLogos() ?? []}>
                 {(g) => (
                   <Show when={g.avatar} fallback={<div {...stylex.props(styles.statLogoFallbackSmall)}>{g.name.slice(0, 1)}</div>}>
                     <img src={g.avatar!} alt={g.name} {...stylex.props(styles.statLogoSmall)} />
