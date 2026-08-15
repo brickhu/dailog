@@ -4,6 +4,7 @@ import { usePlayback, type QueueEpisode } from "../lib/playback";
 import { apiBaseForFetch, episodeCoverUrl } from "../lib/env";
 import { getEpisodeCached } from "../lib/episode-cache";
 import { Faq } from "../components/faq";
+import { Icon } from "@dailogues/ui";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
@@ -56,7 +57,9 @@ const styles = stylex.create({
     flexWrap: "wrap",
   },
   cta: {
-    display: "inline-block",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: dimensions.spacing2,
     width: "fit-content",
     padding: `${dimensions.spacing3} ${dimensions.spacing6}`,
     borderRadius: dimensions.radiusMd,
@@ -443,7 +446,7 @@ export default function HomePage() {
         <h1 {...stylex.props(styles.tagline)}>{t("home.hero.tagline")}</h1>
         <p {...stylex.props(styles.what)}>{t("home.hero.what")}</p>
         <div {...stylex.props(styles.ctaRow)}>
-          <A href="/submit" {...stylex.props(styles.cta)}>{t("home.hero.submit")}</A>
+          <A href="/submit" {...stylex.props(styles.cta)}><Icon icon="mdi:send" width={16} />{t("home.hero.submit")}</A>
         </div>
         <p {...stylex.props(styles.ctaHint)}>{t("home.hero.ctaHint")}</p>
       </section>

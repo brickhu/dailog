@@ -1,4 +1,5 @@
 import { createSignal, For, Show } from "solid-js";
+import { Icon } from "@dailogues/ui";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
@@ -41,9 +42,13 @@ const styles = stylex.create({
     ":hover": { backgroundColor: colors.surfaceStrong },
   },
   indicator: {
+    display: "inline-flex",
     color: colors.neutral,
-    fontSize: dimensions.fontSizeLg,
     flexShrink: 0,
+    transition: "transform 0.2s ease",
+  },
+  indicatorOpen: {
+    transform: "rotate(180deg)",
   },
   answer: {
     margin: 0,
@@ -97,8 +102,8 @@ export function Faq() {
                 onClick={() => setOpen(isOpen() ? null : i())}
               >
                 <span>{item.q}</span>
-                <span {...stylex.props(styles.indicator)} aria-hidden="true">
-                  {isOpen() ? "−" : "+"}
+                <span {...stylex.props(styles.indicator, isOpen() && styles.indicatorOpen)} aria-hidden="true">
+                  <Icon icon="mdi:chevron-down" width={20} />
                 </span>
               </button>
               <Show when={isOpen()}>
