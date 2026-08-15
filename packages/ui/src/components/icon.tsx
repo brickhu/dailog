@@ -16,12 +16,16 @@ export interface IconProps {
 
 export function Icon(props: IconProps) {
   const [svg, setSvg] = createSignal("");
-  onMount(async () => {
-    const idx = props.icon.indexOf(":");
-    if (idx <= 0) return;
-    const collection = props.icon.slice(0, idx);
-    const name = props.icon.slice(idx + 1);
-    setSvg((await loadIcon(collection, name).catch(() => undefined)) ?? "");
+  onMount(() => {
+    // 延迟到 hydration 完全结束后注入：嵌套组件（如 Button 内）中 onMount 可能早于
+    // 父级 hydration 完成，SVG 子节点注入会干扰节点匹配（Hydration Mismatch）
+    setTimeout(async () => {
+      const idx = props.icon.indexOf(":");
+      if (idx <= 0) return;
+      const collection = props.icon.slice(0, idx);
+      const name = props.icon.slice(idx + 1);
+      setSvg((await loadIcon(collection, name).catch(() => undefined)) ?? "");
+    }, 0);
   });
   return (
     <span

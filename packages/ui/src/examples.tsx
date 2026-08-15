@@ -90,6 +90,32 @@ export default function Examples() {
           <p>Details here...</p>
         </Banner>
         <Banner status="success" title="Changes saved" container="section" elevation="low" />
+
+        {/* 图标 Icon：按需注入（iconify API 单图标拉取，内联 SVG） */}
+        <div style={{ padding: "16px 0" }}>
+          <h2>图标 Icon</h2>
+          <div style={{ display: "flex", "align-items": "center", gap: "16px", padding: "12px 0" }}>
+            <Icon icon="mdi:send" width={16} />
+            <Icon icon="mdi:send" width={20} />
+            <Icon icon="mdi:send" width={32} />
+            <Icon icon="mdi:send" width={48} />
+          </div>
+          <div style={{ display: "flex", "align-items": "center", gap: "16px", padding: "12px 0" }}>
+            <Icon icon="mdi:heart" width={24} style={{ color: "red" }} />
+            <Icon icon="mdi:heart" width={24} style={{ color: "green" }} />
+            <Icon icon="mdi:heart" width={24} style={{ color: "#3b82f6" }} />
+          </div>
+          <div style={{ display: "flex", "flex-wrap": "wrap", "align-items": "center", gap: "16px", padding: "12px 0" }}>
+            <Icon icon="mdi:home" width={24} />
+            <Icon icon="mdi:close" width={24} />
+            <Icon icon="mdi:check" width={24} />
+            <Icon icon="mdi:alert" width={24} />
+            <Icon icon="mdi:chevron-down" width={24} />
+            <Icon icon="mdi:information-outline" width={24} />
+            <Icon icon="mdi:microphone" width={24} />
+            <Icon icon="mdi:play" width={24} />
+          </div>
+        </div>
     </div>
   );
 }

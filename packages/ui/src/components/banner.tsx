@@ -3,7 +3,6 @@ import { createSignal, createUniqueId, splitProps, Show, type JSX } from "solid-
 import { type StyleXStyles } from "@stylexjs/stylex";
 import { Icon } from "./icon";
 import { colors, dimensions, durations, easings, shadows } from "../theme.stylex";
-import { Button } from "./button";
 
 /**
  * Banner（复刻 Astryx Banner：https://astryx.atmeta.com/components/Banner，
@@ -244,6 +243,18 @@ const styles = stylex.create({
     transitionTimingFunction: easings.easeOut,
   },
   chevronExpanded: { transform: "rotate(180deg)" },
+  dismissBtn: {
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    padding: "4px",
+    color: "inherit",
+    display: "inline-flex",
+    alignItems: "center",
+  },
+  expandBtn: {
+    color: "inherit",
+  },
 });
 
 // 状态底（Astryx muted 底 → 项目 *Weak 档）
@@ -267,44 +278,7 @@ const statusTextStyles = stylex.create({
 // （:hover:not(:disabled):not([aria-disabled]) + @media (hover: hover)），
 // 同特异度靠样式表先后（banner 晚于 button 编译）覆盖内部 hover——即 button.md
 // 中 xstyle「同名属性覆盖内部」的既有约定
-const actionButtonStyles = stylex.create({
-  info: {
-    color: colors.onSecondaryWeak,
-    ":hover:not(:disabled):not([aria-disabled])": {
-      "@media (hover: hover)": {
-        color: colors.onSecondaryWeak,
-        backgroundColor: `color-mix(in srgb, ${colors.onSecondaryWeak} 12%, transparent)`,
-      },
-    },
-  },
-  warning: {
-    color: colors.onWarningWeak,
-    ":hover:not(:disabled):not([aria-disabled])": {
-      "@media (hover: hover)": {
-        color: colors.onWarningWeak,
-        backgroundColor: `color-mix(in srgb, ${colors.onWarningWeak} 12%, transparent)`,
-      },
-    },
-  },
-  error: {
-    color: colors.onDangerWeak,
-    ":hover:not(:disabled):not([aria-disabled])": {
-      "@media (hover: hover)": {
-        color: colors.onDangerWeak,
-        backgroundColor: `color-mix(in srgb, ${colors.onDangerWeak} 12%, transparent)`,
-      },
-    },
-  },
-  success: {
-    color: colors.onSuccessWeak,
-    ":hover:not(:disabled):not([aria-disabled])": {
-      "@media (hover: hover)": {
-        color: colors.onSuccessWeak,
-        backgroundColor: `color-mix(in srgb, ${colors.onSuccessWeak} 12%, transparent)`,
-      },
-    },
-  },
-});
+
 
 // 阴影层级
 const elevationStyles = stylex.create({
@@ -498,41 +472,33 @@ export function Banner(props: BannerProps) {
             <div {...stylex.props(styles.endArea)}>
               {local.endContent}
               <Show when={hasChildren()}>
-                <Button
-                  variant="neutral"
-                  appear="ghost"
-                  size="sm"
-                  isIconOnly
-                  xstyle={actionButtonStyles[props.status]}
-                  label={isExpanded() ? "Collapse" : "Expand"}
-                  tooltip={isExpanded() ? "Collapse" : "Expand"}
-                  icon={
-                    <span
-                      {...stylex.props(
-                        styles.chevron,
-                        isExpanded() && styles.chevronExpanded,
-                      )}
-                    >
-                      <Icon icon="mdi:chevron-down" width={16} height={16} />
-                    </span>
-                  }
+                <button
+                  type="button"
                   onClick={handleToggleExpand}
                   aria-expanded={isExpanded()}
                   aria-controls={isRendered() ? contentId : undefined}
-                />
+                  aria-label={isExpanded() ? "Collapse" : "Expand"}
+                  {...stylex.props(styles.dismissBtn, styles.expandBtn)}
+                >
+                  <span
+                    {...stylex.props(
+                      styles.chevron,
+                      isExpanded() && styles.chevronExpanded,
+                    )}
+                  >
+                    <Icon icon="mdi:chevron-down" width={16} height={16} />
+                  </span>
+                </button>
               </Show>
               <Show when={local.isDismissable}>
-                <Button
-                  variant="neutral"
-                  appear="ghost"
-                  size="sm"
-                  isIconOnly
-                  xstyle={actionButtonStyles[props.status]}
-                  label="Dismiss"
-                  tooltip="Dismiss"
-                  icon={<Icon icon="mdi:close" width={16} height={16} />}
+                <button
+                  type="button"
                   onClick={handleDismiss}
-                />
+                  aria-label="Dismiss"
+                  {...stylex.props(styles.dismissBtn)}
+                >
+                  <Icon icon="mdi:close" width={16} height={16} />
+                </button>
               </Show>
             </div>
           </Show>
