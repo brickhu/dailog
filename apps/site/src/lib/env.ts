@@ -45,8 +45,8 @@ export function episodeCoverUrl(id: string, coverUrl: string | null | undefined)
 
 export type SiteEnv = typeof env;
 
-/** 数据 fetch 基址：服务端 node fetch 必须 http（OrbStack 自签证书不被信任）；
- *  浏览器用公开基址（https，mixed content 拦截）。配合 createResource 的服务端短路使用 */
-export const apiBaseForFetch =
-  typeof window === "undefined" ? env.apiBaseUrl : (env.apiBaseUrlPublic ?? env.apiBaseUrl);
+/** 数据 fetch 基址：服务端 node fetch 必须 http（OrbStack 自签证书不被信任），直连 API；
+ *  浏览器端返回空串 → 走同源相对路径（site 的 /v1/* 代理转发到 API）——
+ *  避免浏览器跨域直连 API 被 CORS 拦截（local 8787 白名单不含 localhost:3000，生产同理） */
+export const apiBaseForFetch = typeof window === "undefined" ? env.apiBaseUrl : "";
 

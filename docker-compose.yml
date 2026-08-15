@@ -52,7 +52,7 @@ services:
       # localhost:3000 不再可用（host-only 才匹配）——统一用 https://dailog.orb.local（录音/登录均可）
       BETTER_AUTH_COOKIE_DOMAIN: .dailog.orb.local
       # CORS/CSRF 白名单：http 项保留兼容（本地 http 直连/端口访问来源）
-      APP_ORIGINS: https://dailog.orb.local,http://dailog.orb.local,https://api.dailog.orb.local
+      APP_ORIGINS: https://dailog.orb.local,http://dailog.orb.local,https://api.dailog.orb.local,http://localhost:3000
       # 本地开发放宽认证限流（容器内请求共享 local 桶）；生产不配，用默认 5 次/分钟
       AUTH_RATE_MAX: 30
       # 部署自动预留管理员（逗号分隔邮箱）：启动时提升为 admin，新注册的也即时提升

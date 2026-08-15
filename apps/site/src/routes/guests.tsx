@@ -1,4 +1,4 @@
-import { For, Show, createResource } from "solid-js";
+import { For, Show, Suspense, createResource } from "solid-js";
 import { A } from "@solidjs/router";
 import { Title } from "@solidjs/meta";
 import { apiBaseForFetch } from "../lib/env";
@@ -71,6 +71,7 @@ export default function GuestsPage() {
       <div {...stylex.props(styles.content)}>
         <div {...stylex.props(styles.title)}>{t("guests.title")}</div>
         <p {...stylex.props(styles.desc)}>{t("guests.desc")}</p>
+        <Suspense fallback={<ListSkeleton />}>
         <Show when={guests()?.length} fallback={<ListSkeleton />}>
           <div {...stylex.props(styles.grid)}>
             <For each={guests() ?? []}>
@@ -86,6 +87,7 @@ export default function GuestsPage() {
             </For>
           </div>
         </Show>
+        </Suspense>
       </div>
     </div>
   );
