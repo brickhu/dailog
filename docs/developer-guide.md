@@ -155,3 +155,25 @@ vinxi 0.5.11 对每个 router 的 vite server 用 `getRandomPort()` 分配 **HMR
 - **`https://dailog.orb.local`**：功能正常，但 wss 仍会报错（OrbStack 对非 443 publish 端口
   无 TLS，属平台限制）——改代码后手动刷新即可；需要安全上下文的功能（录音/登录）用 https。
 - 换机器/重装依赖：`pnpm install` 自动应用 patch；compose 环境变量已配置。
+
+## 7. /example 页（dev-only）Hydration Mismatch —— 已知问题，勿与图标混淆
+
+### 现象
+访问 /example（UI 组件示例页）控制台报：
+`Hydration Mismatch. Unable to find DOM nodes for hydration key: ...a1201320120 <span></span>`
+
+### 排查结论（2026-08 多轮二分定位）
+- **与图标实现无关**：web component 版（iconify-icon）、空 span 版、内联 SVG 版均复现
+  同一位置的 key 错位（SSR 渲染树比客户端少 1 个节点，key 012 缺失）。
+- **根因区域**：banner 关闭按钮（`tooltip` + `createUniqueId` + `aria-describedby` 组合）
+  附近 —— Solid 1.9 hydration 对该组合的节点匹配错位。所有相关条件均为 props 驱动
+  （代码审查无 SSR/客户端分支差异），属框架层兼容问题。
+- **影响范围**：`/example` 是 **dev-only** 页面（`import.meta.env.DEV`，生产构建不渲染，
+  `import.meta.env.DEV` 为 false 时整段不输出）——**生产无此问题**。
+  站点正常页面（首页/详情/列表等）不使用 banner + Button tooltip 组合，不受影响。
+- **副作用**：example 页 hydration 中断 → 该页 onMount 不执行 → 图标不显示
+  （站点其他页面图标正常）。
+
+### 处理建议
+- 接受现状（dev-only 展示页），或深挖 Button tooltip 区域（`createUniqueId`/aria 关联）。
+- 若 example 页报错干扰开发：可临时从 examples.tsx 移除 Banner 展示（移除后无 mismatch）。
