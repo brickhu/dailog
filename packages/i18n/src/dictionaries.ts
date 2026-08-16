@@ -11,6 +11,8 @@ export const zh = {
   "auth.signOutTitle": "退出登录",
   "auth.signOutDesc": "确定要退出当前账号吗？",
   "auth.signOutConfirm": "确认退出",
+  "importDialog.unreachable": "链接当前无法访问，请确认链接有效后重试",
+  "importDialog.retry": "重新输入 URL",
   // ---- 通用 ----
   "common.play": "播放",
   "common.pause": "暂停",
@@ -717,6 +719,8 @@ export const en: Dictionary = {
   "auth.signOutTitle": "Sign out",
   "auth.signOutDesc": "Are you sure you want to sign out?",
   "auth.signOutConfirm": "Sign out",
+  "importDialog.unreachable": "The link is currently unreachable. Please check and try again.",
+  "importDialog.retry": "Enter URL again",
   // ---- 通用 ----
   "common.play": "Play",
   "common.pause": "Pause",

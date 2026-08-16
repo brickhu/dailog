@@ -10,6 +10,7 @@ import { layouts, typography } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { auth } from "../lib/auth-guard";
+import { openImportDialog } from "../components/import-dialog";
 // use:auth 指令的作用域绑定（babel 编译转换需要；TS 不识 JSX 指令故 void 消除未使用误报）
 void auth;
 
@@ -445,7 +446,7 @@ export default function HomePage() {
             use:auth={true}
             size="xl"
             icon={<Icon icon="mdi:send" width={16} />}
-            onClick={() => navigate("/submit")}
+            onClick={openImportDialog}
           >
             {t("home.hero.submit")}
           </Button>

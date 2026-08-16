@@ -86,6 +86,26 @@ export function submissionsRoutes(repo: Repos) {
     });
   }) as unknown as RouteHandler<typeof r1, { Variables: { userId: string } }>);
 
+  const rReach = createRoute({
+    method: "post",
+    path: "/v1/submissions/reachable",
+    responses: {
+      200: { content: { "application/json": { schema: z.object({ ok: z.boolean() }) } }, description: "URL 可达" },
+      400: { content: { "application/json": { schema: Err } }, description: "URL 非法" },
+      422: { content: { "application/json": { schema: Err } }, description: "URL 不可达（网络层失败）" },
+    },
+  });
+  app.openapi(rReach, (async (c: Context) => {
+    const body = (await c.req.json().catch(() => null)) as { url?: unknown } | null;
+    const url = typeof body?.url === "string" ? body.url.trim() : "";
+    if (!url) return c.json({ error: "invalid_url", detail: "缺少分享链接（请粘贴 AI 对话分享 URL）" }, 400);
+    if (!isValidUrl(url)) return c.json({ error: "invalid_url", detail: "链接格式不合法（仅支持 http/https 分享链接）" }, 400);
+    if (url.length > 2048) return c.json({ error: "invalid_url", detail: "链接过长" }, 400);
+    const ok = await isReachable(url);
+    if (!ok) return c.json({ error: "url_unreachable", detail: "链接当前无法访问，请确认链接有效后重试" }, 422);
+    return c.json({ ok: true });
+  }) as unknown as RouteHandler<typeof rReach, { Variables: { userId: string } }>);
+
   const r2 = createRoute({
     method: "post",
     path: "/v1/submissions",

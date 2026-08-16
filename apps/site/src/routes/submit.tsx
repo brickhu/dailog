@@ -194,11 +194,15 @@ export default function SubmitPage() {
   };
 
   onMount(() => {
-    // 剪贴板弹层跳转预填：/submit?url=…
+    // 导入弹框跳转预填：/import?url=…（弹框已做可达性检测）——
+    // 预填后跳过 URL 输入那一步，直接进入第二步（确认投稿/配置）
     try {
       const params = new URLSearchParams(window.location.search);
       const prefill = params.get("url");
-      if (prefill && prefill.startsWith("http")) setUrl(prefill);
+      if (prefill && prefill.startsWith("http")) {
+        setUrl(prefill);
+        setStep("confirm");
+      }
     } catch { /* 静默 */ }
   });
 

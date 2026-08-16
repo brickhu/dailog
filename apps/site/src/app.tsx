@@ -10,6 +10,7 @@ import { CardGridSkeleton, DetailSkeleton, ListSkeleton } from "./components/rou
 import { PlaybackProvider } from "./lib/playback";
 import { PlayerBar } from "./components/player-bar";
 import { AuthGuardDialog, SignOutConfirmDialog } from "./lib/auth-guard";
+import { ImportDialog } from "./components/import-dialog";
 import { SiteNav } from "./components/site-nav";
 import { Footer } from "./components/footer";
 import "./app.css";
@@ -66,6 +67,7 @@ function AppShell(props: { children: JSX.Element }) {
       {/* 全局弹层（AppShell 内单例）：登录引导（use:auth 触发）+ 登出确认 */}
       <AuthGuardDialog />
       <SignOutConfirmDialog />
+      <ImportDialog />
     </div>
   );
 }

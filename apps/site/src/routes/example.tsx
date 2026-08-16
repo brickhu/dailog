@@ -5,6 +5,7 @@ import { Examples } from "@dailogues/ui";
 import { layouts } from "@dailogues/ui/theme.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { auth } from "../lib/auth-guard";
+import { openImportDialog } from "../components/import-dialog";
 
 export default function Example() {
   if (!import.meta.env.DEV) return null;
@@ -24,6 +25,11 @@ export default function Example() {
         <Show when={ran()}>
           <span style={{ color: "green" }}>{ran()}</span>
         </Show>
+      </div>
+      <div style={{ padding: "16px", display: "flex", gap: "12px" }}>
+        <button onClick={openImportDialog} style={{ padding: "8px 16px" }}>
+          打开导入弹框
+        </button>
       </div>
       </div>
     </div>
