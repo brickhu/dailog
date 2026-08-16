@@ -5,6 +5,7 @@ import { createSignal, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { Button, Dialog } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
+import { isLoggedIn } from "../lib/auth-guard";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 
@@ -40,6 +41,8 @@ let lastClipboardUrl = "";
 
 async function tryOpenFromClipboard(): Promise<void> {
   if (dialogOpen()) return; // 弹框已开：不打断用户操作
+  // 剪贴板自动弹框仅登录用户生效（未登录走 use:auth 登录引导，不自动打扰）
+  if (!(await isLoggedIn())) return;
   try {
     const text = await navigator.clipboard.readText();
     const url = text.trim();
