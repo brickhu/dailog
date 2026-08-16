@@ -8,9 +8,9 @@ import { useI18n } from "@dailogues/i18n";
 // 容器由页面负责（首页 containerLg 内 fullRow span 12）；组件自身只保留内容间距。
 const styles = stylex.create({
   wrap: {
-    padding: `0 ${dimensions.spacing8} ${dimensions.spacing12}`,
+    padding: `0 0 ${dimensions.spacing12}`,
     "@media (max-width: 640px)": {
-      padding: `0 ${dimensions.spacing4} ${dimensions.spacing8}`,
+      padding: `0 0 ${dimensions.spacing8}`,
     },
   },
   title: {

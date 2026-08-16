@@ -69,9 +69,9 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "baseline",
     justifyContent: "space-between",
-    padding: `${dimensions.spacing8} ${dimensions.spacing8} ${dimensions.spacing4}`,
+    // padding: `${dimensions.spacing8} ${dimensions.spacing8} ${dimensions.spacing4}`,
     "@media (max-width: 640px)": {
-      padding: `${dimensions.spacing6} ${dimensions.spacing4} ${dimensions.spacing3}`,
+      // padding: `${dimensions.spacing6} ${dimensions.spacing4} ${dimensions.spacing3}`,
     },
   },
   listTitle: {
@@ -87,10 +87,10 @@ const styles = stylex.create({
   // ---- 推荐滚屏：视口 + 平移轨道 + 分页 ----
   viewport: {
     // 无左右内边距：overflow 裁剪边界 = 容器边缘，相邻分页的卡片不会从 padding 区露出
-    padding: `0 0 ${dimensions.spacing2}`,
+    // padding: `0 0 ${dimensions.spacing2}`,
     overflow: "hidden",
     "@media (max-width: 640px)": {
-      padding: `0 0 ${dimensions.spacing2}`,
+      // padding: `0 0 ${dimensions.spacing2}`,
     },
   },
   track: {
@@ -101,7 +101,7 @@ const styles = stylex.create({
     flex: "0 0 100%",
     minWidth: "100%",
     // 左右内边距在分页内部：卡片与标题行同宽，且下一屏从容器边缘外才开始
-    padding: `0 ${dimensions.spacing4}`,
+    // padding: `0 ${dimensions.spacing4}`,
     display: "grid",
     // 列数跟随 containerLg 断点（<640 4 列 / <1024 8 列 / 默认 12 列）：
     // min-width 移动优先（stylex 升序输出 media，大断点在后覆盖小断点，语义正确）
@@ -109,7 +109,6 @@ const styles = stylex.create({
     columnGap: dimensions.spacing4,
     rowGap: dimensions.spacing4,
     "@media (min-width: 641px)": {
-      padding: `0 ${dimensions.spacing8}`,
       gridTemplateColumns: "repeat(8, minmax(0, 1fr))",
       columnGap: dimensions.spacing5,
       rowGap: dimensions.spacing5,
@@ -131,13 +130,13 @@ const styles = stylex.create({
   },
   // ---- 分页控制：‹ 圆点 › ----
   controls: {
-    padding: `${dimensions.spacing3} ${dimensions.spacing8} ${dimensions.spacing12}`,
+    padding: `${dimensions.spacing3} 0 ${dimensions.spacing12}`,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     gap: dimensions.spacing4,
     "@media (max-width: 640px)": {
-      padding: `${dimensions.spacing3} ${dimensions.spacing4} ${dimensions.spacing8}`,
+      padding: `${dimensions.spacing3} 0 ${dimensions.spacing8}`,
       gap: dimensions.spacing3,
     },
   },
@@ -177,12 +176,11 @@ const styles = stylex.create({
   // ---- 骨架屏（异步加载占位）：与真实卡片同尺寸（手机 2×2 / 平板以上 4 张一行），透明度脉冲 ----
   skeletonGrid: {
     // 与滚屏一致：左右内边距与标题行对齐
-    padding: `0 ${dimensions.spacing4} ${dimensions.spacing8}`,
+    // padding: `0 ${dimensions.spacing4} ${dimensions.spacing8}`,
     display: "grid",
     gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
     gap: dimensions.spacing4,
     "@media (min-width: 641px)": {
-      padding: `0 ${dimensions.spacing8} ${dimensions.spacing12}`,
       gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
       gap: dimensions.spacing5,
     },
