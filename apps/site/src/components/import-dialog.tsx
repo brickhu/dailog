@@ -22,10 +22,44 @@ function isUrlLike(input: string): boolean {
 
 // —— 全局单例（AppShell 挂载；openImportDialog 打开）——
 const [dialogOpen, setDialogOpen] = createSignal(false);
+// 弹框内部状态（打开时自动预填/重置用）
+let setDialogUrl: ((v: string) => void) | null = null;
+let setDialogState: ((s: DialogState) => void) | null = null;
+let setDialogFail: ((v: string) => void) | null = null;
 
 /** 打开导入弹框 */
 export function openImportDialog(): void {
   setDialogOpen(true);
+}
+
+// —— 剪贴板实时监控 ——
+// 剪贴板含合法 URL（且弹框未开）→ 自动打开弹框并预填 URL。
+// 轮询（3s）+ 页面重新可见时检测；权限拒绝/不可用静默（有权限的浏览器生效）。
+// 去重：同一 URL 只自动弹一次（用户关闭后不重复打扰；新 URL 才再弹）。
+let lastClipboardUrl = "";
+
+async function tryOpenFromClipboard(): Promise<void> {
+  if (dialogOpen()) return; // 弹框已开：不打断用户操作
+  try {
+    const text = await navigator.clipboard.readText();
+    const url = text.trim();
+    if (url && isUrlLike(url) && url !== lastClipboardUrl) {
+      lastClipboardUrl = url;
+      setDialogUrl?.(url);
+      setDialogState?.("input");
+      setDialogFail?.("");
+      setDialogOpen(true);
+    }
+  } catch {
+    // 剪贴板权限拒绝/API 不可用：静默（不打扰）
+  }
+}
+
+if (typeof document !== "undefined") {
+  setInterval(() => void tryOpenFromClipboard(), 3000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void tryOpenFromClipboard();
+  });
 }
 
 const styles = stylex.create({
@@ -89,6 +123,10 @@ export function ImportDialog() {
   const [state, setState] = createSignal<DialogState>("input");
   const [url, setUrl] = createSignal("");
   const [failMsg, setFailMsg] = createSignal("");
+  // 剪贴板监控预填通道（组件挂载期间生效）
+  setDialogUrl = setUrl;
+  setDialogState = setState;
+  setDialogFail = setFailMsg;
 
   const urlInvalid = () => url().trim().length > 0 && !isUrlLike(url().trim());
   const canSubmit = () => url().trim().length > 0 && !urlInvalid();
