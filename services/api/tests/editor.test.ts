@@ -64,6 +64,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       countPendingByUser: async () => 0,
       hasReadyVoiceSample: async () => true,
       listByUser: async () => [],
+      getByUser: async () => null,
       listQueue: async () => [],
       getDetail: async () => null,
       reject: async () => {},

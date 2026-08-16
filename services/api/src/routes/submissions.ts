@@ -190,5 +190,20 @@ export function submissionsRoutes(repo: Repos) {
     return c.json(list);
   }) as unknown as RouteHandler<typeof r3, { Variables: { userId: string } }>);
 
+  const r4 = createRoute({
+    method: "get",
+    path: "/v1/me/submissions/:id",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "当前用户单条投稿详情（含最新节目信息）" },
+      404: { content: { "application/json": { schema: Err } }, description: "投稿不存在或非本人" },
+    },
+  });
+  app.openapi(r4, (async (c: Context) => {
+    const userId = c.get("userId") as string;
+    const row = await repo.submissions.getByUser(userId, c.req.param("id")!);
+    if (!row) return c.json({ error: "not_found" }, 404);
+    return c.json(row);
+  }) as unknown as RouteHandler<typeof r4, { Variables: { userId: string } }>);
+
   return app;
 }

@@ -37,6 +37,12 @@ const styles = stylex.create({
     fontWeight: dimensions.fontWeightBold,
     marginBottom: dimensions.spacing6,
   },
+  cardLink: {
+    textDecoration: "none",
+    color: "inherit",
+    display: "block",
+    ":hover": { opacity: 0.85 },
+  },
   card: {
     display: "block",
     padding: dimensions.spacing4,
@@ -121,7 +127,7 @@ function SubmissionsList() {
       >
         <For each={submissions()}>
           {(sub) => (
-            <div {...stylex.props(styles.card)}>
+            <A href={`/submissions/${sub.id}`} {...stylex.props(styles.card, styles.cardLink)}>
               <div {...stylex.props(styles.subTitle)}>
                 {sub.title || t("common.unnamed")}
                 <span {...stylex.props(styles.badge)}>{statusLabel(sub.status)}</span>
@@ -137,7 +143,7 @@ function SubmissionsList() {
               <Show when={sub.status === "rejected" && sub.rejectedReason}>
                 <div {...stylex.props(styles.reason)}>{t("meSubmits.rejectReason")}：{sub.rejectedReason}</div>
               </Show>
-            </div>
+            </A>
           )}
         </For>
       </Show>

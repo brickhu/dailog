@@ -43,6 +43,17 @@ export interface SubmissionsRepo {
     episodeStatus: string | null;
     createdAt: Date;
   }>>;
+  /** 当前用户单条投稿详情（归属校验：非本人返回 null）+ 最新节目信息 */
+  getByUser(userId: string, id: string): Promise<{
+    id: string;
+    url: string;
+    title: string | null;
+    callName: string | null;
+    status: string;
+    rejectedReason: string | null;
+    createdAt: Date;
+    episode: { id: string; slug: string; title: string | null; number: number | null; coverUrl: string | null; status: string } | null;
+  } | null>;
   /** 编辑队列：按状态筛选（缺省 submitted），submitted 按提交时间升序（inbox 先到先审）。
    *  附带投稿人信息与采样就绪标记（无采样 = 无法制作主持人克隆音色，先标注） */
   listQueue(status?: "submitted" | "rejected" | "published"): Promise<Array<{
@@ -565,6 +576,47 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           episodeStatus: latestBySubmission.get(s.id)?.status ?? null,
           createdAt: s.createdAt,
         }));
+      },
+      async getByUser(userId, id) {
+        const [sub] = await db
+          .select({
+            id: schema.submissions.id,
+            url: schema.submissions.url,
+            title: schema.submissions.title,
+            callName: schema.submissions.callName,
+            status: schema.submissions.status,
+            rejectedReason: schema.submissions.rejectedReason,
+            createdAt: schema.submissions.createdAt,
+          })
+          .from(schema.submissions)
+          .where(and(eq(schema.submissions.id, id), eq(schema.submissions.userId, userId)))
+          .limit(1);
+        if (!sub) return null;
+        const epRows = await db
+          .select({
+            id: schema.episodes.id,
+            slug: schema.episodes.slug,
+            title: schema.episodes.title,
+            number: schema.episodes.number,
+            coverUrl: schema.episodes.coverUrl,
+            status: schema.episodes.status,
+            createdAt: schema.episodes.createdAt,
+          })
+          .from(schema.episodes)
+          .where(eq(schema.episodes.submissionId, id))
+          .orderBy(desc(schema.episodes.createdAt))
+          .limit(1);
+        const ep = epRows[0] ?? null;
+        return {
+          id: sub.id,
+          url: sub.url,
+          title: sub.title,
+          callName: sub.callName,
+          status: sub.status,
+          rejectedReason: sub.rejectedReason,
+          createdAt: sub.createdAt,
+          episode: ep ? { id: ep.id, slug: ep.slug, title: ep.title, number: ep.number, coverUrl: ep.coverUrl, status: ep.status } : null,
+        };
       },
       async listQueue(status = "submitted") {
         const rows = await db

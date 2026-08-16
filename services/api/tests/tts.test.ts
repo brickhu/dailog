@@ -65,7 +65,9 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       create: async () => ({ id: "sub-1" }),
       findByUserUrl: async () => null,
       countPendingByUser: async () => 0,
+      hasReadyVoiceSample: async () => true,
       listByUser: async () => [],
+      getByUser: async () => null,
       listQueue: async () => [],
       getDetail: async () => null,
       reject: async () => {},
@@ -117,6 +119,7 @@ const SUBMITTED_DETAIL = {
   userEmail: "submitter@test.local",
   personaInfo: { displayName: "投稿人", gender: null, profession: null, age: null, bio: null, nationality: null },
   callName: "小北",
+  suggestion: null,
   voiceSampleId: null,
   voiceSamples: [{ audioUrl: "voices/user-1/zh.webm", transcript: "大家好", language: "zh", status: "ready", duration: 5 }],
 };
