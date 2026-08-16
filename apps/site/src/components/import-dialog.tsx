@@ -46,13 +46,24 @@ async function tryOpenFromClipboard(): Promise<void> {
   try {
     const text = await navigator.clipboard.readText();
     const url = text.trim();
-    if (url && isUrlLike(url) && url !== lastClipboardUrl) {
-      lastClipboardUrl = url;
-      setDialogUrl?.(url);
-      setDialogState?.("input");
-      setDialogFail?.("");
-      setDialogOpen(true);
+    if (!url || !isUrlLike(url) || url === lastClipboardUrl) return;
+    lastClipboardUrl = url; // 记录（无论是否弹，避免重复检测/重复打扰）
+    // 已投稿过的 URL（重复导入）→ 不弹（弹框内确认投稿时仍有重复兜底）
+    try {
+      const res = await fetch("/v1/submissions/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = (await res.json().catch(() => null)) as { existing?: boolean } | null;
+      if (data?.existing) return;
+    } catch {
+      // 重复检测失败：仍弹（弹框内确认投稿时再兜底检测）
     }
+    setDialogUrl?.(url);
+    setDialogState?.("input");
+    setDialogFail?.("");
+    setDialogOpen(true);
   } catch {
     // 剪贴板权限拒绝/API 不可用：静默（不打扰）
   }
