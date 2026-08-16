@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --env-file-if-exists=.env.local node_modules/tsx/dist/cli.mjs watch src/index.ts",
+    "dev": "node dev-supervisor.mjs",
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -14,18 +14,20 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1101.0",
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@hono/node-server": "^1.13.0",
+    "@hono/swagger-ui": "^0.6.1",
+    "@hono/zod-openapi": "^1.6.0",
     "@smithy/node-http-handler": "^4.9.13",
     "better-auth": "^1.6.25",
     "drizzle-orm": "^0.38.0",
     "hono": "^4.6.0",
     "jose": "^6.2.7",
     "postgres": "^3.4.5",
-    "tsx": "^4.19.0",
-    "zod": "^3.24.0",
-    "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "socks-proxy-agent": "^10.1.0",
-    "undici": "^7.8.0"
+    "tsx": "^4.19.0",
+    "undici": "^7.8.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

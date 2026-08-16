@@ -55,13 +55,13 @@ importers:
         version: 1.0.0(solid-js@1.9.14)
       '@solidjs/start':
         specifier: ^1.3.2
-        version: 1.3.2(solid-js@1.9.14)(vinxi@0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4))(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4))
+        version: 1.3.2(solid-js@1.9.14)(vinxi@0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))
       '@stylexjs/stylex':
         specifier: ^0.19.0
         version: 0.19.0
       '@stylexjs/unplugin':
         specifier: ^0.19.0
-        version: 0.19.0(unplugin@3.3.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.4)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)))
+        version: 0.19.0(unplugin@3.3.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.4)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)))
       postgres:
         specifier: ^3.4.5
         version: 3.4.9
@@ -77,10 +77,10 @@ importers:
         version: 5.9.3
       vinxi:
         specifier: ^0.5.11
-        version: 0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4)
+        version: 0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)
       vitest:
         specifier: ^3.0.0
-        version: 3.2.7(@types/node@22.20.1)(happy-dom@20.11.1)(jiti@2.7.0)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)
+        version: 3.2.7(@types/node@22.20.1)(happy-dom@20.11.1)(jiti@2.7.0)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)
 
   packages/auth-ui:
     dependencies:
@@ -144,12 +144,18 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.0
         version: 1.19.17(hono@4.12.33)
+      '@hono/swagger-ui':
+        specifier: ^0.6.1
+        version: 0.6.1(hono@4.12.33)
+      '@hono/zod-openapi':
+        specifier: ^1.6.0
+        version: 1.6.0(hono@4.12.33)(zod@4.4.3)
       '@smithy/node-http-handler':
         specifier: ^4.9.13
         version: 4.9.13
       better-auth:
         specifier: ^1.6.25
-        version: 1.6.25(drizzle-kit@0.30.6)(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(solid-js@1.9.14)(vitest@3.2.7(@types/node@22.20.1)(happy-dom@20.11.1)(jiti@2.7.0)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4))
+        version: 1.6.25(drizzle-kit@0.30.6)(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(solid-js@1.9.14)(vitest@3.2.7(@types/node@22.20.1)(happy-dom@20.11.1)(jiti@2.7.0)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))
       drizzle-orm:
         specifier: ^0.38.0
         version: 0.38.4(kysely@0.29.4)(postgres@3.4.9)
@@ -172,8 +178,8 @@ importers:
         specifier: ^7.8.0
         version: 7.29.0
       zod:
-        specifier: ^3.24.0
-        version: 3.25.76
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -186,7 +192,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.0.0
-        version: 3.2.7(@types/node@22.20.1)(happy-dom@20.11.1)(jiti@2.7.0)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)
+        version: 3.2.7(@types/node@22.20.1)(happy-dom@20.11.1)(jiti@2.7.0)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)
 
   tools/dailog-editor:
     dependencies:
@@ -211,6 +217,11 @@ packages:
 
   '@asamuzakjp/css-color@3.2.0':
     resolution: {integrity: sha512-K1A6z8tS3XsmCMM86xoWdn7Fkdn9m6RSVtocUrJYIwZnFVkng/PvkEoWtOWmP+Scc6saYWHWZYbndEEXxl24jw==}
+
+  '@asteasolutions/zod-to-openapi@9.1.0':
+    resolution: {integrity: sha512-pLMeRgRYS7/vZIgAAkOe2P6+XGTifR1MT9pqDoxZ11EmcJJ+DPmdPqLN8ZZF4U8R9KHCCQCS9c2wtuE8wSrfkw==}
+    peerDependencies:
+      zod: ^4.0.0
 
   '@aws-sdk/checksums@3.1000.24':
     resolution: {integrity: sha512-7TWLjypP8kk3savsDBRuhZJx7mBuFFA2136BQhwwLllsAnO4Tmq/p+SXZaNxbuulkzUFz3BZzj0bb4YzexZcNQ==}
@@ -1301,6 +1312,24 @@ packages:
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
+
+  '@hono/swagger-ui@0.6.1':
+    resolution: {integrity: sha512-sJTvldu1GPeEPfyeLG7gRj+W4vEuD+JDi+JjJ3TJs/DvMUtBLs0KJO5yokGegWWdy5qrbdnQGekbhgNRmPmYKQ==}
+    peerDependencies:
+      hono: '>=4.0.0'
+
+  '@hono/zod-openapi@1.6.0':
+    resolution: {integrity: sha512-42HXUBIaGmQh+hZGLw3Hy5piOreIXgnBnUSs55mtn2gnW/xWtU9nQwEUtRRCk5to8Vm2XbfO0J83eUCwCf5eTg==}
+    engines: {node: '>=16.0.0'}
+    peerDependencies:
+      hono: '>=4.10.0'
+      zod: ^4.0.0
+
+  '@hono/zod-validator@0.9.0':
+    resolution: {integrity: sha512-n0ZSXmCiHVIp4Y5wlOOyZCeTd/rsawA/qW1cipB8QOYKZ9N8Tk0nZUZCXho9cu374AN4JpDNKioNKBJ/W+LBug==}
+    peerDependencies:
+      hono: '>=4.11.2'
+      zod: ^3.25.0 || ^4.0.0
 
   '@iconify-icon/solid@3.0.3':
     resolution: {integrity: sha512-VUM8/gscfrU0e6dUWjitdsJrNzYoY1bGTp1+gfZIAbvo+tIGcP9bD3WAvFb6pHaCYL/5X6erZUUn8pL0c0xX9Q==}
@@ -3608,6 +3637,9 @@ packages:
     resolution: {integrity: sha512-smsWv2LzFjP03xmvFoJ331ss6h+jixfA4UUV/Bsiyuu4YJPfN+FIQGOIiv4w9/+MoHkfkJ22UIaQWRVFRfH6Vw==}
     engines: {node: '>=20'}
 
+  openapi3-ts@4.6.1:
+    resolution: {integrity: sha512-XW9MOldkhoICNeXVzzmXzmOW5G73ppOEGmh7fLCqHjgfdEYCGGN+00MlVCeUZgovjjfC56j9tvtDt1zGabNjjA==}
+
   package-json-from-dist@1.0.1:
     resolution: {integrity: sha512-UEZIS3/by4OC8vL3P2dTXRETpebLI2NiI5vIrjaD/5UtrkFX/tNbwjTSRAGC/+7CAo2pIcBaRgWmcBBHcsaCIw==}
 
@@ -4599,6 +4631,11 @@ packages:
     resolution: {integrity: sha512-YgvUTfwqyc7UXVMrB+SImsVYSmTS8X/tSrtdNZMImM+n7+QTriRXyXim0mBrTXNeqzVF0KWGgHPeiyViFFrNDw==}
     engines: {node: '>=18'}
 
+  yaml@2.9.0:
+    resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
+
   yargs-parser@22.0.0:
     resolution: {integrity: sha512-rwu/ClNdSMpkSrUb+d6BRsSkLUq1fmfsY6TOpYzTwvwkg1/NRG85KBy3kq++A8LKQwX6lsu+aWad+2khvuXrqw==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=23}
@@ -4616,9 +4653,6 @@ packages:
   zip-stream@6.0.1:
     resolution: {integrity: sha512-zK7YHHz4ZXpW89AHXUPbQVGKI7uvkd3hzusTdotCg1UxyaVtg0zFJSTfW/Dq5f7OBBVnq6cZIaC8Ti4hb6dtCA==}
     engines: {node: '>= 14'}
-
-  zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
   zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
@@ -4641,6 +4675,11 @@ snapshots:
       '@csstools/css-tokenizer': 3.0.4
       lru-cache: 10.4.3
     optional: true
+
+  '@asteasolutions/zod-to-openapi@9.1.0(zod@4.4.3)':
+    dependencies:
+      openapi3-ts: 4.6.1
+      zod: 4.4.3
 
   '@aws-sdk/checksums@3.1000.24':
     dependencies:
@@ -4934,7 +4973,7 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
-  '@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2)':
+  '@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2)':
     dependencies:
       '@better-auth/utils': 0.4.2
       '@better-fetch/fetch': 1.3.1
@@ -4946,38 +4985,38 @@ snapshots:
       nanostores: 1.4.2
       zod: 4.4.3
 
-  '@better-auth/drizzle-adapter@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))':
+  '@better-auth/drizzle-adapter@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))':
     dependencies:
-      '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2)
+      '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2)
       '@better-auth/utils': 0.4.2
     optionalDependencies:
       drizzle-orm: 0.38.4(kysely@0.29.4)(postgres@3.4.9)
 
-  '@better-auth/kysely-adapter@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(kysely@0.29.4)':
+  '@better-auth/kysely-adapter@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(kysely@0.29.4)':
     dependencies:
-      '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2)
+      '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2)
       '@better-auth/utils': 0.4.2
     optionalDependencies:
       kysely: 0.29.4
 
-  '@better-auth/memory-adapter@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)':
+  '@better-auth/memory-adapter@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)':
     dependencies:
-      '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2)
+      '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2)
       '@better-auth/utils': 0.4.2
 
-  '@better-auth/mongo-adapter@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)':
+  '@better-auth/mongo-adapter@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)':
     dependencies:
-      '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2)
+      '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2)
       '@better-auth/utils': 0.4.2
 
-  '@better-auth/prisma-adapter@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)':
+  '@better-auth/prisma-adapter@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)':
     dependencies:
-      '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2)
+      '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2)
       '@better-auth/utils': 0.4.2
 
-  '@better-auth/telemetry@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)':
+  '@better-auth/telemetry@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)':
     dependencies:
-      '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2)
+      '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2)
       '@better-auth/utils': 0.4.2
       '@better-fetch/fetch': 1.3.1
 
@@ -5455,6 +5494,23 @@ snapshots:
   '@hono/node-server@1.19.17(hono@4.12.33)':
     dependencies:
       hono: 4.12.33
+
+  '@hono/swagger-ui@0.6.1(hono@4.12.33)':
+    dependencies:
+      hono: 4.12.33
+
+  '@hono/zod-openapi@1.6.0(hono@4.12.33)(zod@4.4.3)':
+    dependencies:
+      '@asteasolutions/zod-to-openapi': 9.1.0(zod@4.4.3)
+      '@hono/zod-validator': 0.9.0(hono@4.12.33)(zod@4.4.3)
+      hono: 4.12.33
+      openapi3-ts: 4.6.1
+      zod: 4.4.3
+
+  '@hono/zod-validator@0.9.0(hono@4.12.33)(zod@4.4.3)':
+    dependencies:
+      hono: 4.12.33
+      zod: 4.4.3
 
   '@iconify-icon/solid@3.0.3(solid-js@1.9.14)':
     dependencies:
@@ -5958,11 +6014,11 @@ snapshots:
     dependencies:
       solid-js: 1.9.14
 
-  '@solidjs/start@1.3.2(solid-js@1.9.14)(vinxi@0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4))(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4))':
+  '@solidjs/start@1.3.2(solid-js@1.9.14)(vinxi@0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))':
     dependencies:
-      '@tanstack/server-functions-plugin': 1.121.21(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4))
-      '@vinxi/plugin-directives': 0.5.1(vinxi@0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4))
-      '@vinxi/server-components': 0.5.1(vinxi@0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4))
+      '@tanstack/server-functions-plugin': 1.121.21(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))
+      '@vinxi/plugin-directives': 0.5.1(vinxi@0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))
+      '@vinxi/server-components': 0.5.1(vinxi@0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))
       cookie-es: 2.0.1
       defu: 6.1.7
       error-stack-parser: 2.1.4
@@ -5974,8 +6030,8 @@ snapshots:
       source-map-js: 1.2.1
       terracotta: 1.1.1(solid-js@1.9.14)
       tinyglobby: 0.2.17
-      vinxi: 0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4)
-      vite-plugin-solid: 2.11.14(solid-js@1.9.14)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4))
+      vinxi: 0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)
+      vite-plugin-solid: 2.11.14(solid-js@1.9.14)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))
     transitivePeerDependencies:
       - '@testing-library/jest-dom'
       - solid-js
@@ -6007,7 +6063,7 @@ snapshots:
       invariant: 2.2.4
       styleq: 0.2.1
 
-  '@stylexjs/unplugin@0.19.0(unplugin@3.3.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.4)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)))':
+  '@stylexjs/unplugin@0.19.0(unplugin@3.3.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.4)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)))':
     dependencies:
       '@babel/core': 7.29.7
       '@babel/plugin-syntax-flow': 7.29.7(@babel/core@7.29.7)
@@ -6016,11 +6072,11 @@ snapshots:
       '@stylexjs/babel-plugin': 0.19.0
       browserslist: 4.28.7
       lightningcss: 1.33.0
-      unplugin: 3.3.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.4)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4))
+      unplugin: 3.3.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.4)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))
     transitivePeerDependencies:
       - supports-color
 
-  '@tanstack/directive-functions-plugin@1.121.21(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4))':
+  '@tanstack/directive-functions-plugin@1.121.21(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))':
     dependencies:
       '@babel/code-frame': 7.26.2
       '@babel/core': 7.29.7
@@ -6029,7 +6085,7 @@ snapshots:
       '@tanstack/router-utils': 1.162.2
       babel-dead-code-elimination: 1.0.12
       tiny-invariant: 1.3.3
-      vite: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)
+      vite: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -6046,7 +6102,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@tanstack/server-functions-plugin@1.121.21(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4))':
+  '@tanstack/server-functions-plugin@1.121.21(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))':
     dependencies:
       '@babel/code-frame': 7.26.2
       '@babel/core': 7.29.7
@@ -6055,7 +6111,7 @@ snapshots:
       '@babel/template': 7.29.7
       '@babel/traverse': 7.29.8
       '@babel/types': 7.29.8
-      '@tanstack/directive-functions-plugin': 1.121.21(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4))
+      '@tanstack/directive-functions-plugin': 1.121.21(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))
       babel-dead-code-elimination: 1.0.12
       tiny-invariant: 1.3.3
     transitivePeerDependencies:
@@ -6170,7 +6226,7 @@ snapshots:
       untun: 0.1.3
       uqr: 0.1.3
 
-  '@vinxi/plugin-directives@0.5.1(vinxi@0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4))':
+  '@vinxi/plugin-directives@0.5.1(vinxi@0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))':
     dependencies:
       '@babel/parser': 7.29.8
       acorn: 8.18.0
@@ -6181,18 +6237,18 @@ snapshots:
       magicast: 0.2.11
       recast: 0.23.19
       tslib: 2.8.1
-      vinxi: 0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4)
+      vinxi: 0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)
 
-  '@vinxi/server-components@0.5.1(vinxi@0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4))':
+  '@vinxi/server-components@0.5.1(vinxi@0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))':
     dependencies:
-      '@vinxi/plugin-directives': 0.5.1(vinxi@0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4))
+      '@vinxi/plugin-directives': 0.5.1(vinxi@0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))
       acorn: 8.18.0
       acorn-loose: 8.5.2
       acorn-typescript: 1.4.13(acorn@8.18.0)
       astring: 1.9.0
       magicast: 0.2.11
       recast: 0.23.19
-      vinxi: 0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4)
+      vinxi: 0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)
 
   '@vitest/expect@3.2.7':
     dependencies:
@@ -6202,13 +6258,13 @@ snapshots:
       chai: 5.3.3
       tinyrainbow: 2.0.0
 
-  '@vitest/mocker@3.2.7(vite@7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4))':
+  '@vitest/mocker@3.2.7(vite@7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))':
     dependencies:
       '@vitest/spy': 3.2.7
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)
+      vite: 7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)
 
   '@vitest/pretty-format@3.2.7':
     dependencies:
@@ -6388,15 +6444,15 @@ snapshots:
 
   baseline-browser-mapping@2.11.11: {}
 
-  better-auth@1.6.25(drizzle-kit@0.30.6)(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(solid-js@1.9.14)(vitest@3.2.7(@types/node@22.20.1)(happy-dom@20.11.1)(jiti@2.7.0)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)):
+  better-auth@1.6.25(drizzle-kit@0.30.6)(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(solid-js@1.9.14)(vitest@3.2.7(@types/node@22.20.1)(happy-dom@20.11.1)(jiti@2.7.0)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)):
     dependencies:
-      '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2)
-      '@better-auth/drizzle-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))
-      '@better-auth/kysely-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(kysely@0.29.4)
-      '@better-auth/memory-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)
-      '@better-auth/mongo-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)
-      '@better-auth/prisma-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)
-      '@better-auth/telemetry': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@3.25.76))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)
+      '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2)
+      '@better-auth/drizzle-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))
+      '@better-auth/kysely-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(kysely@0.29.4)
+      '@better-auth/memory-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)
+      '@better-auth/mongo-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)
+      '@better-auth/prisma-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)
+      '@better-auth/telemetry': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.7)(kysely@0.29.4)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)
       '@better-auth/utils': 0.4.2
       '@better-fetch/fetch': 1.3.1
       '@noble/ciphers': 2.2.0
@@ -6411,7 +6467,7 @@ snapshots:
       drizzle-kit: 0.30.6
       drizzle-orm: 0.38.4(kysely@0.29.4)(postgres@3.4.9)
       solid-js: 1.9.14
-      vitest: 3.2.7(@types/node@22.20.1)(happy-dom@20.11.1)(jiti@2.7.0)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)
+      vitest: 3.2.7(@types/node@22.20.1)(happy-dom@20.11.1)(jiti@2.7.0)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)
     transitivePeerDependencies:
       - '@cloudflare/workers-types'
       - '@opentelemetry/api'
@@ -7654,7 +7710,7 @@ snapshots:
 
   nanostores@1.4.2: {}
 
-  nitropack@2.13.4(@parcel/watcher@2.6.0)(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(rolldown@1.2.1)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)):
+  nitropack@2.13.4(@parcel/watcher@2.6.0)(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(rolldown@1.2.1)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)):
     dependencies:
       '@cloudflare/kv-asset-handler': 0.4.2
       '@rollup/plugin-alias': 6.0.0(rollup@4.62.4)
@@ -7719,7 +7775,7 @@ snapshots:
       uncrypto: 0.1.3
       unctx: 2.5.0
       unenv: 2.0.0-rc.24
-      unimport: 6.4.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.4)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4))
+      unimport: 6.4.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.4)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))
       unplugin-utils: 0.3.2
       unstorage: 1.17.5(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(ioredis@5.11.1)
       untyped: 2.0.0
@@ -7829,6 +7885,10 @@ snapshots:
       is-inside-container: 1.0.0
       powershell-utils: 0.1.0
       wsl-utils: 0.3.1
+
+  openapi3-ts@4.6.1:
+    dependencies:
+      yaml: 2.9.0
 
   package-json-from-dist@1.0.1: {}
 
@@ -8470,7 +8530,7 @@ snapshots:
 
   unicorn-magic@0.4.0: {}
 
-  unimport@6.4.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.4)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)):
+  unimport@6.4.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.4)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)):
     dependencies:
       acorn: 8.18.0
       escape-string-regexp: 5.0.0
@@ -8484,7 +8544,7 @@ snapshots:
       scule: 1.3.0
       strip-literal: 4.0.0
       tinyglobby: 0.2.17
-      unplugin: 3.3.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.4)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4))
+      unplugin: 3.3.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.4)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))
       unplugin-utils: 0.3.2
     optionalDependencies:
       rolldown: 1.2.1
@@ -8533,7 +8593,7 @@ snapshots:
       picomatch: 4.0.5
       webpack-virtual-modules: 0.6.2
 
-  unplugin@3.3.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.4)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)):
+  unplugin@3.3.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.4)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)):
     dependencies:
       '@jridgewell/remapping': 2.3.5
       picomatch: 4.0.5
@@ -8542,7 +8602,7 @@ snapshots:
       esbuild: 0.28.1
       rolldown: 1.2.1
       rollup: 4.62.4
-      vite: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)
+      vite: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)
 
   unstorage@1.17.5(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(ioredis@5.11.1):
     dependencies:
@@ -8603,7 +8663,7 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
 
-  vinxi@0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4):
+  vinxi@0.5.11(patch_hash=4iqkp5nzt2ttdsgnzffyoiiqyu)(@parcel/watcher@2.6.0)(@types/node@22.20.1)(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(ioredis@5.11.1)(jiti@2.7.0)(lightningcss@1.33.0)(rolldown@1.2.1)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0):
     dependencies:
       '@babel/core': 7.29.7
       '@babel/plugin-syntax-jsx': 7.29.7(@babel/core@7.29.7)
@@ -8624,7 +8684,7 @@ snapshots:
       hookable: 5.5.3
       http-proxy: 1.18.1
       micromatch: 4.0.8
-      nitropack: 2.13.4(@parcel/watcher@2.6.0)(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(rolldown@1.2.1)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4))
+      nitropack: 2.13.4(@parcel/watcher@2.6.0)(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9))(rolldown@1.2.1)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))
       node-fetch-native: 1.6.7
       path-to-regexp: 6.3.0
       pathe: 1.1.2
@@ -8637,7 +8697,7 @@ snapshots:
       unctx: 2.5.0
       unenv: 1.10.0
       unstorage: 1.17.5(db0@0.3.4(drizzle-orm@0.38.4(kysely@0.29.4)(postgres@3.4.9)))(ioredis@5.11.1)
-      vite: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)
+      vite: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)
       zod: 4.4.3
     transitivePeerDependencies:
       - '@azure/app-configuration'
@@ -8693,13 +8753,13 @@ snapshots:
       - xml2js
       - yaml
 
-  vite-node@3.2.4(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4):
+  vite-node@3.2.4(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0):
     dependencies:
       cac: 6.7.14
       debug: 4.4.3
       es-module-lexer: 1.7.0
       pathe: 2.0.3
-      vite: 7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)
+      vite: 7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)
     transitivePeerDependencies:
       - '@types/node'
       - jiti
@@ -8714,7 +8774,7 @@ snapshots:
       - tsx
       - yaml
 
-  vite-plugin-solid@2.11.14(solid-js@1.9.14)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)):
+  vite-plugin-solid@2.11.14(solid-js@1.9.14)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)):
     dependencies:
       '@babel/core': 7.29.7
       '@types/babel__core': 7.20.5
@@ -8722,12 +8782,12 @@ snapshots:
       merge-anything: 5.1.7
       solid-js: 1.9.14
       solid-refresh: 0.6.3(solid-js@1.9.14)
-      vite: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)
-      vitefu: 1.1.3(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4))
+      vite: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)
+      vitefu: 1.1.3(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))
     transitivePeerDependencies:
       - supports-color
 
-  vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4):
+  vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0):
     dependencies:
       esbuild: 0.25.12
       fdir: 6.5.0(picomatch@4.0.5)
@@ -8742,8 +8802,9 @@ snapshots:
       lightningcss: 1.33.0
       terser: 5.49.0
       tsx: 4.23.4
+      yaml: 2.9.0
 
-  vite@7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4):
+  vite@7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0):
     dependencies:
       esbuild: 0.28.1
       fdir: 6.5.0(picomatch@4.0.5)
@@ -8758,16 +8819,17 @@ snapshots:
       lightningcss: 1.33.0
       terser: 5.49.0
       tsx: 4.23.4
+      yaml: 2.9.0
 
-  vitefu@1.1.3(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)):
+  vitefu@1.1.3(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)):
     optionalDependencies:
-      vite: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)
+      vite: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)
 
-  vitest@3.2.7(@types/node@22.20.1)(happy-dom@20.11.1)(jiti@2.7.0)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4):
+  vitest@3.2.7(@types/node@22.20.1)(happy-dom@20.11.1)(jiti@2.7.0)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/expect': 3.2.7
-      '@vitest/mocker': 3.2.7(vite@7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4))
+      '@vitest/mocker': 3.2.7(vite@7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0))
       '@vitest/pretty-format': 3.2.7
       '@vitest/runner': 3.2.7
       '@vitest/snapshot': 3.2.7
@@ -8785,8 +8847,8 @@ snapshots:
       tinyglobby: 0.2.17
       tinypool: 1.1.1
       tinyrainbow: 2.0.0
-      vite: 7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)
-      vite-node: 3.2.4(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)
+      vite: 7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)
+      vite-node: 3.2.4(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.4)(yaml@2.9.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 22.20.1
@@ -8893,6 +8955,8 @@ snapshots:
 
   yallist@5.0.0: {}
 
+  yaml@2.9.0: {}
+
   yargs-parser@22.0.0: {}
 
   yargs@18.1.0:
@@ -8922,8 +8986,6 @@ snapshots:
       archiver-utils: 5.0.2
       compress-commons: 6.0.2
       readable-stream: 4.7.0
-
-  zod@3.25.76: {}
 
   zod@4.4.3: {}
 

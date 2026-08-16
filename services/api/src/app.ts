@@ -1,5 +1,5 @@
-import { Hono } from "hono";
-import type { Context } from "hono";
+import { createRoute, OpenAPIHono, z, type RouteHandler } from "@hono/zod-openapi";
+import { swaggerUI } from "@hono/swagger-ui";
 import type { Env } from "./config/env";
 import { createAuthMiddleware, type AuthEnv, type AuthLike } from "./middleware/auth";
 import { createCorsMiddleware } from "./middleware/cors";
@@ -31,16 +31,32 @@ export type AppDeps = {
   tts: TtsDeps;
 };
 
-export function createApp(deps: AppDeps): Hono<AuthEnv> {
-  const app = new Hono<AuthEnv>();
+// —— OpenAPI 文档（GET /doc JSON + GET /doc Swagger UI）——
+const ErrorResp = z.object({ error: z.string() }).openapi("Error");
+const IdParam = z.object({ id: z.string().min(1) }).openapi("IdParam");
+const OkResp = z.object({ ok: z.boolean() }).openapi("Ok");
+
+export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
+  const app = new OpenAPIHono<AuthEnv>();
   const deviceStore = deps.deviceStore ?? createDeviceStore();
+
+  // API 文档：JSON 定义 + Swagger UI（可交互调试）
+  app.doc("/doc", {
+    openapi: "3.1.0",
+    info: { title: "Dailog API", version: "1.0.0", description: "Dailog 播客站服务端 API（公开端点 + 登录后端点）" },
+  });
+  app.get("/doc/ui", swaggerUI({ url: "/doc" }));
 
   // 跨域（本地 dev + 生产 app.dailog.fm）；OPTIONS 预检在此统一 204。
   // 必须先于其它路由注册（Hono middleware 顺序敏感），否则先注册的路由不经 CORS
   const appOrigins = deps.env.APP_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean);
   app.use("*", createCorsMiddleware(appOrigins));
 
-  app.get("/health", (c) => c.json({ ok: true }));
+  app.openapi(createRoute({
+    method: "get",
+    path: "/health",
+    responses: { 200: { content: { "application/json": { schema: OkResp } }, description: "健康检查" } },
+  }), (c) => c.json({ ok: true }));
 
   // 统一登录/注册（老用户密码登录 / 新用户验证码注册）——必须先于 better-auth
   // 的 /api/auth/* 全捕获注册（Hono 先注册先匹配，否则被吞返回 404）
@@ -58,7 +74,15 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   ));
 
   // 主站公开端点（免鉴权）：仅已发布公开节目可读——必须在鉴权中间件之前注册
-  app.get("/v1/public/episodes/:id/cover", async (c) => {
+  app.openapi(createRoute({
+    method: "get",
+    path: "/v1/public/episodes/:id/cover",
+    request: { params: IdParam },
+    responses: {
+      200: { content: { "image/jpeg": { schema: z.any() } }, description: "节目封面图（公开，缓存 86400s）" },
+      404: { content: { "application/json": { schema: ErrorResp } }, description: "封面不存在" },
+    },
+  }), async (c) => {
     const cover = await deps.repo.episodes.getPublicCoverKey(c.req.param("id"));
     if (!cover) return c.json({ error: "not_found" }, 404);
     try {
@@ -71,7 +95,18 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
       return c.json({ error: "not_found" }, 404);
     }
   });
-  app.get("/v1/public/episodes/:id/audio", async (c) => {
+  app.openapi(createRoute({
+    method: "get",
+    path: "/v1/public/episodes/:id/audio",
+    request: { params: IdParam },
+    responses: {
+      200: { content: { "audio/mpeg": { schema: z.any() } }, description: "节目音频全量（缓存 604800s，ETag 304）" },
+      206: { content: { "audio/mpeg": { schema: z.any() } }, description: "Range 分片（浏览器流式播放/seek）" },
+      304: { description: "If-None-Match 命中（未修改）" },
+      416: { description: "Range 越界" },
+      404: { content: { "application/json": { schema: ErrorResp } }, description: "音频不存在" },
+    },
+  }), async (c) => {
     const audio = await deps.repo.episodes.getPublicAudioKey(c.req.param("id"));
     if (!audio) return c.json({ error: "not_found" }, 404);
     // ETag 按发布时间：重新制作发布是新 episode → 内容变化 → 浏览器重新拉取；未变 → 304 省流量
@@ -125,7 +160,19 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   const statCooldown = new Map<string, number>();
   const STAT_WINDOW_MS = 5 * 60 * 1000;
   const statKey = (ip: string, id: string, type: string) => `${ip}:${id}:${type}`;
-  app.post("/v1/public/episodes/:id/stats/:type", async (c) => {
+  const statsPostRoute = createRoute({
+    method: "post",
+    path: "/v1/public/episodes/:id/stats/:type",
+    request: {
+      params: z.object({ id: z.string().min(1), type: z.string().openapi({ example: "play", description: "play 或 completion" }) }),
+    },
+    responses: {
+      200: { content: { "application/json": { schema: OkResp } }, description: "上报成功（含窗口内去重静默）" },
+      400: { content: { "application/json": { schema: ErrorResp } }, description: "type 不是 play/completion" },
+      404: { content: { "application/json": { schema: ErrorResp } }, description: "节目不存在" },
+    },
+  });
+  app.openapi(statsPostRoute, (async (c) => {
     const type = c.req.param("type");
     if (type !== "play" && type !== "completion") return c.json({ error: "invalid_type" }, 400);
     const id = c.req.param("id");
@@ -140,15 +187,37 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
     statCooldown.set(key, now);
     await deps.repo.episodes.recordStat(id, type);
     return c.json({ ok: true });
+  }) as RouteHandler<typeof statsPostRoute, AuthEnv>);
+  const statsGetRoute = createRoute({
+    method: "get",
+    path: "/v1/public/episodes/:id/stats",
+    request: { params: IdParam },
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "播放/完播/点赞/收藏计数" },
+      404: { content: { "application/json": { schema: ErrorResp } }, description: "节目不存在" },
+    },
   });
-  app.get("/v1/public/episodes/:id/stats", async (c) => {
+  app.openapi(statsGetRoute, (async (c) => {
     const exists = await deps.repo.episodes.getPublicAudioKey(c.req.param("id"));
     if (!exists) return c.json({ error: "not_found" }, 404);
     return c.json(await deps.repo.episodes.getStats(c.req.param("id")));
-  });
+  }) as RouteHandler<typeof statsGetRoute, AuthEnv>);
 
   // 推荐队列（首页播放器/抖音流）：热度分排序；lang 优先、exclude 排除已播
-  app.get("/v1/public/episodes/recommended", async (c) => {
+  app.openapi(createRoute({
+    method: "get",
+    path: "/v1/public/episodes/recommended",
+    request: {
+      query: z.object({
+        lang: z.enum(["zh", "en"]).optional().openapi({ description: "语言优先" }),
+        limit: z.string().optional().openapi({ default: "20", description: "数量 1-50（handler 内转换）" }),
+        exclude: z.string().optional().openapi({ description: "逗号分隔已播 slug" }),
+      }),
+    },
+    responses: {
+      200: { content: { "application/json": { schema: z.array(z.any()) } }, description: "推荐节目队列（热度分排序）" },
+    },
+  }), async (c) => {
     const lang = typeof c.req.query("lang") === "string" && /^[a-z]{2,3}$/i.test(c.req.query("lang") ?? "")
       ? (c.req.query("lang") as string).toLowerCase()
       : undefined;
@@ -158,30 +227,59 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   });
 
   // 站点头部数据（首页宣传语）——公开
-  app.get("/v1/public/stats", async (c) => {
+  app.openapi(createRoute({
+    method: "get",
+    path: "/v1/public/stats",
+    responses: { 200: { content: { "application/json": { schema: z.any() } }, description: "站点统计（主播/嘉宾/期数/热门标签）" } },
+  }), async (c) => {
     return c.json(await deps.repo.episodes.getSiteStats());
   });
   // 热门主播（个人主页入口）——公开
-  app.get("/v1/public/hosts", async (c) => {
+  app.openapi(createRoute({
+    method: "get",
+    path: "/v1/public/hosts",
+    request: { query: z.object({ limit: z.string().optional().openapi({ default: "8", description: "数量 1-20（handler 内转换）" }) }) },
+    responses: { 200: { content: { "application/json": { schema: z.array(z.any()) } }, description: "热门主播（播放量+期数排序）" } },
+  }), async (c) => {
     const limit = Math.min(Number(c.req.query("limit") ?? 8) || 8, 20);
     return c.json(await deps.repo.episodes.listTopHosts(limit));
   });
   // 常驻 AI 嘉宾（品牌声线宿主）——公开
-  app.get("/v1/public/guests", async (c) => {
+  app.openapi(createRoute({
+    method: "get",
+    path: "/v1/public/guests",
+    responses: { 200: { content: { "application/json": { schema: z.array(z.any()) } }, description: "常驻 AI 嘉宾列表" } },
+  }), async (c) => {
     return c.json(await deps.repo.guests.list());
   });
   // 嘉宾详情 + 参与的节目（公开详情页 /guest/<id>）——不存在 404
-  app.get("/v1/public/guests/:id", async (c) => {
+  const guestRoute = createRoute({
+    method: "get",
+    path: "/v1/public/guests/:id",
+    request: { params: IdParam },
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "嘉宾详情 + 参与的节目" },
+      404: { content: { "application/json": { schema: ErrorResp } }, description: "嘉宾不存在" },
+    },
+  });
+  app.openapi(guestRoute, (async (c) => {
     const id = c.req.param("id");
     const guest = await deps.repo.guests.getById(id);
     if (!guest) return c.json({ error: "not_found" }, 404);
     const episodes = await deps.repo.episodes.listByGuest(id);
     return c.json({ guest, episodes });
-  });
+  }) as RouteHandler<typeof guestRoute, AuthEnv>);
 
   app.use("/v1/*", createAuthMiddleware(deps.auth, async (userId) => (await deps.repo.episodes.getRole?.(userId)) ?? null));
 
-  app.get("/v1/me", async (c) => {
+  app.openapi(createRoute({
+    method: "get",
+    path: "/v1/me",
+    responses: {
+      200: { content: { "application/json": { schema: z.object({ userId: z.string(), role: z.string(), channelActive: z.boolean(), hasVoiceSample: z.boolean() }) } }, description: "当前登录用户概要（需登录）" },
+      401: { description: "未登录" },
+    },
+  }), async (c) => {
     const userId = c.get("userId");
     const sample = await deps.repo.episodes.getVoiceSample(userId);
     const role = (await deps.repo.episodes.getRole?.(userId)) ?? "user";
