@@ -28,8 +28,11 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
     gap: dimensions.spacing3,
-    gridColumn: "span 7",
+    gridColumn: "span 7", // 桌面 12 列占 7 / 平板 8 列占 7；手机 4 列必须占满（span 7 会撑隐式轨道）
     paddingTop: dimensions.spacing12,
+    "@media (max-width: 640px)": {
+      gridColumn: "1 / -1",
+    },
   },
   tagline: {
     margin: 0,
@@ -84,40 +87,31 @@ const styles = stylex.create({
     textDecoration: "none",
     ":hover": { color: colors.primary },
   },
-  // ---- 推荐滚屏：视口 + 平移轨道 + 分页 ----
-  viewport: {
-    // 无左右内边距：overflow 裁剪边界 = 容器边缘，相邻分页的卡片不会从 padding 区露出
-    // padding: `0 0 ${dimensions.spacing2}`,
-    overflow: "hidden",
-    "@media (max-width: 640px)": {
-      // padding: `0 0 ${dimensions.spacing2}`,
-    },
+  // ---- 推荐滚屏（subgrid 继承 containerLg 轨道）----
+  // subgrid 只能继承直接父 grid 的轨道 → 链路每层都必须是 grid + subgrid：
+  // recommendedRow(1/-1) → viewport(1/-1) → 屏(1/-1, grid-row:1 重叠) → 卡片(span 3/2/2)。
+  // 屏们重叠在同一行（grid-row: 1），切换 = 每屏自身 translateX((i-cur)*100%) 平移
+  // （subgrid 与横向 auto-flow 互斥——track 的 auto-flow 会把子项塞进单列轨道）
+  recommendedRow: {
+    display: "grid",
+    gridTemplateColumns: "subgrid",
   },
-  track: {
-    display: "flex",
-    transition: "transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+  viewport: {
+    gridColumn: "1 / -1", // 占满 containerLg 全部轨道（12/8/4 列均生效）
+    display: "grid",
+    gridTemplateColumns: "subgrid",
+    overflow: "hidden",
   },
   pagePane: {
-    flex: "0 0 100%",
+    gridColumn: "1 / -1",
+    gridRow: "1", // 所有屏重叠在同一行（多屏切换靠各自 transform 平移）
     minWidth: "100%",
-    // 左右内边距在分页内部：卡片与标题行同宽，且下一屏从容器边缘外才开始
-    // padding: `0 ${dimensions.spacing4}`,
     display: "grid",
-    // 列数跟随 containerLg 断点（<640 4 列 / <1024 8 列 / 默认 12 列）：
-    // min-width 移动优先（stylex 升序输出 media，大断点在后覆盖小断点，语义正确）
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-    columnGap: dimensions.spacing4,
-    rowGap: dimensions.spacing4,
-    "@media (min-width: 641px)": {
-      gridTemplateColumns: "repeat(8, minmax(0, 1fr))",
-      columnGap: dimensions.spacing5,
-      rowGap: dimensions.spacing5,
-    },
-    "@media (min-width: 1025px)": {
-      gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-    },
+    gridTemplateColumns: "subgrid", // 卡片直接继承 containerLg 轨道（columnGap 也继承）
+    rowGap: dimensions.spacing4, // subgrid 只继承列轨道；行 gap 需显式（2×2 时行间距）
+    transition: "transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
   },
-  // 节目卡片/灰块：4 列占 2（2×2）、8 列占 2（4 张一行）、12 列占 3（4 张一行）
+  // 节目卡片/灰块：12 列占 3（4 张一行）、8 列占 2（4 张一行）、4 列占 2（2×2）
   cardSpan: {
     gridColumn: "span 2",
     "@media (min-width: 1025px)": {
@@ -173,17 +167,12 @@ const styles = stylex.create({
     backgroundColor: colors.brand,
     ":hover": { backgroundColor: colors.brand },
   },
-  // ---- 骨架屏（异步加载占位）：与真实卡片同尺寸（手机 2×2 / 平板以上 4 张一行），透明度脉冲 ----
+  // ---- 骨架屏（异步加载占位）：subgrid 继承 containerLg 轨道，卡片同真实卡片 span ----
   skeletonGrid: {
-    // 与滚屏一致：左右内边距与标题行对齐
-    // padding: `0 ${dimensions.spacing4} ${dimensions.spacing8}`,
+    gridColumn: "1 / -1",
     display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    gap: dimensions.spacing4,
-    "@media (min-width: 641px)": {
-      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-      gap: dimensions.spacing5,
-    },
+    gridTemplateColumns: "subgrid",
+    rowGap: dimensions.spacing4,
   },
   skeletonCard: {
     // 复用 card 的底板/内边距，仅占位不可点击
@@ -468,22 +457,24 @@ export default function HomePage() {
         </div>
         
       </section>
+      
+
 
       <div {...stylex.props(layouts.fullRow, styles.listTitleRow)}>
         <div {...stylex.props(styles.listTitle)}>{t("home.recommended")}</div>
         <A href="/discover" {...stylex.props(styles.moreLink)}>{t("home.hero.browse")}</A>
       </div>
 
-      <div {...stylex.props(layouts.fullRow)}>
+      <div {...stylex.props(layouts.fullRow, styles.recommendedRow)}>
       <Show
         when={list()?.length}
         fallback={
           <Show when={list.loading} fallback={<div {...stylex.props(styles.empty)}>{t("common.empty")}</div>}>
-            {/* 异步加载中：骨架屏占位（与真实卡片同尺寸，桌面 4 列 / 移动 2 列） */}
+            {/* 异步加载中：骨架屏占位（subgrid 继承容器轨道，卡片同真实卡片尺寸） */}
             <div {...stylex.props(styles.skeletonGrid)}>
               <For each={Array.from({ length: 4 })}>
                 {() => (
-                  <div {...stylex.props(styles.card, styles.skeletonCard)}>
+                  <div {...stylex.props(styles.card, styles.skeletonCard, styles.cardSpan)}>
                     <div {...stylex.props(styles.skeletonBlock, styles.skeletonCover)} />
                     <div {...stylex.props(styles.skeletonBlock, styles.skeletonLine, styles.skeletonLineTitle)} />
                     <div {...stylex.props(styles.skeletonBlock, styles.skeletonLine)} />
@@ -495,12 +486,11 @@ export default function HomePage() {
           </Show>
         }
       >
-        {/* 滚屏轨道：每屏 4 条，transform 平移切换 */}
+        {/* 滚屏：屏们重叠在同一行，各自 translateX 平移（当前屏居中，相邻屏从两侧滑入） */}
         <div {...stylex.props(styles.viewport)}>
-          <div {...stylex.props(styles.track)} style={{ transform: `translateX(-${curPage() * 100}%)` }}>
-            <For each={pageIndexes()}>
-              {(i) => (
-                <div {...stylex.props(styles.pagePane)}>
+          <For each={pageIndexes()}>
+            {(i) => (
+              <div {...stylex.props(styles.pagePane)} style={{ transform: `translateX(${(i - curPage()) * 100}%)` }}>
                   <For each={pageItems(i)}>
                     {(ep) => (
                       // hover 预取详情数据（点击进详情页即开；移动端无 hover → 走全局 spinner 过渡）
@@ -542,7 +532,6 @@ export default function HomePage() {
                 </div>
               )}
             </For>
-          </div>
         </div>
         {/* 分页控制：仅多屏时显示（‹ 上一页 · 圆点 · 下一页 ›） */}
         <Show when={pageCount() > 1}>

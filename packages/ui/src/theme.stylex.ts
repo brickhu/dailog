@@ -304,14 +304,15 @@ export const layouts = stylex.create({
   },
 
   // —— 内容容器（grid 布局）——
-  // 全部采用 CSS Grid（桌面 12 列 / 平板 6 / 手机 3）。
-  // 直接子项默认占 1 列 —— 常规全宽内容块须配合 fullRow（gridColumn: "span 12"，
-  // 在 6/3 列模板下自动换行占满整行）；需要多列排布的内容块自行声明列跨度
-  // （如 gridColumn: "span 4"）。
+  // 全部采用 CSS Grid（桌面 12 / 平板 8 / 手机 4 等）。
+  // 直接子项默认占 1 列 —— 常规全宽内容块须配合 fullRow（gridColumn: "1 / -1"，
+  // 跨满全部显式列；**不要用 span 12**——列数小于 12 时 span 会撑出隐式轨道，
+  // subgrid 继承时把隐式轨道也算进去导致错位）；需要多列排布的内容块自行声明列跨度
+  // （如 gridColumn: "span 4"，跨度不得超过列数）。
 
-  // 全宽行：内容块的默认跨度（跨满全部可见列）
+  // 全宽行：内容块的默认跨度（跨满全部可见列，不撑隐式轨道）
   fullRow: {
-    gridColumn: "span 12",
+    gridColumn: "1 / -1",
   },
 
   // 全屏容器：宽高 100%，单列结构（适合全屏应用/无宽度约束区块）
@@ -319,24 +320,24 @@ export const layouts = stylex.create({
     width: "100%",
   },
 
-  // 大容器：max-width 1128px，居中；网格列数 <640 为 4 列 / <1024 为 8 列 / 默认 12 列
-  // （min-width 移动优先：stylex 按断点升序输出 media 规则，min-width 同时匹配时大断点在后
-  //  覆盖小断点，语义正确；max-width 会被大断点反向覆盖导致手机端错列）
+  // 大容器：max-width 1128px，居中；网格列数 <640 为 4 列 / <1024 为 8 列 / 默认 12 列。
+  // 轨道用 minmax(0, 1fr)：1fr 默认有 min-content 下限，内容（hero/长标题）会把轨道撑成
+  // 非均分（subgrid 继承后卡片不等宽）；minmax(0) 保证轨道严格均分
   containerLg: {
     width: "100%",
     flexShrink: "0",
     maxWidth: "1128px",
     margin: "0 auto",
     display: "grid",
-    gridTemplateColumns: "repeat(4, 1fr)",
+    gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
     columnGap: dimensions.spacing4,
     alignItems: "start",
-    "@media (min-width: 641px)": {
-      gridTemplateColumns: "repeat(8, 1fr)",
-      columnGap: dimensions.spacing5,
+     "@media (max-width: 1024px)": {
+      gridTemplateColumns: "repeat(8, minmax(0, 1fr))",
     },
-    "@media (min-width: 1025px)": {
-      gridTemplateColumns: "repeat(12, 1fr)",
+    "@media (max-width: 640px)": {
+      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+      columnGap: dimensions.spacing4,
     },
   },
 
