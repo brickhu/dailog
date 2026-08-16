@@ -9,6 +9,7 @@ import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../components/auth-gate";
 import { isShareUrl } from "../components/import-dialog";
 import { getUrlCheck } from "../lib/url-check";
+import { openImportDialog } from "../components/import-dialog";
 import Recorder from "../components/recorder";
 
 // 投稿流程（本质版，2026-08-13）：
@@ -297,7 +298,10 @@ export default function SubmitPage() {
           <div {...stylex.props(layouts.fullRow, styles.card)}>
             {/* URL 本地检测状态（非法/不可达 → 提示 + 导入按钮置灰） */}
             <Show when={urlState() === "empty"}>
-              <p {...stylex.props(styles.error)}>{t("submit.error.invalid_url")}</p>
+              <p {...stylex.props(styles.error)}>{t("submit.noValidUrl")}</p>
+              <div {...stylex.props(styles.actions)}>
+                <Button onClick={openImportDialog}>{t("submit.resubmit")}</Button>
+              </div>
             </Show>
             <Show when={urlState() === "invalid"}>
               <p {...stylex.props(styles.error)}>{t("submit.urlUnsupported")}</p>
