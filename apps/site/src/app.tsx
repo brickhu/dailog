@@ -47,20 +47,18 @@ function RouterOutlet(props: { children: JSX.Element }) {
 // SSR 首帧语言：由 request 的 accept-language/cookie 检测（entry-server 同步用于 <html lang>）
 function AppShell(props: { children: JSX.Element }) {
   const location = useLocation();
-  let contentRef: HTMLDivElement | undefined;
-  // 路由切换后内容区回顶（window 不再滚动，滚动发生在内容区）
+  let shellRef: HTMLDivElement | undefined;
+  // 路由切换后整壳回顶（shellRoot 为纵向滚动容器）
   createEffect(() => {
     location.pathname;
-    if (contentRef) contentRef.scrollTop = 0;
+    if (shellRef) shellRef.scrollTop = 0;
   });
   return (
-    <div {...stylex.props(layouts.shellRoot)}>
+    <div ref={shellRef} {...stylex.props(layouts.shellRoot)}>
       {/* 全局导航单实例（路由切换不重挂载——避免会话/头像重复加载跳动） */}
       <SiteNav />
-      <div ref={contentRef} {...stylex.props(layouts.shellContent)}>
-        <RouterOutlet>{props.children}</RouterOutlet>
-        <Footer />
-      </div>
+      <RouterOutlet>{props.children}</RouterOutlet>
+      <Footer />
       <PlayerBar />
     </div>
   );

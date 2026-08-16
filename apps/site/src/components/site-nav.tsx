@@ -9,15 +9,22 @@ import { UserMenu, type NavUser } from "./user-menu";
 
 const styles = stylex.create({
   header: {
-    padding: `${dimensions.spacing4} ${dimensions.spacing8}`,
+    width: "100%",
+    height: "56px",
+    flexShrink: "0", // shellRoot 纵向 flex 容器：内容超高时不被压缩（保持吸顶高度）
+    boxSizing: "border-box",
+    padding: `0 ${dimensions.spacing8}`,
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: dimensions.spacing4,
-    position: "sticky",
+    position: "sticky", // 在 shellRoot 滚动容器内吸顶
     top: 0,
     zIndex: 40,
     backgroundColor: colors.background,
+    "@media (max-width: 640px)": {
+      padding: `0 ${dimensions.spacing4}`,
+    },
   },
   brand: {
     fontSize: "18px",

@@ -260,9 +260,12 @@ export const typography = stylex.create({
 // 的值（14px/400/1.5/body 字体）在此显式展开
 export const layouts = stylex.create({
   // —— 应用壳根（AppShell 框架层 + 全站页面根合并）——
-  // 壳 root 承担页面根样式（字体/前景/背景/最小宽度/防横向溢出）：
-  // fixed 100vw×100vh 容器（导航/播放条固定），页面内容在壳内内容区滚动；
-  // 页面自身不再有独立根，内容容器（container*）直接作页面根（margin auto 居中）。
+  // 全局顶层容器：fixed 100vw×100vh，自身为纵向滚动容器（内容超高整体滚动）。
+  // flex 纵列（默认 align stretch → header/footer 自动全宽）；子项默认横向居中
+  // （container* 自带 margin: 0 auto），纵向从顶开始。承担页面根样式
+  // （字体/前景/背景/最小宽度/防横向溢出）。
+  // 直接子结构：header（site-nav，sticky 吸顶）、container（每页一个）、footer、
+  // 以及 fixed 定位的全局组件（如播放条）。
   shellRoot: {
     position: "fixed",
     top: "0",
@@ -271,6 +274,8 @@ export const layouts = stylex.create({
     height: "100vh",
     display: "flex",
     flexDirection: "column",
+    overflowY: "auto",
+    overscrollBehavior: "contain", // 滚动链限制在壳内
     fontFamily: fontfamilies.body,
     fontSize: dimensions.fontSizeSm,
     fontWeight: dimensions.fontWeightNormal,
@@ -279,12 +284,6 @@ export const layouts = stylex.create({
     backgroundColor: colors.background,
     minWidth: "320px",
     overflowX: "hidden",
-  },
-  shellContent: {
-    flex: "1",
-    minHeight: "0", // 允许 flex 子项收缩，内容区独立滚动
-    overflowY: "auto",
-    overscrollBehavior: "contain", // 滚动链限制在壳内
   },
 
   // —— 内容容器（grid 布局）——
@@ -303,6 +302,7 @@ export const layouts = stylex.create({
     width: "100%",
     height: "100%",
     minHeight: "100vh",
+    flexShrink: "0",
     display: "grid",
     gridTemplateColumns: "1fr",
     gridTemplateRows: "minmax(0, 1fr)",
@@ -311,6 +311,7 @@ export const layouts = stylex.create({
   // 大容器：max-width 1128px，桌面 12 列 / 平板 6 列 / 手机 3 列，居中（首页类宽页面）
   containerLg: {
     width: "100%",
+    flexShrink: "0",
     maxWidth: "1128px",
     margin: "0 auto",
     paddingLeft: dimensions.spacing4,
@@ -331,6 +332,7 @@ export const layouts = stylex.create({
   // 中容器：max-width 960px，12 列 → 平板 6 → 手机 3，居中（详情/列表类页面）
   containerMd: {
     width: "100%",
+    flexShrink: "0",
     maxWidth: "960px",
     margin: "0 auto",
     paddingLeft: dimensions.spacing4,
@@ -351,6 +353,7 @@ export const layouts = stylex.create({
   // 小容器：max-width 720px，6 列 → 手机 3，居中（表单/个人中心类窄页面）
   containerSm: {
     width: "100%",
+    flexShrink: "0",
     maxWidth: "720px",
     margin: "0 auto",
     paddingLeft: dimensions.spacing4,
