@@ -6,7 +6,7 @@
 //   （登录/登出后调用 resetAuthCache 重置）
 import { createSignal } from "solid-js";
 import { useLocation, useNavigate } from "@solidjs/router";
-import { Button, Dialog } from "@dailogues/ui";
+import { Button, Dialog, registerDirective } from "@dailogues/ui";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 
@@ -19,16 +19,20 @@ export interface AuthGuardOptions {
 let loggedIn: boolean | null = null;
 
 /** 当前是否已登录（未检查过则请求 /v1/me；401/网络异常 = 未登录） */
-export async function isLoggedIn(): Promise<boolean> {
-  if (loggedIn != null) return loggedIn;
-  try {
-    const r = await fetch("/v1/me");
-    // 200 且响应为 JSON 才算已登录（代理缺失时 SPA fallback 会返回 200 + HTML）
-    loggedIn = r.status === 200 && (r.headers.get("content-type") ?? "").includes("application/json");
-  } catch {
-    loggedIn = false;
-  }
-  return loggedIn;
+let checking: Promise<boolean> | null = null;
+export function isLoggedIn(): Promise<boolean> {
+  if (loggedIn != null) return Promise.resolve(loggedIn);
+  checking ??= (async () => {
+    try {
+      const r = await fetch("/v1/me");
+      // 200 且响应为 JSON 才算已登录（代理缺失时 SPA fallback 会返回 200 + HTML）
+      loggedIn = r.status === 200 && (r.headers.get("content-type") ?? "").includes("application/json");
+    } catch {
+      loggedIn = false;
+    }
+    return loggedIn;
+  })();
+  return checking;
 }
 
 /** 登录/登出后重置登录态缓存 */
@@ -102,17 +106,33 @@ export function AuthGuardDialog() {
 // —— use:auth 指令 ——
 // 挂载后点击拦截：capture 阶段先于元素自身 onClick（冒泡）执行；
 // 已登录 → 放行（执行绑定事件）；未登录 → preventDefault/stopPropagation + 弹引导层
-export function auth(el: HTMLElement, accessor: () => AuthGuardOptions | undefined) {
-  const handler = async (e: Event) => {
-    const ok = await isLoggedIn();
-    if (ok) return; // 已登录：放行，执行绑定的事件函数
+export function auth(el: HTMLElement, accessor: () => unknown) {
+  // 已登录（缓存）→ 放行；否则同步拦截（preventDefault/stopPropagation 必须在 await 前，
+  // 否则 async 挂起期间事件继续冒泡，元素自身 onClick 会先执行——曾导致未登录直接跳转）
+  // 首次点击时登录态未知：先拦截，异步确认后已登录则手动重放点击（放行语义）
+  let replaying = false;
+  const handler = (e: Event) => {
+    if (replaying) return; // 重放点击：跳过拦截
+    if (loggedIn === true) return; // 缓存已登录：放行
     e.preventDefault();
     e.stopPropagation();
-    openAuthDialog(accessor()?.redirect);
+    void isLoggedIn().then((ok) => {
+      if (ok) {
+        replaying = true;
+        el.click();
+        replaying = false;
+      } else {
+        const opts = accessor() as AuthGuardOptions | true | undefined;
+        openAuthDialog(typeof opts === "object" ? opts?.redirect : undefined);
+      }
+    });
   };
   el.addEventListener("click", handler, true);
   return () => el.removeEventListener("click", handler, true);
 }
+
+// 注册到组件指令注册表：Button 等组件上的 use:auth 通过注册表应用到底层元素
+registerDirective("auth", auth);
 
 declare module "solid-js" {
   namespace JSX {

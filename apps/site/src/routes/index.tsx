@@ -441,18 +441,14 @@ export default function HomePage() {
         <h1 {...stylex.props(typography.displayMd, styles.tagline)}>{t("home.hero.tagline")}</h1>
         <p {...stylex.props(typography.bodyXl, styles.what)}>{t("home.hero.what")}</p>
         <div {...stylex.props(styles.ctaRow)}>
-          {/* use:auth 只能用于原生元素（jsxDOM 对组件上的 use: 直接丢弃）——
-              用 span 承载指令：点击 Button 冒泡到 span 被 capture 拦截，
-              未登录弹引导、已登录放行执行 Button 的 onClick 跳转 /submit */}
-          <span use:auth={true} style={{ display: "inline-flex" }}>
           <Button
+            use:auth={true}
             size="xl"
             icon={<Icon icon="mdi:send" width={16} />}
             onClick={() => navigate("/submit")}
           >
             {t("home.hero.submit")}
           </Button>
-          </span>
           {/* <A href="/submit" {...stylex.props(styles.cta)}><Icon icon="mdi:send" width={16} />{t("home.hero.submit")}</A> */}
           <p {...stylex.props(styles.ctaHint)}>{t("home.hero.ctaHint")}</p>
         </div>

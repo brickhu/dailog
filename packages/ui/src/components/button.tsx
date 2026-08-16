@@ -1,9 +1,10 @@
 import * as stylex from "@stylexjs/stylex";
-import { children, createSignal, createUniqueId, splitProps, Show, type JSX } from "solid-js";
+import { children, createSignal, createUniqueId, onCleanup, onMount, splitProps, Show, type JSX } from "solid-js";
 import { type StyleXStyles } from "@stylexjs/stylex";
 import { colors, dimensions, durations, fontfamilies, shadows } from "../theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { Spinner } from "./spinner";
+import { getDirective } from "../directives";
 import { useButtonGroup } from "./button-group";
 
 /**
@@ -731,6 +732,21 @@ export function Button(props: ButtonProps) {
     return width == null ? local.style : { ...local.style, width };
   };
 
+  // 组件级 use:* 指令（如 use:auth）：Solid 的 use: 编译只作用于原生元素，
+  // 组件上的 use:xxx 作为 prop 传入——通过指令注册表应用到底层根元素（button/a）
+  let rootRef: HTMLElement | undefined;
+  const setRootRef = (el: HTMLElement) => {
+    rootRef = el;
+  };
+  const useDirectiveKeys = () => Object.keys(props).filter((k) => k.startsWith("use:"));
+  onMount(() => {
+    for (const k of useDirectiveKeys()) {
+      const fn = getDirective(k.slice(4));
+      const cleanup = fn?.(rootRef as HTMLElement, () => (props as Record<string, unknown>)[k]);
+      if (typeof cleanup === "function") onCleanup(cleanup);
+    }
+  });
+
   const buttonContent = () => (
     <>
       {loading() && (
@@ -790,6 +806,7 @@ export function Button(props: ButtonProps) {
       when={renderAsLink()}
       fallback={
         <button
+          ref={setRootRef}
           type={type}
           name={local.name}
           value={local.value}
@@ -814,6 +831,7 @@ export function Button(props: ButtonProps) {
       }
     >
       <a
+        ref={setRootRef}
         href={local.href}
         target={local.target}
         rel={local.rel}

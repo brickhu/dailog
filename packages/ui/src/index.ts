@@ -32,3 +32,5 @@ export { Spinner } from "./components/spinner";
 export { Avatar, type AvatarProps } from "./components/avatar";
 export { default as Examples } from "./examples";
 export { Icon, type IconProps } from "./components/icon";
+
+export { registerDirective, getDirective } from "./directives";
