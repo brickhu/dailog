@@ -1,7 +1,7 @@
 import { Show, Suspense, createEffect, onMount } from "solid-js";
 import { createAsync, useParams } from "@solidjs/router";
 import { Meta, Title } from "@solidjs/meta";
-import { CoverPlayer } from "../../components/cover-player";
+import { Cover } from "../../components/cover";
 import { DetailSkeleton } from "../../components/route-skeletons";
 import { EpisodeDetail } from "../../components/episode-detail";
 import { usePlayback, type QueueEpisode } from "../../lib/playback";
@@ -121,17 +121,11 @@ export default function EpisodeDetailPage() {
     }
   });
 
-  // 本页节目的播放状态与操作：本页节目是当前 → 暂停/继续；否则 → 播放本页（切歌）
+  // 本页节目的播放状态：本页节目是当前 → 暂停/继续；否则 → 播放本页（切歌）
   const thisEpisode = () => (ep() ? asQueue(ep()!) : null);
   const isThisPlaying = () => {
     const t = thisEpisode();
     return !!t && playback.current()?.id === t.id;
-  };
-  const handleToggle = () => {
-    const t = thisEpisode();
-    if (!t) return;
-    if (isThisPlaying()) playback.toggle();
-    else playback.play(t);
   };
 
   return (
@@ -158,10 +152,11 @@ export default function EpisodeDetailPage() {
         </Show>
         <div {...stylex.props(layouts.fullRow, styles.body)}>
           <div {...stylex.props(styles.coverCol)}>
-            <CoverPlayer
+            <Cover
               episode={asQueue(ep()!)}
               playing={isThisPlaying() && playback.playing()}
-              onToggle={handleToggle}
+              onPlay={() => playback.play(asQueue(ep()!))}
+              onPause={() => playback.toggle()}
             />
           </div>
           <div {...stylex.props(styles.detailCol)}>
