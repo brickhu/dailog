@@ -82,6 +82,32 @@ const styles = stylex.create({
     paddingLeft: dimensions.spacing3,
     margin: 0,
   },
+  urlCard: {
+    backgroundColor: colors.surface,
+    borderRadius: dimensions.radiusMd,
+    padding: `${dimensions.spacing4}`,
+    display: "flex",
+    flexDirection: "column",
+    gap: dimensions.spacing2,
+  },
+  urlRow: {
+    display: "flex",
+    gap: dimensions.spacing3,
+    alignItems: "baseline",
+    flexWrap: "wrap",
+  },
+  urlLabel: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeXs,
+    margin: 0,
+    minWidth: "64px",
+  },
+  urlValue: {
+    color: colors.foreground,
+    fontSize: dimensions.fontSizeSm,
+    margin: 0,
+    wordBreak: "break-all",
+  },
   error: {
     color: colors.danger,
     fontSize: dimensions.fontSizeSm,
@@ -143,6 +169,8 @@ export default function SubmitPage() {
   // 初始步骤：?url=（导入弹框跳转，已做输入/检测）→ 首帧即第二步，不渲染 URL 输入
   const [step, setStep] = createSignal<Step>("confirm");
   const [url, setUrl] = createSignal("");
+  // 当前检测结果 id（localStorage 的 json key；用于展示检测信息区块）
+  const [checkId, setCheckId] = createSignal<string | null>(null);
   // URL 本地检测（防绕过弹框手动构造 ?url=）：非法/不可达 → 导入按钮置灰
   // 状态：checking（检测中）/ ok（可达）/ invalid（非平台链接）/ unreachable（不可达）/ empty（缺失）
   const [urlState, setUrlState] = createSignal<"checking" | "ok" | "invalid" | "unreachable" | "empty">("checking");
@@ -165,6 +193,7 @@ export default function SubmitPage() {
       const params = new URLSearchParams(window.location.search);
       const id = params.get("id");
       if (id) {
+        setCheckId(id);
         const check = getUrlCheck(id);
         if (check && check.valid && check.reachable) {
           setUrl(check.url);
@@ -296,6 +325,26 @@ export default function SubmitPage() {
         {/* 2. 确认投稿态：人设编辑（可选）+ 声音采样（必填）→ [确认投稿] */}
         <Show when={step() === "confirm"}>
           <div {...stylex.props(layouts.fullRow, styles.card)}>
+            {/* 分享链接检测信息（localStorage 中该 id 的检测结果） */}
+            <Show when={checkId()}>
+              <div {...stylex.props(layouts.fullRow, styles.urlCard)}>
+                <p {...stylex.props(styles.stepTitle)}>{t("submit.checkInfo")}</p>
+                <div {...stylex.props(styles.urlRow)}>
+                  <p {...stylex.props(styles.urlLabel)}>{t("submit.checkUrl")}</p>
+                  <p {...stylex.props(styles.urlValue)}>{url()}</p>
+                </div>
+                <div {...stylex.props(styles.urlRow)}>
+                  <p {...stylex.props(styles.urlLabel)}>{t("submit.checkValid")}</p>
+                  <p {...stylex.props(styles.urlValue)}>{urlState() === "ok" ? "✓" : "—"}</p>
+                  <p {...stylex.props(styles.urlLabel)}>{t("submit.checkReachable")}</p>
+                  <p {...stylex.props(styles.urlValue)}>{urlState() === "ok" ? "✓" : "—"}</p>
+                  <p {...stylex.props(styles.urlLabel)}>{t("submit.checkTime")}</p>
+                  <p {...stylex.props(styles.urlValue)}>
+                    {checkId() ? new Date(getUrlCheck(checkId()!)?.checkedAt ?? Date.now()).toLocaleString("zh-CN") : ""}
+                  </p>
+                </div>
+              </div>
+            </Show>
             {/* URL 本地检测状态（非法/不可达 → 提示 + 导入按钮置灰） */}
             <Show when={urlState() === "empty"}>
               <p {...stylex.props(styles.error)}>{t("submit.noValidUrl")}</p>
