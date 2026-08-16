@@ -4,11 +4,14 @@ import { usePlayback, type QueueEpisode } from "../lib/playback";
 import { apiBaseForFetch, episodeCoverUrl } from "../lib/env";
 import { getEpisodeCached } from "../lib/episode-cache";
 import { Faq } from "../components/faq";
-import { Icon } from "@dailogues/ui";
+import { Button, Icon } from "@dailogues/ui";
 import * as stylex from "@stylexjs/stylex";
-import { layouts } from "@dailogues/ui/theme.stylex";
+import { layouts, typography } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
+import { auth } from "../lib/auth-guard";
+// use:auth 指令的作用域绑定（babel 编译转换需要；TS 不识 JSX 指令故 void 消除未使用误报）
+void auth;
 
 // 首页（传统博客式）：hero 品牌区 + 推荐节目滚屏。
 // 播放由全局播放条（PlayerBar）接管——点卡片播放按钮即入队连播，播完自动切下一期；
@@ -20,23 +23,19 @@ import { useI18n } from "@dailogues/i18n";
 const styles = stylex.create({
 
   hero: {
-    padding: `${dimensions.spacing12} ${dimensions.spacing8} ${dimensions.spacing8}`,
+    // padding: `${dimensions.spacing12} ${dimensions.spacing8} ${dimensions.spacing8}`,
     display: "flex",
     flexDirection: "column",
-    gap: dimensions.spacing4,
+    gap: dimensions.spacing3,
+    gridColumn: "span 7",
+    paddingTop: dimensions.spacing12,
   },
   tagline: {
-    fontSize: dimensions.fontSize4xl,
-    fontWeight: dimensions.fontWeightBold,
-    lineHeight: 1.25,
     margin: 0,
   },
   what: {
-    color: colors.neutral,
-    fontSize: dimensions.fontSizeLg,
-    lineHeight: 1.6,
+    color: colors.foreground,
     margin: 0,
-    maxWidth: "640px",
   },
   ctaHint: {
     color: colors.neutral,
@@ -45,9 +44,11 @@ const styles = stylex.create({
   },
   ctaRow: {
     display: "flex",
+    flexDirection: "column",
     gap: dimensions.spacing3,
-    alignItems: "center",
+    alignItems: "flex-start",
     flexWrap: "wrap",
+    paddingTop: dimensions.spacing3,
   },
   cta: {
     display: "inline-flex",
@@ -436,13 +437,26 @@ export default function HomePage() {
   return (
     <div {...stylex.props(layouts.page)}>
       <div {...stylex.props(layouts.containerLg)}>
-      <section {...stylex.props(layouts.fullRow, styles.hero)}>
-        <h1 {...stylex.props(styles.tagline)}>{t("home.hero.tagline")}</h1>
-        <p {...stylex.props(styles.what)}>{t("home.hero.what")}</p>
+      <section {...stylex.props(styles.hero)}>
+        <h1 {...stylex.props(typography.displayMd, styles.tagline)}>{t("home.hero.tagline")}</h1>
+        <p {...stylex.props(typography.bodyXl, styles.what)}>{t("home.hero.what")}</p>
         <div {...stylex.props(styles.ctaRow)}>
-          <A href="/submit" {...stylex.props(styles.cta)}><Icon icon="mdi:send" width={16} />{t("home.hero.submit")}</A>
+          {/* use:auth 只能用于原生元素（jsxDOM 对组件上的 use: 直接丢弃）——
+              用 span 承载指令：点击 Button 冒泡到 span 被 capture 拦截，
+              未登录弹引导、已登录放行执行 Button 的 onClick 跳转 /submit */}
+          <span use:auth={true} style={{ display: "inline-flex" }}>
+          <Button
+            size="xl"
+            icon={<Icon icon="mdi:send" width={16} />}
+            onClick={() => navigate("/submit")}
+          >
+            {t("home.hero.submit")}
+          </Button>
+          </span>
+          {/* <A href="/submit" {...stylex.props(styles.cta)}><Icon icon="mdi:send" width={16} />{t("home.hero.submit")}</A> */}
+          <p {...stylex.props(styles.ctaHint)}>{t("home.hero.ctaHint")}</p>
         </div>
-        <p {...stylex.props(styles.ctaHint)}>{t("home.hero.ctaHint")}</p>
+        
       </section>
 
       <div {...stylex.props(layouts.fullRow, styles.listTitleRow)}>
