@@ -134,6 +134,8 @@ export const submissions = pgTable(
     url: text("url").notNull(),
     /** 本次节目的主持人自称（≤20 字；脚本生成时按脚本语言改写） */
     callName: text("call_name"),
+    /** 投稿人节目建议（可选；编辑脚本生成时仅供选题视角参考，无参考价值可忽略） */
+    suggestion: text("suggestion"),
     /** 主持人档案快照（投稿时写入；编辑脚本生成注入画像用） */
     personaInfo: jsonb("persona_info").$type<PersonaSnapshot>(),
     /** 投稿时使用的采样（仅记录；TTS 按 脚本语言→en→兜底 重新匹配） */

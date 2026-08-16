@@ -1,4 +1,5 @@
-import { Hono } from "hono";
+import { createRoute, OpenAPIHono, z, type RouteHandler } from "@hono/zod-openapi";
+import type { Context } from "hono";
 import type { AudioStorage } from "../storage";
 
 export interface VoiceSampleRow {
@@ -24,9 +25,19 @@ export interface VoiceDeps {
 // 自带 /api 前缀（与 polish/generate/job 路由一致，见 app.ts 挂载说明）：测试对裸 app 请求 /api/...
 // 样本直传模式：上传只保存录音文件，不训练音色模型；生成时由 TTS 管线以 referenceAudio 零样本方式使用
 export function voiceRoutes(deps: VoiceDeps) {
-  const app = new Hono<{ Variables: { userId: string } }>();
+  const app = new OpenAPIHono<{ Variables: { userId: string } }>();
+  const Err = z.object({ error: z.string() });
 
-  app.get("/v1/me/voice-sample", async (c) => {
+  const r1 = createRoute({
+    method: "get",
+    path: "/v1/me/voice-sample",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/me/voice-sample" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r1, (async (c: Context) => {
     const userId = c.get("userId") as string;
     const row = await deps.getVoiceSample?.(userId);
     if (!row) return c.json({ error: "not_found" }, 404);
@@ -38,10 +49,19 @@ export function voiceRoutes(deps: VoiceDeps) {
       transcript: row.transcript,
       createdAt: row.createdAt,
     });
-  });
+  }) as unknown as RouteHandler<typeof r1, { Variables: { userId: string } }>);
 
   /** 采样音频流（设置页播放用）：读 storage key 返回 webm */
-  app.get("/v1/me/voice-sample/audio", async (c) => {
+  const r2 = createRoute({
+    method: "get",
+    path: "/v1/me/voice-sample/audio",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/me/voice-sample/audio" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r2, (async (c: Context) => {
     const userId = c.get("userId") as string;
     const row = await deps.getVoiceSample?.(userId);
     if (!row) return c.json({ error: "not_found" }, 404);
@@ -53,9 +73,18 @@ export function voiceRoutes(deps: VoiceDeps) {
         "Cache-Control": "private, max-age=300",
       },
     });
-  });
+  }) as unknown as RouteHandler<typeof r2, { Variables: { userId: string } }>);
 
-  app.post("/v1/me/voice-sample", async (c) => {
+  const r3 = createRoute({
+    method: "post",
+    path: "/v1/me/voice-sample",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/me/voice-sample" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r3, (async (c: Context) => {
     const userId = c.get("userId") as string;
     const form = await c.req.formData().catch(() => null);
     const file = form?.get("file");
@@ -72,6 +101,6 @@ export function voiceRoutes(deps: VoiceDeps) {
     await deps.storage.put(key, bytes);
     const saved = await deps.saveVoiceSample({ userId, language, audioUrl: key, transcript, duration: 0, status: "ready" });
     return c.json({ ok: true, sampleId: saved.id }); // sampleId：投稿时记录 voiceSampleId 用
-  });
+  }) as unknown as RouteHandler<typeof r3, { Variables: { userId: string } }>);
   return app;
 }

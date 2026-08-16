@@ -8,7 +8,8 @@
 //   → 返回整集 mp3（audio/mpeg）
 // 编辑本地不直连 Fish——key 只在服务端；guest 声线/称呼服务端配置（guests 管理端点）。
 
-import { Hono } from "hono";
+import { createRoute, OpenAPIHono, z, type RouteHandler } from "@hono/zod-openapi";
+import type { Context } from "hono";
 import { spawn } from "node:child_process";
 import { writeFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -51,10 +52,20 @@ function toWav(ffmpegPath: string, input: Uint8Array): Promise<Uint8Array> {
 }
 
 export function ttsRoutes(deps: TtsDeps) {
-  const app = new Hono<AuthEnv>();
+  const app = new OpenAPIHono<AuthEnv>();
+  const Err = z.object({ error: z.string() });
   app.use("/v1/editor/tts", requireRole("editor"));
 
-  app.post("/v1/editor/tts", async (c) => {
+  const r1 = createRoute({
+    method: "post",
+    path: "/v1/editor/tts",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/tts" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r1, (async (c: Context) => {
     if (!deps.fish) {
       return c.json({ error: "tts_not_configured", detail: "服务端未配置 FISH_API_KEY" }, 503);
     }
@@ -153,7 +164,7 @@ export function ttsRoutes(deps: TtsDeps) {
     } catch (e) {
       return c.json({ error: "tts_failed", detail: (e as Error).message.slice(0, 300) }, 502);
     }
-  });
+  }) as unknown as RouteHandler<typeof r1, AuthEnv>);
 
   return app;
 }

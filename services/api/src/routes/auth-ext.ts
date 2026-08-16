@@ -7,7 +7,8 @@
 // OTP 完全自定义（不依赖 better-auth emailOTP 插件的存储行为）——
 // 验证码存数据库 verification 表，重启/多实例不丢失。
 
-import { Hono } from "hono";
+import { createRoute, OpenAPIHono, z, type RouteHandler } from "@hono/zod-openapi";
+import type { Context, Env as HonoEnv } from "hono";
 import { eq, and, gt } from "drizzle-orm";
 import { randomInt } from "node:crypto";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -51,10 +52,20 @@ function generateOtp(): string {
 }
 
 export function authExtRoutes(deps: AuthExtDeps) {
-  const app = new Hono();
+  const app = new OpenAPIHono();
+  const Err = z.object({ error: z.string() });
 
   /** 统一提交：老用户密码登录 / 新用户发验证码 */
-  app.post("/v1/auth/login-or-otp", async (c) => {
+  const r1 = createRoute({
+    method: "post",
+    path: "/v1/auth/login-or-otp",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/auth/login-or-otp" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r1, (async (c: Context) => {
     const ip = (c.req.header("x-forwarded-for") ?? "local").split(",")[0].trim();
     if (!checkRate(ip)) return c.json({ error: "rate_limited" }, 429);
     const body = (await c.req.json().catch(() => null)) as
@@ -113,10 +124,19 @@ export function authExtRoutes(deps: AuthExtDeps) {
              <p style="color:#8b95a7;font-size:12px">验证码 10 分钟内有效。如果不是你本人操作，请忽略此邮件。</p>`,
     }).catch(() => null);
     return c.json({ needOtp: true });
-  });
+  }) as unknown as RouteHandler<typeof r1>);
 
   /** OTP 完成注册：校验验证码 → 创建用户（带密码）→ 自动登录 */
-  app.post("/v1/auth/otp-complete", async (c) => {
+  const r2 = createRoute({
+    method: "post",
+    path: "/v1/auth/otp-complete",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/auth/otp-complete" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r2, (async (c: Context) => {
     const ip = (c.req.header("x-forwarded-for") ?? "local").split(",")[0].trim();
     if (!checkRate(ip)) return c.json({ error: "rate_limited" }, 429);
     const body = (await c.req.json().catch(() => null)) as
@@ -185,7 +205,7 @@ export function authExtRoutes(deps: AuthExtDeps) {
     } catch {
       return c.json({ error: "signup_failed" }, 502);
     }
-  });
+  }) as unknown as RouteHandler<typeof r2>);
 
   return app;
 }

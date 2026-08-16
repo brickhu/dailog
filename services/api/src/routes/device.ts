@@ -10,9 +10,12 @@
 // 存储：内存 Map（MVP 单实例；重启即失效——登录是一次性动作，重试即可）。
 // 放 /v1/device/* 而非 /v1/auth/*（后者被 better-auth 全捕获吞掉）。
 
-import { Hono } from "hono";
+import { createRoute, OpenAPIHono, z, type RouteHandler } from "@hono/zod-openapi";
+import type { Context } from "hono";
 import { randomBytes, randomInt } from "node:crypto";
 import { requireRole, type AuthEnv, type AuthLike } from "../middleware/auth";
+
+const Err = z.object({ error: z.string() });
 import type { Env } from "../config/env";
 
 interface DeviceGrant {
@@ -97,18 +100,36 @@ export function createDeviceStore(): DeviceStore {
 }
 
 export function devicePublicRoutes(store: DeviceStore, env: Env, auth: AuthLike, getRole: (userId: string) => Promise<string | null>) {
-  const app = new Hono();
+  const app = new OpenAPIHono<AuthEnv>();
 
   /** 创建授权（免鉴权）：配对链接由 Agent 本地拼装（{apiBase}/v1/device/authorize?code=…），不依赖 site */
-  app.post("/v1/device", async (c) => {
+  const r1 = createRoute({
+    method: "post",
+    path: "/v1/device",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/device" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r1, (async (c: Context) => {
     const { deviceCode } = store.create();
     return c.json({ deviceCode });
-  });
+  }) as unknown as RouteHandler<typeof r1, AuthEnv>);
 
   /** 授权页（免鉴权，自包含 HTML——不依赖 site）：API 域内完成登录 + 授权 + 配对码展示
    *   · 已登录（api cookie 会话 + editor/admin 角色）→ 自动授权 → 显示配对码
    *   · 未登录 → 内联登录表单（同源 /v1/auth/sign-in/email → 成功后 reload 自动授权） */
-  app.get("/v1/device/authorize", async (c) => {
+  const r2 = createRoute({
+    method: "get",
+    path: "/v1/device/authorize",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/device/authorize" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r2, (async (c: Context) => {
     const deviceCode = c.req.query("code") ?? "";
     if (!deviceCode) {
       return c.html(page("授权失败", "<h1>缺少授权码</h1><p>请从 Agent 终端执行 pnpm editor login 获取授权链接</p>"));
@@ -155,11 +176,20 @@ export function devicePublicRoutes(store: DeviceStore, env: Env, auth: AuthLike,
       <p>复制下面的配对码，粘贴回 Agent 窗口：</p>
       <div class="code">${formatUserCode(grant.userCode)}</div>
       <p>配对码 5 分钟内有效，仅可使用一次。</p>`));
-  });
+  }) as unknown as RouteHandler<typeof r2, AuthEnv>);
 
   /** 配对码换 token（免鉴权；Agent 提交用户复制的配对码）：
    *  未授权 → 409 提示先完成浏览器授权；授权后一次性返回 token（取后作废） */
-  app.post("/v1/device/pair", async (c) => {
+  const r3 = createRoute({
+    method: "post",
+    path: "/v1/device/pair",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/device/pair" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r3, (async (c: Context) => {
     const body = (await c.req.json().catch(() => null)) as { userCode?: unknown } | null;
     const userCode = normalizeUserCode(typeof body?.userCode === "string" ? body.userCode : "");
     if (!userCode) return c.json({ error: "user_code_required", detail: "缺少配对码（请粘贴页面显示的配对码）" }, 400);
@@ -175,7 +205,7 @@ export function devicePublicRoutes(store: DeviceStore, env: Env, auth: AuthLike,
     }
     store.markUsed(userCode);
     return c.json({ status: "approved", token: grant.token });
-  });
+  }) as unknown as RouteHandler<typeof r3, AuthEnv>);
 
   return app;
 }
@@ -194,11 +224,20 @@ function page(title: string, body: string): string {
 }
 
 export function deviceApproveRoutes(store: DeviceStore, auth: AuthLike) {
-  const app = new Hono<AuthEnv>();
+  const app = new OpenAPIHono<AuthEnv>();
   app.use("/v1/device/*", requireRole("editor"));
 
   /** 浏览器授权确认（cookie 会话 + editor/admin 角色）：签发 bearer token 存 grant，返回配对码供页面展示 */
-  app.post("/v1/device/approve", async (c) => {
+  const r4 = createRoute({
+    method: "post",
+    path: "/v1/device/approve",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/device/approve" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r4, (async (c: Context) => {
     const body = (await c.req.json().catch(() => null)) as { deviceCode?: unknown } | null;
     const deviceCode = typeof body?.deviceCode === "string" ? body.deviceCode : "";
     if (!deviceCode) return c.json({ error: "device_code_required" }, 400);
@@ -213,7 +252,7 @@ export function deviceApproveRoutes(store: DeviceStore, auth: AuthLike) {
     if (!token) return c.json({ error: "no_session_token" }, 500);
     store.approve(deviceCode, userId, token);
     return c.json({ ok: true, userCode: formatUserCode(grant.userCode) });
-  });
+  }) as unknown as RouteHandler<typeof r4, AuthEnv>);
 
   return app;
 }

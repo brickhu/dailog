@@ -1,4 +1,5 @@
-import { Hono } from "hono";
+import { createRoute, OpenAPIHono, z, type RouteHandler } from "@hono/zod-openapi";
+import type { Context } from "hono";
 import { and, count, desc, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "../db/schema";
@@ -27,48 +28,97 @@ export interface FavoritesRepo {
 }
 
 export function favoritesRoutes(repo: FavoritesRepo) {
-  const app = new Hono<{ Variables: { userId: string } }>();
+  const app = new OpenAPIHono<{ Variables: { userId: string } }>();
+  const Err = z.object({ error: z.string() });
   // 路径自带 /api 前缀（与其它路由一致，挂载在根路径）
 
-  app.post("/v1/episodes/:id/favorite", async (c) => {
-    const ep = await repo.getPublishableEpisode(c.req.param("id"));
+  const favPost = createRoute({
+    method: "post",
+    path: "/v1/episodes/:id/favorite",
+    request: { params: z.object({ id: z.string().min(1) }) },    responses: {
+      200: { content: { "application/json": { schema: z.object({ favorited: z.boolean(), favorites: z.number() }) } }, description: "收藏后最终状态 + 最新计数" },
+      404: { content: { "application/json": { schema: Err } }, description: "节目不存在" },
+    },
+  });
+  app.openapi(favPost, (async (c: Context) => {
+    const ep = await repo.getPublishableEpisode(c.req.param("id")!);
     if (!ep) return c.json({ error: "not_found" }, 404);
     const result = await repo.toggleFavorite(c.get("userId") as string, ep.id);
     return c.json(result);
-  });
+  }) as unknown as RouteHandler<typeof favPost, { Variables: { userId: string } }>);
 
-  app.delete("/v1/episodes/:id/favorite", async (c) => {
-    const ep = await repo.getPublishableEpisode(c.req.param("id"));
+  const favDel = createRoute({
+    method: "delete",
+    path: "/v1/episodes/:id/favorite",
+    request: { params: z.object({ id: z.string().min(1) }) },    responses: {
+      200: { content: { "application/json": { schema: z.object({ favorited: z.boolean(), favorites: z.number() }) } }, description: "取消收藏后最终状态 + 最新计数" },
+      404: { content: { "application/json": { schema: Err } }, description: "节目不存在" },
+    },
+  });
+  app.openapi(favDel, (async (c: Context) => {
+    const ep = await repo.getPublishableEpisode(c.req.param("id")!);
     if (!ep) return c.json({ error: "not_found" }, 404);
     const result = await repo.toggleFavorite(c.get("userId") as string, ep.id);
     return c.json(result);
-  });
+  }) as unknown as RouteHandler<typeof favDel, { Variables: { userId: string } }>);
 
-  app.post("/v1/episodes/:id/like", async (c) => {
-    const ep = await repo.getPublishableEpisode(c.req.param("id"));
+  const likePost = createRoute({
+    method: "post",
+    path: "/v1/episodes/:id/like",
+    request: { params: z.object({ id: z.string().min(1) }) },    responses: {
+      200: { content: { "application/json": { schema: z.object({ liked: z.boolean(), likes: z.number() }) } }, description: "点赞后最终状态 + 最新计数" },
+      404: { content: { "application/json": { schema: Err } }, description: "节目不存在" },
+    },
+  });
+  app.openapi(likePost, (async (c: Context) => {
+    const ep = await repo.getPublishableEpisode(c.req.param("id")!);
     if (!ep) return c.json({ error: "not_found" }, 404);
     const result = await repo.toggleLike(c.get("userId") as string, ep.id);
     return c.json(result);
-  });
+  }) as unknown as RouteHandler<typeof likePost, { Variables: { userId: string } }>);
 
-  app.delete("/v1/episodes/:id/like", async (c) => {
-    const ep = await repo.getPublishableEpisode(c.req.param("id"));
+  const likeDel = createRoute({
+    method: "delete",
+    path: "/v1/episodes/:id/like",
+    request: { params: z.object({ id: z.string().min(1) }) },    responses: {
+      200: { content: { "application/json": { schema: z.object({ liked: z.boolean(), likes: z.number() }) } }, description: "取消点赞后最终状态 + 最新计数" },
+      404: { content: { "application/json": { schema: Err } }, description: "节目不存在" },
+    },
+  });
+  app.openapi(likeDel, (async (c: Context) => {
+    const ep = await repo.getPublishableEpisode(c.req.param("id")!);
     if (!ep) return c.json({ error: "not_found" }, 404);
     const result = await repo.toggleLike(c.get("userId") as string, ep.id);
     return c.json(result);
-  });
+  }) as unknown as RouteHandler<typeof likeDel, { Variables: { userId: string } }>);
 
-  app.get("/v1/me/favorites", async (c) => {
+  const favList = createRoute({
+    method: "get",
+    path: "/v1/me/favorites",
+    responses: {
+      200: { content: { "application/json": { schema: z.array(z.any()) } }, description: "我的收藏列表" },
+      404: { content: { "application/json": { schema: Err } }, description: "节目不存在" },
+    },
+  });
+  app.openapi(favList, (async (c: Context) => {
     const rows = await repo.listFavorites(c.get("userId") as string);
     return c.json(rows);
-  });
+  }) as unknown as RouteHandler<typeof favList, { Variables: { userId: string } }>);
 
   // 当前用户互动状态（like/favorite）：详情页按钮初始化用（未登录 401）
-  app.get("/v1/episodes/:id/interactions", async (c) => {
-    const ep = await repo.getPublishableEpisode(c.req.param("id"));
+  const interactions = createRoute({
+    method: "get",
+    path: "/v1/episodes/:id/interactions",
+    request: { params: z.object({ id: z.string().min(1) }) },    responses: {
+      200: { content: { "application/json": { schema: z.object({ liked: z.boolean(), favorited: z.boolean() }) } }, description: "当前用户互动状态" },
+      404: { content: { "application/json": { schema: Err } }, description: "节目不存在" },
+    },
+  });
+  app.openapi(interactions, (async (c: Context) => {
+    const ep = await repo.getPublishableEpisode(c.req.param("id")!);
     if (!ep) return c.json({ error: "not_found" }, 404);
     return c.json(await repo.getInteractions(c.get("userId") as string, ep.id));
-  });
+  }) as unknown as RouteHandler<typeof interactions, { Variables: { userId: string } }>);
 
   return app;
 }

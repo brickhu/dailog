@@ -6,7 +6,8 @@
 // 划分：账号 = user 表（邮箱/密码/昵称=@slug），主持人档案 = profiles 表（displayName/画像/社交链接）。
 // 频道概念已废弃（无 username slug）；@主页 = user.name。
 
-import { Hono } from "hono";
+import { createRoute, OpenAPIHono, z, type RouteHandler } from "@hono/zod-openapi";
+import type { Context } from "hono";
 import type { Repos } from "../repo";
 
 export interface ProfileDeps {
@@ -14,17 +15,36 @@ export interface ProfileDeps {
 }
 
 export function profileRoutes(deps: ProfileDeps) {
-  const app = new Hono<{ Variables: { userId: string } }>();
+  const app = new OpenAPIHono<{ Variables: { userId: string } }>();
+  const Err = z.object({ error: z.string() });
 
-  app.get("/v1/me/profile", async (c) => {
+  const r1 = createRoute({
+    method: "get",
+    path: "/v1/me/profile",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/me/profile" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r1, (async (c: Context) => {
     const userId = c.get("userId") as string;
     const profile = await deps.repo.episodes.getProfile(userId);
     if (!profile) return c.json({ error: "not_found" }, 404);
     return c.json(profile);
-  });
+  }) as unknown as RouteHandler<typeof r1, { Variables: { userId: string } }>);
 
   /** 导航栏聚合：一次请求替代 get-session + profile + 未读数三连（减少整页加载请求数） */
-  app.get("/v1/me/overview", async (c) => {
+  const r2 = createRoute({
+    method: "get",
+    path: "/v1/me/overview",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/me/overview" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r2, (async (c: Context) => {
     const userId = c.get("userId") as string;
     const [profile, unread] = await Promise.all([
       deps.repo.episodes.getProfile(userId).catch(() => null),
@@ -36,10 +56,19 @@ export function profileRoutes(deps: ProfileDeps) {
       nickname: profile.nickname ?? null, // user.name = @slug
       unreadCount: unread,
     });
-  });
+  }) as unknown as RouteHandler<typeof r2, { Variables: { userId: string } }>);
 
   /** 账号昵称（≤30 字，去空白）——接口字段 nickname（DB 列 user.name = @slug；注册时应用层唯一） */
-  app.patch("/v1/me/profile", async (c) => {
+  const r3 = createRoute({
+    method: "patch",
+    path: "/v1/me/profile",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/me/profile" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r3, (async (c: Context) => {
     const userId = c.get("userId") as string;
     const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body) return c.json({ error: "invalid_input" }, 400);
@@ -107,7 +136,7 @@ export function profileRoutes(deps: ProfileDeps) {
     }
 
     return c.json({ ok: true });
-  });
+  }) as unknown as RouteHandler<typeof r3, { Variables: { userId: string } }>);
 
   return app;
 }

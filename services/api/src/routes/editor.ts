@@ -3,7 +3,8 @@
 // → 一次性上传成品（multipart：音频 + 封面 + 元数据）→ episode 直接 published + 通知投稿人。
 // 服务端只有 4 个动作：队列 / 详情 / 拒审 / 发布；无 LLM、无生成管线。
 
-import { Hono } from "hono";
+import { createRoute, OpenAPIHono, z, type RouteHandler } from "@hono/zod-openapi";
+import type { Context } from "hono";
 import { requireRole, type AuthEnv } from "../middleware/auth";
 import type { Repos } from "../repo";
 import type { AudioStorage } from "../storage";
@@ -35,32 +36,58 @@ interface PublishMeta {
 const MAX_AUDIO_BYTES = 100 * 1024 * 1024;
 
 export function editorRoutes(deps: EditorDeps) {
-  const app = new Hono<AuthEnv>();
+  const app = new OpenAPIHono<AuthEnv>();
+  const Err = z.object({ error: z.string() });
   app.use("/v1/editor/*", requireRole("editor"));
 
   // ---- 投稿队列 / 详情 ----
 
   /** 待审队列：?status=submitted|rejected|published（缺省 submitted，先到先审） */
-  app.get("/v1/editor/submissions", async (c) => {
+  const r1 = createRoute({
+    method: "get",
+    path: "/v1/editor/submissions",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/submissions" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r1, (async (c: Context) => {
     const raw = c.req.query("status");
     const status = raw === "rejected" || raw === "published" ? raw : "submitted";
     const list = await deps.repo.submissions.listQueue(status);
     return c.json(list);
-  });
+  }) as unknown as RouteHandler<typeof r1, AuthEnv>);
 
   /** 投稿详情：URL + 投稿人 + 声音采样（transcript 供本地 TTS 克隆）+ 已上线节目 */
-  app.get("/v1/editor/submissions/:id", async (c) => {
-    const detail = await deps.repo.submissions.getDetail(c.req.param("id"));
+  const r2 = createRoute({
+    method: "get",
+    path: "/v1/editor/submissions/:id",
+      responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/submissions/:id" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r2, (async (c: Context) => {
+    const detail = await deps.repo.submissions.getDetail(c.req.param("id")!);
     if (!detail) return c.json({ error: "not_found" }, 404);
     const episodes = await deps.repo.episodes.listBySubmission(detail.id);
     return c.json({ ...detail, episodes });
-  });
+  }) as unknown as RouteHandler<typeof r2, AuthEnv>);
 
   // ---- 拒审 ----
 
   /** 人工拒审（reason 必填）→ rejected + 站内通知 + 邮件 */
-  app.post("/v1/editor/submissions/:id/reject", async (c) => {
-    const id = c.req.param("id");
+  const r3 = createRoute({
+    method: "post",
+    path: "/v1/editor/submissions/:id/reject",
+      responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/submissions/:id/reject" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r3, (async (c: Context) => {
+    const id = c.req.param("id")!;
     const detail = await deps.repo.submissions.getDetail(id);
     if (!detail) return c.json({ error: "not_found" }, 404);
     if (detail.status !== "submitted") {
@@ -87,14 +114,22 @@ export function editorRoutes(deps: EditorDeps) {
       html: `<p>你好 ${detail.personaInfo?.displayName ?? detail.userEmail}，</p><p>很遗憾，你的投稿未能通过编辑审核：</p><blockquote>${escapeHtml(reason)}</blockquote><p>投稿链接：<a href="${escapeHtml(detail.url)}">${escapeHtml(detail.url)}</a></p><p>你可以在 <a href="${deps.siteBaseUrl ?? ""}/me/submits">投稿状态页</a> 查看。</p>`,
     }).catch(() => {});
     return c.json({ ok: true, status: "rejected" });
-  });
+  }) as unknown as RouteHandler<typeof r3, AuthEnv>);
 
   // ---- 发布（编辑本地制作成品后一次性上传） ----
 
   /** 一次性上传发布：multipart（audio 文件 + 可选 cover 文件 + meta JSON 字段）
    *  → 音频/封面存 R2 → episode 创建（published，期号 max+1）→ 投稿状态 published → 通知投稿人 */
-  app.post("/v1/editor/submissions/:id/publish", async (c) => {
-    const id = c.req.param("id");
+  const r4 = createRoute({
+    method: "post",
+    path: "/v1/editor/submissions/:id/publish",
+      responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/submissions/:id/publish" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r4, (async (c: Context) => {
+    const id = c.req.param("id")!;
     const detail = await deps.repo.submissions.getDetail(id);
     if (!detail) return c.json({ error: "not_found" }, 404);
     if (detail.status !== "submitted") {
@@ -185,19 +220,36 @@ export function editorRoutes(deps: EditorDeps) {
     }).catch(() => {});
 
     return c.json({ episodeId: created.id, slug: created.slug, number: created.number, status: "published" }, 201);
-  });
+  }) as unknown as RouteHandler<typeof r4, AuthEnv>);
 
   // ---- 已发布节目（编辑本地查看/微调） ----
 
   /** 已发布节目清单（按期号倒序） */
-  app.get("/v1/editor/episodes", async (c) => {
+  const r5 = createRoute({
+    method: "get",
+    path: "/v1/editor/episodes",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/episodes" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r5, (async (c: Context) => {
     const list = await deps.repo.episodes.listPublished();
     return c.json(list);
-  });
+  }) as unknown as RouteHandler<typeof r5, AuthEnv>);
 
   /** 已发布节目编辑：tags / 精选 / 标题 / 简介 / 封面 */
-  app.put("/v1/editor/episodes/:id", async (c) => {
-    const ep = await deps.repo.episodes.getById(c.req.param("id"));
+  const r6 = createRoute({
+    method: "put",
+    path: "/v1/editor/episodes/:id",
+      responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/episodes/:id" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r6, (async (c: Context) => {
+    const ep = await deps.repo.episodes.getById(c.req.param("id")!);
     if (!ep) return c.json({ error: "not_found" }, 404);
     const body = (await c.req.json().catch(() => null)) as {
       tags?: unknown; isPicked?: unknown; title?: unknown; description?: unknown; coverUrl?: unknown;
@@ -211,25 +263,51 @@ export function editorRoutes(deps: EditorDeps) {
     if (typeof body.coverUrl === "string") patch.coverUrl = body.coverUrl;
     await deps.repo.episodes.updatePublished(ep.id, patch);
     return c.json({ ok: true });
-  });
+  }) as unknown as RouteHandler<typeof r6, AuthEnv>);
 
   // ---- 嘉宾库（品牌声线宿主，编辑本地 TTS 用） ----
 
   /** 嘉宾列表（id/name/avatar/intro/url） */
-  app.get("/v1/editor/guests", async (c) => {
+  const r7 = createRoute({
+    method: "get",
+    path: "/v1/editor/guests",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/guests" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r7, (async (c: Context) => {
     const list = await deps.repo.guests.list();
     return c.json(list);
-  });
+  }) as unknown as RouteHandler<typeof r7, AuthEnv>);
 
   /** 嘉宾声线清单（管理查看：guestId/language/transcript/audioKey） */
-  app.get("/v1/editor/guests/voice-samples", async (c) => {
+  const r8 = createRoute({
+    method: "get",
+    path: "/v1/editor/guests/voice-samples",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/guests/voice-samples" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r8, (async (c: Context) => {
     const list = await deps.repo.guests.listVoiceSamples();
     return c.json(list);
-  });
+  }) as unknown as RouteHandler<typeof r8, AuthEnv>);
 
   /** 更新嘉宾称呼/简介（节目中的称呼——服务端配置） */
-  app.put("/v1/editor/guests/:id", async (c) => {
-    const id = c.req.param("id");
+  const r9 = createRoute({
+    method: "put",
+    path: "/v1/editor/guests/:id",
+      responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/guests/:id" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r9, (async (c: Context) => {
+    const id = c.req.param("id")!;
     const body = (await c.req.json().catch(() => null)) as { name?: unknown; intro?: unknown } | null;
     if (!body) return c.json({ error: "invalid_body" }, 400);
     const patch: { name?: string; intro?: string | null } = {};
@@ -238,11 +316,19 @@ export function editorRoutes(deps: EditorDeps) {
     if (Object.keys(patch).length === 0) return c.json({ error: "nothing_to_update" }, 400);
     await deps.repo.guests.update(id, patch);
     return c.json({ ok: true });
-  });
+  }) as unknown as RouteHandler<typeof r9, AuthEnv>);
 
   /** 上传嘉宾声线（multipart：audio 文件 + language + transcript）→ R2 + guest_voice_samples（服务端配置） */
-  app.post("/v1/editor/guests/:id/voice-sample", async (c) => {
-    const guestId = c.req.param("id");
+  const r10 = createRoute({
+    method: "post",
+    path: "/v1/editor/guests/:id/voice-sample",
+      responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/guests/:id/voice-sample" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r10, (async (c: Context) => {
+    const guestId = c.req.param("id")!;
     const form = await c.req.formData().catch(() => null);
     if (!form) return c.json({ error: "invalid_body" }, 400);
     const file = form.get("audio");
@@ -259,29 +345,47 @@ export function editorRoutes(deps: EditorDeps) {
     await deps.storage.put(audioKey, new Uint8Array(await file.arrayBuffer()));
     await deps.repo.guests.upsertVoiceSample({ guestId, language, audioKey, transcript });
     return c.json({ ok: true, guestId, language });
-  });
+  }) as unknown as RouteHandler<typeof r10, AuthEnv>);
 
   /** 嘉宾采样音频（品牌声线参考音频，编辑本地 TTS 下载用） */
-  app.get("/v1/editor/samples/guest/:guestId/audio", async (c) => {
-    const sample = await deps.repo.guests.voiceSampleAny(c.req.param("guestId"));
+  const r11 = createRoute({
+    method: "get",
+    path: "/v1/editor/samples/guest/:guestId/audio",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/samples/guest/:guestId/audio" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r11, (async (c: Context) => {
+    const sample = await deps.repo.guests.voiceSampleAny(c.req.param("guestId")!);
     if (!sample) return c.json({ error: "not_found" }, 404);
     const bytes = await deps.storage.get(sample.audioKey).then((r) => r.data).catch(() => null);
     if (!bytes) return c.json({ error: "not_found" }, 404);
     return new Response(bytes as unknown as BodyInit, {
       headers: { "Content-Type": "audio/mpeg", "Cache-Control": "private, max-age=300" },
     });
-  });
+  }) as unknown as RouteHandler<typeof r11, AuthEnv>);
 
   /** 投稿人采样音频（主持人克隆音色参考，编辑本地 TTS 下载用） */
-  app.get("/v1/editor/samples/host/:userId/audio", async (c) => {
-    const sample = await deps.repo.episodes.getVoiceSample(c.req.param("userId"));
+  const r12 = createRoute({
+    method: "get",
+    path: "/v1/editor/samples/host/:userId/audio",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/samples/host/:userId/audio" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r12, (async (c: Context) => {
+    const sample = await deps.repo.episodes.getVoiceSample(c.req.param("userId")!);
     if (!sample) return c.json({ error: "not_found" }, 404);
     const bytes = await deps.storage.get(sample.audioUrl).then((r) => r.data).catch(() => null);
     if (!bytes) return c.json({ error: "not_found" }, 404);
     return new Response(bytes as unknown as BodyInit, {
       headers: { "Content-Type": "audio/webm", "Cache-Control": "private, max-age=300" },
     });
-  });
+  }) as unknown as RouteHandler<typeof r12, AuthEnv>);
 
   return app;
 }

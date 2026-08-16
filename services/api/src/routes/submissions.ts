@@ -6,7 +6,8 @@
 // 服务端不做内容采集——只做「基本合法性（http/https 格式）与触达性（网络可达）检查」，
 // 内容抓取/脚本/语音/合成全部由编辑本地 Agent 完成。
 
-import { Hono } from "hono";
+import { createRoute, OpenAPIHono, z, type RouteHandler } from "@hono/zod-openapi";
+import type { Context } from "hono";
 import type { Repos } from "../repo";
 
 // 待审核投稿上限：同时排队待审的投稿超过该数 → 拒绝新投稿（防队列积压 + 引导等待）
@@ -53,10 +54,20 @@ export async function isReachable(url: string): Promise<boolean> {
 }
 
 export function submissionsRoutes(repo: Repos) {
-  const app = new Hono<{ Variables: { userId: string } }>();
+  const app = new OpenAPIHono<{ Variables: { userId: string } }>();
+  const Err = z.object({ error: z.string() });
 
   // 预检：同 URL 是否已投稿/已生成节目（输入地址即提示，无需采样/触达检查）
-  app.post("/v1/submissions/check", async (c) => {
+  const r1 = createRoute({
+    method: "post",
+    path: "/v1/submissions/check",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/submissions/check" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r1, (async (c: Context) => {
     const userId = c.get("userId") as string;
     const body = (await c.req.json().catch(() => null)) as { url?: unknown } | null;
     const url = typeof body?.url === "string" ? body.url.trim() : "";
@@ -73,9 +84,18 @@ export function submissionsRoutes(repo: Repos) {
       status: existing.status,
       episode: published ? { id: published.id, slug: published.slug, title: published.title, coverUrl: published.coverUrl, number: published.number } : null,
     });
-  });
+  }) as unknown as RouteHandler<typeof r1, { Variables: { userId: string } }>);
 
-  app.post("/v1/submissions", async (c) => {
+  const r2 = createRoute({
+    method: "post",
+    path: "/v1/submissions",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/submissions" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r2, (async (c: Context) => {
     const userId = c.get("userId") as string;
     const body = (await c.req.json().catch(() => null)) as { url?: unknown; title?: unknown; callNameInEpisode?: unknown; voiceSampleId?: unknown; suggestion?: unknown } | null;
     if (!body) return c.json({ error: "invalid_body", detail: "请求体缺失" }, 400);
@@ -133,13 +153,22 @@ export function submissionsRoutes(repo: Repos) {
       return c.json({ error: "already_submitted", detail: "该链接已提交过投稿" }, 409);
     }
     return c.json({ submissionId: created.id, status: "submitted" }, 201);
-  });
+  }) as unknown as RouteHandler<typeof r2, { Variables: { userId: string } }>);
 
-  app.get("/v1/me/submissions", async (c) => {
+  const r3 = createRoute({
+    method: "get",
+    path: "/v1/me/submissions",
+    
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/me/submissions" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r3, (async (c: Context) => {
     const userId = c.get("userId") as string;
     const list = await repo.submissions.listByUser(userId);
     return c.json(list);
-  });
+  }) as unknown as RouteHandler<typeof r3, { Variables: { userId: string } }>);
 
   return app;
 }
