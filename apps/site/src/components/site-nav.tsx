@@ -7,6 +7,7 @@ import { useI18n } from "@dailogues/i18n";
 import { LangSwitch } from "./lang-switch";
 import { UserMenu, type NavUser } from "./user-menu";
 import { confirmSignOut } from "../lib/auth-guard";
+import { openImportDialog } from "./import-dialog";
 
 const styles = stylex.create({
   header: {
@@ -178,14 +179,14 @@ export function SiteNav() {
       </A>
       {/* 投稿入口仅登录后显示（user 由 onMount 判定；首帧未确认前不显示） */}
       {/* <Show when={user()}>
-        <Button size="sm" onClick={() => navigate("/submit")}>
+        <Button size="sm" onClick={openImportDialog}>
           {t("nav.submit")}
         </Button>
       </Show> */}
       <Show when={user()} fallback={<Button size="sm" round="full" onClick={() => navigate("/login")}>{t("nav.login")}</Button>}>
         {(u) => (
           <>
-            <Button size="sm" round="full" onClick={() => navigate("/submit")}>
+            <Button size="sm" round="full" onClick={openImportDialog}>
               {t("nav.submit")}
             </Button>
             <A href="/me/notifications" {...stylex.props(styles.bell)} aria-label="notifications">
