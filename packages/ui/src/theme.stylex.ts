@@ -313,6 +313,7 @@ export const layouts = stylex.create({
     width: "100%",
     flexShrink: "0",
     maxWidth: "1128px",
+    backgroundColor: "#00ff00",
     margin: "0 auto",
     paddingLeft: dimensions.spacing4,
     paddingRight: dimensions.spacing4,

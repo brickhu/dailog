@@ -18,16 +18,8 @@ import { useI18n } from "@dailogues/i18n";
 // 注意：keyframes 须在 create 内内联（stylex 0.19 插件对模块级 keyframes const 求值报错）
 
 const styles = stylex.create({
-  page: {
-    minHeight: "100vh",
-    backgroundColor: colors.background,
-    color: colors.foreground,
-    fontFamily: "system-ui, -apple-system, sans-serif",
-    paddingBottom: "72px", // 播放条高度预留
-  },
+
   hero: {
-    maxWidth: "1080px",
-    margin: "0 auto",
     padding: `${dimensions.spacing12} ${dimensions.spacing8} ${dimensions.spacing8}`,
     display: "flex",
     flexDirection: "column",
