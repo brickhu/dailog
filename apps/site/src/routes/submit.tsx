@@ -152,7 +152,7 @@ export default function SubmitPage() {
   const [submitting, setSubmitting] = createSignal(false);
 
   onMount(() => {
-    // 导入弹框跳转预填：/import?url=…（URL 输入/检测均在弹框完成）
+    // 导入弹框跳转预填：/submit?url=…（URL 输入/检测均在弹框完成）
     try {
       const params = new URLSearchParams(window.location.search);
       const prefill = params.get("url");

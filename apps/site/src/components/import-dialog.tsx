@@ -237,7 +237,7 @@ export function ImportDialog() {
     setFailMsg("");
   };
 
-  // 确认投稿：重复检测（已投稿直接提示跳转）→ 可达性检测 → 可触达跳 /import?url=…
+  // 确认投稿：重复检测（已投稿直接提示跳转）→ 可达性检测 → 可触达跳 /submit?url=…（第二步）
   const handleConfirm = async () => {
     setState("checking");
     try {
@@ -259,7 +259,7 @@ export function ImportDialog() {
       if (res.ok) {
         const target = url().trim();
         close();
-        navigate(`/import?url=${encodeURIComponent(target)}`);
+        navigate(`/submit?url=${encodeURIComponent(target)}`);
         return;
       }
       const data = (await res.json().catch(() => null)) as { detail?: string } | null;
