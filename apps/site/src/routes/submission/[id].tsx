@@ -6,6 +6,7 @@ import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
+import { apiBaseForFetch } from "../../lib/env";
 
 
 interface SubmissionDetail {
@@ -96,8 +97,9 @@ function SubmissionDetailPage() {
   const { t } = useI18n();
   const params = useParams<{ id: string }>();
   const data = createAsync<SubmissionDetail | null>(async () => {
-    if (typeof window === "undefined") return null; // SSR 首帧短路
-    const res = await fetch(`/v1/public/submissions/${params.id}`);
+    // 服务端用 API 基址直取（公开端点，序列化给客户端复用）；客户端同源代理
+    const base = typeof window === "undefined" ? apiBaseForFetch : "";
+    const res = await fetch(`${base}/v1/public/submissions/${params.id}`);
     if (!res.ok) return null;
     return (await res.json()) as SubmissionDetail;
   });
