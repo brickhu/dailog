@@ -78,6 +78,13 @@ dailog/
 
 ## 技术要点速查
 
+- **前端数据获取原则（硬性约定）**：非必要不要把数据获取逻辑放进 `onMount`。
+  优先顺序：`createAsync`/`createResource`（配合 Suspense 骨架）→ `createEffect`
+  （依赖驱动，query/信号变化自动刷新）→ `onMount`（仅事件绑定等一次性副作用）。
+  典型反例与正解：路由 query 变化（如 `/submit?id=`）用 `createEffect` 响应而非
+  整页刷新；列表/详情数据用 `createAsync`（SSR 服务端取数序列化，客户端复用）或
+  `createResource`（注意：SSR 短路返回 null 会被序列化、客户端不再重新请求——见
+  developer-guide §投稿详情页修复记录）。
 - 前端：SolidJS + Solid Router + StyleX（设计 token 与基础组件在 `packages/ui`）
 - 后端：Node + TypeScript + Hono + Drizzle + better-auth（自托管邮箱+密码会话）
 - **服务端无采集/LLM**——内容拉取、脚本生成、音频拼接、封面在编辑本地完成；
