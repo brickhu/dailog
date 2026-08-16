@@ -9,8 +9,8 @@ import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { usePlayback, type QueueEpisode } from "../lib/playback";
-import { CARD_COVER_SIZES, episodeCoverSrcset, episodeCoverUrl } from "../lib/env";
 import { getEpisodeCached } from "../lib/episode-cache";
+import { EpisodeCard } from "./episode-card";
 
 const styles = stylex.create({
   // subgrid 只能继承直接父 grid 的轨道 → 链路每层都必须是 grid + subgrid：
@@ -213,13 +213,6 @@ const styles = stylex.create({
   },
 });
 
-function fmtDuration(sec: number | null): string {
-  if (!sec) return "";
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
 const PAGE_SIZE = 4;
 const MAX_PAGES = 5;
 
@@ -240,16 +233,8 @@ export function EpisodeCarousel(props: {
     setPage(0);
   });
 
-  const hostName = (ep: QueueEpisode) => ep.callName ?? ep.displayName ?? ep.username;
-  // 当前播放中的节目：卡片显示「暂停」+ 已播放时间（进度由全局播放器驱动）
+  // 当前播放中的节目（卡片三态按钮与播放条高亮用）
   const isCurrent = (id: string) => playback.current()?.id === id;
-  const fmt = (sec: number) => {
-    if (!Number.isFinite(sec) || sec < 0) return "0:00";
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    return `${m}:${String(s).padStart(2, "0")}`;
-  };
-
   // 分页：每屏 4 条、最多 5 屏；末屏不足 4 条由灰块补齐
   const pageCount = () =>
     props.episodes?.length ? Math.min(MAX_PAGES, Math.ceil(props.episodes.length / PAGE_SIZE)) : 0;
@@ -286,42 +271,17 @@ export function EpisodeCarousel(props: {
               <div {...stylex.props(styles.pagePane)} style={{ transform: `translateX(${(i - curPage()) * 100}%)` }}>
                 <For each={pageItems(i)}>
                   {(ep) => (
-                    // hover 预取详情数据（点击进详情页即开；移动端无 hover → 走全局 spinner 过渡）
-                    <div
-                      {...stylex.props(styles.card, styles.cardSpan)}
-                      onClick={() => navigate(`/episode/${ep.slug}`)}
-                      onPointerEnter={() => void getEpisodeCached(ep.slug)}
-                    >
-                      <Show when={episodeCoverUrl(ep.id, ep.coverUrl)} fallback={<div {...stylex.props(styles.coverFallback)}>🎙</div>}>
-                        {/* srcset/sizes：按视口选规格（最大 1280w），不拉原图 */}
-                        <img
-                          src={episodeCoverUrl(ep.id, ep.coverUrl, 640)!}
-                          srcset={episodeCoverSrcset(ep.id, ep.coverUrl) ?? undefined}
-                          sizes={CARD_COVER_SIZES}
-                          alt={ep.title || ""}
-                          {...stylex.props(styles.cover)}
-                        />
-                      </Show>
-                      <p {...stylex.props(styles.title)}>{ep.title || t("common.unnamed")}</p>
-                      <p {...stylex.props(styles.meta)}>
-                        {hostName(ep)} · {fmtDuration(ep.durationSeconds)}
-                      </p>
-                      <div {...stylex.props(styles.cardActions)}>
-                        <button
-                          {...stylex.props(styles.playBtn, isCurrent(ep.id) && playback.playing() && styles.playBtnActive)}
-                          onClick={(e) => { e.stopPropagation(); isCurrent(ep.id) ? playback.toggle() : playback.play(ep); }}
-                        >
-                          {/* 正在播放 → 暂停（实底高亮）；其余（含当前曲目暂停时）→ 播放（普通样式） */}
-                          {isCurrent(ep.id) && playback.playing() ? "⏸" : "▶"}{" "}
-                          {isCurrent(ep.id) && playback.playing() ? t("common.pause") : t("common.play")}
-                        </button>
-                        {/* 正在播放：已播放时间 / 总时长（实时跟随播放器进度）——未播放时所有卡片一致 */}
-                        <Show when={isCurrent(ep.id) && playback.playing()}>
-                          <span {...stylex.props(styles.playingTime)}>
-                            {fmt(playback.progress())} / {fmt(playback.duration())}
-                          </span>
-                        </Show>
-                      </div>
+                    // grid 模式节目卡片：封面三态按钮（hover 划入）+ 标题 + 时间 + 时长；
+                    // hover 预取详情数据（点击进详情页即开）
+                    <div {...stylex.props(styles.cardSpan)}>
+                      <EpisodeCard
+                        episode={ep}
+                        playing={isCurrent(ep.id) && playback.playing()}
+                        onPlay={() => playback.play(ep)}
+                        onPause={() => playback.toggle()}
+                        onClick={() => navigate(`/episode/${ep.slug}`)}
+                        onHover={() => void getEpisodeCached(ep.slug)}
+                      />
                     </div>
                   )}
                 </For>

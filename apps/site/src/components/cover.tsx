@@ -5,6 +5,7 @@
 // - 状态：playing 受控（外部播放器传入）；loading 组件内部（点击 play → 直到 playing 变
 //         true 或超时兜底）——与 playback.play 时序天然匹配（audio.play() pending 期间
 //         playing 为 false，就绪后才 true）
+// - interactive=false：纯封面（无透明层/无按钮）——compact 与列表模式封面用
 // - 事件：onPlay / onPause 暴露，外部接入全局播放器
 import { createEffect, createSignal, onCleanup, Show, type JSX } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
@@ -77,27 +78,26 @@ const styles = stylex.create({
   },
 });
 
-export function Cover(props: {
-  /** 节目 meta（id / coverUrl / audioUrl / title 等） */
-  episode: QueueEpisode;
-  /** 是否播放中（外部受控，来自全局播放器）；true 时 loading 自动结束 */
+/**
+ * 三态播放按钮（play / loading spinner / pause）+ loading 状态机。
+ * 供 Cover（封面右下角）与 EpisodeCard 列表模式（右侧靠右）复用。
+ */
+export function CoverControls(props: {
+  /** 是否播放中（外部受控）；true 时 loading 自动结束 */
   playing: boolean;
-  /** 待播放点击（组件进入加载中）——外部接入全局播放器 */
+  /** 待播放点击（进入加载中）——外部接入全局播放器 */
   onPlay?: () => void;
   /** 播放中点击暂停——外部接入全局播放器 */
   onPause?: () => void;
-  /** 封面 sizes（响应式选图）；缺省详情页档 */
-  sizes?: string;
-  /** CSS 控制显示大小（透传；默认 width 100% 由父级控制） */
-  style?: JSX.CSSProperties;
-  class?: string;
+  /** 待播放按钮 hover 划入（封面 overlay 场景）；列表模式常显传 false */
+  revealOnHover?: boolean;
+  /** hover 状态（revealOnHover 时由外部传入：封面 hover → 划入） */
+  hovered?: boolean;
+  /** 按钮尺寸（列表模式小一号）@default "lg" */
+  size?: "sm" | "md" | "lg";
 }) {
   const { t } = useI18n();
-  const [hover, setHover] = createSignal(false);
   const [loading, setLoading] = createSignal(false);
-  // 仅错误态（图片加载失败 → 占位覆盖）；加载成功不依赖 onLoad——
-  // hydration 时序下图片可能先于 onLoad 绑定完成加载，事件丢失会卡在隐藏态
-  const [imgError, setImgError] = createSignal(false);
 
   // playing 变 true → 加载完成；外部停止（false）→ 待播放
   createEffect(() => {
@@ -115,20 +115,95 @@ export function Cover(props: {
   });
   onCleanup(() => clearTimeout(timer));
 
-  const src = () => episodeCoverUrl(props.episode.id, props.episode.coverUrl);
   const handlePlay = () => {
     if (loading()) return;
     setLoading(true);
     props.onPlay?.();
   };
 
+  const btn = (interactive: boolean) => (
+    <>
+      <Show when={props.playing}>
+        <Button
+          round="full"
+          size={props.size ?? "lg"}
+          appear="fill"
+          variant="brand"
+          isIconOnly
+          icon={<Icon icon="mdi:pause" width={20} />}
+          label={t("common.pause")}
+          onClick={props.onPause}
+        />
+      </Show>
+      <Show when={loading() && !props.playing}>
+        <Button round="full" size={props.size ?? "lg"} appear="fill" variant="brand" isIconOnly isLoading label={t("common.play")} />
+      </Show>
+      <Show when={!props.playing && !loading()}>
+        {interactive ? (
+          <div {...stylex.props(styles.btnIdle, props.hovered && styles.btnIdleVisible)}>
+            <Button
+              round="full"
+              size={props.size ?? "lg"}
+              appear="fill"
+              variant="brand"
+              isIconOnly
+              icon={<Icon icon="mdi:play" width={20} />}
+              label={t("common.play")}
+              onClick={handlePlay}
+            />
+          </div>
+        ) : (
+          <Button
+            round="full"
+            size={props.size ?? "lg"}
+            appear="fill"
+            variant="brand"
+            isIconOnly
+            icon={<Icon icon="mdi:play" width={20} />}
+            label={t("common.play")}
+            onClick={handlePlay}
+          />
+        )}
+      </Show>
+    </>
+  );
+
+  // 只有一处渲染出口（条件分支都在 btn 内）
+  return <>{btn(props.revealOnHover ?? false)}</>;
+}
+
+export function Cover(props: {
+  /** 节目 meta（id / coverUrl / audioUrl / title 等） */
+  episode: QueueEpisode;
+  /** 是否播放中（外部受控，来自全局播放器） */
+  playing: boolean;
+  /** 待播放点击（组件进入加载中）——外部接入全局播放器 */
+  onPlay?: () => void;
+  /** 播放中点击暂停——外部接入全局播放器 */
+  onPause?: () => void;
+  /** 交互模式：false = 纯封面（无透明层/无按钮）@default true */
+  interactive?: boolean;
+  /** 封面 sizes（响应式选图）；缺省详情页档 */
+  sizes?: string;
+  /** CSS 控制显示大小（透传；默认 width 100% 由父级控制） */
+  style?: JSX.CSSProperties;
+  class?: string;
+}) {
+  const interactive = () => props.interactive ?? true;
+  const [hover, setHover] = createSignal(false);
+  // 仅错误态（图片加载失败 → 占位覆盖）；加载成功不依赖 onLoad——
+  // hydration 时序下图片可能先于 onLoad 绑定完成加载，事件丢失会卡在隐藏态
+  const [imgError, setImgError] = createSignal(false);
+
+  const src = () => episodeCoverUrl(props.episode.id, props.episode.coverUrl);
+
   return (
     <div
       {...stylex.props(styles.wrap)}
       style={props.style}
       class={props.class}
-      onPointerEnter={() => setHover(true)}
-      onPointerLeave={() => setHover(false)}
+      onPointerEnter={interactive() ? () => setHover(true) : undefined}
+      onPointerLeave={interactive() ? () => setHover(false) : undefined}
     >
       <Show when={src()} fallback={<div {...stylex.props(styles.placeholder)}>🎙</div>}>
         {/* img 始终显示（加载成功自然可见，不依赖 onLoad）；失败时占位覆盖 */}
@@ -144,40 +219,14 @@ export function Cover(props: {
           <div {...stylex.props(styles.placeholder)}>🎙</div>
         </Show>
       </Show>
-      {/* 透明覆盖层（hover 划入按钮的交互载体） */}
-      <div {...stylex.props(styles.overlay)} />
-      {/* 右下角按钮：播放中 → pause 长显；加载中 → disabled spinner；待播放 → play（hover 划入） */}
-      <div {...stylex.props(styles.btnSlot)}>
-        <Show when={props.playing}>
-          <Button
-            round="full"
-            size="lg"
-            appear="fill"
-            variant="brand"
-            isIconOnly
-            icon={<Icon icon="mdi:pause" width={20} />}
-            label={t("common.pause")}
-            onClick={props.onPause}
-          />
-        </Show>
-        <Show when={loading() && !props.playing}>
-          <Button round="full" size="lg" appear="fill" variant="brand" isIconOnly isLoading label={t("common.play")} />
-        </Show>
-        <Show when={!props.playing && !loading()}>
-          <div {...stylex.props(styles.btnIdle, hover() && styles.btnIdleVisible)}>
-            <Button
-              round="full"
-              size="lg"
-              appear="fill"
-              variant="brand"
-              isIconOnly
-              icon={<Icon icon="mdi:play" width={20} />}
-              label={t("common.play")}
-              onClick={handlePlay}
-            />
-          </div>
-        </Show>
-      </div>
+      <Show when={interactive()}>
+        {/* 透明覆盖层（hover 划入按钮的交互载体） */}
+        <div {...stylex.props(styles.overlay)} />
+        {/* 右下角三态按钮（播放中 pause 长显 / 加载中 spinner / 待播放 hover 划入） */}
+        <div {...stylex.props(styles.btnSlot)}>
+          <CoverControls playing={props.playing} onPlay={props.onPlay} onPause={props.onPause} revealOnHover hovered={hover()} />
+        </div>
+      </Show>
     </div>
   );
 }

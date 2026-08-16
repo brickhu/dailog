@@ -4,7 +4,12 @@ import * as stylex from "@stylexjs/stylex";
 // 注意：defineVars 文件必须保持 .stylex.ts 后缀（StyleX 编译器约定）。
 
 // A constant can be used to avoid repeating the media query
+// 断点用 min-width 移动优先链（base = 手机 <640；TABLET ≥640；DESKTOP ≥1024）：
+// stylex 不支持复合 media query（`and` 组合会被静默丢弃）——TABLET 写成
+// `min-width: 640px and max-width: 1023px` 时规则不生成，640-1023 视口无列数定义
 const DARK = '@media (prefers-color-scheme: dark)';
+const DESKTOP = '@media (min-width: 1024px)';
+const TABLET = '@media (min-width: 640px)';
 
 // 颜色
 export const colors = stylex.defineVars({
@@ -248,9 +253,13 @@ export const typography = stylex.create({
   },
   displayMd: {
     fontFamily: fontfamilies.heading,
-    fontSize: dimensions.fontSize5xl,
     fontWeight: dimensions.fontWeightBold,
     lineHeight: "1.2",
+    // 移动优先：base（<640 手机）与 TABLET（640-1023 平板）同为 4xl，桌面 5xl
+    fontSize: dimensions.fontSize4xl,
+    [DESKTOP]: {
+      fontSize: dimensions.fontSize5xl,
+    },
   },
   displaySm: {
     fontFamily: fontfamilies.heading,
@@ -320,7 +329,8 @@ export const layouts = stylex.create({
     width: "100%",
   },
 
-  // 大容器：max-width 1128px，居中；网格列数 <640 为 4 列 / <1024 为 8 列 / 默认 12 列。
+  // 大容器：max-width 1128px，居中；网格列数 <640 为 4 列 / 640-1023 为 8 列 / ≥1024 为 12 列。
+  // 移动优先 min-width 链（base 手机 + TABLET + DESKTOP；stylex 不支持复合 media）。
   // 轨道用 minmax(0, 1fr)：1fr 默认有 min-content 下限，内容（hero/长标题）会把轨道撑成
   // 非均分（subgrid 继承后卡片不等宽）；minmax(0) 保证轨道严格均分
   containerLg: {
@@ -329,15 +339,16 @@ export const layouts = stylex.create({
     maxWidth: "1128px",
     margin: "0 auto",
     display: "grid",
-    gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
+    paddingLeft: dimensions.spacing4,
+    paddingRight: dimensions.spacing4,
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
     columnGap: dimensions.spacing4,
     alignItems: "start",
-     "@media (max-width: 1024px)": {
+    [TABLET]: {
       gridTemplateColumns: "repeat(8, minmax(0, 1fr))",
     },
-    "@media (max-width: 640px)": {
-      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-      columnGap: dimensions.spacing4,
+    [DESKTOP]: {
+      gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
     },
   },
 
@@ -380,3 +391,9 @@ export const layouts = stylex.create({
     },
   },
 })
+
+export const constants = {
+  DARK,
+  DESKTOP,
+  TABLET,
+}
