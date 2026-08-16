@@ -13,6 +13,9 @@ export const zh = {
   "auth.signOutConfirm": "确认退出",
   "importDialog.unreachable": "链接当前无法访问，请确认链接有效后重试",
   "importDialog.retry": "重新输入 URL",
+  "importDialog.duplicate": "这个 URL 已经投稿",
+  "importDialog.duplicateHint": "该分享链接已提交过，可直接查看投稿详情。",
+  "importDialog.viewSubmission": "查看投稿",
   // ---- 通用 ----
   "common.play": "播放",
   "common.pause": "暂停",
@@ -721,6 +724,9 @@ export const en: Dictionary = {
   "auth.signOutConfirm": "Sign out",
   "importDialog.unreachable": "The link is currently unreachable. Please check and try again.",
   "importDialog.retry": "Enter URL again",
+  "importDialog.duplicate": "This URL has already been submitted",
+  "importDialog.duplicateHint": "This link has already been submitted. You can view the submission details.",
+  "importDialog.viewSubmission": "View submission",
   // ---- 通用 ----
   "common.play": "Play",
   "common.pause": "Pause",

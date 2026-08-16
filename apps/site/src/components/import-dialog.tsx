@@ -8,7 +8,7 @@ import { useI18n } from "@dailogues/i18n";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 
-type DialogState = "input" | "checking" | "error";
+type DialogState = "input" | "checking" | "error" | "duplicate";
 
 /** 前端基本校验：http/https + 有域名（后端仍会做完整合法性 + 触达性检查） */
 function isUrlLike(input: string): boolean {
@@ -123,6 +123,8 @@ export function ImportDialog() {
   const [state, setState] = createSignal<DialogState>("input");
   const [url, setUrl] = createSignal("");
   const [failMsg, setFailMsg] = createSignal("");
+  // 重复投稿信息（已投稿 → 提示 + 跳转投稿详情）
+  const [dupEpisode, setDupEpisode] = createSignal<{ slug: string; title: string | null } | null>(null);
   // 剪贴板监控预填通道（组件挂载期间生效）
   setDialogUrl = setUrl;
   setDialogState = setState;
@@ -142,10 +144,27 @@ export function ImportDialog() {
     setFailMsg("");
   };
 
-  // 确认投稿：可达性检测 → 可触达跳 /import?url=…（第二步，URL 输入那一步已跳过）
+  // 确认投稿：重复检测（已投稿直接提示跳转）→ 可达性检测 → 可触达跳 /import?url=…
   const handleConfirm = async () => {
     setState("checking");
     try {
+      // 1) 重复检测：URL 已投稿过 → 提示 + 跳转投稿详情（不再走导入）
+      const checkRes = await fetch("/v1/submissions/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: url().trim() }),
+      });
+      const checkData = (await checkRes.json().catch(() => null)) as {
+        existing?: boolean;
+        episode?: { slug?: string; title?: string | null } | null;
+      } | null;
+      if (checkData?.existing) {
+        const ep = checkData.episode;
+        setDupEpisode(ep && ep.slug ? { slug: ep.slug, title: ep.title ?? null } : null);
+        setState("duplicate");
+        return;
+      }
+      // 2) 可达性检测
       const res = await fetch("/v1/submissions/reachable", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -166,52 +185,78 @@ export function ImportDialog() {
     }
   };
 
+  // 跳转投稿详情：已生成节目 → 节目页；仅投稿记录 → 我的投稿列表
+  const goSubmission = () => {
+    const target = dupEpisode()?.slug
+      ? `/episode/${dupEpisode()!.slug}`
+      : "/me/submits";
+    close();
+    navigate(target);
+  };
+
   return (
     <Dialog isOpen={dialogOpen()} onOpenChange={(v) => !v && close()} width={480} purpose="form">
       <div {...stylex.props(styles.wrap)}>
         <Show
-          when={state() !== "error"}
+          when={state() === "duplicate"}
           fallback={
-            <>
+            <Show
+              when={state() !== "error"}
+              fallback={
+                <>
+                  <p {...stylex.props(styles.title)}>{t("submit.import")}</p>
+                  <p {...stylex.props(styles.fail)} role="alert">{failMsg()}</p>
+                  <div {...stylex.props(styles.actions)}>
+                    <Button onClick={backToInput}>{t("importDialog.retry")}</Button>
+                    <Button variant="neutral" appear="ghost" onClick={close}>
+                      {t("common.cancel")}
+                    </Button>
+                  </div>
+                </>
+              }
+            >
               <p {...stylex.props(styles.title)}>{t("submit.import")}</p>
-              <p {...stylex.props(styles.fail)} role="alert">{failMsg()}</p>
+              <p {...stylex.props(styles.desc)}>{t("submit.step1Desc")}</p>
+              <div>
+                <input
+                  type="url"
+                  value={url()}
+                  disabled={state() === "checking"}
+                  placeholder={t("submit.urlPlaceholder")}
+                  onInput={(e) => setUrl((e.target as HTMLInputElement).value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && canSubmit() && state() === "input") void handleConfirm(); }}
+                  {...stylex.props(styles.input, urlInvalid() && styles.inputError)}
+                />
+                <Show when={urlInvalid()}>
+                  <p {...stylex.props(styles.fieldError)}>{t("submit.urlUnsupported")}</p>
+                </Show>
+              </div>
+              <p {...stylex.props(styles.desc)}>{t("submit.urlHint")}</p>
               <div {...stylex.props(styles.actions)}>
-                <Button onClick={backToInput}>{t("importDialog.retry")}</Button>
                 <Button variant="neutral" appear="ghost" onClick={close}>
                   {t("common.cancel")}
                 </Button>
+                <Button
+                  onClick={() => void handleConfirm()}
+                  disabled={!canSubmit() || state() === "checking"}
+                  isLoading={state() === "checking"}
+                >
+                  {t("submit.import")}
+                </Button>
               </div>
-            </>
+            </Show>
           }
         >
-          <p {...stylex.props(styles.title)}>{t("submit.import")}</p>
-          <p {...stylex.props(styles.desc)}>{t("submit.step1Desc")}</p>
-          <div>
-            <input
-              type="url"
-              value={url()}
-              disabled={state() === "checking"}
-              placeholder={t("submit.urlPlaceholder")}
-              onInput={(e) => setUrl((e.target as HTMLInputElement).value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && canSubmit() && state() === "input") void handleConfirm(); }}
-              {...stylex.props(styles.input, urlInvalid() && styles.inputError)}
-            />
-            {/* 非法 URL 提示（输入框下方） */}
-            <Show when={urlInvalid()}>
-              <p {...stylex.props(styles.fieldError)}>{t("submit.urlUnsupported")}</p>
-            </Show>
-          </div>
-          <p {...stylex.props(styles.desc)}>{t("submit.urlHint")}</p>
+          {/* duplicate：URL 已投稿 → 提示 + 查看投稿详情 */}
+          <p {...stylex.props(styles.title)}>{t("importDialog.duplicate")}</p>
+          <p {...stylex.props(styles.desc)}>{t("importDialog.duplicateHint")}</p>
+          <Show when={dupEpisode()}>
+            <p {...stylex.props(styles.fail)}>{dupEpisode()!.title}</p>
+          </Show>
           <div {...stylex.props(styles.actions)}>
+            <Button onClick={goSubmission}>{t("importDialog.viewSubmission")}</Button>
             <Button variant="neutral" appear="ghost" onClick={close}>
               {t("common.cancel")}
-            </Button>
-            <Button
-              onClick={() => void handleConfirm()}
-              disabled={!canSubmit() || state() === "checking"}
-              isLoading={state() === "checking"}
-            >
-              {t("submit.import")}
             </Button>
           </div>
         </Show>
