@@ -33,6 +33,76 @@ export function openImportDialog(): void {
   setDialogOpen(true);
 }
 
+// —— submissions 重复检测本地缓存 ——
+// 同一 URL 不重复请求 check 端点：已投稿 24h / 未投稿 10min（投稿状态不回退，未投稿
+// 可能随后被投）。localStorage 持久（跨刷新）+ 内存 Map（快读）。
+interface CheckCacheEntry {
+  existing: boolean;
+  submissionId?: string;
+  episode?: { slug?: string; title?: string | null } | null;
+  ts: number;
+}
+const CHECK_CACHE_KEY = "dailog.submissionCheck";
+const CHECK_TTL_EXISTING = 24 * 60 * 60 * 1000;
+const CHECK_TTL_NONE = 10 * 60 * 1000;
+const CHECK_CACHE_MAX = 100;
+const checkCache = new Map<string, CheckCacheEntry>();
+
+function readCheckStore(): Record<string, CheckCacheEntry> {
+  try {
+    return JSON.parse(localStorage.getItem(CHECK_CACHE_KEY) ?? "{}") as Record<string, CheckCacheEntry>;
+  } catch {
+    return {};
+  }
+}
+function writeCheckStore(store: Record<string, CheckCacheEntry>): void {
+  try {
+    localStorage.setItem(CHECK_CACHE_KEY, JSON.stringify(store));
+  } catch {
+    // 存储不可用（隐私模式等）：仅内存缓存
+  }
+}
+
+/** 重复检测（带本地缓存）：命中缓存不请求端点 */
+async function checkSubmission(url: string): Promise<CheckCacheEntry> {
+  const cached = checkCache.get(url) ?? readCheckStore()[url];
+  if (cached) {
+    const ttl = cached.existing ? CHECK_TTL_EXISTING : CHECK_TTL_NONE;
+    if (Date.now() - cached.ts < ttl) return cached;
+  }
+  try {
+    const res = await fetch("/v1/submissions/check", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    const data = (await res.json().catch(() => null)) as {
+      existing?: boolean;
+      submissionId?: string;
+      episode?: { slug?: string; title?: string | null } | null;
+    } | null;
+    const entry: CheckCacheEntry = {
+      existing: !!data?.existing,
+      submissionId: data?.submissionId ?? undefined,
+      episode: data?.episode ?? null,
+      ts: Date.now(),
+    };
+    checkCache.set(url, entry);
+    const store = readCheckStore();
+    const keys = Object.keys(store);
+    if (keys.length >= CHECK_CACHE_MAX) {
+      // 超上限：清掉最旧的一半（按 ts）
+      keys.sort((a, b) => (store[a]?.ts ?? 0) - (store[b]?.ts ?? 0));
+      for (const k of keys.slice(0, Math.floor(CHECK_CACHE_MAX / 2))) delete store[k];
+    }
+    store[url] = entry;
+    writeCheckStore(store);
+    return entry;
+  } catch {
+    return { existing: false, ts: 0 }; // 检测失败：不缓存（调用方走兜底）
+  }
+}
+
 // —— 剪贴板实时监控 ——
 // 剪贴板含合法 URL（且弹框未开）→ 自动打开弹框并预填 URL。
 // 轮询（3s）+ 页面重新可见时检测；权限拒绝/不可用静默（有权限的浏览器生效）。
@@ -48,18 +118,9 @@ async function tryOpenFromClipboard(): Promise<void> {
     const url = text.trim();
     if (!url || !isUrlLike(url) || url === lastClipboardUrl) return;
     lastClipboardUrl = url; // 记录（无论是否弹，避免重复检测/重复打扰）
-    // 已投稿过的 URL（重复导入）→ 不弹（弹框内确认投稿时仍有重复兜底）
-    try {
-      const res = await fetch("/v1/submissions/check", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-      const data = (await res.json().catch(() => null)) as { existing?: boolean } | null;
-      if (data?.existing) return;
-    } catch {
-      // 重复检测失败：仍弹（弹框内确认投稿时再兜底检测）
-    }
+    // 已投稿过的 URL（重复导入）→ 不弹（弹框内确认投稿时仍有重复兜底；本地缓存命中不请求）
+    const check = await checkSubmission(url);
+    if (check.existing) return;
     setDialogUrl?.(url);
     setDialogState?.("input");
     setDialogFail?.("");
@@ -165,18 +226,9 @@ export function ImportDialog() {
   const handleConfirm = async () => {
     setState("checking");
     try {
-      // 1) 重复检测：URL 已投稿过 → 提示 + 跳转投稿详情（不再走导入）
-      const checkRes = await fetch("/v1/submissions/check", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url: url().trim() }),
-      });
-      const checkData = (await checkRes.json().catch(() => null)) as {
-        existing?: boolean;
-        submissionId?: string;
-        episode?: { slug?: string; title?: string | null } | null;
-      } | null;
-      if (checkData?.existing) {
+      // 1) 重复检测：URL 已投稿过 → 提示 + 跳转投稿详情（不再走导入；本地缓存命中不请求）
+      const checkData = await checkSubmission(url().trim());
+      if (checkData.existing) {
         setDupSubmissionId(checkData.submissionId ?? null);
         const ep = checkData.episode;
         setDupEpisode(ep && ep.slug ? { slug: ep.slug, title: ep.title ?? null } : null);
