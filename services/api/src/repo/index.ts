@@ -24,8 +24,10 @@ export interface SubmissionsRepo {
    *  voiceSampleId：投稿时使用的采样（仅记录，TTS 仍按语言匹配）；
    *  suggestion：投稿人节目建议（可为 null；编辑生成脚本时仅供选题视角参考） */
   create(id: string, userId: string, url: string, title: string | null, callNameInEpisode?: string | null, personaInfo?: PersonaSnapshot | null, voiceSampleId?: string | null, suggestion?: string | null): Promise<{ id: string }>;
-  /** 重复投稿检测（同用户同 URL → 已存在） */
+  /** 重复投稿检测（同用户同 URL → 已存在；存量数据兜底） */
   findByUserUrl(userId: string, url: string): Promise<{ id: string; status: string } | null>;
+  /** 按确定性投稿 ID 查（主键索引；同 URL 同 ID → 已存在即重复，含他人投稿） */
+  findById(id: string): Promise<{ id: string; status: string } | null>;
   /** 待审核投稿数（status=submitted）——投稿并发限制（pending_limit）用 */
   countPendingByUser(userId: string): Promise<number>;
   /** 声音采样严格要求：投稿必须关联一条属于该用户的 ready 采样。
@@ -524,6 +526,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           if (isUniqueViolation(err)) return { id: "" }; // 竞态：并发提交撞唯一约束
           throw err;
         }
+      },
+      async findById(id) {
+        const rows = await db
+          .select({ id: schema.submissions.id, status: schema.submissions.status })
+          .from(schema.submissions)
+          .where(eq(schema.submissions.id, id))
+          .limit(1);
+        return rows[0] ?? null;
       },
       async findByUserUrl(userId, url) {
         const rows = await db

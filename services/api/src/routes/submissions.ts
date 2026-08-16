@@ -105,7 +105,11 @@ export function submissionsRoutes(repo: Repos) {
     if (!isValidUrl(url)) {
       return c.json({ error: "invalid_url", detail: "链接格式不合法（仅支持 http/https 分享链接）" }, 400);
     }
-    const existing = await repo.submissions.findByUserUrl(userId, url);
+    // 确定性 ID：同 URL 同 ID → 直接按主键查（含他人投稿，全局唯一）；
+    // 存量数据（随机 UUID）按 user×url 兜底
+    const existing =
+      (await repo.submissions.findById(submissionIdFromUrl(url))) ??
+      (await repo.submissions.findByUserUrl(userId, url));
     if (!existing) return c.json({ existing: false });
     const episodes = await repo.episodes.listBySubmission(existing.id).catch(() => []);
     const published = episodes.find((e) => e.status === "published" && e.isPublic) ?? null;

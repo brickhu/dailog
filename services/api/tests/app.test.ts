@@ -26,6 +26,7 @@ function fakeRepo(): AppDeps["repo"] {
     submissions: {
       create: async () => ({ id: "sub-1" }),
       findByUserUrl: async () => null,
+      findById: async () => null,
       countPendingByUser: async () => 0,
       hasReadyVoiceSample: async () => true,
       listByUser: async () => [],
