@@ -323,7 +323,10 @@ export default function SubmitPage() {
       <div {...stylex.props(layouts.page)}>
         <div {...stylex.props(layouts.containerSm)}>
           <Title>{t("submit.title")} · dailog</Title>
-        <h1 {...stylex.props(styles.title)}>{t("submit.title")}</h1>
+        {/* empty（未检测到有效 URL）独占状态：连页面标题都不显示 */}
+        <Show when={urlState() !== "empty"}>
+          <h1 {...stylex.props(styles.title)}>{t("submit.title")}</h1>
+        </Show>
 
         {/* 2. 确认投稿态：人设编辑（可选）+ 声音采样（必填）→ [确认投稿] */}
         <Show when={step() === "confirm"}>
