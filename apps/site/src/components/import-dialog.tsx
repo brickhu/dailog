@@ -126,7 +126,8 @@ export function ImportDialog() {
   const [state, setState] = createSignal<DialogState>("input");
   const [url, setUrl] = createSignal("");
   const [failMsg, setFailMsg] = createSignal("");
-  // 重复投稿信息（已投稿 → 提示 + 跳转投稿详情）
+  // 重复投稿信息（已投稿 → 提示 + 跳转投稿详情 /submission/<id>）
+  const [dupSubmissionId, setDupSubmissionId] = createSignal<string | null>(null);
   const [dupEpisode, setDupEpisode] = createSignal<{ slug: string; title: string | null } | null>(null);
   // 剪贴板监控预填通道（组件挂载期间生效）
   setDialogUrl = setUrl;
@@ -141,6 +142,8 @@ export function ImportDialog() {
     setState("input");
     setUrl("");
     setFailMsg("");
+    setDupSubmissionId(null);
+    setDupEpisode(null);
   };
   const backToInput = () => {
     setState("input");
@@ -159,9 +162,11 @@ export function ImportDialog() {
       });
       const checkData = (await checkRes.json().catch(() => null)) as {
         existing?: boolean;
+        submissionId?: string;
         episode?: { slug?: string; title?: string | null } | null;
       } | null;
       if (checkData?.existing) {
+        setDupSubmissionId(checkData.submissionId ?? null);
         const ep = checkData.episode;
         setDupEpisode(ep && ep.slug ? { slug: ep.slug, title: ep.title ?? null } : null);
         setState("duplicate");
@@ -188,11 +193,13 @@ export function ImportDialog() {
     }
   };
 
-  // 跳转投稿详情：已生成节目 → 节目页；仅投稿记录 → 我的投稿列表
+  // 跳转投稿详情：/submission/<id>（公开详情页；拿不到 id 时回退节目页/我的投稿）
   const goSubmission = () => {
-    const target = dupEpisode()?.slug
-      ? `/episode/${dupEpisode()!.slug}`
-      : "/me/submits";
+    const target = dupSubmissionId()
+      ? `/submission/${dupSubmissionId()}`
+      : dupEpisode()?.slug
+        ? `/episode/${dupEpisode()!.slug}`
+        : "/me/submits";
     close();
     navigate(target);
   };
