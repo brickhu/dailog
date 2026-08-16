@@ -121,6 +121,12 @@ export function CoverControls(props: {
     props.onPlay?.();
   };
 
+  // 按钮点击只触发播放/暂停事件，不冒泡到卡片容器（卡片主体点击才是进详情）
+  const stop = (fn?: () => void) => (e: MouseEvent) => {
+    e.stopPropagation();
+    fn?.();
+  };
+
   const btn = (interactive: boolean) => (
     <>
       <Show when={props.playing}>
@@ -132,7 +138,7 @@ export function CoverControls(props: {
           isIconOnly
           icon={<Icon icon="mdi:pause" width={20} />}
           label={t("common.pause")}
-          onClick={props.onPause}
+          onClick={stop(props.onPause)}
         />
       </Show>
       <Show when={loading() && !props.playing}>
@@ -149,7 +155,7 @@ export function CoverControls(props: {
               isIconOnly
               icon={<Icon icon="mdi:play" width={20} />}
               label={t("common.play")}
-              onClick={handlePlay}
+              onClick={stop(handlePlay)}
             />
           </div>
         ) : (
@@ -161,7 +167,7 @@ export function CoverControls(props: {
             isIconOnly
             icon={<Icon icon="mdi:play" width={20} />}
             label={t("common.play")}
-            onClick={handlePlay}
+            onClick={stop(handlePlay)}
           />
         )}
       </Show>
