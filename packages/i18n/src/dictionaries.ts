@@ -4,6 +4,10 @@
 // ---------- 中文 ----------
 export const zh = {
   "auth.hint": "注册需邮箱验证码",
+  "auth.guardTitle": "需要登录",
+  "auth.guardDesc": "登录或注册后即可继续操作（新用户可直接注册，老用户密码登录）。",
+  "auth.guardAction": "去登录 / 注册",
+  "auth.guardCancel": "取消",
   // ---- 通用 ----
   "common.play": "播放",
   "common.pause": "暂停",
@@ -703,6 +707,10 @@ export const zh = {
 // ---------- 英文（fallback 语言；结构必须与 zh 完全对齐）----------
 export const en: Dictionary = {
   "auth.hint": "Email code required to sign up",
+  "auth.guardTitle": "Sign in required",
+  "auth.guardDesc": "Sign in or create an account to continue (new users can register directly; existing users sign in with password).",
+  "auth.guardAction": "Sign in / Register",
+  "auth.guardCancel": "Cancel",
   // ---- 通用 ----
   "common.play": "Play",
   "common.pause": "Pause",

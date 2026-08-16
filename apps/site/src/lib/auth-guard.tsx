@@ -5,6 +5,7 @@
 // - 登录态检测走 /v1/me（同源代理，401 = 未登录），结果会话内缓存
 //   （登录/登出后调用 resetAuthCache 重置）
 import { createSignal } from "solid-js";
+import { useI18n } from "@dailogues/i18n";
 import { useLocation, useNavigate } from "@solidjs/router";
 import { Button, Dialog, registerDirective } from "@dailogues/ui";
 import * as stylex from "@stylexjs/stylex";
@@ -78,6 +79,7 @@ const styles = stylex.create({
 
 /** 全局登录引导弹层（AppShell 内挂载一次） */
 export function AuthGuardDialog() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
   const goLogin = () => {
@@ -88,14 +90,12 @@ export function AuthGuardDialog() {
   return (
     <Dialog isOpen={authDialogOpen()} onOpenChange={setAuthDialogOpen} width={400} purpose="form">
       <div {...stylex.props(styles.wrap)}>
-        <p {...stylex.props(styles.title)}>需要登录</p>
-        <p {...stylex.props(styles.desc)}>
-          登录或注册后即可继续操作（新用户可直接注册，老用户密码登录）。
-        </p>
+        <p {...stylex.props(styles.title)}>{t("auth.guardTitle")}</p>
+        <p {...stylex.props(styles.desc)}>{t("auth.guardDesc")}</p>
         <div {...stylex.props(styles.actions)}>
-          <Button onClick={goLogin}>去登录 / 注册</Button>
+          <Button onClick={goLogin}>{t("auth.guardAction")}</Button>
           <Button onClick={() => setAuthDialogOpen(false)}>
-            取消
+            {t("auth.guardCancel")}
           </Button>
         </div>
       </div>
