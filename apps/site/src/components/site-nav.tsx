@@ -178,9 +178,12 @@ export function SiteNav() {
           <path d="M4 4a16 16 0 0 1 16 16h-2.7A13.3 13.3 0 0 0 4 6.7V4Z" />
         </svg>
       </A>
-      <Button size="sm" onClick={() => navigate("/submit")}>
-        {t("nav.submit")}
-      </Button>
+      {/* 投稿入口仅登录后显示（user 由 onMount 判定；首帧未确认前不显示） */}
+      <Show when={user()}>
+        <Button size="sm" onClick={() => navigate("/submit")}>
+          {t("nav.submit")}
+        </Button>
+      </Show>
       <Show when={user()} fallback={<A href="/login" {...stylex.props(styles.login)}>{t("nav.login")}</A>}>
         {(u) => (
           <>
