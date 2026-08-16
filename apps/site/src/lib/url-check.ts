@@ -101,23 +101,24 @@ export function getUrlCheck(id: string): UrlCheckEntry | null {
   return entry;
 }
 
-/** 统一检测入口：算 ID → 合法性（平台白名单）→ 可达性探活 → 存 localStorage → 返回结果 */
+/** 用户端可达性探测：no-cors 直连目标 URL——页面是否存在（任何 HTTP 响应即存在，
+ *  含 403/404/挑战页；opaque 响应无需读内容）。网络层失败（DNS/连接拒绝/超时）→ 不存在。
+ *  放用户端的原因：服务端（数据中心 IP）可能被平台封锁而误判；用户能打开的页面，
+ *  理论上在其浏览器环境中就能 fetch 到。 */
+export async function probeReachable(url: string): Promise<boolean> {
+  try {
+    await fetch(url, { mode: "no-cors", redirect: "follow", signal: AbortSignal.timeout(8000) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 统一检测入口：算 ID → 合法性（平台白名单）→ 用户端可达性探测 → 存 localStorage → 返回结果 */
 export async function checkUrlAndStore(url: string): Promise<{ id: string; valid: boolean; reachable: boolean }> {
   const id = await submissionIdFromUrl(url);
   const valid = isShareUrl(url);
-  let reachable = false;
-  if (valid) {
-    try {
-      const res = await fetch("/v1/submissions/reachable", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-      reachable = res.ok;
-    } catch {
-      reachable = false;
-    }
-  }
+  const reachable = valid ? await probeReachable(url) : false;
   const entry: UrlCheckEntry = { url, valid, reachable, checkedAt: Date.now() };
   const store = readStore();
   store[id] = entry;

@@ -217,10 +217,8 @@ export function submissionsRoutes(repo: Repos) {
     if (!(await repo.submissions.hasReadyVoiceSample(userId, voiceSampleId))) {
       return c.json({ error: "voice_sample_required", detail: "投稿必须提供声音采样（请先完成录音）" }, 422);
     }
-    // 触达性检查：网络不可达 → 提示稍后重试（不落库；探活用原生 URL）
-    if (!(await isReachable(url))) {
-      return c.json({ error: "url_unreachable", detail: "链接当前无法访问，请确认链接有效后重试" }, 422);
-    }
+    // 可达性由用户端检测（浏览器直连探测——服务端数据中心 IP 可能被平台封锁而误判）；
+    // 服务端不再以 isReachable 阻断提交，仅校验合法性与平台白名单。
     // 并发限制：待审核（submitted）超过上限 → 等待审批完成后再投（明确错误码，前端映射友好文案）
     const pending = await repo.submissions.countPendingByUser(userId);
     if (pending >= PENDING_LIMIT) {

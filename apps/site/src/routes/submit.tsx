@@ -8,7 +8,7 @@ import { Button } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../components/auth-gate";
 import { isShareUrl } from "../components/import-dialog";
-import { getUrlCheck, markSubmitted } from "../lib/url-check";
+import { getUrlCheck, markSubmitted, probeReachable } from "../lib/url-check";
 import { openImportDialog } from "../components/import-dialog";
 import Recorder from "../components/recorder";
 
@@ -218,12 +218,8 @@ export default function SubmitPage() {
       return;
     }
     setUrlState("checking");
-    void fetch("/v1/submissions/reachable", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: prefill }),
-    })
-      .then((r) => setUrlState(r.ok ? "ok" : "unreachable"))
+    void probeReachable(prefill)
+      .then((ok) => setUrlState(ok ? "ok" : "unreachable"))
       .catch(() => setUrlState("unreachable"));
   });
 
