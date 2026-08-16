@@ -11,15 +11,28 @@ import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 
 type DialogState = "input" | "checking" | "error" | "duplicate";
 
-/** 前端基本校验：http/https + 有域名（后端仍会做完整合法性 + 触达性检查） */
-function isUrlLike(input: string): boolean {
+/** 支持的 AI 对话平台分享链接（仅这些平台的分享页 URL 才算合法投稿链接） */
+const SHARE_HOSTS = [
+  "chat.deepseek.com", "claude.ai", "chatgpt.com", "chat.openai.com",
+  "gemini.google.com", "kimi.moonshot.cn", "doubao.com", "www.doubao.com",
+  "tongyi.aliyun.com", "perplexity.ai",
+];
+
+/** 平台分享链接识别：host 白名单 + 分享路径（/share/ 或 /s/ 或非根路径） */
+function isShareUrl(input: string): boolean {
   try {
     const url = new URL(input);
-    return (url.protocol === "http:" || url.protocol === "https:") && url.hostname.includes(".");
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+    const host = url.hostname.toLowerCase();
+    if (!SHARE_HOSTS.includes(host)) return false;
+    const path = url.pathname.replace(/\/+$/, "");
+    // 分享页：/share/xxx、/s/xxx，或至少是具体内容路径（非首页）
+    return path.length > 1 && (path.includes("/share/") || path.includes("/s/") || path.split("/").length > 2);
   } catch {
     return false;
   }
 }
+
 
 // —— 全局单例（AppShell 挂载；openImportDialog 打开）——
 const [dialogOpen, setDialogOpen] = createSignal(false);
@@ -116,7 +129,8 @@ async function tryOpenFromClipboard(): Promise<void> {
   try {
     const text = await navigator.clipboard.readText();
     const url = text.trim();
-    if (!url || !isUrlLike(url) || url === lastClipboardUrl) return;
+    // 只对合法平台分享链接自动弹（不要什么 URL 都弹）
+    if (!url || !isShareUrl(url) || url === lastClipboardUrl) return;
     lastClipboardUrl = url; // 记录（无论是否弹，避免重复检测/重复打扰）
     // 已投稿过的 URL（重复导入）→ 不弹（弹框内确认投稿时仍有重复兜底；本地缓存命中不请求）
     const check = await checkSubmission(url);
@@ -206,7 +220,8 @@ export function ImportDialog() {
   setDialogState = setState;
   setDialogFail = setFailMsg;
 
-  const urlInvalid = () => url().trim().length > 0 && !isUrlLike(url().trim());
+  // 输入校验：空 → 禁用确认；非平台分享链接 → 非法提示（输入框下方）
+  const urlInvalid = () => url().trim().length > 0 && !isShareUrl(url().trim());
   const canSubmit = () => url().trim().length > 0 && !urlInvalid();
 
   const close = () => {
