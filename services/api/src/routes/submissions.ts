@@ -48,6 +48,18 @@ export function isShareUrl(input: string): boolean {
   }
 }
 
+/** 规范化分享 URL：https + host 小写 + 路径（去 query/hash/协议差异）——
+ *  同一分享内容可能经多个 URL（平台结构变化 / 用户追加追踪参数）访问，
+ *  入库统一用提炼出的标准 URL（与 submissionKeyFromUrl 的 key 同源） */
+export function canonicalUrl(input: string): string {
+  try {
+    const u = new URL(input);
+    return `https://${u.hostname.toLowerCase()}${u.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return input;
+  }
+}
+
 /** 触达性探活：HEAD 请求，能拿到 HTTP 响应（任何状态码）即视为可达——
  *  403/429 等反爬响应说明资源存在只是被挡（编辑本地 Agent 有浏览器可处理）；
  *  仅网络层失败（DNS/连接拒绝/超时）判不可达。 */
@@ -129,14 +141,13 @@ export function submissionsRoutes(repo: Repos) {
     if (!isShareUrl(url)) {
       return c.json({ error: "unsupported_url", detail: "暂不支持的链接——仅支持 Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 的分享页" }, 400);
     }
-    if (!isShareUrl(url)) {
-      return c.json({ error: "unsupported_url", detail: "暂不支持的链接——仅支持 Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 的分享页" }, 400);
-    }
+    // 规范化：同内容多 URL（含追踪参数）→ 同一标准 URL 查询
+    const canonical = canonicalUrl(url);
     // 确定性 ID：同 URL 同 ID → 直接按主键查（全局唯一，不涉及用户）；
     // 存量数据（随机 UUID）按 URL 全局兜底（任何人提交过都算重复）
     const existing =
       (await repo.submissions.findById(submissionIdFromUrl(url))) ??
-      (await repo.submissions.findByUrl(url));
+      (await repo.submissions.findByUrl(canonical));
     if (!existing) return c.json({ existing: false });
     const episodes = await repo.episodes.listBySubmission(existing.id).catch(() => []);
     const published = episodes.find((e) => e.status === "published" && e.isPublic) ?? null;
@@ -164,9 +175,11 @@ export function submissionsRoutes(repo: Repos) {
     if (!isValidUrl(url)) return c.json({ error: "invalid_url", detail: "链接格式不合法（仅支持 http/https 分享链接）" }, 400);
     if (!isShareUrl(url)) return c.json({ error: "unsupported_url", detail: "暂不支持的链接——仅支持 Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 的分享页" }, 400);
     if (url.length > 2048) return c.json({ error: "invalid_url", detail: "链接过长" }, 400);
+    // 探活用原生 URL（实际可访问性）；响应返回规范 URL 供前端存储
+    const canonical = canonicalUrl(url);
     const ok = await isReachable(url);
     if (!ok) return c.json({ error: "url_unreachable", detail: "链接当前无法访问，请确认链接有效后重试" }, 422);
-    return c.json({ ok: true });
+    return c.json({ ok: true, url: canonical });
   }) as unknown as RouteHandler<typeof rReach, { Variables: { userId: string } }>);
 
   const r2 = createRoute({
@@ -189,9 +202,14 @@ export function submissionsRoutes(repo: Repos) {
     if (!isValidUrl(url)) {
       return c.json({ error: "invalid_url", detail: "链接格式不合法（仅支持 http/https 分享链接）" }, 400);
     }
+    if (!isShareUrl(url)) {
+      return c.json({ error: "unsupported_url", detail: "暂不支持的链接——仅支持 Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 的分享页" }, 400);
+    }
     if (url.length > 2048) {
       return c.json({ error: "invalid_url", detail: "链接过长" }, 400);
     }
+    // 入库统一用标准 URL（用户原生输入不落库；同内容多 URL → 同一规范形式）
+    const canonicalUrl2 = canonicalUrl(url);
     // 声音采样严格要求：投稿必须关联一条属于该用户的 ready 采样（前端按钮已禁用，接口兜底防绕过）
     const voiceSampleId = typeof body.voiceSampleId === "string" && /^[0-9a-f-]{36}$/i.test(body.voiceSampleId)
       ? body.voiceSampleId
@@ -199,7 +217,7 @@ export function submissionsRoutes(repo: Repos) {
     if (!(await repo.submissions.hasReadyVoiceSample(userId, voiceSampleId))) {
       return c.json({ error: "voice_sample_required", detail: "投稿必须提供声音采样（请先完成录音）" }, 422);
     }
-    // 触达性检查：网络不可达 → 提示稍后重试（不落库）
+    // 触达性检查：网络不可达 → 提示稍后重试（不落库；探活用原生 URL）
     if (!(await isReachable(url))) {
       return c.json({ error: "url_unreachable", detail: "链接当前无法访问，请确认链接有效后重试" }, 422);
     }
@@ -211,7 +229,7 @@ export function submissionsRoutes(repo: Repos) {
     // 重复提交同一链接（全局唯一，不涉及用户）→ 返回已有投稿 + 已生成节目
     const existing =
       (await repo.submissions.findById(submissionIdFromUrl(url))) ??
-      (await repo.submissions.findByUrl(url));
+      (await repo.submissions.findByUrl(canonicalUrl2));
     if (existing) {
       const episodes = await repo.episodes.listBySubmission(existing.id).catch(() => []);
       const published = episodes.find((e) => e.status === "published" && e.isPublic) ?? null;
@@ -233,7 +251,7 @@ export function submissionsRoutes(repo: Repos) {
       : null;
     // 主持人档案快照（编辑 getDetail 免查库；脚本生成注入画像）
     const personaInfo = await repo.episodes.getPersonaSnapshot(userId).catch(() => null);
-    const created = await repo.submissions.create(submissionIdFromUrl(url), userId, url, title, callNameInEpisode, personaInfo, voiceSampleId, suggestion);
+    const created = await repo.submissions.create(submissionIdFromUrl(url), userId, canonicalUrl2, title, callNameInEpisode, personaInfo, voiceSampleId, suggestion);
     if (!created.id) {
       return c.json({ error: "already_submitted", detail: "该链接已提交过投稿" }, 409);
     }
