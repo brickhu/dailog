@@ -327,103 +327,111 @@ export default function SubmitPage() {
 
         {/* 2. 确认投稿态：人设编辑（可选）+ 声音采样（必填）→ [确认投稿] */}
         <Show when={step() === "confirm"}>
-          {/* 区块 1：分享链接检测信息（灰底圆角；含 URL 状态提示） */}
-          <div {...stylex.props(layouts.fullRow, styles.card, styles.cardBlock)}>
-            <Show when={checkId()}>
-              <p {...stylex.props(styles.stepTitle)}>{t("submit.checkInfo")}</p>
-              <div {...stylex.props(styles.urlRow)}>
-                <p {...stylex.props(styles.urlLabel)}>{t("submit.checkUrl")}</p>
-                <p {...stylex.props(styles.urlValue)}>{url()}</p>
-              </div>
-              <div {...stylex.props(styles.urlRow)}>
-                <p {...stylex.props(styles.urlLabel)}>{t("submit.checkValid")}</p>
-                <p {...stylex.props(styles.urlValue)}>{urlState() === "ok" ? "✓" : "—"}</p>
-                <p {...stylex.props(styles.urlLabel)}>{t("submit.checkReachable")}</p>
-                <p {...stylex.props(styles.urlValue)}>{urlState() === "ok" ? "✓" : "—"}</p>
-                <p {...stylex.props(styles.urlLabel)}>{t("submit.checkTime")}</p>
-                <p {...stylex.props(styles.urlValue)}>
-                  {checkId() ? new Date(getUrlCheck(checkId()!)?.checkedAt ?? Date.now()).toLocaleString("zh-CN") : ""}
-                </p>
-              </div>
-            </Show>
-            {/* URL 本地检测状态 */}
-            <Show when={urlState() === "empty"}>
+          {/* 未检测到有效 URL：独占状态，只显示提示 + 重新投稿 */}
+          <Show
+            when={urlState() === "empty"}
+            fallback={
+              <>
+                {/* 区块 1：分享链接检测信息（灰底圆角；含 URL 状态提示） */}
+                <div {...stylex.props(layouts.fullRow, styles.card, styles.cardBlock)}>
+                  <Show when={checkId()}>
+                    <p {...stylex.props(styles.stepTitle)}>{t("submit.checkInfo")}</p>
+                    <div {...stylex.props(styles.urlRow)}>
+                      <p {...stylex.props(styles.urlLabel)}>{t("submit.checkUrl")}</p>
+                      <p {...stylex.props(styles.urlValue)}>{url()}</p>
+                    </div>
+                    <div {...stylex.props(styles.urlRow)}>
+                      <p {...stylex.props(styles.urlLabel)}>{t("submit.checkValid")}</p>
+                      <p {...stylex.props(styles.urlValue)}>{urlState() === "ok" ? "✓" : "—"}</p>
+                      <p {...stylex.props(styles.urlLabel)}>{t("submit.checkReachable")}</p>
+                      <p {...stylex.props(styles.urlValue)}>{urlState() === "ok" ? "✓" : "—"}</p>
+                      <p {...stylex.props(styles.urlLabel)}>{t("submit.checkTime")}</p>
+                      <p {...stylex.props(styles.urlValue)}>
+                        {checkId() ? new Date(getUrlCheck(checkId()!)?.checkedAt ?? Date.now()).toLocaleString("zh-CN") : ""}
+                      </p>
+                    </div>
+                  </Show>
+                  <Show when={urlState() === "invalid"}>
+                    <p {...stylex.props(styles.error)}>{t("submit.urlUnsupported")}</p>
+                  </Show>
+                  <Show when={urlState() === "checking"}>
+                    <p {...stylex.props(styles.hint)}>{t("submit.importing")}</p>
+                  </Show>
+                  <Show when={urlState() === "unreachable"}>
+                    <p {...stylex.props(styles.error)}>{t("importDialog.unreachable")}</p>
+                  </Show>
+                </div>
+
+                {/* 区块 2：② Set up your host persona（主持人 + 声音采样） */}
+                <div {...stylex.props(layouts.fullRow, styles.card, styles.cardBlock)}>
+                  <p {...stylex.props(styles.stepTitle)}>{t("submit.step2")}</p>
+                  <p {...stylex.props(styles.stepDesc)}>{t("submit.step2Desc")}</p>
+                  <label {...stylex.props(styles.label)}>{t("submit.callName")}</label>
+                  <input
+                    {...stylex.props(styles.input)}
+                    placeholder={t("submit.callNamePlaceholder")}
+                    value={callName()}
+                    onInput={(e) => setCallName(e.currentTarget.value)}
+                  />
+                  <Show when={hasVoiceSample() && !voiceBlob()}>
+                    <p {...stylex.props(styles.ok)}>{t("submit.voiceFilled")}</p>
+                    <p {...stylex.props(styles.hint)}>{t("submit.voiceLang", { lang: t(`lang.${voiceLang()}` as never) })}</p>
+                    <audio controls src="/v1/me/voice-sample/audio" {...stylex.props(styles.audio)} />
+                    <p {...stylex.props(styles.hint)}>{t("submit.voiceReRecord")}</p>
+                  </Show>
+                  <Show when={!hasVoiceSample() || voiceBlob()}>
+                    <p {...stylex.props(styles.hint)}>{t("submit.voiceHint")}</p>
+                    <p {...stylex.props(styles.readingScript)}>{readingScript()}</p>
+                    <Recorder minSeconds={8} maxSeconds={30} onReady={(b) => setVoiceBlob(b)} />
+                  </Show>
+                </div>
+
+                {/* 区块 3：节目建议（Show suggestion, optional） */}
+                <div {...stylex.props(layouts.fullRow, styles.card, styles.cardBlock)}>
+                  <label {...stylex.props(styles.label)}>{t("submit.suggestion")}</label>
+                  <textarea
+                    {...stylex.props(styles.input)}
+                    rows={3}
+                    maxLength={500}
+                    placeholder={t("submit.suggestionPlaceholder")}
+                    value={suggestion()}
+                    onInput={(e) => setSuggestion(e.currentTarget.value)}
+                  />
+                  <p {...stylex.props(styles.hint)}>{t("submit.suggestionHint")}</p>
+                </div>
+
+                {/* 提交时撞重复 / 错误提示（区块外） */}
+                <Show when={existing()}>
+                  <p {...stylex.props(styles.error)}>{t("submit.existing")}</p>
+                  <p {...stylex.props(styles.hint)}>
+                    <A href="/me/submits">{t("submit.viewSubmissions")}</A>
+                  </p>
+                </Show>
+                <Show when={error()}>
+                  <p {...stylex.props(styles.error)}>{error()}</p>
+                </Show>
+                <Show when={!hasSample()}>
+                  <p {...stylex.props(styles.error)}>{t("submit.error.needVoice")}</p>
+                </Show>
+
+                {/* 确认/取消（区块外） */}
+                <div {...stylex.props(layouts.fullRow, styles.actions)}>
+                  <Button onClick={confirmSubmit} disabled={submitting() || !hasSample() || !urlReady()}>
+                    {submitting() ? t("submit.submitting") : t("submit.confirm")}
+                  </Button>
+                  <A href="/"><Button appear="ghost">{t("common.cancel")}</Button></A>
+                </div>
+              </>
+            }
+          >
+            {/* 独占状态：未检测到有效 URL */}
+            <div {...stylex.props(layouts.fullRow, styles.card)}>
               <p {...stylex.props(styles.error)}>{t("submit.noValidUrl")}</p>
               <div {...stylex.props(styles.actions)}>
                 <Button onClick={openImportDialog}>{t("submit.resubmit")}</Button>
               </div>
-            </Show>
-            <Show when={urlState() === "invalid"}>
-              <p {...stylex.props(styles.error)}>{t("submit.urlUnsupported")}</p>
-            </Show>
-            <Show when={urlState() === "checking"}>
-              <p {...stylex.props(styles.hint)}>{t("submit.importing")}</p>
-            </Show>
-            <Show when={urlState() === "unreachable"}>
-              <p {...stylex.props(styles.error)}>{t("importDialog.unreachable")}</p>
-            </Show>
-          </div>
-
-          {/* 区块 2：② Set up your host persona（主持人 + 声音采样） */}
-          <div {...stylex.props(layouts.fullRow, styles.card, styles.cardBlock)}>
-            <p {...stylex.props(styles.stepTitle)}>{t("submit.step2")}</p>
-            <p {...stylex.props(styles.stepDesc)}>{t("submit.step2Desc")}</p>
-            <label {...stylex.props(styles.label)}>{t("submit.callName")}</label>
-            <input
-              {...stylex.props(styles.input)}
-              placeholder={t("submit.callNamePlaceholder")}
-              value={callName()}
-              onInput={(e) => setCallName(e.currentTarget.value)}
-            />
-            <Show when={hasVoiceSample() && !voiceBlob()}>
-              <p {...stylex.props(styles.ok)}>{t("submit.voiceFilled")}</p>
-              <p {...stylex.props(styles.hint)}>{t("submit.voiceLang", { lang: t(`lang.${voiceLang()}` as never) })}</p>
-              {/* 自动填充的采样：试听（同源代理——<audio> 跨域不带 cookie 会 401） */}
-              <audio controls src="/v1/me/voice-sample/audio" {...stylex.props(styles.audio)} />
-              <p {...stylex.props(styles.hint)}>{t("submit.voiceReRecord")}</p>
-            </Show>
-            <Show when={!hasVoiceSample() || voiceBlob()}>
-              <p {...stylex.props(styles.hint)}>{t("submit.voiceHint")}</p>
-              <p {...stylex.props(styles.readingScript)}>{readingScript()}</p>
-              <Recorder minSeconds={8} maxSeconds={30} onReady={(b) => setVoiceBlob(b)} />
-            </Show>
-          </div>
-
-          {/* 区块 3：节目建议（Show suggestion, optional） */}
-          <div {...stylex.props(layouts.fullRow, styles.card, styles.cardBlock)}>
-            <label {...stylex.props(styles.label)}>{t("submit.suggestion")}</label>
-            <textarea
-              {...stylex.props(styles.input)}
-              rows={3}
-              maxLength={500}
-              placeholder={t("submit.suggestionPlaceholder")}
-              value={suggestion()}
-              onInput={(e) => setSuggestion(e.currentTarget.value)}
-            />
-            <p {...stylex.props(styles.hint)}>{t("submit.suggestionHint")}</p>
-          </div>
-
-          {/* 提交时撞重复 / 错误提示（区块外） */}
-          <Show when={existing()}>
-            <p {...stylex.props(styles.error)}>{t("submit.existing")}</p>
-            <p {...stylex.props(styles.hint)}>
-              <A href="/me/submits">{t("submit.viewSubmissions")}</A>
-            </p>
+            </div>
           </Show>
-          <Show when={error()}>
-            <p {...stylex.props(styles.error)}>{error()}</p>
-          </Show>
-          <Show when={!hasSample()}>
-            <p {...stylex.props(styles.error)}>{t("submit.error.needVoice")}</p>
-          </Show>
-
-          {/* 确认/取消（区块外） */}
-          <div {...stylex.props(layouts.fullRow, styles.actions)}>
-            <Button onClick={confirmSubmit} disabled={submitting() || !hasSample() || !urlReady()}>
-              {submitting() ? t("submit.submitting") : t("submit.confirm")}
-            </Button>
-            <A href="/"><Button appear="ghost">{t("common.cancel")}</Button></A>
-          </div>
         </Show>
 
         {/* 3. 提交成功：等待审核 */}
