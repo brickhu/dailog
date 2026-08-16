@@ -41,6 +41,39 @@ export function resetAuthCache(): void {
   loggedIn = null;
 }
 
+// —— 全局登出确认（AppShell 挂载单例；confirmSignOut 打开，确认才执行登出）——
+const [signOutOpen, setSignOutOpen] = createSignal(false);
+
+/** 打开退出登录确认守卫（用户确认后才真正登出） */
+export function confirmSignOut(): void {
+  setSignOutOpen(true);
+}
+
+/** 全局登出确认弹层 */
+export function SignOutConfirmDialog() {
+  const { t } = useI18n();
+  const doSignOut = async () => {
+    setSignOutOpen(false);
+    await fetch("/v1/auth/sign-out", { method: "POST" }).catch(() => {});
+    resetAuthCache();
+    window.location.reload();
+  };
+  return (
+    <Dialog isOpen={signOutOpen()} onOpenChange={setSignOutOpen} width={380} purpose="form">
+      <div {...stylex.props(styles.wrap)}>
+        <p {...stylex.props(styles.title)}>{t("auth.signOutTitle")}</p>
+        <p {...stylex.props(styles.desc)}>{t("auth.signOutDesc")}</p>
+        <div {...stylex.props(styles.actions)}>
+          <Button onClick={doSignOut}>{t("auth.signOutConfirm")}</Button>
+          <Button onClick={() => setSignOutOpen(false)}>
+            {t("auth.guardCancel")}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
 // —— 全局引导 Dialog（AppShell 挂载单例；openAuthDialog 打开）——
 const [authDialogOpen, setAuthDialogOpen] = createSignal(false);
 let pendingRedirect: string | null = null;

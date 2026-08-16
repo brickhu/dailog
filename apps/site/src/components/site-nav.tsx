@@ -6,6 +6,7 @@ import { Button } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { LangSwitch } from "./lang-switch";
 import { UserMenu, type NavUser } from "./user-menu";
+import { confirmSignOut } from "../lib/auth-guard";
 
 const styles = stylex.create({
   header: {
@@ -154,10 +155,7 @@ export function SiteNav() {
     window.addEventListener("focus", refreshUnread);
   });
 
-  const signOut = async () => {
-    await fetch("/v1/auth/sign-out", { method: "POST" }).catch(() => {});
-    window.location.reload();
-  };
+  // 退出登录：走全局确认守卫（确认后才真正登出；登出逻辑在 auth-guard）
 
   // 导航内容（桌面行内 + 移动浮层共用）
   const navContent = () => (
@@ -179,21 +177,24 @@ export function SiteNav() {
         </svg>
       </A>
       {/* 投稿入口仅登录后显示（user 由 onMount 判定；首帧未确认前不显示） */}
-      <Show when={user()}>
+      {/* <Show when={user()}>
         <Button size="sm" onClick={() => navigate("/submit")}>
           {t("nav.submit")}
         </Button>
-      </Show>
-      <Show when={user()} fallback={<A href="/login" {...stylex.props(styles.login)}>{t("nav.login")}</A>}>
+      </Show> */}
+      <Show when={user()} fallback={<Button size="sm" round="full" onClick={() => navigate("/login")}>{t("nav.login")}</Button>}>
         {(u) => (
           <>
+            <Button size="sm" round="full" onClick={() => navigate("/submit")}>
+              {t("nav.submit")}
+            </Button>
             <A href="/me/notifications" {...stylex.props(styles.bell)} aria-label="notifications">
               🔔
               <Show when={unread() > 0}>
                 <span {...stylex.props(styles.badge)}>{unread() > 99 ? "99+" : unread()}</span>
               </Show>
             </A>
-            <UserMenu user={u()} onSignOut={signOut} />
+            <UserMenu user={u()} onSignOut={() => confirmSignOut()} />
           </>
         )}
       </Show>

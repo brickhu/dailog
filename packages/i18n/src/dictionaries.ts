@@ -8,6 +8,9 @@ export const zh = {
   "auth.guardDesc": "登录或注册后即可继续操作（新用户可直接注册，老用户密码登录）。",
   "auth.guardAction": "去登录 / 注册",
   "auth.guardCancel": "取消",
+  "auth.signOutTitle": "退出登录",
+  "auth.signOutDesc": "确定要退出当前账号吗？",
+  "auth.signOutConfirm": "确认退出",
   // ---- 通用 ----
   "common.play": "播放",
   "common.pause": "暂停",
@@ -711,6 +714,9 @@ export const en: Dictionary = {
   "auth.guardDesc": "Sign in or create an account to continue (new users can register directly; existing users sign in with password).",
   "auth.guardAction": "Sign in / Register",
   "auth.guardCancel": "Cancel",
+  "auth.signOutTitle": "Sign out",
+  "auth.signOutDesc": "Are you sure you want to sign out?",
+  "auth.signOutConfirm": "Sign out",
   // ---- 通用 ----
   "common.play": "Play",
   "common.pause": "Pause",
