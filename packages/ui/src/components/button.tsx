@@ -546,6 +546,7 @@ export function Button(props: ButtonProps) {
   // hydration 下组件 key 分配与 SSR 不一致（Hydration Mismatch）——children() 将
   // 惰性求值转为稳定 memo，SSR/客户端一致
   const iconNode = children(() => local.icon);
+  const endContentNode = children(() => local.endContent);
   // ref 类型绑定 button 元素（ButtonHTMLAttributes），anchor 分支泛化后展开
   const anchorRest = rest as Record<string, unknown>;
   // ButtonGroup 感知：组内应用连接样式、整组禁用、尺寸继承；组外按钮自持 elevation/按压
@@ -765,8 +766,8 @@ export function Button(props: ButtonProps) {
         {local.isIconOnly ? null : (
           <span {...stylex.props(styles.labelText)}>{local.children ?? local.label}</span>
         )}
-        {!local.isIconOnly && local.endContent && (
-          <span {...stylex.props(styles.endContentWrapper)}>{local.endContent}</span>
+        {!local.isIconOnly && endContentNode() && (
+          <span {...stylex.props(styles.endContentWrapper)}>{endContentNode()}</span>
         )}
       </span>
       {/* 加载态播报 live region */}

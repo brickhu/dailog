@@ -56,41 +56,10 @@ export default function Examples() {
 <Button label="完成" variant="success" appear="outline" />  // 绿描边
 
         // Banner 状态横幅（复刻 Astryx Banner）
-        <Banner status="info" title="A new software update is available." />
-        <Banner status="success" title="Your changes have been saved." />
-        <Banner
-          status="warning"
-          title="Your trial expires in 3 days."
-          description="Upgrade to keep access to all features."
-        />
-        <Banner
-          status="error"
-          title="Payment failed"
-          description="Update your billing information to continue."
-          isDismissable
-          onDismiss={() => console.log("banner dismissed")}
-        />
-
-        // 操作按钮 + 折叠内容（disclosure）
-        <Banner
-          status="warning"
-          title="Configuration changes detected"
-          description="Review the changes before they take effect."
-          endContent={<Button label="Review" appear="fill" size="sm" />}
-          isDismissable
-        >
-          <ul>
-            <li>Authentication method updated</li>
-            <li>Rate limits modified</li>
-          </ul>
-        </Banner>
-
-        // 初始展开 + 页面级横幅 + 悬浮阴影
-        <Banner status="warning" title="Trial ends soon" defaultIsExpanded>
-          <p>Details here...</p>
-        </Banner>
-        <Banner status="success" title="Changes saved" container="section" elevation="low" />
-
+        {/* Banner 状态横幅（组件特性见 banner.md）：
+            注：Solid 1.9 hydration 下部分 Banner 特性组合（isDismissable/endContent/
+            defaultIsExpanded 等与相邻 Banner 共存）会触发 Hydration Mismatch（dev-only
+            展示页问题，站点页面无 Banner 不受影响），示例暂不在 example 页展示 */}
         {/* 图标 Icon：按需注入（iconify API 单图标拉取，内联 SVG） */}
         <div style={{ padding: "16px 0" }}>
           <h2>图标 Icon</h2>
