@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { createSignal, createUniqueId, splitProps, Show, type JSX } from "solid-js";
+import { children, createSignal, createUniqueId, splitProps, Show, type JSX } from "solid-js";
 import { type StyleXStyles } from "@stylexjs/stylex";
 import { colors, dimensions, durations, fontfamilies, shadows } from "../theme.stylex";
 import { useI18n } from "@dailogues/i18n";
@@ -542,6 +542,10 @@ const SPLIT_KEYS = [
 export function Button(props: ButtonProps) {
   const { t } = useI18n();
   const [local, rest] = splitProps(props, SPLIT_KEYS);
+  // icon 用 children() 包装：lazy props 里的 JSX 元素（icon={<Icon/>}）在 Solid 1.9
+  // hydration 下组件 key 分配与 SSR 不一致（Hydration Mismatch）——children() 将
+  // 惰性求值转为稳定 memo，SSR/客户端一致
+  const iconNode = children(() => local.icon);
   // ref 类型绑定 button 元素（ButtonHTMLAttributes），anchor 分支泛化后展开
   const anchorRest = rest as Record<string, unknown>;
   // ButtonGroup 感知：组内应用连接样式、整组禁用、尺寸继承；组外按钮自持 elevation/按压
@@ -744,7 +748,7 @@ export function Button(props: ButtonProps) {
         )}
         aria-hidden={loading() || undefined}
       >
-        {local.icon && (
+        {iconNode() && (
           <span
             {...stylex.props(
               styles.iconWrapper,
@@ -755,7 +759,7 @@ export function Button(props: ButtonProps) {
               isSize("xxl") && iconSizeStyles.xxl,
             )}
           >
-            {local.icon}
+            {iconNode()}
           </span>
         )}
         {local.isIconOnly ? null : (
