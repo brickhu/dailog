@@ -257,7 +257,14 @@ export function ImportDialog() {
       const { id, reachable } = await checkUrlAndStore(url().trim());
       if (reachable) {
         close();
-        navigate(`/submit?id=${encodeURIComponent(id)}`);
+        const target = `/submit?id=${encodeURIComponent(id)}`;
+        if (window.location.pathname.startsWith("/submit")) {
+          // 已在 /submit（如 empty 态点 Submit again）：整页刷新，
+          // 重新挂载并读取 localStorage 中的检测结果（客户端 navigate 不重跑 onMount）
+          window.location.href = target;
+        } else {
+          navigate(target);
+        }
         return;
       }
       setFailMsg(t("importDialog.unreachable"));
