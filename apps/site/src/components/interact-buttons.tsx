@@ -79,8 +79,10 @@ export function InteractButtons(props: {
       return r.ok ? ((await r.json()) as { likes?: number; favorites?: number }) : null;
     },
   );
+  // 登录态端点：SSR 无 cookie 必然 401，且相对路径在 Node fetch 下直接抛错。
+  // source 在 SSR 端为 null → server 端 load 短路（不执行、不序列化）→ 客户端 hydration 后重新请求。
   const [interactions] = createResource(
-    () => props.episodeId,
+    () => (typeof window === "undefined" ? null : props.episodeId),
     async (episodeId) => {
       // 未登录 401 → null → 保持未选中
       const r = await fetch(`/v1/episodes/${episodeId}/interactions`);

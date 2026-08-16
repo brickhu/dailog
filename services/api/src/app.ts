@@ -75,6 +75,8 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
   ));
 
   // 主站公开端点（免鉴权）：仅已发布公开节目可读——必须在鉴权中间件之前注册
+  // id 列是 uuid 类型：非法格式（旧短 id/任意字符串）直接 404，避免 Postgres 抛 22P02 → 500
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   app.openapi(createRoute({
     method: "get",
     path: "/v1/public/episodes/:id/cover",
@@ -84,6 +86,7 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
       404: { content: { "application/json": { schema: ErrorResp } }, description: "封面不存在" },
     },
   }), async (c) => {
+    if (!UUID_RE.test(c.req.param("id"))) return c.json({ error: "not_found" }, 404);
     const cover = await deps.repo.episodes.getPublicCoverKey(c.req.param("id"));
     if (!cover) return c.json({ error: "not_found" }, 404);
     try {
@@ -108,6 +111,7 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
       404: { content: { "application/json": { schema: ErrorResp } }, description: "音频不存在" },
     },
   }), async (c) => {
+    if (!UUID_RE.test(c.req.param("id"))) return c.json({ error: "not_found" }, 404);
     const audio = await deps.repo.episodes.getPublicAudioKey(c.req.param("id"));
     if (!audio) return c.json({ error: "not_found" }, 404);
     // ETag 按发布时间：重新制作发布是新 episode → 内容变化 → 浏览器重新拉取；未变 → 304 省流量
@@ -177,6 +181,7 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
     const type = c.req.param("type");
     if (type !== "play" && type !== "completion") return c.json({ error: "invalid_type" }, 400);
     const id = c.req.param("id");
+    if (!UUID_RE.test(id)) return c.json({ error: "not_found" }, 404);
     const exists = await deps.repo.episodes.getPublicAudioKey(id);
     if (!exists) return c.json({ error: "not_found" }, 404);
     // 限频：同 IP 同 episode 同事件 5 分钟内只计一次（CF 代理头优先；本地无头 → 空串）
@@ -199,6 +204,7 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
     },
   });
   app.openapi(statsGetRoute, (async (c) => {
+    if (!UUID_RE.test(c.req.param("id"))) return c.json({ error: "not_found" }, 404);
     const exists = await deps.repo.episodes.getPublicAudioKey(c.req.param("id"));
     if (!exists) return c.json({ error: "not_found" }, 404);
     return c.json(await deps.repo.episodes.getStats(c.req.param("id")));
