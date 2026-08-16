@@ -18,6 +18,14 @@ export default createHandler(() => {
             <meta name="viewport" content="width=device-width, initial-scale=1" />
             <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
             {assets}
+            {/* dev 消除 FOUC：首帧无样式（stylex 样式靠 runtime JS 注入），先隐藏页面，
+                客户端 hydration + 样式注入完成后移除（见 entry-client）——避免无样式 DOM 闪现 */}
+            {import.meta.env.DEV && (
+              <>
+                <script>{`document.documentElement.classList.add('stylex-pre');`}</script>
+                <style>{`.stylex-pre body{visibility:hidden}`}</style>
+              </>
+            )}
           </head>
           <body>
             <div id="app">{children}</div>
