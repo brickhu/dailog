@@ -46,11 +46,10 @@ services:
       # 容器内 127.0.0.1 是容器自身——出网代理经 host.docker.internal 指向宿主 socks 代理
       # （宿主直跑时用 .env.local 的 127.0.0.1:1081；compose 环境变量覆盖 .env.local）
       FISH_PROXY_URL: socks5://host.docker.internal:1081
-      # https（OrbStack 自动 TLS）：cookie 带 Secure，登录/录音全可用
-      BETTER_AUTH_URL: https://api.dailog.orb.local
-      # 子域共享会话（SSO）：site 登录态互通（Domain=.dailog.orb.local）。
-      # localhost:3000 不再可用（host-only 才匹配）——统一用 https://dailog.orb.local（录音/登录均可）
-      BETTER_AUTH_COOKIE_DOMAIN: .dailog.orb.local
+      # 本地开发统一 localhost:3000（去掉 dailog.orb.local 访问路径——其 HMR ws 固定端口
+      # 24681 与 OrbStack 转发竞争导致热更新失效；localhost 的 HMR 走动态端口实测正常）。
+      # http baseURL → better-auth cookie 非 Secure；不设 cookieDomain → host-only 匹配 localhost
+      BETTER_AUTH_URL: http://localhost:8787
       # CORS/CSRF 白名单：http 项保留兼容（本地 http 直连/端口访问来源）
       APP_ORIGINS: https://dailog.orb.local,http://dailog.orb.local,https://api.dailog.orb.local,http://localhost:3000
       # 本地开发放宽认证限流（容器内请求共享 local 桶）；生产不配，用默认 5 次/分钟
@@ -81,22 +80,17 @@ services:
     command: pnpm --filter @dailogues/site dev
     ports:
       - "3000:80"
-      # HMR ws 固定端口（vinxi patch 支持 VINXI_HMR_PORT）——publish 后 OrbStack 提供 TLS，
-      # https 页面 wss 可连（随机端口无 TLS 会报 WebSocket connection failed）。
-      # 注意：24680 被宿主 OrbStack（tcc-http）占用，映射冲突 → 用 24681
-      - "24681:24681"
     environment:
       ORB: "1"
       PORT: "80"
-      VINXI_HMR_PORT: "24681"
       # site 的 server functions（lib/db.ts）直连 postgres——容器内用服务名
       DATABASE_URL: postgres://dailogues:dailogues@postgres:5432/dailogues
       # 统一 VITE_ 一套（构建期注入；服务端代理转发与客户端共用）
       # 服务端代理（node fetch）必须 http：OrbStack 自签证书不被 Node 信任（SELF_SIGNED_CERT_IN_CHAIN）
       VITE_API_BASE_URL: http://api.dailog.orb.local
-      # 浏览器端音频 URL 必须 https（https 页面加载 http 音频 = mixed content 被拦）
-      VITE_PUBLIC_API_BASE_URL: https://api.dailog.orb.local
-      VITE_SITE_BASE_URL: https://dailog.orb.local
+      # 浏览器端媒体/API 直连：localhost（http 页面加载 http 资源无 mixed content 问题）
+      VITE_PUBLIC_API_BASE_URL: http://localhost:8787
+      VITE_SITE_BASE_URL: http://localhost:3000
     volumes:
       - .:/app
       - /app/node_modules
