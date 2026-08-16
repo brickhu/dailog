@@ -1,5 +1,5 @@
-import { A } from "@solidjs/router";
-import { createSignal, createEffect, onMount, Show } from "solid-js";
+import { A, useSearchParams } from "@solidjs/router";
+import { createSignal, createEffect, Show } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
@@ -169,7 +169,7 @@ const styles = stylex.create({
 
 export default function SubmitPage() {
   const { t, locale } = useI18n();
-  // 初始步骤：?url=（导入弹框跳转，已做输入/检测）→ 首帧即第二步，不渲染 URL 输入
+  const [params] = useSearchParams<{ id?: string; url?: string }>();
   const [step, setStep] = createSignal<Step>("confirm");
   const [url, setUrl] = createSignal("");
   // 当前检测结果 id（localStorage 的 json key；用于展示检测信息区块）
@@ -189,45 +189,42 @@ export default function SubmitPage() {
   const [voiceBlob, setVoiceBlob] = createSignal<Blob | null>(null);
   const [submitting, setSubmitting] = createSignal(false);
 
-  onMount(() => {
-    // 优先 ?id=（导入弹框检测结果存 localStorage，key = 确定性投稿 ID）：
-    // 直接取 URL 与检测结果，不重新检测、不暴露 URL 参数；无缓存/过期 → 置灰提示
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const id = params.get("id");
-      if (id) {
-        setCheckId(id);
-        const check = getUrlCheck(id);
-        if (check && check.valid && check.reachable) {
-          setUrl(check.url);
-          setUrlState("ok");
-          return;
-        }
-        setUrlState("empty");
+  // 响应 ?id=/?url= 变化（原生路由导航到相同路径不同 query 时也会触发——
+  // 弹框确认投稿后 navigate('/submit?id=…') 无需整页刷新）：
+  // ?id= 从 localStorage 取检测结果；无缓存/过期 → empty（独占提示）；
+  // 旧链接 ?url= 兜底本地检测（手动构造无法绕过）
+  createEffect(() => {
+    const id = params.id;
+    if (id) {
+      setCheckId(id);
+      const check = getUrlCheck(id);
+      if (check && check.valid && check.reachable) {
+        setUrl(check.url);
+        setUrlState("ok");
         return;
       }
-      // 旧链接兜底：?url=… 本地再做合法性 + 可达性检测（手动构造无法绕过）
-      const prefill = params.get("url");
-      if (!prefill || !prefill.startsWith("http")) {
-        setUrlState("empty");
-        return;
-      }
-      setUrl(prefill);
-      if (!isShareUrl(prefill)) {
-        setUrlState("invalid");
-        return;
-      }
-      setUrlState("checking");
-      void fetch("/v1/submissions/reachable", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url: prefill }),
-      })
-        .then((r) => setUrlState(r.ok ? "ok" : "unreachable"))
-        .catch(() => setUrlState("unreachable"));
-    } catch {
       setUrlState("empty");
+      return;
     }
+    setCheckId(null);
+    const prefill = params.url;
+    if (!prefill || !prefill.startsWith("http")) {
+      setUrlState("empty");
+      return;
+    }
+    setUrl(prefill);
+    if (!isShareUrl(prefill)) {
+      setUrlState("invalid");
+      return;
+    }
+    setUrlState("checking");
+    void fetch("/v1/submissions/reachable", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: prefill }),
+    })
+      .then((r) => setUrlState(r.ok ? "ok" : "unreachable"))
+      .catch(() => setUrlState("unreachable"));
   });
 
   // 进入确认投稿态时拉取已有人设/采样（此时 AuthGate 已放行、必然登录；避免未登录 401 噪音）
