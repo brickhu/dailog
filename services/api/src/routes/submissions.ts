@@ -27,6 +27,27 @@ export function isValidUrl(input: string): boolean {
   return (url.protocol === "http:" || url.protocol === "https:") && url.hostname.includes(".");
 }
 
+/** 支持的 AI 对话平台分享链接（与前端 import-dialog 的 SHARE_HOSTS 保持一致；
+ *  后端权威校验——防绕过前端检测直接提交任意 URL） */
+const SHARE_HOSTS = [
+  "chat.deepseek.com", "claude.ai", "chatgpt.com", "chat.openai.com",
+  "gemini.google.com", "kimi.moonshot.cn", "doubao.com", "www.doubao.com",
+  "tongyi.aliyun.com", "perplexity.ai",
+];
+
+export function isShareUrl(input: string): boolean {
+  try {
+    const url = new URL(input);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+    const host = url.hostname.toLowerCase();
+    if (!SHARE_HOSTS.includes(host)) return false;
+    const path = url.pathname.replace(/\/+$/, "");
+    return path.length > 1 && (path.includes("/share/") || path.includes("/s/") || path.split("/").length > 2);
+  } catch {
+    return false;
+  }
+}
+
 /** 触达性探活：HEAD 请求，能拿到 HTTP 响应（任何状态码）即视为可达——
  *  403/429 等反爬响应说明资源存在只是被挡（编辑本地 Agent 有浏览器可处理）；
  *  仅网络层失败（DNS/连接拒绝/超时）判不可达。 */
@@ -105,6 +126,12 @@ export function submissionsRoutes(repo: Repos) {
     if (!isValidUrl(url)) {
       return c.json({ error: "invalid_url", detail: "链接格式不合法（仅支持 http/https 分享链接）" }, 400);
     }
+    if (!isShareUrl(url)) {
+      return c.json({ error: "unsupported_url", detail: "暂不支持的链接——仅支持 Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 的分享页" }, 400);
+    }
+    if (!isShareUrl(url)) {
+      return c.json({ error: "unsupported_url", detail: "暂不支持的链接——仅支持 Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 的分享页" }, 400);
+    }
     // 确定性 ID：同 URL 同 ID → 直接按主键查（全局唯一，不涉及用户）；
     // 存量数据（随机 UUID）按 URL 全局兜底（任何人提交过都算重复）
     const existing =
@@ -135,6 +162,7 @@ export function submissionsRoutes(repo: Repos) {
     const url = typeof body?.url === "string" ? body.url.trim() : "";
     if (!url) return c.json({ error: "invalid_url", detail: "缺少分享链接（请粘贴 AI 对话分享 URL）" }, 400);
     if (!isValidUrl(url)) return c.json({ error: "invalid_url", detail: "链接格式不合法（仅支持 http/https 分享链接）" }, 400);
+    if (!isShareUrl(url)) return c.json({ error: "unsupported_url", detail: "暂不支持的链接——仅支持 Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包 的分享页" }, 400);
     if (url.length > 2048) return c.json({ error: "invalid_url", detail: "链接过长" }, 400);
     const ok = await isReachable(url);
     if (!ok) return c.json({ error: "url_unreachable", detail: "链接当前无法访问，请确认链接有效后重试" }, 422);
