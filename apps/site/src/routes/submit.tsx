@@ -7,6 +7,7 @@ import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { Button } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../components/auth-gate";
+import { isShareUrl } from "../components/import-dialog";
 import Recorder from "../components/recorder";
 
 // 投稿流程（本质版，2026-08-13）：
@@ -140,6 +141,10 @@ export default function SubmitPage() {
   // 初始步骤：?url=（导入弹框跳转，已做输入/检测）→ 首帧即第二步，不渲染 URL 输入
   const [step, setStep] = createSignal<Step>("confirm");
   const [url, setUrl] = createSignal("");
+  // URL 本地检测（防绕过弹框手动构造 ?url=）：非法/不可达 → 导入按钮置灰
+  // 状态：checking（检测中）/ ok（可达）/ invalid（非平台链接）/ unreachable（不可达）/ empty（缺失）
+  const [urlState, setUrlState] = createSignal<"checking" | "ok" | "invalid" | "unreachable" | "empty">("checking");
+  const urlReady = () => urlState() === "ok";
   const [existing, setExisting] = createSignal<string | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   // 人设（可选）+ 采样（必填；已有采样自动填充可沿用）
@@ -152,14 +157,31 @@ export default function SubmitPage() {
   const [submitting, setSubmitting] = createSignal(false);
 
   onMount(() => {
-    // 导入弹框跳转预填：/submit?url=…（URL 输入/检测均在弹框完成）
+    // 导入弹框跳转预填：/submit?url=…；本地再做合法性 + 可达性检测
+    // （手动构造 URL 无法绕过：非法/不可达 → 导入按钮置灰）
     try {
       const params = new URLSearchParams(window.location.search);
       const prefill = params.get("url");
-      if (prefill && prefill.startsWith("http")) {
-        setUrl(prefill);
+      if (!prefill || !prefill.startsWith("http")) {
+        setUrlState("empty");
+        return;
       }
-    } catch { /* 静默 */ }
+      setUrl(prefill);
+      if (!isShareUrl(prefill)) {
+        setUrlState("invalid");
+        return;
+      }
+      setUrlState("checking");
+      void fetch("/v1/submissions/reachable", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: prefill }),
+      })
+        .then((r) => setUrlState(r.ok ? "ok" : "unreachable"))
+        .catch(() => setUrlState("unreachable"));
+    } catch {
+      setUrlState("empty");
+    }
   });
 
   // 进入确认投稿态时拉取已有人设/采样（此时 AuthGate 已放行、必然登录；避免未登录 401 噪音）
@@ -260,6 +282,19 @@ export default function SubmitPage() {
         {/* 2. 确认投稿态：人设编辑（可选）+ 声音采样（必填）→ [确认投稿] */}
         <Show when={step() === "confirm"}>
           <div {...stylex.props(layouts.fullRow, styles.card)}>
+            {/* URL 本地检测状态（非法/不可达 → 提示 + 导入按钮置灰） */}
+            <Show when={urlState() === "empty"}>
+              <p {...stylex.props(styles.error)}>{t("submit.error.invalid_url")}</p>
+            </Show>
+            <Show when={urlState() === "invalid"}>
+              <p {...stylex.props(styles.error)}>{t("submit.urlUnsupported")}</p>
+            </Show>
+            <Show when={urlState() === "checking"}>
+              <p {...stylex.props(styles.hint)}>{t("submit.importing")}</p>
+            </Show>
+            <Show when={urlState() === "unreachable"}>
+              <p {...stylex.props(styles.error)}>{t("importDialog.unreachable")}</p>
+            </Show>
             {/* 提交时撞重复（后端返回 existing）：提示 + 我的投稿入口 */}
             <Show when={existing()}>
               <p {...stylex.props(styles.error)}>{t("submit.existing")}</p>
@@ -305,7 +340,7 @@ export default function SubmitPage() {
               <p {...stylex.props(styles.error)}>{t("submit.error.needVoice")}</p>
             </Show>
             <div {...stylex.props(styles.actions)}>
-              <Button onClick={confirmSubmit} disabled={submitting() || !hasSample()}>
+              <Button onClick={confirmSubmit} disabled={submitting() || !hasSample() || !urlReady()}>
                 {submitting() ? t("submit.submitting") : t("submit.confirm")}
               </Button>
               <A href="/"><Button appear="ghost">{t("common.cancel")}</Button></A>

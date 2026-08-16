@@ -19,7 +19,7 @@ const SHARE_HOSTS = [
 ];
 
 /** 平台分享链接识别：host 白名单 + 分享路径（/share/ 或 /s/ 或非根路径） */
-function isShareUrl(input: string): boolean {
+export function isShareUrl(input: string): boolean {
   try {
     const url = new URL(input);
     if (url.protocol !== "http:" && url.protocol !== "https:") return false;
