@@ -237,3 +237,28 @@ blocked by CORS policy: No 'Access-Control-Allow-Origin' header`。
   体验最佳，discover 即此模式）；或 **createResource + 页面级 Suspense 骨架**。
 - 骨架屏样式依赖 stylex 客户端注入，页面骨架组件应放在入口可及模块（如
   route-skeletons.tsx），避免懒加载 chunk 首用无样式。
+
+## 10. Solid 1.9 hydration 与 JSX 元素 props（lazy props）的 Mismatch
+
+### 现象
+1. `<Button icon={<Icon .../>}>`（JSX 元素作为普通 props 传递）→ Hydration Mismatch
+   （`Unable to find DOM nodes for hydration key ... <span>`），且 hydration 崩溃后
+   页面内容大量丢失（example 页 27 个按钮只剩 5 个）。
+2. Banner 组件特性组合（isDismissable/endContent 与相邻 defaultIsExpanded Banner 共存）
+   同样触发，且**与内容类型无关**（endContent 传 Button 或 span 都复现）、与位置无关。
+
+### 根因
+Solid 1.9 中 JSX 元素作为**普通 props**（icon={...}/endContent={...}）是惰性求值
+（编译为函数），SSR 与客户端 hydrate 的组件 key 分配不一致 → 嵌套组件（Icon/Button）
+的节点找不到对应。标准 children 不受影响（Solid 对 children 有专门的 hydration 处理）。
+
+### 修复
+- **接收方用 `children()` 包装**（Solid 官方 helper，惰性求值转稳定 memo）：
+  Button 的 `icon`/`endContent` 均 `children(() => local.xxx)` 后渲染 —— 已修复
+  Button+Icon 组合（提交 b5fd94ae、a4d92bf4）。
+- **Icon 渲染改 Show 条件切换**（fallback 静态空 span 占位，注入后整元素替换，
+  不在原元素上改 innerHTML）。
+- **Banner 特性组合**：未能根除（children() 包装无效，深挖成本高）——example 页
+  移除 Banner 展示组（特性见 banner.md）；站点页面无 Banner，不受影响。
+  **教训**：此类"组合触发 + 与内容无关"的 Mismatch，优先考虑调整使用方式/展示
+  组合，不要陷入逐个属性二分的泥潭（测试本身可能受时序干扰给出矛盾结果）。
