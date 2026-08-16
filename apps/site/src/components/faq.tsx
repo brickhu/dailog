@@ -5,10 +5,9 @@ import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 
 // 首页常见问题：互斥手风琴（单开，点击切换）。文案走 i18n（中英），跟随语言切换。
+// 容器由页面负责（首页 containerLg 内 fullRow span 12）；组件自身只保留内容间距。
 const styles = stylex.create({
   wrap: {
-    maxWidth: "1080px",
-    margin: "0 auto",
     padding: `0 ${dimensions.spacing8} ${dimensions.spacing12}`,
     "@media (max-width: 640px)": {
       padding: `0 ${dimensions.spacing4} ${dimensions.spacing8}`,

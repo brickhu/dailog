@@ -204,6 +204,12 @@ export const typography = stylex.create({
     fontWeight: dimensions.fontWeightBold,
     lineHeight: "1.2",
   },
+  bodyXl: {
+    fontFamily: fontfamilies.body,
+    fontSize: dimensions.fontSizeXl,
+    fontWeight: dimensions.fontWeightNormal,
+    lineHeight: "1.5",
+  },
   bodyLg: {
     fontFamily: fontfamilies.body,
     fontSize: dimensions.fontSizeMd,
@@ -311,33 +317,26 @@ export const layouts = stylex.create({
   // 全屏容器：宽高 100%，单列结构（适合全屏应用/无宽度约束区块）
   containerFull: {
     width: "100%",
-    height: "100%",
-    minHeight: "100vh",
-    flexShrink: "0",
-    display: "grid",
-    gridTemplateColumns: "1fr",
-    gridTemplateRows: "minmax(0, 1fr)",
   },
 
-  // 大容器：max-width 1128px，桌面 12 列 / 平板 6 列 / 手机 3 列，居中（首页类宽页面）
+  // 大容器：max-width 1128px，居中；网格列数 <640 为 4 列 / <1024 为 8 列 / 默认 12 列
+  // （min-width 移动优先：stylex 按断点升序输出 media 规则，min-width 同时匹配时大断点在后
+  //  覆盖小断点，语义正确；max-width 会被大断点反向覆盖导致手机端错列）
   containerLg: {
     width: "100%",
     flexShrink: "0",
     maxWidth: "1128px",
-    backgroundColor: "#00ff00",
     margin: "0 auto",
-    paddingLeft: dimensions.spacing4,
-    paddingRight: dimensions.spacing4,
     display: "grid",
-    gridTemplateColumns: "repeat(12, 1fr)",
-    columnGap: dimensions.spacing5,
+    gridTemplateColumns: "repeat(4, 1fr)",
+    columnGap: dimensions.spacing4,
     alignItems: "start",
-    "@media (max-width: 1024px)": {
-      gridTemplateColumns: "repeat(6, 1fr)",
+    "@media (min-width: 641px)": {
+      gridTemplateColumns: "repeat(8, 1fr)",
+      columnGap: dimensions.spacing5,
     },
-    "@media (max-width: 640px)": {
-      gridTemplateColumns: "repeat(3, 1fr)",
-      columnGap: dimensions.spacing4,
+    "@media (min-width: 1025px)": {
+      gridTemplateColumns: "repeat(12, 1fr)",
     },
   },
 

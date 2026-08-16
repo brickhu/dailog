@@ -66,12 +66,10 @@ const styles = stylex.create({
   },
 
   listTitleRow: {
-    maxWidth: "1080px",
-    margin: "0 auto",
-    padding: `${dimensions.spacing8} ${dimensions.spacing8} ${dimensions.spacing4}`,
     display: "flex",
     alignItems: "baseline",
     justifyContent: "space-between",
+    padding: `${dimensions.spacing8} ${dimensions.spacing8} ${dimensions.spacing4}`,
     "@media (max-width: 640px)": {
       padding: `${dimensions.spacing6} ${dimensions.spacing4} ${dimensions.spacing3}`,
     },
@@ -88,8 +86,6 @@ const styles = stylex.create({
   },
   // ---- 推荐滚屏：视口 + 平移轨道 + 分页 ----
   viewport: {
-    maxWidth: "1080px",
-    margin: "0 auto",
     // 无左右内边距：overflow 裁剪边界 = 容器边缘，相邻分页的卡片不会从 padding 区露出
     padding: `0 0 ${dimensions.spacing2}`,
     overflow: "hidden",
@@ -105,15 +101,28 @@ const styles = stylex.create({
     flex: "0 0 100%",
     minWidth: "100%",
     // 左右内边距在分页内部：卡片与标题行同宽，且下一屏从容器边缘外才开始
-    padding: `0 ${dimensions.spacing8}`,
+    padding: `0 ${dimensions.spacing4}`,
     display: "grid",
-    // minmax(0,1fr)：1fr 默认有 min-content 下限，长标题卡片会把轨道撑宽导致第 4 张被裁掉
+    // 列数跟随 containerLg 断点（<640 4 列 / <1024 8 列 / 默认 12 列）：
+    // min-width 移动优先（stylex 升序输出 media，大断点在后覆盖小断点，语义正确）
     gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-    gap: dimensions.spacing5,
-    "@media (max-width: 640px)": {
-      padding: `0 ${dimensions.spacing4}`,
-      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-      gap: dimensions.spacing4,
+    columnGap: dimensions.spacing4,
+    rowGap: dimensions.spacing4,
+    "@media (min-width: 641px)": {
+      padding: `0 ${dimensions.spacing8}`,
+      gridTemplateColumns: "repeat(8, minmax(0, 1fr))",
+      columnGap: dimensions.spacing5,
+      rowGap: dimensions.spacing5,
+    },
+    "@media (min-width: 1025px)": {
+      gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
+    },
+  },
+  // 节目卡片/灰块：4 列占 2（2×2）、8 列占 2（4 张一行）、12 列占 3（4 张一行）
+  cardSpan: {
+    gridColumn: "span 2",
+    "@media (min-width: 1025px)": {
+      gridColumn: "span 3",
     },
   },
   grayBlock: {
@@ -122,8 +131,6 @@ const styles = stylex.create({
   },
   // ---- 分页控制：‹ 圆点 › ----
   controls: {
-    maxWidth: "1080px",
-    margin: "0 auto",
     padding: `${dimensions.spacing3} ${dimensions.spacing8} ${dimensions.spacing12}`,
     display: "flex",
     alignItems: "center",
@@ -167,19 +174,17 @@ const styles = stylex.create({
     backgroundColor: colors.brand,
     ":hover": { backgroundColor: colors.brand },
   },
-  // ---- 骨架屏（异步加载占位）：与真实卡片同尺寸，透明度脉冲 ----
+  // ---- 骨架屏（异步加载占位）：与真实卡片同尺寸（手机 2×2 / 平板以上 4 张一行），透明度脉冲 ----
   skeletonGrid: {
-    maxWidth: "1080px",
-    margin: "0 auto",
     // 与滚屏一致：左右内边距与标题行对齐
-    padding: `0 ${dimensions.spacing8} ${dimensions.spacing12}`,
+    padding: `0 ${dimensions.spacing4} ${dimensions.spacing8}`,
     display: "grid",
-    gridTemplateColumns: "repeat(4, 1fr)",
-    gap: dimensions.spacing5,
-    "@media (max-width: 640px)": {
-      gridTemplateColumns: "repeat(2, 1fr)",
-      padding: `0 ${dimensions.spacing4} ${dimensions.spacing8}`,
-      gap: dimensions.spacing4,
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: dimensions.spacing4,
+    "@media (min-width: 641px)": {
+      padding: `0 ${dimensions.spacing8} ${dimensions.spacing12}`,
+      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+      gap: dimensions.spacing5,
     },
   },
   skeletonCard: {
@@ -286,18 +291,28 @@ const styles = stylex.create({
     padding: dimensions.spacing12,
   },
   statCards: {
-    maxWidth: "1080px",
-    margin: "0 auto",
-    padding: `0 ${dimensions.spacing8} ${dimensions.spacing12}`,
+    padding: `0 ${dimensions.spacing4} ${dimensions.spacing8}`,
     display: "grid",
-    gridTemplateColumns: "repeat(3, 1fr)",
-    gap: dimensions.spacing4,
-    "@media (max-width: 640px)": {
-      gridTemplateColumns: "1fr",
-      padding: `0 ${dimensions.spacing4} ${dimensions.spacing8}`,
+    // 列数跟随 containerLg 断点：4 列（手机单列堆叠）/ 8 列（3 张一行）/ 12 列（3 张一行）
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    columnGap: dimensions.spacing4,
+    rowGap: dimensions.spacing4,
+    "@media (min-width: 641px)": {
+      padding: `0 ${dimensions.spacing8} ${dimensions.spacing12}`,
+      gridTemplateColumns: "repeat(8, minmax(0, 1fr))",
+    },
+    "@media (min-width: 1025px)": {
+      gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
     },
   },
   statCard: {
+    gridColumn: "span 4", // 手机 4 列占满 → 单列堆叠
+    "@media (min-width: 641px)": {
+      gridColumn: "span 2", // 平板 8 列占 2 → 3 张一行
+    },
+    "@media (min-width: 1025px)": {
+      gridColumn: "span 4", // 桌面 12 列占 4 → 3 张一行
+    },
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
@@ -460,7 +475,7 @@ export default function HomePage() {
         <div {...stylex.props(styles.listTitle)}>{t("home.recommended")}</div>
         <A href="/discover" {...stylex.props(styles.moreLink)}>{t("home.hero.browse")}</A>
       </div>
-    </div>
+
       <div {...stylex.props(layouts.fullRow)}>
       <Show
         when={list()?.length}
@@ -492,7 +507,7 @@ export default function HomePage() {
                     {(ep) => (
                       // hover 预取详情数据（点击进详情页即开；移动端无 hover → 走全局 spinner 过渡）
                       <div
-                        {...stylex.props(styles.card)}
+                        {...stylex.props(styles.card, styles.cardSpan)}
                         onClick={() => navigate(`/episode/${ep.slug}`)}
                         onPointerEnter={() => void getEpisodeCached(ep.slug)}
                       >
@@ -522,9 +537,9 @@ export default function HomePage() {
                       </div>
                     )}
                   </For>
-                  {/* 末屏不足 4 条：灰块补齐，保持每屏等宽 */}
+                  {/* 末屏不足 4 条：灰块补齐，保持每屏等宽（同卡片 3 列） */}
                   <For each={Array.from({ length: PAGE_SIZE - pageItems(i).length })}>
-                    {() => <div {...stylex.props(styles.grayBlock)} />}
+                    {() => <div {...stylex.props(styles.grayBlock, styles.cardSpan)} />}
                   </For>
                 </div>
               )}
@@ -606,6 +621,7 @@ export default function HomePage() {
       {/* 常见问题（互斥手风琴，双语跟随语言切换） */}
       <div {...stylex.props(layouts.fullRow)}>
       <Faq />
+      </div>
       </div>
       </div>
   );
