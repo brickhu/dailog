@@ -172,15 +172,27 @@ export function editorRoutes(deps: EditorDeps) {
     const audioKey = `episodes/${detail.userId}/${id}.${ext}`;
     await deps.storage.put(audioKey, new Uint8Array(await audioFile.arrayBuffer()));
 
-    // 封面可选：cover 文件 → covers/{submissionId}.jpg（无封面 → null，播放页自适应）
+    // 封面可选：cover 文件 → covers/{submissionId}.jpg（无封面 → null，播放页自适应）。
+    // 兜底统一 1400×1400 居中裁方 JPEG：编辑端 cover 命令已裁（--image-url 下载 → ffmpeg 裁），
+    // 此处校验尺寸，非标（漏裁/外部图）才处理——避免已达标图片二次压缩
     let coverUrl: string | null = null;
     const coverFile = form?.get("cover");
     if (coverFile instanceof File && coverFile.size > 0) {
       if (coverFile.size > 5 * 1024 * 1024) {
         return c.json({ error: "cover_too_large", detail: "封面超过 5MB 上限" }, 400);
       }
+      let coverBytes = new Uint8Array(await coverFile.arrayBuffer());
+      try {
+        const { default: sharp } = await import("sharp");
+        const meta = await sharp(coverBytes).metadata();
+        if (meta.width !== 1400 || meta.height !== 1400) {
+          coverBytes = new Uint8Array(
+            await sharp(coverBytes).resize(1400, 1400, { fit: "cover" }).jpeg({ quality: 90 }).toBuffer(),
+          );
+        }
+      } catch { /* 非图片文件：原样存（前端显示会失败占位） */ }
       coverUrl = `covers/${id}.jpg`;
-      await deps.storage.put(coverUrl, new Uint8Array(await coverFile.arrayBuffer()));
+      await deps.storage.put(coverUrl, coverBytes);
     }
 
     // 创建节目（published + 期号）+ 投稿状态流转，同事务
