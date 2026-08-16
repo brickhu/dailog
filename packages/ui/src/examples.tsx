@@ -7,7 +7,7 @@ import { Icon } from './components/icon';
 
 export default function Examples() {
   return (
-    <div {...stylex.props(layouts.page)}>
+    <div {...stylex.props(layouts.containerFull)}>
 
         <ButtonGroup label="文本操作">
   <Button label="复制" />

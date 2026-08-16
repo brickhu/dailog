@@ -67,10 +67,9 @@ export default function GuestsPage() {
   });
 
   return (
-    <div {...stylex.props(layouts.page)}>
-      <Title>{t("guests.title")} · dailog</Title>
       <div {...stylex.props(layouts.containerLg)}>
         <div {...stylex.props(layouts.fullRow, styles.title)}>{t("guests.title")}</div>
+        <Title>{t("guests.title")} · dailog</Title>
         <p {...stylex.props(layouts.fullRow, styles.desc)}>{t("guests.desc")}</p>
         <div {...stylex.props(layouts.fullRow)}>
         <Suspense fallback={<ListSkeleton />}>
@@ -92,6 +91,5 @@ export default function GuestsPage() {
         </Suspense>
         </div>
       </div>
-    </div>
   );
 }

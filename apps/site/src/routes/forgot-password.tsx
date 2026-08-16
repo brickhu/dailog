@@ -122,10 +122,9 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div {...stylex.props(layouts.page)}>
-      <Title>找回密码 · dailog</Title>
       <div {...stylex.props(layouts.containerSm)}>
       <div {...stylex.props(layouts.fullRow, styles.card)}>
+        <Title>找回密码 · dailog</Title>
         <Show when={step() === "email"} fallback={
           <>
             <div {...stylex.props(styles.title)}>{t("forgot.resetTitle")}</div>
@@ -161,6 +160,5 @@ export default function ForgotPasswordPage() {
         </Show>
       </div>
       </div>
-    </div>
   );
 }

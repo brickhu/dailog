@@ -125,7 +125,6 @@ export default function EpisodeDetailPage() {
   };
 
   return (
-    <div {...stylex.props(layouts.page)}>
       <div {...stylex.props(layouts.containerMd)}>
       <Title>{ep()?.title || "dailog"}</Title>
       {/* OG 标签：社交分享卡片（og:image = 封面，各平台抓取展示） */}
@@ -157,6 +156,5 @@ export default function EpisodeDetailPage() {
       </Show>
       </Suspense>
       </div>
-    </div>
   );
 }

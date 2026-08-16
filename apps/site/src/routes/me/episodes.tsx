@@ -187,11 +187,9 @@ function EpisodesList() {
 export default function MeEpisodesPage() {
   const { t } = useI18n();
   return (
-    <div {...stylex.props(layouts.page)}>
-      <Title>{t("me.episodes")} · dailog</Title>
       <AuthGate redirect="/me/episodes">
+        <Title>{t("me.episodes")} · dailog</Title>
         <EpisodesList />
       </AuthGate>
-    </div>
   );
 }

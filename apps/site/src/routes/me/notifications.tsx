@@ -125,11 +125,9 @@ function NotificationsList() {
 export default function NotificationsPage() {
   const { t } = useI18n();
   return (
-    <div {...stylex.props(layouts.page)}>
-      <Title>{t("notif.title")} · dailog</Title>
       <AuthGate redirect="/me/notifications">
+        <Title>{t("notif.title")} · dailog</Title>
         <NotificationsList />
       </AuthGate>
-    </div>
   );
 }

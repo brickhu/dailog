@@ -109,10 +109,9 @@ export default function MePage() {
   ];
 
   return (
-    <div {...stylex.props(layouts.page)}>
-      <Title>{t("me.title")} · dailog</Title>
       <AuthGate redirect="/me">
         <div {...stylex.props(layouts.containerSm)}>
+          <Title>{t("me.title")} · dailog</Title>
           <div {...stylex.props(layouts.fullRow, styles.title)}>{t("me.title")}</div>
           <p {...stylex.props(layouts.fullRow, styles.subtitle)}>
             <Show when={profile()?.image}>
@@ -138,6 +137,5 @@ export default function MePage() {
           </div>
         </div>
       </AuthGate>
-    </div>
   );
 }

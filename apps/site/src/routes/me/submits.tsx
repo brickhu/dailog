@@ -147,12 +147,10 @@ function SubmissionsList() {
 export default function MeSubmitsPage() {
   const { t } = useI18n();
   return (
-    <div {...stylex.props(layouts.page)}>
-      <Title>{t("meSubmits.title")} · dailog</Title>
       <AuthGate redirect="/me/submits">
+        <Title>{t("meSubmits.title")} · dailog</Title>
         <SubmissionsList />
       </AuthGate>
-    </div>
   );
 }
 

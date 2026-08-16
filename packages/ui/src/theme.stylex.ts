@@ -259,7 +259,10 @@ export const typography = stylex.create({
 // "A style value can only contain an array, string or number"）——typography.bodyMd
 // 的值（14px/400/1.5/body 字体）在此显式展开
 export const layouts = stylex.create({
-  // —— 应用壳（AppShell 框架层：导航/播放条固定，内容区独立滚动）——
+  // —— 应用壳根（AppShell 框架层 + 全站页面根合并）——
+  // 壳 root 承担页面根样式（字体/前景/背景/最小宽度/防横向溢出）：
+  // fixed 100vw×100vh 容器（导航/播放条固定），页面内容在壳内内容区滚动；
+  // 页面自身不再有独立根，内容容器（container*）直接作页面根（margin auto 居中）。
   shellRoot: {
     position: "fixed",
     top: "0",
@@ -268,31 +271,20 @@ export const layouts = stylex.create({
     height: "100vh",
     display: "flex",
     flexDirection: "column",
-    backgroundColor: colors.background,
-  },
-  shellContent: {
-    flex: "1",
-    minHeight: "0", // 允许 flex 子项收缩，内容区独立滚动
-    overflowY: "auto",
-    overscrollBehavior: "contain", // 滚动链限制在壳内
-  },
-
-  // 页面根：全站统一（字号/颜色/背景/最小高度），内容横向防溢出。
-  // 滚动由应用壳内容区承担（AppShell），此处不声明 overflow-y 滚动。
-  page: {
     fontFamily: fontfamilies.body,
     fontSize: dimensions.fontSizeSm,
     fontWeight: dimensions.fontWeightNormal,
     lineHeight: "1.5",
     color: colors.foreground,
     backgroundColor: colors.background,
-    minHeight: "100vh",
     minWidth: "320px",
     overflowX: "hidden",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "start",
+  },
+  shellContent: {
+    flex: "1",
+    minHeight: "0", // 允许 flex 子项收缩，内容区独立滚动
+    overflowY: "auto",
+    overscrollBehavior: "contain", // 滚动链限制在壳内
   },
 
   // —— 内容容器（grid 布局）——

@@ -67,10 +67,9 @@ export default function HostsPage() {
   });
 
   return (
-    <div {...stylex.props(layouts.page)}>
-      <Title>{t("hosts.title")} · dailog</Title>
       <div {...stylex.props(layouts.containerLg)}>
         <div {...stylex.props(layouts.fullRow, styles.title)}>{t("hosts.title")}</div>
+        <Title>{t("hosts.title")} · dailog</Title>
         <p {...stylex.props(layouts.fullRow, styles.desc)}>{t("hosts.desc")}</p>
         <div {...stylex.props(layouts.fullRow)}>
         <Suspense fallback={<ListSkeleton />}>
@@ -92,6 +91,5 @@ export default function HostsPage() {
         </Suspense>
         </div>
       </div>
-    </div>
   );
 }

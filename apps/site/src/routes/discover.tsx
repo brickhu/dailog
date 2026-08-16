@@ -113,7 +113,6 @@ export default function DiscoverPage() {
   const episodes = createAsync<EpisodeSummary[]>(() => getLatestCached(locale() === "zh" ? "zh" : "en"));
 
   return (
-    <div {...stylex.props(layouts.page)}>
       <div {...stylex.props(layouts.containerSm)}>
         <div {...stylex.props(layouts.fullRow, styles.title)}>{t("discover.title")}</div>
         <div {...stylex.props(layouts.fullRow, styles.tabs)}>
@@ -153,6 +152,5 @@ export default function DiscoverPage() {
         </Suspense>
         </div>
       </div>
-    </div>
   );
 }

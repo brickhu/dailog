@@ -154,9 +154,8 @@ export default function AccountPage() {
   });
 
   return (
-    <div {...stylex.props(layouts.page)}>
-      <Title>{t("account.title")} · dailog</Title>
       <div {...stylex.props(layouts.containerSm)}>
+        <Title>{t("account.title")} · dailog</Title>
         <div {...stylex.props(layouts.fullRow)}>
         <Show when={session()}>
           <div {...stylex.props(styles.title)}>{t("account.title")}</div>
@@ -168,7 +167,6 @@ export default function AccountPage() {
         </Show>
         </div>
       </div>
-    </div>
   );
 }
 
