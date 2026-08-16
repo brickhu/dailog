@@ -6,6 +6,7 @@ import { useNavigate } from "@solidjs/router";
 import { Button, Dialog } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { isLoggedIn } from "../lib/auth-guard";
+import { checkUrlAndStore } from "../lib/url-check";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 
@@ -250,20 +251,14 @@ export function ImportDialog() {
         setState("duplicate");
         return;
       }
-      // 2) 可达性检测
-      const res = await fetch("/v1/submissions/reachable", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url: url().trim() }),
-      });
-      if (res.ok) {
-        const target = url().trim();
+      // 2) 可达性检测 + 结果存 localStorage（key = 确定性投稿 ID）→ 跳 /submit?id=…
+      const { id, reachable } = await checkUrlAndStore(url().trim());
+      if (reachable) {
         close();
-        navigate(`/submit?url=${encodeURIComponent(target)}`);
+        navigate(`/submit?id=${encodeURIComponent(id)}`);
         return;
       }
-      const data = (await res.json().catch(() => null)) as { detail?: string } | null;
-      setFailMsg(typeof data?.detail === "string" ? data.detail : t("importDialog.unreachable"));
+      setFailMsg(t("importDialog.unreachable"));
       setState("error");
     } catch {
       setFailMsg(t("importDialog.unreachable"));

@@ -8,6 +8,7 @@ import { Button } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../components/auth-gate";
 import { isShareUrl } from "../components/import-dialog";
+import { getUrlCheck } from "../lib/url-check";
 import Recorder from "../components/recorder";
 
 // 投稿流程（本质版，2026-08-13）：
@@ -157,10 +158,22 @@ export default function SubmitPage() {
   const [submitting, setSubmitting] = createSignal(false);
 
   onMount(() => {
-    // 导入弹框跳转预填：/submit?url=…；本地再做合法性 + 可达性检测
-    // （手动构造 URL 无法绕过：非法/不可达 → 导入按钮置灰）
+    // 优先 ?id=（导入弹框检测结果存 localStorage，key = 确定性投稿 ID）：
+    // 直接取 URL 与检测结果，不重新检测、不暴露 URL 参数；无缓存/过期 → 置灰提示
     try {
       const params = new URLSearchParams(window.location.search);
+      const id = params.get("id");
+      if (id) {
+        const check = getUrlCheck(id);
+        if (check && check.valid && check.reachable) {
+          setUrl(check.url);
+          setUrlState("ok");
+          return;
+        }
+        setUrlState("empty");
+        return;
+      }
+      // 旧链接兜底：?url=… 本地再做合法性 + 可达性检测（手动构造无法绕过）
       const prefill = params.get("url");
       if (!prefill || !prefill.startsWith("http")) {
         setUrlState("empty");
