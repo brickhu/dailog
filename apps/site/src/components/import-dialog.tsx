@@ -125,6 +125,8 @@ let lastClipboardUrl = "";
 
 async function tryOpenFromClipboard(): Promise<void> {
   if (dialogOpen()) return; // 弹框已开：不打断用户操作
+  // /submit 路由（导入第二步）不检测剪贴板——URL 已由弹框检测并预填
+  if (typeof window !== "undefined" && window.location.pathname.startsWith("/submit")) return;
   // 剪贴板自动弹框仅登录用户生效（未登录走 use:auth 登录引导，不自动打扰）
   if (!(await isLoggedIn())) return;
   try {
