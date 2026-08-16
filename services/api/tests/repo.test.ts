@@ -1,3 +1,4 @@
+import { submissionIdFromUrl } from "../src/routes/submissions";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { createDb } from "../src/db/client";
@@ -52,10 +53,10 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
   describe("submissions repo（投稿 = URL + 采样，落库待审核）", () => {
     it("create → submitted；同 user+url 重复提交撞唯一约束返回空 id", async () => {
       const url = `https://example.com/share/repo-${Date.now()}`;
-      const created = await repo.submissions.create(REPO_USER, url, "我的对话");
+      const created = await repo.submissions.create(submissionIdFromUrl(url), REPO_USER, url, "我的对话");
       expect(created.id).toBeTruthy();
 
-      const dup = await repo.submissions.create(REPO_USER, url, null);
+      const dup = await repo.submissions.create(submissionIdFromUrl(url), REPO_USER, url, null);
       expect(dup.id).toBe("");
 
       await db.delete(submissions).where(eq(submissions.id, created.id));
@@ -63,7 +64,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
 
     it("findByUserUrl / countPendingByUser / reject / markPublished 状态流转", async () => {
       const url = `https://claude.ai/share/repo-${Date.now()}`;
-      const { id } = await repo.submissions.create(REPO_USER, url, null);
+      const { id } = await repo.submissions.create(submissionIdFromUrl(url), REPO_USER, url, null);
       expect((await repo.submissions.findByUserUrl(REPO_USER, url))?.status).toBe("submitted");
       expect(await repo.submissions.countPendingByUser(REPO_USER)).toBeGreaterThan(0);
 
@@ -72,7 +73,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
 
       // 另一条 → published 流转 + 详情聚合投稿人信息
       const url2 = `https://claude.ai/share/repo2-${Date.now()}`;
-      const { id: id2 } = await repo.submissions.create(REPO_USER, url2, null);
+      const { id: id2 } = await repo.submissions.create(submissionIdFromUrl(url2), REPO_USER, url2, null);
       await repo.submissions.markPublished(id2);
       const detail = await repo.submissions.getDetail(id2);
       expect(detail?.status).toBe("published");
@@ -84,7 +85,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
 
     it("listQueue 附带投稿人信息与采样就绪标记", async () => {
       const url = `https://chatgpt.com/share/repo-${Date.now()}`;
-      const { id } = await repo.submissions.create(REPO_USER, url, null);
+      const { id } = await repo.submissions.create(submissionIdFromUrl(url), REPO_USER, url, null);
       const rows = await repo.submissions.listQueue("submitted");
       const row = rows.find((r) => r.id === id);
       expect(row).toMatchObject({ url, userEmail: "repo-test@test.local", hasVoiceSample: false });
@@ -92,7 +93,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
     });
 
     it("listByUser 返回 url/status/rejectedReason + 最新节目状态", async () => {
-      const { id: subId } = await repo.submissions.create(REPO_USER, `https://example.com/share/lb-${Date.now()}`, null);
+      const { id: subId } = await repo.submissions.create(submissionIdFromUrl(`https://example.com/share/lb-${Date.now()}`), REPO_USER, `https://example.com/share/lb-${Date.now()}`, null);
       await repo.episodes.createPublished({
         submissionId: subId,
         userId: REPO_USER,
@@ -110,7 +111,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
 
   describe("episodes repo（编辑上传成品 → 发布，期号 max+1）", () => {
     it("createPublished：期号递增 + published + isPublic + 公开音频 key", async () => {
-      const { id: subId } = await repo.submissions.create(REPO_USER, `https://example.com/share/ep-${Date.now()}`, null);
+      const { id: subId } = await repo.submissions.create(submissionIdFromUrl(`https://example.com/share/ep-${Date.now()}`), REPO_USER, `https://example.com/share/ep-${Date.now()}`, null);
       const first = await repo.episodes.createPublished({
         submissionId: subId,
         userId: REPO_USER,
@@ -147,7 +148,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
     });
 
     it("getPublicAudioKey 对非公开节目返回 null", async () => {
-      const { id: subId } = await repo.submissions.create(REPO_USER, `https://example.com/share/hidden-${Date.now()}`, null);
+      const { id: subId } = await repo.submissions.create(submissionIdFromUrl(`https://example.com/share/hidden-${Date.now()}`), REPO_USER, `https://example.com/share/hidden-${Date.now()}`, null);
       const { id: epId } = await repo.episodes.createPublished({
         submissionId: subId,
         userId: REPO_USER,

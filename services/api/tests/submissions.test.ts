@@ -183,7 +183,7 @@ describe("POST /v1/submissions —— 并发上限 / 重复 / 入库", () => {
 
   it("creates submission with url + optional title + callName + suggestion + voiceSampleId（采样校验传参、trim 入库）", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
-    const create = vi.fn(async (_u: string, _url: string, _t: string | null, _cn?: string | null, _pi?: unknown, _vs?: string | null, _sug?: string | null) => ({ id: "sub-new" }));
+    const create = vi.fn(async (_id: string, _u: string, _url: string, _t: string | null, _cn?: string | null, _pi?: unknown, _vs?: string | null, _sug?: string | null) => ({ id: _id || "sub-new" }));
     const hasReadyVoiceSample = vi.fn(async () => true);
     const app = makeApp({ create, hasReadyVoiceSample });
     const res = await app.request("/v1/submissions", {

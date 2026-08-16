@@ -23,7 +23,7 @@ export interface SubmissionsRepo {
    *  personaInfo：主持人档案快照（路由层从 getPersonaSnapshot 取，编辑侧免查库）；
    *  voiceSampleId：投稿时使用的采样（仅记录，TTS 仍按语言匹配）；
    *  suggestion：投稿人节目建议（可为 null；编辑生成脚本时仅供选题视角参考） */
-  create(userId: string, url: string, title: string | null, callNameInEpisode?: string | null, personaInfo?: PersonaSnapshot | null, voiceSampleId?: string | null, suggestion?: string | null): Promise<{ id: string }>;
+  create(id: string, userId: string, url: string, title: string | null, callNameInEpisode?: string | null, personaInfo?: PersonaSnapshot | null, voiceSampleId?: string | null, suggestion?: string | null): Promise<{ id: string }>;
   /** 重复投稿检测（同用户同 URL → 已存在） */
   findByUserUrl(userId: string, url: string): Promise<{ id: string; status: string } | null>;
   /** 待审核投稿数（status=submitted）——投稿并发限制（pending_limit）用 */
@@ -506,9 +506,10 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
 
     submissions: {
       /** 投稿入库（唯一约束 user×url 兜底；重复提交由路由层查 existing） */
-      async create(userId, url, title, callNameInEpisode, personaInfo, voiceSampleId, suggestion) {
+      async create(id, userId, url, title, callNameInEpisode, personaInfo, voiceSampleId, suggestion) {
         try {
           const rows = await db.insert(schema.submissions).values({
+            id,
             userId,
             url,
             title: title ?? null,

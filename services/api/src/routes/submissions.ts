@@ -53,6 +53,37 @@ export async function isReachable(url: string): Promise<boolean> {
   }
 }
 
+// —— 确定性投稿 ID ——
+// 由「平台标识 + 平台内容 ID」hash 生成（UUID v5 / RFC 4122 命名空间）：
+// 同一分享 URL 永远得到同一 ID —— 天然幂等（重复提交撞唯一约束）、详情链接稳定、
+// 并发竞态由 DB 唯一约束兜底。存量数据（随机 UUID）保留不变，两者兼容。
+import { createHash } from "node:crypto";
+
+const SUBMISSION_NS = "d6a5c441-58e7-4b1c-9a2d-3f0e1b2c3d4e"; // 投稿命名空间（固定）
+
+/** 规范化分享 URL → 平台标识 + 内容 ID（去 query/hash、host 小写）：
+ *  https://chat.deepseek.com/share/dy7ngmaqp1t8o642km?x=1 → "chat.deepseek.com:share/dy7ngmaqp1t8o642km"
+ *  （分享链接的 query 常带追踪参数，不计入 ID —— 同内容同 ID） */
+export function submissionKeyFromUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.hostname.toLowerCase()}:${u.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return url;
+  }
+}
+
+/** UUID v5：sha1(命名空间 + 名称) 取前 16 字节 → 标准 UUID 格式（确定性） */
+export function submissionIdFromUrl(url: string): string {
+  const key = submissionKeyFromUrl(url);
+  const digest = createHash("sha1").update(SUBMISSION_NS + key).digest();
+  const b = digest.subarray(0, 16);
+  b[6] = (b[6] & 0x0f) | 0x50; // version 5
+  b[8] = (b[8] & 0x3f) | 0x80; // variant 10xx
+  const hex = b.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 export function submissionsRoutes(repo: Repos) {
   const app = new OpenAPIHono<{ Variables: { userId: string } }>();
   const Err = z.object({ error: z.string() });
@@ -168,7 +199,7 @@ export function submissionsRoutes(repo: Repos) {
       : null;
     // 主持人档案快照（编辑 getDetail 免查库；脚本生成注入画像）
     const personaInfo = await repo.episodes.getPersonaSnapshot(userId).catch(() => null);
-    const created = await repo.submissions.create(userId, url, title, callNameInEpisode, personaInfo, voiceSampleId, suggestion);
+    const created = await repo.submissions.create(submissionIdFromUrl(url), userId, url, title, callNameInEpisode, personaInfo, voiceSampleId, suggestion);
     if (!created.id) {
       return c.json({ error: "already_submitted", detail: "该链接已提交过投稿" }, 409);
     }
