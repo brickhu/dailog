@@ -7,7 +7,7 @@
 //         playing 为 false，就绪后才 true）
 // - interactive=false：纯封面（无透明层/无按钮）——compact 与列表模式封面用
 // - 事件：onPlay / onPause 暴露，外部接入全局播放器
-import { createEffect, createSignal, onCleanup, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { Button, Icon } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
@@ -95,9 +95,21 @@ export function CoverControls(props: {
   hovered?: boolean;
   /** 按钮尺寸（列表模式小一号）@default "lg" */
   size?: "sm" | "md" | "lg";
+  /** 按钮外观：缺省自动（触摸设备 ghost / 桌面 fill） */
+  appear?: "fill" | "ghost";
 }) {
   const { t } = useI18n();
   const [loading, setLoading] = createSignal(false);
+  // 触摸设备（手机/平板无 hover）→ ghost 按钮（半透明底，弱化实心色块）；
+  // SSR 端默认 fill（桌面），客户端 hydration 后按 matchMedia 修正
+  const [isTouch, setIsTouch] = createSignal(false);
+  onMount(() => {
+    setIsTouch((typeof window !== "undefined" && window.matchMedia?.("(hover: none)").matches) ?? false);
+  });
+  const appear = () => props.appear ?? (isTouch() ? "ghost" : "fill");
+  // ghost 按钮在封面上的可见性：半透明深底（Button xstyle 最后合并覆盖）
+  const ghostBg = stylex.create({ base: { backgroundColor: "rgba(0,0,0,0.3)" } });
+  const ghostStyle = () => (appear() === "ghost" ? ghostBg.base : undefined);
 
   // playing 变 true → 加载完成；外部停止（false）→ 待播放
   createEffect(() => {
@@ -133,16 +145,26 @@ export function CoverControls(props: {
         <Button
           round="full"
           size={props.size ?? "lg"}
-          appear="fill"
+          appear={appear()}
           variant="brand"
           isIconOnly
           icon={<Icon icon="mdi:pause" width={20} />}
           label={t("common.pause")}
+          xstyle={ghostStyle()}
           onClick={stop(props.onPause)}
         />
       </Show>
       <Show when={loading() && !props.playing}>
-        <Button round="full" size={props.size ?? "lg"} appear="fill" variant="brand" isIconOnly isLoading label={t("common.play")} />
+        <Button
+          round="full"
+          size={props.size ?? "lg"}
+          appear={appear()}
+          variant="brand"
+          isIconOnly
+          isLoading
+          label={t("common.play")}
+          xstyle={ghostStyle()}
+        />
       </Show>
       <Show when={!props.playing && !loading()}>
         {interactive ? (
@@ -150,11 +172,12 @@ export function CoverControls(props: {
             <Button
               round="full"
               size={props.size ?? "lg"}
-              appear="fill"
+              appear={appear()}
               variant="brand"
               isIconOnly
               icon={<Icon icon="mdi:play" width={20} />}
               label={t("common.play")}
+              xstyle={ghostStyle()}
               onClick={stop(handlePlay)}
             />
           </div>
@@ -162,11 +185,12 @@ export function CoverControls(props: {
           <Button
             round="full"
             size={props.size ?? "lg"}
-            appear="fill"
+            appear={appear()}
             variant="brand"
             isIconOnly
             icon={<Icon icon="mdi:play" width={20} />}
             label={t("common.play")}
+            xstyle={ghostStyle()}
             onClick={stop(handlePlay)}
           />
         )}
