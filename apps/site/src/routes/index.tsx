@@ -121,6 +121,15 @@ const styles = stylex.create({
   grayBlock: {
     borderRadius: dimensions.radiusMd,
     backgroundColor: colors.surface, // 与卡片同底色的灰块占位
+    // 固定高度：2×2 时第二行可能全是灰块（没有卡片撑起行高，空 div 高度 0 会塌陷）；
+    // 高度按对应断点卡片高度取整（封面 aspect 1:1 + 标题/meta/按钮 ≈ +100px）
+    minHeight: "270px",
+    "@media (min-width: 641px)": {
+      minHeight: "310px",
+    },
+    "@media (min-width: 1025px)": {
+      minHeight: "370px",
+    },
   },
   // ---- 分页控制：‹ 圆点 › ----
   controls: {
