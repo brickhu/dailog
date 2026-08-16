@@ -9,6 +9,7 @@ import { I18nProvider, detectLocale } from "@dailogues/i18n";
 import { CardGridSkeleton, DetailSkeleton, ListSkeleton } from "./components/route-skeletons";
 import { PlaybackProvider } from "./lib/playback";
 import { PlayerBar } from "./components/player-bar";
+import { AuthGuardDialog } from "./lib/auth-guard";
 import { SiteNav } from "./components/site-nav";
 import { Footer } from "./components/footer";
 import "./app.css";
@@ -62,6 +63,8 @@ function AppShell(props: { children: JSX.Element }) {
       <RouterOutlet>{props.children}</RouterOutlet>
       <Footer />
       <PlayerBar />
+      {/* 全局登录引导弹层（use:auth 指令触发；AppShell 内单例） */}
+      <AuthGuardDialog />
     </div>
   );
 }
