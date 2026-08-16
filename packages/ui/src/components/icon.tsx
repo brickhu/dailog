@@ -18,10 +18,44 @@ export interface IconProps {
   style?: JSX.CSSProperties;
 }
 
+// —— 自定义图标注册（addIcon，参考 iconify 的 addIcon API）——
+// 外部可注册任意图标（body = SVG 内部内容，如 <path>；fill 用 currentColor 可随
+// 文字颜色着色），优先于网络拉取；用法：addIcon("brand:logo", { body: '<path .../>' })
+// 后 <Icon icon="brand:logo" /> 直接渲染（无需访问 iconify API）
+export interface CustomIconData {
+  /** SVG body（不含 <svg> 标签；fill="currentColor" 可继承文字颜色） */
+  body: string;
+  /** 图标基准宽度（viewBox 基准）@default 24 */
+  width?: number;
+  /** 图标基准高度（viewBox 基准）@default 24 */
+  height?: number;
+}
+
+const customIcons = new Map<string, CustomIconData>();
+
+/** 注册自定义图标（模块加载时调用；同名覆盖）：
+ *  - addIcon("brand:logo", { body: '<path d="..."/>', width: 24, height: 24 })
+ *  - addIcon("brand:logo", '<svg ...>...</svg>')  // 完整 SVG 字符串原样使用
+ *  之后 <Icon icon="brand:logo" /> 即可渲染；尺寸默认 1em 继承 font-size，
+ *  也可用 Icon 的 width/height 属性（与网络图标一致） */
+export function addIcon(name: string, icon: CustomIconData | string): void {
+  customIcons.set(name, typeof icon === "string" ? { body: icon } : icon);
+}
+
 // 拉取缓存（URL → Promise<SVG 字符串>）；空串（失败）不缓存，允许重试
 const cache = new Map<string, Promise<string>>();
 
 function loadIconSvg(icon: string, width?: string | number, height?: string | number): Promise<string> {
+  // 自定义图标优先（addIcon 注册，按完整图标名匹配）
+  const custom = customIcons.get(icon);
+  if (custom) {
+    const body = custom.body.trim();
+    // 完整 SVG 字符串（以 <svg 开头）原样返回
+    if (body.startsWith("<svg")) return Promise.resolve(body);
+    const w = custom.width ?? 24;
+    const h = custom.height ?? 24;
+    return Promise.resolve(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}">${body}</svg>`);
+  }
   const idx = icon.indexOf(":");
   if (idx <= 0) return Promise.resolve("");
   const collection = icon.slice(0, idx);

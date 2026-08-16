@@ -3,7 +3,15 @@ import { ButtonGroup } from "./components/button-group";
 import { Banner } from "./components/banner";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "./theme.stylex";
-import { Icon } from './components/icon';
+import { Icon, addIcon } from './components/icon';
+
+// 自定义图标注册（addIcon）：无需访问 iconify API，注册后 <Icon icon="..." /> 直接渲染
+addIcon("demo:heart", {
+  body: '<path fill="currentColor" d="M12 21s-6.7-4.3-9.3-8.1C.8 10.2 2 6.5 5.5 6c2-.3 3.9.8 4.7 2.4.1.2.5.2.6 0C10.6 6.8 12.5 5.7 14.5 6c3.5.5 4.7 4.2 2.8 6.9C18.7 16.7 12 21 12 21z"/>',
+  width: 24,
+  height: 24,
+});
+addIcon("demo:raw", '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/></svg>');
 
 export default function Examples() {
   return (
@@ -83,6 +91,12 @@ export default function Examples() {
             <Icon icon="mdi:information-outline" width={24} />
             <Icon icon="mdi:microphone" width={24} />
             <Icon icon="mdi:play" width={24} />
+          </div>
+          <div style={{ display: "flex", "align-items": "center", gap: "16px", padding: "12px 0" }}>
+            {/* 自定义图标（addIcon 注册，body 方式 + 完整 SVG 字符串方式） */}
+            <Icon icon="demo:heart" width={24} style={{ color: "red" }} />
+            <Icon icon="demo:heart" width={32} style={{ color: "green" }} />
+            <Icon icon="demo:raw" width={24} />
           </div>
         </div>
     </div>
