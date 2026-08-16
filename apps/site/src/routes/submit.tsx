@@ -8,7 +8,7 @@ import { Button } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../components/auth-gate";
 import { isShareUrl } from "../components/import-dialog";
-import { getUrlCheck } from "../lib/url-check";
+import { getUrlCheck, markSubmitted } from "../lib/url-check";
 import { openImportDialog } from "../components/import-dialog";
 import Recorder from "../components/recorder";
 
@@ -307,6 +307,7 @@ export default function SubmitPage() {
         setError(detail && typeof detail === "string" ? detail : (mapped.startsWith("submit.error.") ? String(code) : mapped));
         return;
       }
+      markSubmitted(url().trim()); // 已提交：剪贴板自动弹窗不再弹该 URL
       setStep("done");
     } catch {
       setError(t("submit.error.submitFailed", { error: "network" }));

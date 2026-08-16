@@ -62,6 +62,37 @@ function writeStore(store: Record<string, UrlCheckEntry>): void {
   }
 }
 
+// —— 已提交 URL 记录（提交成功后标记：剪贴板检测不再弹该 URL）——
+const SUBMITTED_KEY = "dailog.submittedUrls";
+const SUBMITTED_MAX = 100;
+
+function readSubmitted(): string[] {
+  try {
+    const arr = JSON.parse(localStorage.getItem(SUBMITTED_KEY) ?? "[]") as string[];
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 是否已提交过该 URL（提交成功后标记；剪贴板自动弹窗跳过） */
+export function isSubmittedUrl(url: string): boolean {
+  return readSubmitted().includes(url);
+}
+
+/** 标记 URL 已提交（提交成功时调用） */
+export function markSubmitted(url: string): void {
+  try {
+    const list = readSubmitted();
+    if (list.includes(url)) return;
+    list.push(url);
+    if (list.length > SUBMITTED_MAX) list.splice(0, list.length - SUBMITTED_MAX);
+    localStorage.setItem(SUBMITTED_KEY, JSON.stringify(list));
+  } catch {
+    // 存储不可用：静默
+  }
+}
+
 /** 按 ID 取检测结果（未过期才返回；无/过期 → null） */
 export function getUrlCheck(id: string): UrlCheckEntry | null {
   const entry = readStore()[id];

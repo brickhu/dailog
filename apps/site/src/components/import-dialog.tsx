@@ -6,7 +6,7 @@ import { useNavigate } from "@solidjs/router";
 import { Button, Dialog } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { isLoggedIn } from "../lib/auth-guard";
-import { checkUrlAndStore } from "../lib/url-check";
+import { checkUrlAndStore, isSubmittedUrl } from "../lib/url-check";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 
@@ -132,8 +132,8 @@ async function tryOpenFromClipboard(): Promise<void> {
   try {
     const text = await navigator.clipboard.readText();
     const url = text.trim();
-    // 只对合法平台分享链接自动弹（不要什么 URL 都弹）
-    if (!url || !isShareUrl(url) || url === lastClipboardUrl) return;
+    // 只对合法平台分享链接自动弹（不要什么 URL 都弹）；已提交过的 URL 不再弹
+    if (!url || !isShareUrl(url) || url === lastClipboardUrl || isSubmittedUrl(url)) return;
     lastClipboardUrl = url; // 记录（无论是否弹，避免重复检测/重复打扰）
     // 已投稿过的 URL（重复导入）→ 不弹（弹框内确认投稿时仍有重复兜底；本地缓存命中不请求）
     const check = await checkSubmission(url);
