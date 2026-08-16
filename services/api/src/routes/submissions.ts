@@ -105,11 +105,11 @@ export function submissionsRoutes(repo: Repos) {
     if (!isValidUrl(url)) {
       return c.json({ error: "invalid_url", detail: "链接格式不合法（仅支持 http/https 分享链接）" }, 400);
     }
-    // 确定性 ID：同 URL 同 ID → 直接按主键查（含他人投稿，全局唯一）；
-    // 存量数据（随机 UUID）按 user×url 兜底
+    // 确定性 ID：同 URL 同 ID → 直接按主键查（全局唯一，不涉及用户）；
+    // 存量数据（随机 UUID）按 URL 全局兜底（任何人提交过都算重复）
     const existing =
       (await repo.submissions.findById(submissionIdFromUrl(url))) ??
-      (await repo.submissions.findByUserUrl(userId, url));
+      (await repo.submissions.findByUrl(url));
     if (!existing) return c.json({ existing: false });
     const episodes = await repo.episodes.listBySubmission(existing.id).catch(() => []);
     const published = episodes.find((e) => e.status === "published" && e.isPublic) ?? null;
@@ -180,8 +180,10 @@ export function submissionsRoutes(repo: Repos) {
     if (pending >= PENDING_LIMIT) {
       return c.json({ error: "pending_limit", detail: { count: pending, limit: PENDING_LIMIT } }, 429);
     }
-    // 重复提交同一链接 → 返回已有投稿 + 该投稿已生成的节目（前端提示"只能生成一期"并展示节目横条）
-    const existing = await repo.submissions.findByUserUrl(userId, url);
+    // 重复提交同一链接（全局唯一，不涉及用户）→ 返回已有投稿 + 已生成节目
+    const existing =
+      (await repo.submissions.findById(submissionIdFromUrl(url))) ??
+      (await repo.submissions.findByUrl(url));
     if (existing) {
       const episodes = await repo.episodes.listBySubmission(existing.id).catch(() => []);
       const published = episodes.find((e) => e.status === "published" && e.isPublic) ?? null;

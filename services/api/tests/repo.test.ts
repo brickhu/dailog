@@ -62,14 +62,14 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       await db.delete(submissions).where(eq(submissions.id, created.id));
     });
 
-    it("findByUserUrl / countPendingByUser / reject / markPublished 状态流转", async () => {
+    it("findByUrl / countPendingByUser / reject / markPublished 状态流转", async () => {
       const url = `https://claude.ai/share/repo-${Date.now()}`;
       const { id } = await repo.submissions.create(submissionIdFromUrl(url), REPO_USER, url, null);
-      expect((await repo.submissions.findByUserUrl(REPO_USER, url))?.status).toBe("submitted");
+      expect((await repo.submissions.findByUrl(url))?.status).toBe("submitted");
       expect(await repo.submissions.countPendingByUser(REPO_USER)).toBeGreaterThan(0);
 
       await repo.submissions.reject(id, "内容不符合要求");
-      expect((await repo.submissions.findByUserUrl(REPO_USER, url))?.status).toBe("rejected");
+      expect((await repo.submissions.findByUrl(url))?.status).toBe("rejected");
 
       // 另一条 → published 流转 + 详情聚合投稿人信息
       const url2 = `https://claude.ai/share/repo2-${Date.now()}`;

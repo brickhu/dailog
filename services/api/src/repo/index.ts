@@ -18,14 +18,14 @@ function randomSlug(): string {
 // ---------------------------------------------------------------------------
 
 export interface SubmissionsRepo {
-  /** 投稿入库（唯一约束 user×url 兜底；重复提交由路由层查 findByUserUrl）。
+  /** 投稿入库（唯一约束 url 全局唯一；重复提交由路由层查 findById/findByUrl）。
    *  callNameInEpisode：本次节目称呼（可为 null，脚本生成时按脚本语言改写）；
    *  personaInfo：主持人档案快照（路由层从 getPersonaSnapshot 取，编辑侧免查库）；
    *  voiceSampleId：投稿时使用的采样（仅记录，TTS 仍按语言匹配）；
    *  suggestion：投稿人节目建议（可为 null；编辑生成脚本时仅供选题视角参考） */
   create(id: string, userId: string, url: string, title: string | null, callNameInEpisode?: string | null, personaInfo?: PersonaSnapshot | null, voiceSampleId?: string | null, suggestion?: string | null): Promise<{ id: string }>;
-  /** 重复投稿检测（同用户同 URL → 已存在；存量数据兜底） */
-  findByUserUrl(userId: string, url: string): Promise<{ id: string; status: string } | null>;
+  /** 重复投稿检测（URL 全局唯一：任何人提交过同一分享链接都算重复） */
+  findByUrl(url: string): Promise<{ id: string; status: string } | null>;
   /** 按确定性投稿 ID 查（主键索引；同 URL 同 ID → 已存在即重复，含他人投稿） */
   findById(id: string): Promise<{ id: string; status: string } | null>;
   /** 待审核投稿数（status=submitted）——投稿并发限制（pending_limit）用 */
@@ -535,11 +535,11 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .limit(1);
         return rows[0] ?? null;
       },
-      async findByUserUrl(userId, url) {
+      async findByUrl(url) {
         const rows = await db
           .select({ id: schema.submissions.id, status: schema.submissions.status })
           .from(schema.submissions)
-          .where(and(eq(schema.submissions.userId, userId), eq(schema.submissions.url, url)))
+          .where(eq(schema.submissions.url, url))
           .limit(1);
         return rows[0] ?? null;
       },

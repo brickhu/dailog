@@ -61,7 +61,7 @@ function makeApp(repo: Partial<Repos["submissions"]> = {}) {
     },
     submissions: {
       create: async () => ({ id: "sub-1" }),
-      findByUserUrl: async () => null,
+      findByUrl: async () => null,
       findById: async () => null,
       countPendingByUser: async () => 0,
       hasReadyVoiceSample: async () => true,
@@ -172,7 +172,7 @@ describe("POST /v1/submissions —— 并发上限 / 重复 / 入库", () => {
 
   it("returns existing submission when same user+url already submitted", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
-    const app = makeApp({ findByUserUrl: async () => ({ id: "sub-old", status: "submitted" }) });
+    const app = makeApp({ findByUrl: async () => ({ id: "sub-old", status: "submitted" }) });
     const res = await app.request("/v1/submissions", {
       method: "POST",
       headers: { "content-type": "application/json" },

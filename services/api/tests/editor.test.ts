@@ -60,7 +60,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
     },
     submissions: {
       create: async () => ({ id: "sub-1" }),
-      findByUserUrl: async () => null,
+      findByUrl: async () => null,
       findById: async () => null,
       countPendingByUser: async () => 0,
       hasReadyVoiceSample: async () => true,

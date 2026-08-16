@@ -149,7 +149,8 @@ export const submissions = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("submissions_user_url").on(t.userId, t.url)],
+  // 同 URL 全局唯一（确定性 ID 同 URL 同 ID；任何人重复提交同一分享链接都拒绝）
+  (t) => [uniqueIndex("submissions_url").on(t.url)],
 );
 
 /** AI 平台嘉宾库：品牌声线宿主（跨期统一的 AI 受访嘉宾）。
