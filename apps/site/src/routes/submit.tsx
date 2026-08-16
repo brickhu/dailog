@@ -1,4 +1,4 @@
-import { A, useSearchParams } from "@solidjs/router";
+import { A } from "@solidjs/router";
 import { createSignal, createEffect, onMount, Show } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
@@ -8,7 +8,6 @@ import { Button } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../components/auth-gate";
 import Recorder from "../components/recorder";
-import { EpisodeCover } from "../components/episode-cover";
 
 // 投稿流程（本质版，2026-08-13）：
 //   input   输入态：分享链接（前端基本 http/https 校验）→ [继续]
@@ -17,7 +16,7 @@ import { EpisodeCover } from "../components/episode-cover";
 // 服务端只做 URL 合法性 + 触达性检查，不做内容采集；制作由编辑本地 Agent 完成。
 // 端点在 site 站内代理（/v1/*），会话经 cookie；未登录跳统一登录页
 
-type Step = "input" | "confirm" | "done";
+type Step = "confirm" | "done";
 
 const styles = stylex.create({
   page: {
@@ -136,26 +135,12 @@ const styles = stylex.create({
   },
 });
 
-/** 前端基本校验：http/https + 有域名（后端仍会做完整合法性 + 触达性检查） */
-function isUrlLike(input: string): boolean {
-  try {
-    const url = new URL(input);
-    return (url.protocol === "http:" || url.protocol === "https:") && url.hostname.includes(".");
-  } catch {
-    return false;
-  }
-}
-
 export default function SubmitPage() {
   const { t, locale } = useI18n();
-  const [params] = useSearchParams<{ url?: string }>();
   // 初始步骤：?url=（导入弹框跳转，已做输入/检测）→ 首帧即第二步，不渲染 URL 输入
-  const [step, setStep] = createSignal<Step>(params.url?.startsWith("http") ? "confirm" : "input");
+  const [step, setStep] = createSignal<Step>("confirm");
   const [url, setUrl] = createSignal("");
-  const urlInvalid = () => url().trim().length > 0 && !isUrlLike(url().trim());
   const [existing, setExisting] = createSignal<string | null>(null);
-  // 重复投稿时该投稿已生成的节目（published 才有；横条展示用）
-  const [existingEpisode, setExistingEpisode] = createSignal<{ id: string; slug: string; title: string | null; coverUrl: string | null; number: number | null } | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   // 人设（可选）+ 采样（必填；已有采样自动填充可沿用）
   const [callName, setCallName] = createSignal("");   // callNameInEpisode：本次节目称呼（默认 displayName）
@@ -166,38 +151,8 @@ export default function SubmitPage() {
   const [voiceBlob, setVoiceBlob] = createSignal<Blob | null>(null);
   const [submitting, setSubmitting] = createSignal(false);
 
-  // 输入 URL 防抖预检：同链接已投稿/已生成节目 → 立即提示（无需等到确认投稿）
-  let checkTimer: ReturnType<typeof setTimeout> | undefined;
-  const checkUrlDuplicate = (value: string) => {
-    clearTimeout(checkTimer);
-    if (!isUrlLike(value)) {
-      setExisting(null);
-      setExistingEpisode(null);
-      return;
-    }
-    checkTimer = setTimeout(async () => {
-      try {
-        const res = await fetch("/v1/submissions/check", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ url: value.trim() }),
-        });
-        const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-        if (data?.existing) {
-          setExisting(String((data as { status?: string })?.status ?? "submitted"));
-          const ep = (data as { episode?: { id?: string; slug?: string; title?: string | null; coverUrl?: string | null; number?: number | null } | null })?.episode;
-          setExistingEpisode(ep && ep.slug ? { id: ep.id ?? "", slug: ep.slug, title: ep.title ?? null, coverUrl: ep.coverUrl ?? null, number: ep.number ?? null } : null);
-        } else {
-          setExisting(null);
-          setExistingEpisode(null);
-        }
-      } catch { /* 网络失败静默：提交时仍会兜底检测 */ }
-    }, 500);
-  };
-
   onMount(() => {
-    // 导入弹框跳转预填：/import?url=…（弹框已做可达性检测）——
-    // 预填后跳过 URL 输入那一步，直接进入第二步（确认投稿/配置）
+    // 导入弹框跳转预填：/import?url=…（URL 输入/检测均在弹框完成）
     try {
       const params = new URLSearchParams(window.location.search);
       const prefill = params.get("url");
@@ -278,8 +233,6 @@ export default function SubmitPage() {
       if (!res.ok) {
         if (data?.existing) {
           setExisting(String((data as { status?: string })?.status ?? "submitted"));
-          const ep = (data as { episode?: { id?: string; slug?: string; title?: string | null; coverUrl?: string | null; number?: number | null } | null })?.episode;
-          setExistingEpisode(ep && ep.slug ? { id: ep.id ?? "", slug: ep.slug, title: ep.title ?? null, coverUrl: ep.coverUrl ?? null, number: ep.number ?? null } : null);
           return;
         }
         // 错误码映射友好文案；未知码显示后端 detail
@@ -304,57 +257,16 @@ export default function SubmitPage() {
           <Title>{t("submit.title")} · dailog</Title>
         <h1 {...stylex.props(styles.title)}>{t("submit.title")}</h1>
 
-        {/* 1. 输入态：分享链接（前端基本校验）→ [继续] */}
-        <Show when={step() === "input"}>
+        {/* 2. 确认投稿态：人设编辑（可选）+ 声音采样（必填）→ [确认投稿] */}
+        <Show when={step() === "confirm"}>
           <div {...stylex.props(layouts.fullRow, styles.card)}>
-            <p {...stylex.props(styles.stepTitle)}>{t("submit.step1")}</p>
-            <p {...stylex.props(styles.stepDesc)}>{t("submit.step1Desc")}</p>
-            <input
-              {...stylex.props(styles.input)}
-              type="url"
-              placeholder={t("submit.urlPlaceholder")}
-              value={url()}
-              onInput={(e) => { setUrl(e.currentTarget.value); checkUrlDuplicate(e.currentTarget.value); }}
-            />
-            <Show when={urlInvalid()}>
-              <p {...stylex.props(styles.error)}>{t("submit.error.invalid_url")}</p>
-            </Show>
+            {/* 提交时撞重复（后端返回 existing）：提示 + 我的投稿入口 */}
             <Show when={existing()}>
               <p {...stylex.props(styles.error)}>{t("submit.existing")}</p>
-              {/* 已生成节目横条：点击进详情 */}
-              <Show when={existingEpisode()}>
-                <A href={`/episode/${existingEpisode()!.slug}`} {...stylex.props(styles.epBar)}>
-                  <div style={{ width: "48px", height: "48px", "flex-shrink": "0" }}>
-                    <EpisodeCover id={existingEpisode()!.id} coverUrl={existingEpisode()!.coverUrl} style={{ width: "48px", height: "48px" }} />
-                  </div>
-                  <div {...stylex.props(styles.epText)}>
-                    <p {...stylex.props(styles.epTitle)}>{existingEpisode()!.title || t("common.unnamed")}</p>
-                    <p {...stylex.props(styles.epMeta)}>
-                      {t("submit.episodeNumber", { number: existingEpisode()!.number ?? "?" })} ·{" "}
-                      <span {...stylex.props(styles.epListen)}>{t("submit.viewEpisode")}</span>
-                    </p>
-                  </div>
-                </A>
-              </Show>
               <p {...stylex.props(styles.hint)}>
                 <A href="/me/submits">{t("submit.viewSubmissions")}</A>
               </p>
             </Show>
-            <Show when={error()}>
-              <p {...stylex.props(styles.error)}>{error()}</p>
-            </Show>
-            <div {...stylex.props(styles.actions)}>
-              <Button onClick={() => setStep("confirm")} disabled={urlInvalid() || !url().trim() || existing() !== null}>
-                {t("submit.import")}
-              </Button>
-              <A href="/"><Button appear="ghost">{t("submit.backHome")}</Button></A>
-            </div>
-          </div>
-        </Show>
-
-        {/* 2. 确认投稿态：人设编辑（可选）+ 声音采样（必填）→ [确认投稿] */}
-        <Show when={step() === "confirm"}>
-          <div {...stylex.props(layouts.fullRow, styles.card)}>
             <p {...stylex.props(styles.stepTitle)}>{t("submit.step2")}</p>
             <p {...stylex.props(styles.stepDesc)}>{t("submit.step2Desc")}</p>
             <label {...stylex.props(styles.label)}>{t("submit.callName")}</label>
@@ -396,7 +308,7 @@ export default function SubmitPage() {
               <Button onClick={confirmSubmit} disabled={submitting() || !hasSample()}>
                 {submitting() ? t("submit.submitting") : t("submit.confirm")}
               </Button>
-              <Button appear="ghost" onClick={() => { setStep("input"); setError(null); }}>{t("common.cancel")}</Button>
+              <A href="/"><Button appear="ghost">{t("common.cancel")}</Button></A>
             </div>
           </div>
         </Show>
