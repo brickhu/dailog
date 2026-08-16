@@ -78,6 +78,7 @@ dailog/
 
 ## 技术要点速查
 
+- **任务开始先读 MEMORY.md（如已读取过就略过）**——跨会话长期记忆见该文件
 - **前端数据获取原则（硬性约定）**：非必要不要把数据获取逻辑放进 `onMount`。
   优先顺序：`createAsync`/`createResource`（配合 Suspense 骨架）→ `createEffect`
   （依赖驱动，query/信号变化自动刷新）→ `onMount`（仅事件绑定等一次性副作用）。
