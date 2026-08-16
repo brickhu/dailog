@@ -1,4 +1,4 @@
-import { Show, Suspense, onMount } from "solid-js";
+import { Show, Suspense, createEffect, onMount } from "solid-js";
 import { createAsync, useParams } from "@solidjs/router";
 import { Meta, Title } from "@solidjs/meta";
 import { CoverPlayer } from "../../components/cover-player";
@@ -61,8 +61,8 @@ const styles = stylex.create({
 });
 
 // cache() 在 lib/episode-cache.ts（列表页 hover 预取共用同一缓存）：
-// SSR 渲染前预取（head 先于流式 body flush——OG 标签必须此时已有数据，社交爬虫只读 SSR HTML）
-// route.preload：SSR 渲染前预取节目数据（cache 命中 → createAsync 首帧即有值，head 的 OG 标签完整）
+// route.preload 仅客户端 hover/导航预取（SSR 端 SolidStart 不调用）——SSR 数据
+// 由 createAsync 的 fetch 在渲染期间真实执行，Suspense resolve 后 head OG 完整。
 export const route = {
   preload: ({ params }: { params: { slug: string } }) => {
     void getEpisodeCached(params.slug);
@@ -111,6 +111,16 @@ export default function EpisodeDetailPage() {
       .catch(() => playback.setQueue([first]));
   });
 
+  // 旧 /episode/<uuid> 链接：API 按 id 兜底命中（ep.slug ≠ URL 参数）→ 客户端跳转新路径。
+  // 放组件层而非 fetcher：SSR 返回的数据客户端 hydration 直接复用（fetcher 不再执行），
+  // createEffect 在 hydration 后执行一次即触发跳转。
+  createEffect(() => {
+    const e = ep();
+    if (typeof window !== "undefined" && e && e.slug !== params.slug) {
+      window.location.replace(`/episode/${e.slug}`);
+    }
+  });
+
   // 本页节目的播放状态与操作：本页节目是当前 → 暂停/继续；否则 → 播放本页（切歌）
   const thisEpisode = () => (ep() ? asQueue(ep()!) : null);
   const isThisPlaying = () => {
@@ -127,21 +137,25 @@ export default function EpisodeDetailPage() {
   return (
     <div {...stylex.props(layouts.page)}>
       <div {...stylex.props(layouts.containerMd)}>
-      <Title>{ep()?.title || "dailog"}</Title>
-      {/* OG 标签：社交分享卡片（og:image = 封面，各平台抓取展示） */}
-      <Meta property="og:title" content={ep()?.title || "dailog"} />
-      <Meta property="og:type" content="article" />
-      <Meta property="og:url" content={`${env.siteBaseUrl}/episode/${ep()?.slug ?? ""}`} />
-      <Meta property="og:description" content={ep()?.description?.slice(0, 200) || ""} />
-      <Show when={ep() && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
-        <Meta property="og:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
-      </Show>
-      {/* 数据挂起（客户端导航/刷新）→ 详情页骨架；数据为空 → 未找到 */}
+      {/* 兜底标题：数据未就绪/404 时 head 也有 title（Suspense 内数据到达后 cascading 替换） */}
+      <Title>dailog</Title>
+      {/* OG 标签：社交分享卡片（og:image = 封面，各平台抓取展示）。
+          ⚠️ 必须在 Suspense 内（数据就绪后）渲染——SSR 端 injectAssets 在渲染完成、shell
+          输出前执行，挂起期间注册的 fallback 会被真实数据替换；放 Suspense 外则 head
+          永远只有空值（社交爬虫读原始 HTML 拿不到标题/封面）。 */}
       <Suspense fallback={<DetailSkeleton />}>
       <Show
         when={ep()}
         fallback={<div {...stylex.props(styles.notFound)}>{t("episode.notFound")}</div>}
       >
+        <Title>{ep()!.title || "dailog"}</Title>
+        <Meta property="og:title" content={ep()!.title || "dailog"} />
+        <Meta property="og:type" content="article" />
+        <Meta property="og:url" content={`${env.siteBaseUrl}/episode/${ep()!.slug ?? ""}`} />
+        <Meta property="og:description" content={ep()!.description?.slice(0, 200) || ""} />
+        <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
+          <Meta property="og:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
+        </Show>
         <div {...stylex.props(layouts.fullRow, styles.body)}>
           <div {...stylex.props(styles.coverCol)}>
             <CoverPlayer

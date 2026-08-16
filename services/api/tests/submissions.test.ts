@@ -36,6 +36,7 @@ function makeApp(repo: Partial<Repos["submissions"]> = {}) {
       createPublished: async () => ({ id: "ep-1", number: 1, slug: "abc12345" }),
       getPublicAudioKey: async () => null,
       getPublicCoverKey: async () => null,
+      getPublicEpisode: async () => null,
       getById: async () => null,
       updatePublished: async () => {},
       listPublished: async () => [],

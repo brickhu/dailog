@@ -35,6 +35,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       createPublished: async () => ({ id: "ep-1", number: 7, slug: "abc12345" }),
       getPublicAudioKey: async () => null,
       getPublicCoverKey: async () => null,
+      getPublicEpisode: async () => null,
       getById: async () => null,
       updatePublished: async () => {},
       listPublished: async () => [],

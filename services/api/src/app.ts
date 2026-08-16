@@ -233,6 +233,23 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
     return c.json(await deps.repo.episodes.listRecommended({ lang, limit, exclude: exclude.length > 0 ? exclude : undefined }));
   });
 
+  // 单集公开详情（详情页 SSR head OG 用）：按 slug 或 id 查，仅已发布公开。
+  // 注册在 recommended 之后（同前缀具体静态路径优先；参数路由不干扰多段 /cover /audio /stats）
+  const publicEpisodeRoute = createRoute({
+    method: "get",
+    path: "/v1/public/episodes/:idOrSlug",
+    request: { params: z.object({ idOrSlug: z.string().min(1) }).openapi("IdOrSlugParam") },
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "公开详情（title/cover/sourceUrl/transcript/主持人）" },
+      404: { content: { "application/json": { schema: ErrorResp } }, description: "节目不存在或未公开" },
+    },
+  });
+  app.openapi(publicEpisodeRoute, (async (c) => {
+    const ep = await deps.repo.episodes.getPublicEpisode(c.req.param("idOrSlug"));
+    if (!ep) return c.json({ error: "not_found" }, 404);
+    return c.json(ep);
+  }) as RouteHandler<typeof publicEpisodeRoute, AuthEnv>);
+
   // 站点头部数据（首页宣传语）——公开
   app.openapi(createRoute({
     method: "get",

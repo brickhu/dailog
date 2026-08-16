@@ -145,6 +145,24 @@ export interface EpisodesRepo {
   /** 公开读音频（主站免鉴权端点用）：仅已发布且公开；
    *  version = 发布时间（ETag 用） */
   getPublicAudioKey(episodeId: string): Promise<{ audioKey: string; version: string } | null>;
+  /** 公开详情（按 slug 或 id 查，仅已发布且公开）：详情页 SSR head OG 用——
+   *  sourceUrl = 原始对话链接（回退投稿 url），含主持人名/称呼/台本 */
+  getPublicEpisode(idOrSlug: string): Promise<{
+    id: string;
+    slug: string;
+    title: string | null;
+    description: string | null;
+    durationSeconds: number | null;
+    publishedAt: Date | null;
+    coverUrl: string | null;
+    language: string;
+    audioUrl: string | null;
+    sourceUrl: string | null;
+    transcript: string | null;
+    username: string;
+    displayName: string;
+    callName: string | null;
+  } | null>;
   /** 播放/完播计数 +1（upsert；公开播放器上报） */
   recordStat(episodeId: string, type: "play" | "completion"): Promise<void>;
   /** 公开读取播放/完播/点赞/收藏统计（未统计过 → 0；like/favorite 计数实时 COUNT） */
@@ -813,6 +831,44 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         const row = rows[0];
         // version = 发布时间（ETag 用——重新制作发布是新 episode，内容变化 → 浏览器重新拉取）
         return row && row.audioUrl ? { audioKey: row.audioUrl, version: (row.publishedAt ?? new Date(0)).toISOString() } : null;
+      },
+      /** 公开详情（详情页 SSR OG 用）：先按 slug，命中即返回；
+       *  旧 /episode/<uuid> 链接再按 id（uuid 列——非 uuid 输入直接跳过，避免 22P02） */
+      async getPublicEpisode(idOrSlug) {
+        const fields = {
+          id: schema.episodes.id,
+          slug: schema.episodes.slug,
+          title: schema.episodes.title,
+          description: schema.episodes.description,
+          durationSeconds: schema.episodes.durationSeconds,
+          publishedAt: schema.episodes.publishedAt,
+          coverUrl: schema.episodes.coverUrl,
+          language: schema.episodes.language,
+          audioUrl: schema.episodes.audioUrl,
+          transcript: schema.episodes.transcript,
+          sourceUrl: sql<string>`COALESCE(${schema.episodes.rawConversationUrl}, ${schema.submissions.url})`,
+          username: schema.authUsers.name,
+          displayName: schema.profiles.displayName,
+          callName: schema.submissions.callName,
+        };
+        const base = () => db.select(fields)
+          .from(schema.episodes)
+          .innerJoin(schema.submissions, eq(schema.submissions.id, schema.episodes.submissionId))
+          .innerJoin(schema.profiles, eq(schema.profiles.id, schema.episodes.userId))
+          .innerJoin(schema.authUsers, eq(schema.authUsers.id, schema.profiles.id));
+        const bySlug = await base().where(and(
+          eq(schema.episodes.status, "published"),
+          eq(schema.episodes.isPublic, true),
+          eq(schema.episodes.slug, idOrSlug),
+        )).limit(1);
+        if (bySlug.length) return bySlug[0];
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug)) return null;
+        const byId = await base().where(and(
+          eq(schema.episodes.status, "published"),
+          eq(schema.episodes.isPublic, true),
+          eq(schema.episodes.id, idOrSlug),
+        )).limit(1);
+        return byId[0] ?? null;
       },
       /** 播放/完播计数 +1（upsert 行；仅已发布公开节目——调用方先校验存在） */
       async recordStat(episodeId, type: "play" | "completion") {
