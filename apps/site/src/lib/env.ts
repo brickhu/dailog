@@ -34,14 +34,37 @@ export const env = {
     (import.meta.env.DEV ? "http://localhost:3000" : "https://dailog.fm"),
 };
 
-/** 节目封面 URL：R2 key（covers/ 前缀）→ 公开端点；外链（历史 Pexels 数据）→ 直用 */
-export function episodeCoverUrl(id: string, coverUrl: string | null | undefined): string | null {
+/** 节目封面 URL：R2 key（covers/ 前缀）→ 公开端点；外链（历史 Pexels 数据）→ 直用。
+ *  w 可选（160/320/480/640/960/1280）：请求缩略规格（服务端 sharp 居中裁方）——
+ *  小尺寸展示（播放条 48px 等）直接指定，避免拉原图 */
+export function episodeCoverUrl(
+  id: string,
+  coverUrl: string | null | undefined,
+  w?: number,
+): string | null {
   if (!coverUrl) return null;
   if (coverUrl.startsWith("covers/")) {
-    return `${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/episodes/${id}/cover`;
+    const base = `${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/episodes/${id}/cover`;
+    return w ? `${base}?w=${w}` : base;
   }
   return coverUrl;
 }
+
+/** 封面响应式规格：320/640/960/1280（2x 屏覆盖到 640px 显示宽） */
+export const COVER_SRC_WIDTHS = [320, 640, 960, 1280] as const;
+
+/** 封面 srcset（仅 R2 封面；外链返回 null——调用处只用 src）：
+ *  浏览器按 sizes 选最合适规格，避免每张卡都拉 1440 原图 */
+export function episodeCoverSrcset(id: string, coverUrl: string | null | undefined): string | null {
+  if (!coverUrl || !coverUrl.startsWith("covers/")) return null;
+  return COVER_SRC_WIDTHS.map((w) => `${episodeCoverUrl(id, coverUrl, w)} ${w}w`).join(", ");
+}
+
+/** 卡片封面 sizes：桌面卡 ~270px（2x≈540）/ 平板 ~213（2x≈426）/ 手机 ~171（2x≈342） */
+export const CARD_COVER_SIZES = "(max-width: 640px) 342px, (max-width: 1024px) 426px, 540px";
+
+/** 详情页大封面 sizes：min(380px, 40vw)（2x≈760）/ 手机 max 280（2x≈560） */
+export const DETAIL_COVER_SIZES = "(max-width: 640px) 560px, 760px";
 
 export type SiteEnv = typeof env;
 

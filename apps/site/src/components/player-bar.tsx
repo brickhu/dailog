@@ -112,7 +112,8 @@ export function PlayerBar() {
       <div {...stylex.props(styles.bar)}>
         <A href={`/episode/${ep()!.slug}`}>
           <Show when={episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
-            <img src={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} alt="" {...stylex.props(styles.cover)} />
+            {/* 播放条封面 ~48px：直接请求 160 缩略规格，不拉原图 */}
+            <img src={episodeCoverUrl(ep()!.id, ep()!.coverUrl, 160)!} alt="" {...stylex.props(styles.cover)} />
           </Show>
         </A>
         <div {...stylex.props(styles.info)}>

@@ -4,7 +4,7 @@
 import { createSignal, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
-import { episodeCoverUrl } from "../lib/env";
+import { DETAIL_COVER_SIZES, episodeCoverSrcset, episodeCoverUrl } from "../lib/env";
 import type { QueueEpisode } from "../lib/playback";
 
 const styles = stylex.create({
@@ -82,7 +82,9 @@ export function CoverPlayer(props: {
           <div {...stylex.props(styles.placeholder)}>🎙</div>
         </Show>
         <img
-          src={src()!}
+          src={episodeCoverUrl(props.episode.id, props.episode.coverUrl, 960)!}
+          srcset={episodeCoverSrcset(props.episode.id, props.episode.coverUrl) ?? undefined}
+          sizes={DETAIL_COVER_SIZES}
           alt={props.episode.title || ""}
           onLoad={() => setState("loaded")}
           onError={() => setState("error")}

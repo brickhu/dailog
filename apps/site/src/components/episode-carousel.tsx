@@ -9,7 +9,7 @@ import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { usePlayback, type QueueEpisode } from "../lib/playback";
-import { episodeCoverUrl } from "../lib/env";
+import { CARD_COVER_SIZES, episodeCoverSrcset, episodeCoverUrl } from "../lib/env";
 import { getEpisodeCached } from "../lib/episode-cache";
 
 const styles = stylex.create({
@@ -293,7 +293,14 @@ export function EpisodeCarousel(props: {
                       onPointerEnter={() => void getEpisodeCached(ep.slug)}
                     >
                       <Show when={episodeCoverUrl(ep.id, ep.coverUrl)} fallback={<div {...stylex.props(styles.coverFallback)}>🎙</div>}>
-                        <img src={episodeCoverUrl(ep.id, ep.coverUrl)!} alt={ep.title || ""} {...stylex.props(styles.cover)} />
+                        {/* srcset/sizes：按视口选规格（最大 1280w），不拉原图 */}
+                        <img
+                          src={episodeCoverUrl(ep.id, ep.coverUrl, 640)!}
+                          srcset={episodeCoverSrcset(ep.id, ep.coverUrl) ?? undefined}
+                          sizes={CARD_COVER_SIZES}
+                          alt={ep.title || ""}
+                          {...stylex.props(styles.cover)}
+                        />
                       </Show>
                       <p {...stylex.props(styles.title)}>{ep.title || t("common.unnamed")}</p>
                       <p {...stylex.props(styles.meta)}>

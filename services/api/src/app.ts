@@ -77,10 +77,19 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
   // 主站公开端点（免鉴权）：仅已发布公开节目可读——必须在鉴权中间件之前注册
   // id 列是 uuid 类型：非法格式（旧短 id/任意字符串）直接 404，避免 Postgres 抛 22P02 → 500
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  // 封面缩放规格（?w=）：白名单防滥用；响应式图片按视口选规格，避免每张卡拉原图
+  const COVER_WIDTHS = new Set([160, 320, 480, 640, 960, 1280]);
+  // 缩放结果内存缓存（key `cover:{id}:{w}`；原图已有磁盘缓存，缩放结果小、命中即毫秒）
+  const coverResizeCache = new Map<string, { data: Uint8Array; total: number }>();
   app.openapi(createRoute({
     method: "get",
     path: "/v1/public/episodes/:id/cover",
-    request: { params: IdParam },
+    request: {
+      params: IdParam,
+      query: z.object({
+        w: z.string().optional().openapi({ description: "可选缩放宽度（160/320/480/640/960/1280，居中裁方 JPEG q80）；缺省返回原图" }),
+      }),
+    },
     responses: {
       200: { content: { "image/jpeg": { schema: z.any() } }, description: "节目封面图（公开，缓存 86400s）" },
       404: { content: { "application/json": { schema: ErrorResp } }, description: "封面不存在" },
@@ -89,7 +98,28 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
     if (!UUID_RE.test(c.req.param("id"))) return c.json({ error: "not_found" }, 404);
     const cover = await deps.repo.episodes.getPublicCoverKey(c.req.param("id"));
     if (!cover) return c.json({ error: "not_found" }, 404);
+    const wRaw = c.req.query("w");
+    const w = wRaw && COVER_WIDTHS.has(Number(wRaw)) ? Number(wRaw) : null;
     try {
+      if (w) {
+        // 缩放规格：内存缓存命中直出；未命中读原图 → sharp 居中裁方 → 缓存
+        const cacheKey = `cover:${c.req.param("id")}:${w}`;
+        const hit = coverResizeCache.get(cacheKey);
+        if (hit) {
+          return new Response(hit.data as unknown as BodyInit, {
+            headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" },
+          });
+        }
+        const { data } = await deps.voice.storage.get(cover);
+        if (!data) return c.json({ error: "not_found" }, 404);
+        const { default: sharp } = await import("sharp");
+        const resized = await sharp(data).resize(w, w, { fit: "cover" }).jpeg({ quality: 80 }).toBuffer();
+        if (coverResizeCache.size > 200) coverResizeCache.clear(); // 简单上限兜底
+        coverResizeCache.set(cacheKey, { data: new Uint8Array(resized), total: resized.length });
+        return new Response(resized as unknown as BodyInit, {
+          headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" },
+        });
+      }
       const { data } = await deps.voice.storage.get(cover);
       if (!data) return c.json({ error: "not_found" }, 404);
       return new Response(data as unknown as BodyInit, {
