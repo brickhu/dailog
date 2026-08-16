@@ -259,6 +259,24 @@ export const typography = stylex.create({
 // "A style value can only contain an array, string or number"）——typography.bodyMd
 // 的值（14px/400/1.5/body 字体）在此显式展开
 export const layouts = stylex.create({
+  // —— 应用壳（AppShell 框架层：导航/播放条固定，内容区独立滚动）——
+  shellRoot: {
+    position: "fixed",
+    top: "0",
+    left: "0",
+    width: "100vw",
+    height: "100vh",
+    display: "flex",
+    flexDirection: "column",
+    backgroundColor: colors.background,
+  },
+  shellContent: {
+    flex: "1",
+    minHeight: "0", // 允许 flex 子项收缩，内容区独立滚动
+    overflowY: "auto",
+    overscrollBehavior: "contain", // 滚动链限制在壳内
+  },
+
   // 页面根：全站统一（字号/颜色/背景/最小高度），内容横向防溢出。
   // 滚动由应用壳内容区承担（AppShell），此处不声明 overflow-y 滚动。
   page: {

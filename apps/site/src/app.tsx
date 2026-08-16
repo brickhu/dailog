@@ -4,7 +4,7 @@ import { createEffect, Show, Suspense, useContext, type JSX } from "solid-js";
 import { MetaProvider } from "@solidjs/meta";
 import { getRequestEvent } from "solid-js/web";
 import * as stylex from "@stylexjs/stylex";
-import { colors } from "@dailogues/ui/theme.stylex";
+import { layouts } from "@dailogues/ui/theme.stylex";
 import { I18nProvider, detectLocale } from "@dailogues/i18n";
 import { CardGridSkeleton, DetailSkeleton, ListSkeleton } from "./components/route-skeletons";
 import { PlaybackProvider } from "./lib/playback";
@@ -42,28 +42,9 @@ function RouterOutlet(props: { children: JSX.Element }) {
 }
 
 // 消费端应用根：文件路由（src/routes/* 自动生成路由）+ 语言上下文 + 全局播放器。
-// 应用壳布局：fixed 100vw×100vh 容器（导航/播放条固定），页面内容在壳内内容区滚动——
-// 路由切换、骨架屏、滚动行为都稳定在壳内，不引发页面级跳动。
+// 应用壳布局（layouts.shellRoot/shellContent）：fixed 100vw×100vh 容器（导航/播放条
+// 固定），页面内容在壳内内容区滚动——路由切换、骨架屏、滚动行为都稳定在壳内。
 // SSR 首帧语言：由 request 的 accept-language/cookie 检测（entry-server 同步用于 <html lang>）
-const shell = stylex.create({
-  root: {
-    position: "fixed",
-    top: "0",
-    left: "0",
-    width: "100vw",
-    height: "100vh",
-    display: "flex",
-    flexDirection: "column",
-    backgroundColor: colors.background,
-  },
-  content: {
-    flex: "1",
-    minHeight: "0", // 允许 flex 子项收缩，内容区独立滚动
-    overflowY: "auto",
-    overscrollBehavior: "contain", // 滚动链限制在壳内
-  },
-});
-
 function AppShell(props: { children: JSX.Element }) {
   const location = useLocation();
   let contentRef: HTMLDivElement | undefined;
@@ -73,10 +54,10 @@ function AppShell(props: { children: JSX.Element }) {
     if (contentRef) contentRef.scrollTop = 0;
   });
   return (
-    <div {...stylex.props(shell.root)}>
+    <div {...stylex.props(layouts.shellRoot)}>
       {/* 全局导航单实例（路由切换不重挂载——避免会话/头像重复加载跳动） */}
       <SiteNav />
-      <div ref={contentRef} {...stylex.props(shell.content)}>
+      <div ref={contentRef} {...stylex.props(layouts.shellContent)}>
         <RouterOutlet>{props.children}</RouterOutlet>
         <Footer />
       </div>
