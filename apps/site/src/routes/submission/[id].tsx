@@ -6,15 +6,13 @@ import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
-import { AuthGate } from "../../components/auth-gate";
+
 
 interface SubmissionDetail {
   id: string;
   url: string;
   title: string | null;
-  callName: string | null;
   status: string;
-  rejectedReason: string | null;
   createdAt: string;
   episode: {
     id: string;
@@ -99,7 +97,7 @@ function SubmissionDetailPage() {
   const params = useParams<{ id: string }>();
   const data = createAsync<SubmissionDetail | null>(async () => {
     if (typeof window === "undefined") return null; // SSR 首帧短路
-    const res = await fetch(`/v1/me/submissions/${params.id}`);
+    const res = await fetch(`/v1/public/submissions/${params.id}`);
     if (!res.ok) return null;
     return (await res.json()) as SubmissionDetail;
   });
@@ -163,9 +161,6 @@ function SubmissionDetailPage() {
                   {d().url}
                 </a>
               </p>
-              <Show when={d().status === "rejected" && d().rejectedReason}>
-                <p {...stylex.props(styles.reason)}>{t("meSubmits.rejectReason")}：{d().rejectedReason}</p>
-              </Show>
             </div>
           )}
         </Show>
@@ -175,10 +170,5 @@ function SubmissionDetailPage() {
 }
 
 export default function SubmissionDetailRoute() {
-  const params = useParams<{ id: string }>();
-  return (
-    <AuthGate redirect={`/submissions/${params.id}`}>
-      <SubmissionDetailPage />
-    </AuthGate>
-  );
+  return <SubmissionDetailPage />;
 }

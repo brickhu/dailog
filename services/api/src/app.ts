@@ -1,4 +1,5 @@
 import { createRoute, OpenAPIHono, z, type RouteHandler } from "@hono/zod-openapi";
+import type { Context } from "hono";
 import { swaggerUI } from "@hono/swagger-ui";
 import type { Env } from "./config/env";
 import { createAuthMiddleware, type AuthEnv, type AuthLike } from "./middleware/auth";
@@ -269,6 +270,22 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
     const episodes = await deps.repo.episodes.listByGuest(id);
     return c.json({ guest, episodes });
   }) as RouteHandler<typeof guestRoute, AuthEnv>);
+
+  // 投稿公开详情（公开页 /submission/<id>）：仅非敏感字段（URL/标题/状态/节目）
+  const publicSubmissionRoute = createRoute({
+    method: "get",
+    path: "/v1/public/submissions/:id",
+    request: { params: IdParam },
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "投稿公开详情" },
+      404: { content: { "application/json": { schema: ErrorResp } }, description: "投稿不存在" },
+    },
+  });
+  app.openapi(publicSubmissionRoute, (async (c: Context) => {
+    const row = await deps.repo.submissions.getPublicById(c.req.param("id")!);
+    if (!row) return c.json({ error: "not_found" }, 404);
+    return c.json(row);
+  }) as unknown as RouteHandler<typeof publicSubmissionRoute, AuthEnv>);
 
   app.use("/v1/*", createAuthMiddleware(deps.auth, async (userId) => (await deps.repo.episodes.getRole?.(userId)) ?? null));
 

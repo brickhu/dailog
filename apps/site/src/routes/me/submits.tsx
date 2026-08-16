@@ -127,7 +127,7 @@ function SubmissionsList() {
       >
         <For each={submissions()}>
           {(sub) => (
-            <A href={`/submissions/${sub.id}`} {...stylex.props(styles.card, styles.cardLink)}>
+            <A href={`/submission/${sub.id}`} {...stylex.props(styles.card, styles.cardLink)}>
               <div {...stylex.props(styles.subTitle)}>
                 {sub.title || t("common.unnamed")}
                 <span {...stylex.props(styles.badge)}>{statusLabel(sub.status)}</span>
