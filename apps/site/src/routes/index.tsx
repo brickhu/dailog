@@ -434,6 +434,7 @@ export default function HomePage() {
   const curPage = () => Math.max(0, Math.min(page(), pageCount() - 1));
 
   return (
+    <div {...stylex.props(layouts.page)}>
       <div {...stylex.props(layouts.containerLg)}>
       <section {...stylex.props(layouts.fullRow, styles.hero)}>
         <h1 {...stylex.props(styles.tagline)}>{t("home.hero.tagline")}</h1>
@@ -448,6 +449,7 @@ export default function HomePage() {
         <div {...stylex.props(styles.listTitle)}>{t("home.recommended")}</div>
         <A href="/discover" {...stylex.props(styles.moreLink)}>{t("home.hero.browse")}</A>
       </div>
+    </div>
       <div {...stylex.props(layouts.fullRow)}>
       <Show
         when={list()?.length}

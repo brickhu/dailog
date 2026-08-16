@@ -106,6 +106,7 @@ export default function ChannelPage() {
   );
 
   return (
+    <div {...stylex.props(layouts.page)}>
       <div {...stylex.props(layouts.containerSm)}>
         <div {...stylex.props(layouts.fullRow)}>
         <Show
@@ -137,5 +138,6 @@ export default function ChannelPage() {
         </Show>
         </div>
       </div>
+    </div>
   );
 }

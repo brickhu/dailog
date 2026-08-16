@@ -7,8 +7,10 @@ import * as stylex from "@stylexjs/stylex";
 export default function Example() {
   if (!import.meta.env.DEV) return null;
   return (
+    <div {...stylex.props(layouts.page)}>
       <div {...stylex.props(layouts.containerFull)}>
       <Examples />
       </div>
+    </div>
   );
 }

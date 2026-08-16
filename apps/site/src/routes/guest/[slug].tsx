@@ -125,6 +125,7 @@ export default function GuestPage() {
   const data = createAsync<Awaited<ReturnType<typeof getGuest>>>(() => getGuestCached(params.slug));
 
   return (
+    <div {...stylex.props(layouts.page)}>
       <div {...stylex.props(layouts.containerSm)}>
         <div {...stylex.props(layouts.fullRow)}>
         <Show
@@ -167,5 +168,6 @@ export default function GuestPage() {
         </Show>
         </div>
       </div>
+    </div>
   );
 }

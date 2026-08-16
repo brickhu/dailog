@@ -149,6 +149,7 @@ export default function SubscribePage() {
   ];
 
   return (
+    <div {...stylex.props(layouts.page)}>
       <div {...stylex.props(layouts.containerLg)}>
         <Title>{t("subscribe.title")} · dailog</Title>
         <div {...stylex.props(layouts.fullRow, styles.title)}>{t("subscribe.title")}</div>
@@ -188,5 +189,6 @@ export default function SubscribePage() {
           </For>
         </div>
       </div>
+    </div>
   );
 }

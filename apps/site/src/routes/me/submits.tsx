@@ -107,6 +107,7 @@ function SubmissionsList() {
   };
 
   return (
+  <div {...stylex.props(layouts.page)}>
     <div {...stylex.props(layouts.containerSm)}>
       <div {...stylex.props(layouts.fullRow, styles.title)}>{t("meSubmits.title")}</div>
       <Show
@@ -141,6 +142,7 @@ function SubmissionsList() {
         </For>
       </Show>
     </div>
+  </div>
   );
 }
 

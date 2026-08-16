@@ -72,6 +72,7 @@ export default function FavoritesPage() {
 
   return (
       <AuthGate redirect="/me/favorites">
+      <div {...stylex.props(layouts.page)}>
         <div {...stylex.props(layouts.containerSm)}>
           <Title>{t("me.favorites")} · dailog</Title>
           <div {...stylex.props(layouts.fullRow, styles.title)}>{t("me.favorites")}</div>
@@ -92,6 +93,7 @@ export default function FavoritesPage() {
             </For>
           </Show>
         </div>
+      </div>
       </AuthGate>
   );
 }

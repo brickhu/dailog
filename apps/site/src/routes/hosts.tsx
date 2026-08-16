@@ -67,6 +67,7 @@ export default function HostsPage() {
   });
 
   return (
+    <div {...stylex.props(layouts.page)}>
       <div {...stylex.props(layouts.containerLg)}>
         <div {...stylex.props(layouts.fullRow, styles.title)}>{t("hosts.title")}</div>
         <Title>{t("hosts.title")} · dailog</Title>
@@ -91,5 +92,6 @@ export default function HostsPage() {
         </Suspense>
         </div>
       </div>
+    </div>
   );
 }

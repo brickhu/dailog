@@ -32,6 +32,7 @@ export default function LoginPage() {
   });
 
   return (
+    <div {...stylex.props(layouts.page)}>
       <div {...stylex.props(layouts.containerSm)}>
       <div {...stylex.props(layouts.fullRow)}>
       <LoginForm
@@ -44,6 +45,7 @@ export default function LoginPage() {
         redirect={{ allowedOrigins: [env.siteBaseUrl] }}
       />
       </div>
+    </div>
       </div>
   );
 }

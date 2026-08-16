@@ -140,6 +140,7 @@ function EpisodesList() {
   };
 
   return (
+  <div {...stylex.props(layouts.page)}>
     <div {...stylex.props(layouts.containerSm)}>
       <div {...stylex.props(layouts.fullRow, styles.title)}>{t("me.episodes")}</div>
       <Show
@@ -181,6 +182,7 @@ function EpisodesList() {
         </For>
       </Show>
     </div>
+  </div>
   );
 }
 

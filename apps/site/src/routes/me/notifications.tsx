@@ -90,6 +90,7 @@ function NotificationsList() {
   const typeLabel = (type: string) => t(`notif.type.${type}` as never);
 
   return (
+  <div {...stylex.props(layouts.page)}>
     <div {...stylex.props(layouts.containerSm)}>
       <div {...stylex.props(layouts.fullRow, styles.header)}>
         <div {...stylex.props(styles.title)}>{t("notif.title")}</div>
@@ -119,6 +120,7 @@ function NotificationsList() {
         </For>
       </Show>
     </div>
+  </div>
   );
 }
 

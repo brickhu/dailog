@@ -110,6 +110,7 @@ export default function MePage() {
 
   return (
       <AuthGate redirect="/me">
+      <div {...stylex.props(layouts.page)}>
         <div {...stylex.props(layouts.containerSm)}>
           <Title>{t("me.title")} · dailog</Title>
           <div {...stylex.props(layouts.fullRow, styles.title)}>{t("me.title")}</div>
@@ -136,6 +137,7 @@ export default function MePage() {
             </For>
           </div>
         </div>
+      </div>
       </AuthGate>
   );
 }

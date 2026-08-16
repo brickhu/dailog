@@ -122,6 +122,7 @@ export default function ForgotPasswordPage() {
   };
 
   return (
+    <div {...stylex.props(layouts.page)}>
       <div {...stylex.props(layouts.containerSm)}>
       <div {...stylex.props(layouts.fullRow, styles.card)}>
         <Title>找回密码 · dailog</Title>
@@ -159,6 +160,7 @@ export default function ForgotPasswordPage() {
           <A href="/login" {...stylex.props(styles.back)}>{t("forgot.backToLogin")}</A>
         </Show>
       </div>
+    </div>
       </div>
   );
 }

@@ -36,7 +36,9 @@ function RouterOutlet(props: { children: JSX.Element }) {
   const targetPath = () => (isRouting() && router?.pendingTarget ? router.pendingTarget.value : "");
   return (
     <Show when={isRouting()} fallback={<Suspense fallback={<CardGridSkeleton />}>{props.children}</Suspense>}>
-      <PageSkeleton path={targetPath()} />
+      <div {...stylex.props(layouts.page)}>
+        <PageSkeleton path={targetPath()} />
+      </div>
     </Show>
   );
 }

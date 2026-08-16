@@ -286,6 +286,17 @@ export const layouts = stylex.create({
     overflowX: "hidden",
   },
 
+  // —— 页面层（100vw）——
+  // 路由页面的顶层包装：位于 shellRoot 内 header 与 footer 之间，页面内容
+  // （container*）居中于其中。不承担字体/背景（shellRoot 已继承）。
+  page: {
+    width: "100vw",
+    flexShrink: "0", // shellRoot 纵向 flex 容器：内容超高时不被压缩
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center", // 子项（container*）横向居中；container 自带 margin auto 双保险
+  },
+
   // —— 内容容器（grid 布局）——
   // 全部采用 CSS Grid（桌面 12 列 / 平板 6 / 手机 3）。
   // 直接子项默认占 1 列 —— 常规全宽内容块须配合 fullRow（gridColumn: "span 12"，

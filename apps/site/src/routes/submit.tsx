@@ -294,6 +294,7 @@ export default function SubmitPage() {
 
   return (
       <AuthGate redirect="/submit">
+      <div {...stylex.props(layouts.page)}>
         <div {...stylex.props(layouts.containerSm)}>
           <Title>{t("submit.title")} · dailog</Title>
         <h1 {...stylex.props(styles.title)}>{t("submit.title")}</h1>
@@ -407,6 +408,7 @@ export default function SubmitPage() {
           </div>
         </Show>
         </div>
+      </div>
       </AuthGate>
   );
 }
