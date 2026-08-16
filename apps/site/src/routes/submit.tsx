@@ -1,4 +1,4 @@
-import { A } from "@solidjs/router";
+import { A, useSearchParams } from "@solidjs/router";
 import { createSignal, createEffect, onMount, Show } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
@@ -148,7 +148,9 @@ function isUrlLike(input: string): boolean {
 
 export default function SubmitPage() {
   const { t, locale } = useI18n();
-  const [step, setStep] = createSignal<Step>("input");
+  const [params] = useSearchParams<{ url?: string }>();
+  // 初始步骤：?url=（导入弹框跳转，已做输入/检测）→ 首帧即第二步，不渲染 URL 输入
+  const [step, setStep] = createSignal<Step>(params.url?.startsWith("http") ? "confirm" : "input");
   const [url, setUrl] = createSignal("");
   const urlInvalid = () => url().trim().length > 0 && !isUrlLike(url().trim());
   const [existing, setExisting] = createSignal<string | null>(null);
@@ -201,7 +203,6 @@ export default function SubmitPage() {
       const prefill = params.get("url");
       if (prefill && prefill.startsWith("http")) {
         setUrl(prefill);
-        setStep("confirm");
       }
     } catch { /* 静默 */ }
   });
