@@ -82,12 +82,13 @@ services:
     ports:
       - "3000:80"
       # HMR ws 固定端口（vinxi patch 支持 VINXI_HMR_PORT）——publish 后 OrbStack 提供 TLS，
-      # https 页面 wss 可连（随机端口无 TLS 会报 WebSocket connection failed）
-      - "24680:24680"
+      # https 页面 wss 可连（随机端口无 TLS 会报 WebSocket connection failed）。
+      # 注意：24680 被宿主 OrbStack（tcc-http）占用，映射冲突 → 用 24681
+      - "24681:24681"
     environment:
       ORB: "1"
       PORT: "80"
-      VINXI_HMR_PORT: "24680"
+      VINXI_HMR_PORT: "24681"
       # site 的 server functions（lib/db.ts）直连 postgres——容器内用服务名
       DATABASE_URL: postgres://dailogues:dailogues@postgres:5432/dailogues
       # 统一 VITE_ 一套（构建期注入；服务端代理转发与客户端共用）
