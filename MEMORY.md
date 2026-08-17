@@ -11,3 +11,4 @@
 - 同 pathname 不同 query 的客户端 navigate 不重挂载（onMount 不重跑）——用 createEffect 响应 query 变化
 - 浏览器端 API 请求必须走 site 同源代理（/v1/*），否则 SPA fallback 返回 200+HTML 导致登录态误判
 - 坑全集：developer-guide.md §1–§10（FOUC / transition / grid min-content / 壳布局 / HMR ws TLS / loadIcon / CORS 代理 / lazy props 等）
+- [2026-08-17] stylex media 规则输出顺序随全局规则集变化（不稳定）——重叠断点（min-width 链）的“后者覆盖”会被破坏（大断点排到小断点前 → 桌面回退小断点列数）；断点一律用互斥 range 区间（`@media (640px <= width < 1024px)` / `@media (width >= 1024px)`），顺序无关才可靠
