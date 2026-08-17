@@ -115,15 +115,21 @@ triggers:
 
 ```bash
 pnpm editor list                  # 待审队列（先到先审；⚠️无采样 = 无法克隆主持人音色）
-pnpm editor detail <submissionId> # URL/投稿人/主持人称呼(callName)/采样 transcript/已上线节目
+pnpm editor detail <submissionId> # URL/投稿人/主持人称呼(callName)/节目建议/采样 transcript/已上线节目
                                   # （采样在服务端 R2，无需下载本地；callName 2026-08-13 已修）
 ```
 
 ### ③ 采集 + 内容解码（`pnpm editor fetch <id>`）
 
-- 从投稿详情拿 URL → 拉取页面（UA 伪装、跟随重定向、30s 超时）→ 解码落盘草稿目录：
-  - `page.html`：原始 HTML；`page.txt`：清洗后正文；`dialogue.json`：提取的消息
-    `[{role: "user"|"assistant", content}]`
+- 从投稿详情拿 URL → **平台分派**（fetch 内置，2026-08-16 起）：
+  - **deepseek/doubao 分享 API 直取**（SSR 壳平台首选——见平台经验库，命中直接 dialogue.json）
+  - **chatgpt SSR 流解码**（对话在 React Router 流式数据里，不依赖 DOM 渲染）
+  - 其余：拉取页面（UA 伪装、跟随重定向、30s 超时）→ 解码落盘草稿目录：
+    - `page.html`：原始 HTML；`page.txt`：清洗后正文；`dialogue.json`：提取的消息
+      `[{role: "user"|"assistant", content}]`
+- **代理兜底（直连失败自动重试，2026-08-16 实测）**：直连超时/被封锁 → 自动探测本地 SOCKS5 代理
+  （env `ALL_PROXY`/`HTTPS_PROXY` 含 socks → macOS 系统代理 `scutil --proxy`）→
+  `curl --socks5-hostname` 重拉（DNS 也过代理，绕污染）。chatgpt.com 等被网络封锁的域名靠这条路径
 - **提取策略（自进化，三级，规则加载：本地优先 → 产物 fallback）**：
   1. **规则库命中**（host+pathPrefix → 选择器）→ 按规则提取（命中 hits 自动 +1 写回）
      - 优先 `.dailog-editor/rules.json`（自进化主文件）；本地缺失 → fallback 产物种子
@@ -165,10 +171,10 @@ pnpm editor detail <submissionId> # URL/投稿人/主持人称呼(callName)/采�
 
 | 平台 | 规则状态 | 选择器要点 |
 |---|---|---|
-| chatgpt | ✅ 已入库 | `div[data-message-author-role]`（是 div 不是 article）+ `.markdown` 正文 |
-| doubao | ✅ API 直取（2026-08-13 实测） | 静态 HTML 是 SSR 壳（`_ROUTER_DATA.shareInfo` 为空，对话不内嵌）。**分享接口**：`POST https://www.doubao.com/im/message/share/get`，body `{"share_id":"<thread id>"}`（UA 伪装 + Origin/Referer 分享页）→ `data.message_snapshot.message_list[]` 每条 `{user_type: 1=用户/2=AI, content: '{"text":"..."}'}`，按 `index_in_conv` 排序 → 转 `dialogue.json`（alice 变体 `/alice/message/share/get` 会报 710020202，用 im 变体） |
+| chatgpt | ✅ SSR 流解码内置（2026-08-16 实测） | 分享页对话**不在 DOM**，在 React Router 流式 SSR 引用编码（`streamController.enqueue("...")` + 字符串表压缩：dict 的 key/value 与 list 元素均为表索引、负值为 null、`['P', n]` 自引用防环）——fetch 已内置解码器。本机直连 chatgpt.com 被网络封锁（DNS 污染 + SNI 阻断）→ 自动走本地 SOCKS5 代理。DOM 规则（`div[data-message-author-role]` + `.markdown`）保留作解码未命中时的兜底 |
+| doubao | ✅ API 直取内置（2026-08-13 实测） | 静态 HTML 是 SSR 壳（`_ROUTER_DATA.shareInfo` 为空，对话不内嵌）。**分享接口**：`POST https://www.doubao.com/im/message/share/get`，body `{"share_id":"<thread id>"}`（UA 伪装 + Origin/Referer 分享页）→ `data.message_snapshot.message_list[]` 每条 `{user_type: 1=用户/2=AI, content: '{"text":"..."}'}`，按 `index_in_conv` 排序 → 转 `dialogue.json`（alice 变体 `/alice/message/share/get` 会报 710020202，用 im 变体） |
 | claude | 待沉淀 | 分享页内容在 JS 数据（CSS 提取不到）——浏览器兜底后按需沉淀 |
-| deepseek | ✅ API 直取（2026-08-13 实测） | 静态 HTML 是 SPA 壳无内容（CSS 规则不可用）。**分享接口**：`GET https://chat.deepseek.com/api/v0/share/content?share_id=<id>`（UA 伪装 + `Referer: https://chat.deepseek.com/share/<id>`）→ `data.biz_data.messages[]` 每条 `{role: "USER"\|"ASSISTANT", content}` → 转 `dialogue.json`（小写 role）落草稿即可继续管线 |
+| deepseek | ✅ API 直取内置（2026-08-13/16 实测） | 静态 HTML 是 SPA 壳无内容（CSS 规则不可用）。**分享接口**：`GET https://chat.deepseek.com/api/v0/share/content?share_id=<id>`（UA 伪装 + `Referer: https://chat.deepseek.com/share/<id>`）→ `data.biz_data.messages[]` 每条 `{role: "USER"\|"ASSISTANT", content}` → 转 `dialogue.json`（小写 role）落草稿即可继续管线 |
 | gemini/kimi/tongyi/perplexity | 待沉淀 | 首次遇到时走浏览器兜底 + 规则沉淀流程 |
 
 > **接口逆向法**（deepseek 已验证的通用路径）：SPA 分享页拉不到内容时，先拉页面 `main.*.js`
@@ -178,12 +184,19 @@ pnpm editor detail <submissionId> # URL/投稿人/主持人称呼(callName)/采�
 ### ④ 脚本生成规范（dailog 编辑标准——原服务端润色 prompt 完整迁移）
 
 用 LLM（本环境任意可用模型）按以下标准把对话润色成**朗读向播客脚本**，输出
-`{"language", "scripts": [{"topic", "title", "creationNote", "segments": [{"speaker":"host"|"guest", "text"}]}]}`
+`{"language", "score", "scripts": [{"topic", "title", "creationNote", "segments": [{"speaker":"host"|"guest", "text"}]}]}`
 （一个投稿可切多个主题脚本，各自独立成期；这里每期做一个，脚本存
 `scripts-{n}.json` 到草稿目录，格式 `{"segments":[…]}` 供 tts 消费）：
 
 > **提示词保真**：生成脚本时，把「脚本生成提示词模板」（本小节末尾）原样作为 LLM 系统提示词，
 > 对话原文作为用户消息——不要自己改写压缩（压缩会丢细节导致读稿感）。
+> **投稿人节目建议**：detail 的「节目建议」是投稿人可选填写的选题参考（主题/角度/风格倾向）。
+> 有 → 按提示词模板用法追加为用户消息末尾一段；无 → 不追加。
+> 处理分层（模板第 12 条，优先级从高到低）：明确边界（"不要/别/避免"等否定指令）
+> 必须无条件遵守——冲突时宁可 quality_failed 拒稿也不违背用户边界；明确风格倾向 →
+> 脚本生成后逐条比对核验，语言风格尽量贴近；选题视角仅作切题参考——少见且对话支持的
+> 视角优先作为切题角度，常见视角不因被点名而加分；与生成规范冲突时规范优先，
+> 无参考价值（要求虚构/夸大/偏离对话原意等）直接忽略。
 
 **1. 语言**：跟随原对话主要语言（zh/en/ja/ko…）
 
@@ -220,13 +233,23 @@ pnpm editor detail <submissionId> # URL/投稿人/主持人称呼(callName)/采�
 - 称呼改写（脚本语言 ≠ 称呼语言时，一律按此规则）：称呼为英文 → 原样（全球通用）；称呼为中文等小语种 → 改写为英文形式（中文→拼音，如 飞→Fei；日/韩→罗马字）——改写由你完成，开场自我介绍用改写后的名字，不得虚构或意译
 - 主持人画像：detail 的 personaInfo 快照（displayName/性别/职业/年龄/国籍/bio）——注入主持人介绍做补充，有是补充没有也没关系，不得编造画像外细节
 
-**6. 内容价值四维**（选题标准——脚本聚焦四类价值，纯寒暄/无实质内容 → 不生成脚本）：
-- 交锋：观点/立场的碰撞与反转（含 AI 出人意料的回应——戏剧性来源）
-- 新知：知识/信息差/对 AI 能力边界的前沿认知
-- 情感：共鸣/情绪故事/与 AI 对话中的真实情感流动
-- 经验：方法与实操（含 AI 使用技巧）/避坑/具体决策的推演过程
+**6. 选题打分器**（先于切题——对整段对话打分判定是否值得制作，满分 100，<60 拒稿）：
+- 原创独特 vs 常识雷同（权重 5）：提问视角罕见（大多数人面对 AI 不会这样问）+
+  思想/结论非常识复述；锚点：放在主流 AI 对话内容里是否常见
+- 普适性 vs 专有性（权重 3）：话题与思考能否让多数听众代入/共鸣，而非私人细节
+- 冲突反转 vs 毫无悬念（权重 2）：观点碰撞/认知反转/AI 出人意料的回应
+- 总分 = 原创×5 + 普适×3 + 冲突×2；<60 → quality_failed（附分项与依据）
 
-**7. 情绪标注（Fish Audio S2 语法——随文本直达 TTS，完整版）**：
+**7. 切题与提问保真**（打分通过后）：
+- 切题：按主题单元切分（话题切换即新单元），优先原创独特、冲突反转强、普适性高的单元；
+  每期一个主题，2-3 个独立完整强主题才拆多期；单主题撑不起一期 → 不强行成期
+- 提问保真（红线）：用户原生提问的含义必须保留——不得歪曲/替换用户实际问过的问题
+  （如用户问"什么菜最健康"，不得改写为"为什么素菜的维生素含量高"）；改写只动措辞不动含义
+- 原生占比：脚本中用户台词里与原文提问含义对应的部分 ≥ 50%（按用户台词字数）；
+  其余编造仅限服务听感（典型：用提问方式切分 AI 长回答），前后逻辑在线、
+  不得引入与原文相悖的信息
+
+**8. 情绪标注（Fish Audio S2 语法——随文本直达 TTS，完整版）**：
 - 标签放句首；每句 1 个主情绪，复杂时最多组合 3 个；短句与中性叙述不加标签，避免过度标注
 - 可用标签（只用下列标准名，可加强度修饰 slightly/very/extremely，如 [very excited]）：
   - 基础情绪：happy sad angry excited calm nervous confident surprised satisfied delighted
@@ -243,7 +266,8 @@ pnpm editor detail <submissionId> # URL/投稿人/主持人称呼(callName)/采�
 - 角色差异化：host=引导/共情/好奇/惊讶；guest=专业/自信/深沉/感慨
 - 标签是台词的一部分，会原样进入语音合成——放在话术最贴切的位置
 
-**8. 元数据**（每期）：title（简洁有吸引力）、creationNote（创作说明）、
+**9. 元数据**（每期）：title（简洁有吸引力）、creationNote（创作说明，含选题依据：
+为什么选该主题、对应分项得分与用户建议取舍）、
 description（2-3 句简介）、tags（3-5 个话题标签）、coverKeywords（2-4 个英文图片搜索关键词，画面感强）
 
 #### 脚本生成提示词模板（独立参照文件）
@@ -257,8 +281,10 @@ description（2-3 句简介）、tags（3-5 个话题标签）、coverKeywords�
 模板要点（完整版在文件内）：
 - 真人对话感 9 细则（留白 [break]/穿插/比喻/打断/调侃/隐私模糊化/欢笑/直播感/思考）
 - 固定开场白（信息点不可变 + 措辞情绪可变，含示例）
+- 选题打分器（原创×5/普适×3/冲突×2，满分 100 <60 拒稿，score 附分项）
+- 提问保真（原生提问含义不歪曲 + 用户台词原生占比 ≥50%，编造仅限听感服务且逻辑在线）
 - 情绪标注 Fish S2 全表（基础 22 + 进阶 11 + 语气 7 + 音效 6 + 停顿 2 + 强度修饰 + 场景推进 + 角色差异化）
-- 输出 JSON 结构（scripts[].topic/title/creationNote/segments）；内容不足 → quality_failed
+- 输出 JSON 结构（score + scripts[].topic/title/creationNote/segments）；<60 或内容不足 → quality_failed
 
 #### 脚本确认门（生成后必做——内容把关）
 
@@ -393,8 +419,14 @@ pnpm editor reject <id> --reason "拒审原因（必填，投稿人可见）"
 与 `*.jpg/*.jpeg/*.png`——整集/合成/逐段语音与封面不留本地；对话/脚本/页面等文本草稿保留，
 可查阅与重做；重做时重新 tts 即可）。
 
-## 工具链已知点（维护记忆，2026-08-13 整理）
+## 工具链已知点（维护记忆，2026-08-13/16 整理）
 
+- **代理探测**（`src/fetch.ts findSocksProxy`）：env `ALL_PROXY`/`HTTPS_PROXY`（含 socks）优先，
+  其次 macOS `scutil --proxy`（SOCKSEnable+SOCKSPort）。走代理用 `curl --socks5-hostname`
+  子进程（DNS 也过代理）——Node fetch/undici 原生不支持 SOCKS，别引入 socks 依赖重造。
+- **chatgpt SSR 解码**（`src/fetch.ts decodeStreamTable`）：分享页对话在 `streamController.enqueue`
+  引用编码流里（字符串表 + `_N` 引用，list 元素也是索引，`['P', n]` 自引用防环）——
+  平台改版优先检查这个结构，别先改 DOM 规则（页面已不再把消息渲染进 DOM）。
 - **multipart 上传必须走 `serializeFormData`**（`src/lib.ts`）：undici dispatcher 路径
   （本地 `.orb.local` 自签证书）下原生 `FormData` 作 body 会失效——服务端收到空表单，
   publish/guest-voice 报 400 `audio_required`/`invalid_body`。`api()` 已接上自定义编码
@@ -417,7 +449,8 @@ pnpm editor reject <id> --reason "拒审原因（必填，投稿人可见）"
 
 1. **不伪造内容**：网页拉取失败/内容无法提取 → 如实汇报，不凭猜测生成脚本
 2. **脚本必须符合 dailog 标准**：固定开场结构（自我介绍 + Dailog 概念 + 双方称呼不可变）、
-   5-10 分钟、四维价值聚焦；纯寒暄对话 → 建议拒审
+   5-10 分钟、选题打分器 ≥60（原创×5/普适×3/冲突×2）与提问保真（原生提问 ≥50%、
+   含义不歪曲）；低分/纯寒暄对话 → 建议拒审
 3. **脚本确认门**：生成脚本后必须**全文展示**给编辑确认（内容/时长/称呼/情绪），未确认不进 tts
 4. **发布前必须试听**（open final.mp3）：音色克隆异常/断句错误/情绪标签未生效 → 修好再发
 5. **发布/拒审是外发动作**：先与编辑确认（标题/封面/拒审原因），确认后一次执行

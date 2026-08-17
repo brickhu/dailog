@@ -26,6 +26,8 @@ export async function detail(config: EditorConfig, args: string[]): Promise<void
     } | null;
     /** 投稿时配置的本次节目称呼（脚本生成时按脚本语言改写：匹配原样/英文通用/小语种转英文；无则「主持人」） */
     callName: string | null;
+    /** 投稿人节目建议（可选；脚本生成时仅供选题视角参考，无参考价值可忽略） */
+    suggestion: string | null;
     /** 投稿时使用的采样（仅记录） */
     voiceSampleId: string | null;
     /** 投稿人全部 ready 采样（按语种；TTS 按 脚本语言→en→唯一 匹配，服务端自动选择） */
@@ -37,6 +39,9 @@ export async function detail(config: EditorConfig, args: string[]): Promise<void
   console.log(`  URL：${d.url}`);
   console.log(`  投稿人：${d.personaInfo?.displayName ?? "?"} <${d.userEmail}>`);
   console.log(`  主持人称呼：${d.callName ?? "无（脚本用「主持人」）"}`);
+  if (d.suggestion) {
+    console.log(`  节目建议：${d.suggestion}`);
+  }
   const pi = d.personaInfo;
   console.log(`  画像：${[pi?.gender && `性别 ${pi.gender}`, pi?.profession && `职业 ${pi.profession}`, pi?.age && `年龄 ${pi.age}`, pi?.nationality && `国籍 ${pi.nationality}`, pi?.bio && `简介 ${pi.bio.slice(0, 40)}`].filter(Boolean).join("、") || "（无，脚本不强求）"}`);
   console.log(`  拒审原因：${d.rejectedReason ?? "—"}`);

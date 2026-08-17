@@ -37,3 +37,6 @@ poc-profile/
 
 # vinxi 运行时生成的配置临时文件
 apps/site/app.config.timestamp_*.js
+
+# wrangler 本地运行缓存（miniflare state，运行生成）
+.wrangler/
