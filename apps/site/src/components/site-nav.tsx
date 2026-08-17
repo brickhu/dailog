@@ -1,7 +1,7 @@
 import { Show, createSignal, onMount } from "solid-js";
 import { A, useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { colors, dimensions } from "@dailogues/ui/theme.stylex";
+import { colors, dimensions,layouts } from "@dailogues/ui/theme.stylex";
 import { Button } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { LangSwitch } from "./lang-switch";
@@ -11,7 +11,6 @@ import { openImportDialog } from "./import-dialog";
 
 const styles = stylex.create({
   header: {
-    width: "100%",
     height: "56px",
     flexShrink: "0", // shellRoot 纵向 flex 容器：内容超高时不被压缩（保持吸顶高度）
     boxSizing: "border-box",
@@ -205,7 +204,7 @@ export function SiteNav() {
 
   return (
     <>
-    <header {...stylex.props(styles.header)}>
+    <header {...stylex.props(layouts.containerFull,styles.header)}>
       <A href="/" {...stylex.props(styles.brand)}>
         <svg {...stylex.props(styles.logo)} viewBox="0 0 288 104" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M52 32H28V64H52V72H20V24H52V32Z" fill="currentColor"/>
