@@ -21,6 +21,11 @@ void auth;
 // 推荐区滚屏：每屏 4 条（移动端 2×2）、最多 5 屏（limit=20），末屏不足 4 条灰块补齐；
 // 异步加载期间骨架屏占位（透明度脉冲，颜色跟随 surface token 自动适配暗色模式）。
 
+// 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
+// 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
+const DESKTOP = "@media (width >= 1024px)";
+const TABLET = "@media (640px <= width < 1024px)";
+
 const styles = stylex.create({
 
   hero: {
@@ -42,10 +47,10 @@ const styles = stylex.create({
     gap: dimensions.spacing3,
     gridColumn: "1 / -1", // 手机 <640 占满
     // 互斥 range 断点（stylex media 输出顺序不稳定，重叠断点会错乱）
-    "@media (640px <= width < 1024px)": {
+[TABLET]: {
       gridColumn: "span 5", // 平板 8 列占 5
     },
-    "@media (width >= 1024px)": {
+[DESKTOP]: {
       gridColumn: "span 7", // 桌面 12 列占 7
     },
   },
@@ -87,10 +92,6 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "baseline",
     justifyContent: "space-between",
-    // padding: `${dimensions.spacing8} ${dimensions.spacing8} ${dimensions.spacing4}`,
-    "@media (max-width: 640px)": {
-      // padding: `${dimensions.spacing6} ${dimensions.spacing4} ${dimensions.spacing3}`,
-    },
   },
   listTitle: {
     fontSize: dimensions.fontSizeXl,
@@ -111,16 +112,16 @@ const styles = stylex.create({
     gridTemplateColumns: "subgrid",
     rowGap: dimensions.spacing4,
     paddingBottom: dimensions.spacing8, // 与 FAQ 的间距（垂直方向不影响列轨道对齐）
-    "@media (640px <= width < 1024px)": {
+[TABLET]: {
       paddingBottom: dimensions.spacing12,
     },
   },
   statCard: {
     gridColumn: "span 4", // 手机 4 列占满 → 单列堆叠
-    "@media (640px <= width < 1024px)": {
+[TABLET]: {
       gridColumn: "span 2", // 平板 8 列占 2 → 3 张一行
     },
-    "@media (width >= 1024px)": {
+[DESKTOP]: {
       gridColumn: "span 4", // 桌面 12 列占 4 → 3 张一行
     },
     display: "flex",

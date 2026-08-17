@@ -11,6 +11,11 @@ import { ListSkeleton } from "../components/route-skeletons";
 // 主播列表（/hosts）：在 Dailog 出过节目的主持人（按播放量 + 期数排序）
 interface HostRow { username: string; displayName: string; avatar: string | null; episodeCount: number; totalPlays: number; }
 
+// 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
+// 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
+const DESKTOP = "@media (width >= 1024px)";
+const TABLET = "@media (640px <= width < 1024px)";
+
 const styles = stylex.create({
   page: {
     minHeight: "100vh",
@@ -28,9 +33,10 @@ const styles = stylex.create({
   desc: { color: colors.neutral, fontSize: dimensions.fontSizeSm, margin: "0 0 24px" },
   grid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-    gap: dimensions.spacing4,
-    "@media (max-width: 640px)": { gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" },
+    gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", // 移动优先
+gap: dimensions.spacing4,
+[TABLET]: { gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" },
+[DESKTOP]: { gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" },
   },
   card: {
     display: "flex",

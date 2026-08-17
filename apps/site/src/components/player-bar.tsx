@@ -7,6 +7,11 @@ import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { episodeCoverUrl } from "../lib/env";
 import { usePlayback } from "../lib/playback";
 
+// 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
+// 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
+const DESKTOP = "@media (width >= 1024px)";
+const TABLET = "@media (640px <= width < 1024px)";
+
 const styles = stylex.create({
   bar: {
     position: "fixed",
@@ -18,9 +23,7 @@ const styles = stylex.create({
     alignItems: "center",
     gap: dimensions.spacing3,
     padding: `${dimensions.spacing2} ${dimensions.spacing4}`,
-    backgroundColor: "rgba(219, 219, 219, 0.72)", // surface 半透明（#dbdbdb）
-    backdropFilter: "blur(12px)",
-    WebkitBackdropFilter: "blur(12px)",
+    backgroundColor: colors.background, // 与页面背景一致（不透明，滚动内容不再透出）
   },
   cover: {
     width: "44px",
@@ -75,7 +78,7 @@ const styles = stylex.create({
     color: colors.onBrand,
   },
   progress: {
-    width: "140px",
+    width: "80px", // 移动优先（<640）；平板/桌面加宽
     height: "4px",
     appearance: "none",
     WebkitAppearance: "none",
@@ -83,8 +86,11 @@ const styles = stylex.create({
     borderRadius: "2px",
     cursor: "pointer",
     flexShrink: 0,
-    "@media (max-width: 640px)": {
-      width: "80px",
+    [TABLET]: {
+      width: "140px",
+    },
+    [DESKTOP]: {
+      width: "140px",
     },
   },
   time: {

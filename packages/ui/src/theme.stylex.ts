@@ -3,13 +3,12 @@ import * as stylex from "@stylexjs/stylex";
 // 设计 token（StyleX defineVars）唯一源：studio（工作台）与 site（消费端）共享。
 // 注意：defineVars 文件必须保持 .stylex.ts 后缀（StyleX 编译器约定）。
 
-// A constant can be used to avoid repeating the media query
-// 断点用互斥 range 区间（<640 / 640-1023 / ≥1024，不重叠）：
-// stylex 的 media 输出顺序随全局规则集合变化（不稳定）——重叠断点（min-width 链）的
-// "后者覆盖"前提会被破坏（大断点可能排到小断点前）；互斥区间在任何顺序下都正确
-const DARK = '@media (prefers-color-scheme: dark)';
-const DESKTOP = '@media (width >= 1024px)';
-const TABLET = '@media (640px <= width < 1024px)';
+// 断点常量：theme.stylex.const.ts 为唯一规范源。本地定义——stylex 0.19 babel 插件
+// 不支持跨文件常量解析（commonJS 解析不了 ESM import；crossFileParsing 在 TS 源码
+// monorepo 下多处失败），defineVars 的 key 也要求编译期静态值；改断点同步 const 文件
+const DARK = "@media (prefers-color-scheme: dark)";
+const DESKTOP = "@media (width >= 1024px)";
+const TABLET = "@media (640px <= width < 1024px)";
 
 // 颜色
 export const colors = stylex.defineVars({
@@ -352,7 +351,7 @@ export const layouts = stylex.create({
     },
   },
 
-  // 中容器：max-width 960px，12 列 → 平板 6 → 手机 3，居中（详情/列表类页面）
+  // 中容器：max-width 960px，移动优先：默认 3 列（<640）→ 平板 6 → 桌面 12，居中
   containerMd: {
     width: "100%",
     flexShrink: "0",
@@ -361,19 +360,20 @@ export const layouts = stylex.create({
     paddingLeft: dimensions.spacing4,
     paddingRight: dimensions.spacing4,
     display: "grid",
-    gridTemplateColumns: "repeat(12, 1fr)",
-    columnGap: dimensions.spacing5,
+    gridTemplateColumns: "repeat(3, 1fr)",
+    columnGap: dimensions.spacing4,
     alignItems: "start",
-    "@media (max-width: 1024px)": {
+    [TABLET]: {
       gridTemplateColumns: "repeat(6, 1fr)",
+      columnGap: dimensions.spacing5,
     },
-    "@media (max-width: 640px)": {
-      gridTemplateColumns: "repeat(3, 1fr)",
-      columnGap: dimensions.spacing4,
+    [DESKTOP]: {
+      gridTemplateColumns: "repeat(12, 1fr)",
+      columnGap: dimensions.spacing5,
     },
   },
 
-  // 小容器：max-width 720px，6 列 → 手机 3，居中（表单/个人中心类窄页面）
+  // 小容器：max-width 720px，移动优先：默认 3 列（<640）→ 平板/桌面 6 列，居中
   containerSm: {
     width: "100%",
     flexShrink: "0",
@@ -382,15 +382,22 @@ export const layouts = stylex.create({
     paddingLeft: dimensions.spacing4,
     paddingRight: dimensions.spacing4,
     display: "grid",
-    gridTemplateColumns: "repeat(6, 1fr)",
-    columnGap: dimensions.spacing5,
+    gridTemplateColumns: "repeat(3, 1fr)",
+    columnGap: dimensions.spacing4,
     alignItems: "start",
-    "@media (max-width: 640px)": {
-      gridTemplateColumns: "repeat(3, 1fr)",
-      columnGap: dimensions.spacing4,
+    [TABLET]: {
+      gridTemplateColumns: "repeat(6, 1fr)",
+      columnGap: dimensions.spacing5,
+    },
+    [DESKTOP]: {
+      gridTemplateColumns: "repeat(6, 1fr)",
+      columnGap: dimensions.spacing5,
     },
   },
 })
+
+// 断点标签命名导出（全站统一引用；<640 无需声明——默认样式即移动端，移动优先）
+export { DARK, DESKTOP, TABLET };
 
 export const constants = {
   DARK,

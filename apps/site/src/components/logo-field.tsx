@@ -290,16 +290,24 @@ function initLogoField(canvas: HTMLCanvasElement, panel: HTMLDivElement, opts: F
   };
 }
 
+// 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
+// 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
+const DESKTOP = "@media (width >= 1024px)";
+const TABLET = "@media (640px <= width < 1024px)";
+
 const styles = stylex.create({
   panel: {
     position: "relative",
     width: "100%",
     maxWidth: "400px",
-    aspectRatio: "4 / 3",
+    aspectRatio: "4 / 3", // 移动优先
     flexShrink: 0,
     // 粒子颜色来源：JS 读 computed color（明暗自适应）
     color: colors.foreground,
-    "@media (min-width: 640px)": {
+    [TABLET]: {
+      aspectRatio: "1 / 1",
+    },
+    [DESKTOP]: {
       aspectRatio: "1 / 1",
     },
   },

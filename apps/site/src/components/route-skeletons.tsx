@@ -5,19 +5,28 @@ import { For } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 
+// 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
+// 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
+const DESKTOP = "@media (width >= 1024px)";
+const TABLET = "@media (640px <= width < 1024px)";
+
 const skeleton = stylex.create({
   // 容器（页面组件被替换期间自带背景，避免透出 body 白色）
   wrap: {
     maxWidth: "1080px",
     margin: "0 auto",
-    padding: dimensions.spacing8,
+    padding: dimensions.spacing4, // 移动优先
     backgroundColor: colors.background,
     display: "flex",
     flexDirection: "column",
-    gap: dimensions.spacing4,
-    "@media (max-width: 640px)": {
-      padding: dimensions.spacing4,
-      gap: dimensions.spacing3,
+    gap: dimensions.spacing3,
+    [TABLET]: {
+      padding: dimensions.spacing8,
+      gap: dimensions.spacing4,
+    },
+    [DESKTOP]: {
+      padding: dimensions.spacing8,
+      gap: dimensions.spacing4,
     },
   },
   // shimmer 灰块（surface 底 + 透明度脉冲）
@@ -45,40 +54,56 @@ const skeleton = stylex.create({
   lineShort: {
     width: "65%",
   },
-  // 卡片网格（首页/通用）
+  // 卡片网格（首页/通用）：移动优先 2 列 → 平板/桌面 4 列
   cards: {
     display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-    gap: dimensions.spacing5,
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: dimensions.spacing4,
     marginTop: dimensions.spacing4,
-    "@media (max-width: 640px)": {
-      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-      gap: dimensions.spacing4,
+    [TABLET]: {
+      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+      gap: dimensions.spacing5,
+    },
+    [DESKTOP]: {
+      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+      gap: dimensions.spacing5,
     },
   },
   card: {
     aspectRatio: "3 / 4",
     borderRadius: dimensions.radiusMd,
   },
-  // 详情页：左封面 + 右详情（与 episode/[slug].tsx body 布局一致）
+  // 详情页：左封面 + 右详情（与 episode/[slug].tsx body 布局一致）：移动优先竖排
   detailBody: {
     display: "flex",
-    gap: dimensions.spacing8,
+    flexDirection: "column",
+    gap: dimensions.spacing5,
     alignItems: "flex-start",
-    "@media (max-width: 640px)": {
-      flexDirection: "column",
-      gap: dimensions.spacing5,
+    [TABLET]: {
+      flexDirection: "row",
+      gap: dimensions.spacing8,
+    },
+    [DESKTOP]: {
+      flexDirection: "row",
+      gap: dimensions.spacing8,
     },
   },
   detailCover: {
     flexShrink: "0",
-    width: "min(380px, 40vw)",
+    width: "100%", // 移动优先
+    maxWidth: "280px",
+    margin: "0 auto",
     aspectRatio: "1 / 1",
     borderRadius: dimensions.radiusLg,
-    "@media (max-width: 640px)": {
-      width: "100%",
-      maxWidth: "280px",
-      margin: "0 auto",
+    [TABLET]: {
+      width: "min(380px, 40vw)",
+      maxWidth: "none",
+      margin: 0,
+    },
+    [DESKTOP]: {
+      width: "min(380px, 40vw)",
+      maxWidth: "none",
+      margin: 0,
     },
   },
   detailCol: {

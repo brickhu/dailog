@@ -1,7 +1,7 @@
-import { Show, createSignal, onMount } from "solid-js";
+import { Show, createSignal, onCleanup, onMount } from "solid-js";
 import { A, useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { colors, dimensions,layouts } from "@dailogues/ui/theme.stylex";
+import { colors, dimensions, durations, easings, layouts } from "@dailogues/ui/theme.stylex";
 import { Button } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { LangSwitch } from "./lang-switch";
@@ -9,12 +9,17 @@ import { UserMenu, type NavUser } from "./user-menu";
 import { confirmSignOut } from "../lib/auth-guard";
 import { openImportDialog } from "./import-dialog";
 
+// 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
+// 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
+const DESKTOP = "@media (width >= 1024px)";
+const TABLET = "@media (640px <= width < 1024px)";
+
 const styles = stylex.create({
   header: {
     height: dimensions.size2xl,
     flexShrink: "0", // shellRoot 纵向 flex 容器：内容超高时不被压缩（保持吸顶高度）
     boxSizing: "border-box",
-    padding: `0 ${dimensions.spacing8}`,
+    padding: `0 ${dimensions.spacing4}`, // 移动优先
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
@@ -22,10 +27,30 @@ const styles = stylex.create({
     position: "sticky", // 在 shellRoot 滚动容器内吸顶
     top: 0,
     zIndex: 40,
-    backgroundColor: colors.background,
-    "@media (max-width: 640px)": {
-      padding: `0 ${dimensions.spacing4}`,
+    // 默认透明，滚动后（scrolled）过渡到半透明毛玻璃背景 + 底部 border——页面内容压过导航时保证可读性
+    backgroundColor: "transparent",
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: "transparent",
+    transitionProperty: "background-color, border-color, backdrop-filter, -webkit-backdrop-filter",
+    transitionDuration: durations.durationMediumMin,
+    transitionTimingFunction: easings.easeInOut,
+    [TABLET]: {
+      padding: `0 ${dimensions.spacing8}`,
     },
+    [DESKTOP]: {
+      padding: `0 ${dimensions.spacing8}`,
+    },
+  },
+  headerScrolled: {
+    // 背景 85% 半透明 + 毛玻璃（与 player-bar 同款 blur）；color-mix 让 token 的
+    // 双主题（default/DARK）自动适配，不硬编码 rgba
+    backgroundColor: `color-mix(in srgb, ${colors.background} 85%, transparent)`,
+    backdropFilter: "blur(12px)",
+    WebkitBackdropFilter: "blur(12px)",
+    // color-mix 百分比必须跟在颜色后（`颜色 10%`）；currentColor = 页面前景色，
+    // 主题自动适配，且不依赖模板字符串里的跨文件 var（stylex 编译期不可靠）
+    borderBottomColor: "color-mix(in srgb, currentColor 10%, transparent)",
   },
   brand: {
     textDecoration: "none",
@@ -35,15 +60,18 @@ const styles = stylex.create({
     color: "inherit",
   },
   nav: {
-    display: "flex",
+    display: "none", // 移动优先：<640 折叠进汉堡浮层
     alignItems: "center",
     gap: dimensions.spacing4,
-    "@media (max-width: 767px)": {
-      display: "none", // 移动端折叠进汉堡浮层
+    [TABLET]: {
+      display: "flex",
+    },
+    [DESKTOP]: {
+      display: "flex",
     },
   },
   hamburger: {
-    display: "none",
+    display: "inline-flex", // 移动优先：<640 显示汉堡按钮
     borderRadius: dimensions.radiusSm,
     background: "transparent",
     color: colors.foreground,
@@ -53,18 +81,24 @@ const styles = stylex.create({
     justifyContent: "center",
     cursor: "pointer",
     fontSize: "18px",
-    "@media (max-width: 767px)": {
-      display: "inline-flex", // 移动端：汉堡按钮
+    [TABLET]: {
+      display: "none",
+    },
+    [DESKTOP]: {
+      display: "none",
     },
   },
   drawer: {
-    display: "none",
-    "@media (max-width: 767px)": {
-      display: "flex",
-      flexDirection: "column",
-      gap: dimensions.spacing1,
-      padding: `${dimensions.spacing3} ${dimensions.spacing6} ${dimensions.spacing5}`,
-      backgroundColor: colors.surface,
+    display: "flex", // 移动优先：<640 显示浮层
+    flexDirection: "column",
+    gap: dimensions.spacing1,
+    padding: `${dimensions.spacing3} ${dimensions.spacing6} ${dimensions.spacing5}`,
+    backgroundColor: colors.surface,
+    [TABLET]: {
+      display: "none",
+    },
+    [DESKTOP]: {
+      display: "none",
     },
   },
   drawerItem: {
@@ -122,6 +156,19 @@ export function SiteNav() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = createSignal(false);
+  // 滚动状态：滚动容器是父级 shellRoot（header 吸顶在其内），scrollTop > 0 时背景
+  // 由透明过渡到实色。onMount 先同步一次初值——首帧样式变化发生在浏览器绘制前，
+  // 不会触发过渡动画（避免深链接/滚动恢复时闪一下透明）
+  const [scrolled, setScrolled] = createSignal(false);
+  let headerRef: HTMLElement | undefined;
+  onMount(() => {
+    const scroller = headerRef?.parentElement;
+    if (!scroller) return;
+    const onScroll = () => setScrolled(scroller.scrollTop > 0);
+    onScroll();
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    onCleanup(() => scroller.removeEventListener("scroll", onScroll));
+  });
   // 会话判定：仅 client 执行（SSR 无浏览器 cookie、相对 fetch 在 workerd 抛 Invalid URL）。
   // 不用 createAsync——其 SSR 序列化结果（null）会被 hydration 复用，不再重新请求；
   // onMount 保证挂载后必然重新 fetch，首帧渲染"登录"、挂载后更新为头像菜单。
@@ -204,7 +251,7 @@ export function SiteNav() {
 
   return (
     <>
-    <header {...stylex.props(layouts.containerFull,styles.header)}>
+    <header ref={headerRef} {...stylex.props(layouts.containerFull, styles.header, scrolled() && styles.headerScrolled)}>
       <A href="/" {...stylex.props(styles.brand)}>
         <svg {...stylex.props(styles.logo)} viewBox="0 0 288 104" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M52 32H28V64H52V72H20V24H52V32Z" fill="currentColor"/>

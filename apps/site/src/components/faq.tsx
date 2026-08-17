@@ -6,11 +6,19 @@ import { useI18n } from "@dailogues/i18n";
 
 // 首页常见问题：互斥手风琴（单开，点击切换）。文案走 i18n（中英），跟随语言切换。
 // 容器由页面负责（首页 containerLg 内 fullRow span 12）；组件自身只保留内容间距。
+// 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
+// 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
+const DESKTOP = "@media (width >= 1024px)";
+const TABLET = "@media (640px <= width < 1024px)";
+
 const styles = stylex.create({
   wrap: {
-    padding: `0 0 ${dimensions.spacing12}`,
-    "@media (max-width: 640px)": {
-      padding: `0 0 ${dimensions.spacing8}`,
+    padding: `0 0 ${dimensions.spacing8}`, // 移动优先
+    [TABLET]: {
+      padding: `0 0 ${dimensions.spacing12}`,
+    },
+    [DESKTOP]: {
+      padding: `0 0 ${dimensions.spacing12}`,
     },
   },
   title: {

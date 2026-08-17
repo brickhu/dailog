@@ -4,23 +4,31 @@ import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { A } from "@solidjs/router";
 
+// 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
+// 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
+const DESKTOP = "@media (width >= 1024px)";
+const TABLET = "@media (640px <= width < 1024px)";
+
 const styles = stylex.create({
   footer: {
     flexShrink: "0", // shellRoot 直接子项：内容超高时不被压缩
-    backgroundColor: colors.surface, // 通栏背景
+    backgroundColor: colors.background, // 通栏背景（与页面背景一致）
     // stylex 不支持模板字符串内插 token（`1px solid ${colors.ink}` 会被静默丢弃），
     // 单边边框必须拆 longhand + 直接 token 引用
   },
   inner: {
     maxWidth: "1080px",
     margin: "0 auto",
-    padding: `${dimensions.spacing6} ${dimensions.spacing8} 88px`, // 底部 88px 预留播放条
+    padding: `${dimensions.spacing5} ${dimensions.spacing4} 88px`, // 移动优先；底部 88px 预留播放条
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: dimensions.spacing4,
-    "@media (max-width: 640px)": {
-      padding: `${dimensions.spacing5} ${dimensions.spacing4} 88px`,
+    [TABLET]: {
+      padding: `${dimensions.spacing6} ${dimensions.spacing8} 88px`,
+    },
+    [DESKTOP]: {
+      padding: `${dimensions.spacing6} ${dimensions.spacing8} 88px`,
     },
   },
   copyright: {
