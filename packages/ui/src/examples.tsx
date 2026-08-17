@@ -1,6 +1,5 @@
 import { Button } from "./components/button";
 import { ButtonGroup } from "./components/button-group";
-import { Banner } from "./components/banner";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "./theme.stylex";
 import { Icon, addIcon } from './components/icon';

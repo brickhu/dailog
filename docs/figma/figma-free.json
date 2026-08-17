@@ -1,0 +1,2095 @@
+{
+  "Color": {
+    "Primary": {
+      "primary": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1294,
+            0.1176,
+            0.0471
+          ],
+          "alpha": 1,
+          "hex": "#211E0C"
+        },
+        "$description": "主色"
+      },
+      "onPrimary": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9333,
+            0.9176,
+            0.7961
+          ],
+          "alpha": 1,
+          "hex": "#EEEACB"
+        },
+        "$description": "主色上的前景色"
+      },
+      "primaryWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.6196,
+            0.6078,
+            0.549
+          ],
+          "alpha": 1,
+          "hex": "#9E9B8C"
+        },
+        "$description": "主色弱化版"
+      },
+      "onPrimaryWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1294,
+            0.1176,
+            0.0471
+          ],
+          "alpha": 1,
+          "hex": "#211E0C"
+        },
+        "$description": "主色弱化版上的前景色"
+      },
+      "primaryStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0392,
+            0.0353,
+            0.0118
+          ],
+          "alpha": 1,
+          "hex": "#0A0903"
+        },
+        "$description": "主色强化版"
+      },
+      "onPrimaryStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9922,
+            0.9843,
+            0.9333
+          ],
+          "alpha": 1,
+          "hex": "#FDFBEE"
+        },
+        "$description": "主色强化版上的前景色"
+      }
+    },
+    "Secondary": {
+      "secondary": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.102,
+            0.1608,
+            0.2667
+          ],
+          "alpha": 1,
+          "hex": "#1A2944"
+        },
+        "$description": "次色"
+      },
+      "onSecondary": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.6078,
+            0.6667,
+            0.7804
+          ],
+          "alpha": 1,
+          "hex": "#9BAAC7"
+        },
+        "$description": "次色上的前景色"
+      },
+      "secondaryWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.2431,
+            0.3529,
+            0.5333
+          ],
+          "alpha": 1,
+          "hex": "#3E5A88"
+        },
+        "$description": "次色弱化版"
+      },
+      "onSecondaryWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#FFFFFF"
+        },
+        "$description": "次色弱化版上的前景色"
+      },
+      "secondaryStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0627,
+            0.102,
+            0.2
+          ],
+          "alpha": 1,
+          "hex": "#101A33"
+        },
+        "$description": "次色强化版"
+      },
+      "onSecondaryStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#FFFFFF"
+        },
+        "$description": "次色强化版上的前景色"
+      }
+    },
+    "Brand": {
+      "brand": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9961,
+            0.9098,
+            0.2549
+          ],
+          "alpha": 1,
+          "hex": "#FEE841"
+        },
+        "$description": "品牌色"
+      },
+      "onBrand": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1294,
+            0.1176,
+            0.0471
+          ],
+          "alpha": 1,
+          "hex": "#211E0C"
+        },
+        "$description": "品牌色上的前景色"
+      },
+      "brandWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            0.949,
+            0.6275
+          ],
+          "alpha": 1,
+          "hex": "#FFF2A0"
+        },
+        "$description": "品牌色弱化版"
+      },
+      "onBrandWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1294,
+            0.1176,
+            0.0471
+          ],
+          "alpha": 1,
+          "hex": "#211E0C"
+        },
+        "$description": "品牌色弱化版上的前景色"
+      },
+      "brandStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.8157,
+            0.6902,
+            0.1216
+          ],
+          "alpha": 1,
+          "hex": "#D0B01F"
+        },
+        "$description": "品牌色强化版"
+      },
+      "onBrandStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1294,
+            0.1176,
+            0.0471
+          ],
+          "alpha": 1,
+          "hex": "#211E0C"
+        },
+        "$description": "品牌色强化版上的前景色"
+      }
+    },
+    "Neutral": {
+      "neutral": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.2275,
+            0.2314,
+            0.2431
+          ],
+          "alpha": 1,
+          "hex": "#3A3B3E"
+        },
+        "$description": "中性色"
+      },
+      "onNeutral": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#FFFFFF"
+        },
+        "$description": "中性色上的前景色"
+      },
+      "neutralWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4196,
+            0.4235,
+            0.4392
+          ],
+          "alpha": 1,
+          "hex": "#6B6C70"
+        },
+        "$description": "中性色弱化版"
+      },
+      "onNeutralWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#FFFFFF"
+        },
+        "$description": "中性色弱化版上的前景色"
+      },
+      "neutralStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1216,
+            0.1255,
+            0.1373
+          ],
+          "alpha": 1,
+          "hex": "#1F2023"
+        },
+        "$description": "中性色强化版"
+      },
+      "onNeutralStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#FFFFFF"
+        },
+        "$description": "中性色强化版上的前景色"
+      }
+    },
+    "Surface": {
+      "surface": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.8588,
+            0.8588,
+            0.8588
+          ],
+          "alpha": 1,
+          "hex": "#DBDBDB"
+        },
+        "$description": "表面"
+      },
+      "onSurface": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0863,
+            0.1059,
+            0.1333
+          ],
+          "alpha": 1,
+          "hex": "#161B22"
+        },
+        "$description": "表面上的前景色"
+      },
+      "surfaceWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9059,
+            0.9137,
+            0.9255
+          ],
+          "alpha": 1,
+          "hex": "#E7E9EC"
+        },
+        "$description": "表面弱化版"
+      },
+      "onSurfaceWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0863,
+            0.1059,
+            0.1333
+          ],
+          "alpha": 1,
+          "hex": "#161B22"
+        },
+        "$description": "表面弱化版上的前景色"
+      },
+      "surfaceStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.7608,
+            0.7765,
+            0.7843
+          ],
+          "alpha": 1,
+          "hex": "#C2C6C8"
+        },
+        "$description": "表面强化版"
+      },
+      "onSurfaceStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0863,
+            0.1059,
+            0.1333
+          ],
+          "alpha": 1,
+          "hex": "#161B22"
+        },
+        "$description": "表面强化版上的前景色"
+      }
+    },
+    "Popover": {
+      "popover": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0863,
+            0.1059,
+            0.1333
+          ],
+          "alpha": 1,
+          "hex": "#161B22"
+        },
+        "$description": "浮层"
+      },
+      "onPopover": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.902,
+            0.9137,
+            0.9373
+          ],
+          "alpha": 1,
+          "hex": "#E6E9EF"
+        },
+        "$description": "浮层上的前景色"
+      },
+      "popoverWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1216,
+            0.149,
+            0.1882
+          ],
+          "alpha": 1,
+          "hex": "#1F2630"
+        },
+        "$description": "浮层弱化版"
+      },
+      "onPopoverWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.902,
+            0.9137,
+            0.9373
+          ],
+          "alpha": 1,
+          "hex": "#E6E9EF"
+        },
+        "$description": "浮层弱化版上的前景色"
+      },
+      "popoverStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0588,
+            0.0745,
+            0.098
+          ],
+          "alpha": 1,
+          "hex": "#0F1319"
+        },
+        "$description": "浮层强化版"
+      },
+      "onPopoverStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.902,
+            0.9137,
+            0.9373
+          ],
+          "alpha": 1,
+          "hex": "#E6E9EF"
+        },
+        "$description": "浮层强化版上的前景色"
+      }
+    },
+    "Background": {
+      "background": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9765,
+            0.9765,
+            0.9765
+          ],
+          "alpha": 1,
+          "hex": "#F9F9F9"
+        },
+        "$description": "背景"
+      }
+    },
+    "Foreground": {
+      "foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0549,
+            0.0667,
+            0.0863
+          ],
+          "alpha": 1,
+          "hex": "#0E1116"
+        },
+        "$description": "前景"
+      }
+    },
+    "Danger": {
+      "danger": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9412,
+            0.3137,
+            0.4314
+          ],
+          "alpha": 1,
+          "hex": "#F0506E"
+        },
+        "$description": "危险"
+      },
+      "onDanger": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            0.8706,
+            0.902
+          ],
+          "alpha": 1,
+          "hex": "#FFDEE6"
+        },
+        "$description": "危险上的前景色"
+      },
+      "dangerWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            0.8706,
+            0.902
+          ],
+          "alpha": 1,
+          "hex": "#FFDEE6"
+        },
+        "$description": "危险弱化版"
+      },
+      "onDangerWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5176,
+            0.2275,
+            0.302
+          ],
+          "alpha": 1,
+          "hex": "#843A4D"
+        },
+        "$description": "危险弱化版上的前景色"
+      },
+      "dangerStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5176,
+            0.2275,
+            0.302
+          ],
+          "alpha": 1,
+          "hex": "#843A4D"
+        },
+        "$description": "危险强化版"
+      },
+      "onDangerStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            0.8706,
+            0.902
+          ],
+          "alpha": 1,
+          "hex": "#FFDEE6"
+        },
+        "$description": "危险强化版上的前景色"
+      }
+    },
+    "Warning": {
+      "warning": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.8784,
+            0.6353,
+            0.2353
+          ],
+          "alpha": 1,
+          "hex": "#E0A23C"
+        },
+        "$description": "警告"
+      },
+      "onWarning": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#FFFFFF"
+        },
+        "$description": "警告上的前景色"
+      },
+      "warningWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9451,
+            0.7608,
+            0.451
+          ],
+          "alpha": 1,
+          "hex": "#F1C273"
+        },
+        "$description": "警告弱化版"
+      },
+      "onWarningWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1294,
+            0.1176,
+            0.0471
+          ],
+          "alpha": 1,
+          "hex": "#211E0C"
+        },
+        "$description": "警告弱化版上的前景色"
+      },
+      "warningStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.698,
+            0.502,
+            0.1765
+          ],
+          "alpha": 1,
+          "hex": "#B2802D"
+        },
+        "$description": "警告强化版"
+      },
+      "onWarningStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#FFFFFF"
+        },
+        "$description": "警告强化版上的前景色"
+      }
+    },
+    "Success": {
+      "success": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.2471,
+            0.7137,
+            0.5451
+          ],
+          "alpha": 1,
+          "hex": "#3FB68B"
+        },
+        "$description": "成功"
+      },
+      "onSuccess": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#FFFFFF"
+        },
+        "$description": "成功上的前景色"
+      },
+      "successWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4392,
+            0.7569,
+            0.6157
+          ],
+          "alpha": 1,
+          "hex": "#70C19D"
+        },
+        "$description": "成功弱化版"
+      },
+      "onSuccessWeak": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0863,
+            0.1059,
+            0.1333
+          ],
+          "alpha": 1,
+          "hex": "#161B22"
+        },
+        "$description": "成功弱化版上的前景色"
+      },
+      "successStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1804,
+            0.5451,
+            0.4314
+          ],
+          "alpha": 1,
+          "hex": "#2E8B6E"
+        },
+        "$description": "成功强化版"
+      },
+      "onSuccessStrong": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#FFFFFF"
+        },
+        "$description": "成功强化版上的前景色"
+      }
+    },
+    "Ink": {
+      "ink": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0,
+            0
+          ],
+          "alpha": 1,
+          "hex": "#000000"
+        },
+        "$description": "水墨色(阴影/分割线/边框)"
+      }
+    },
+    "Dark": {
+      "Primary": {
+        "primary": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.9333,
+              0.9176,
+              0.7961
+            ],
+            "alpha": 1,
+            "hex": "#EEEACB"
+          },
+          "$description": "主色"
+        },
+        "onPrimary": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.1294,
+              0.1176,
+              0.0471
+            ],
+            "alpha": 1,
+            "hex": "#211E0C"
+          },
+          "$description": "主色上的前景色"
+        },
+        "primaryWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.5176,
+              0.5098,
+              0.4549
+            ],
+            "alpha": 1,
+            "hex": "#848274"
+          },
+          "$description": "主色弱化版"
+        },
+        "onPrimaryWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.1294,
+              0.1176,
+              0.0471
+            ],
+            "alpha": 1,
+            "hex": "#211E0C"
+          },
+          "$description": "主色弱化版上的前景色"
+        },
+        "primaryStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.9922,
+              0.9843,
+              0.9333
+            ],
+            "alpha": 1,
+            "hex": "#FDFBEE"
+          },
+          "$description": "主色强化版"
+        },
+        "onPrimaryStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.1294,
+              0.1176,
+              0.0471
+            ],
+            "alpha": 1,
+            "hex": "#211E0C"
+          },
+          "$description": "主色强化版上的前景色"
+        }
+      },
+      "Secondary": {
+        "secondary": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.6078,
+              0.6667,
+              0.7804
+            ],
+            "alpha": 1,
+            "hex": "#9BAAC7"
+          },
+          "$description": "次色"
+        },
+        "onSecondary": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.102,
+              0.1608,
+              0.2667
+            ],
+            "alpha": 1,
+            "hex": "#1A2944"
+          },
+          "$description": "次色上的前景色"
+        },
+        "secondaryWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.7608,
+              0.8275,
+              0.9216
+            ],
+            "alpha": 1,
+            "hex": "#C2D3EB"
+          },
+          "$description": "次色弱化版"
+        },
+        "onSecondaryWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.102,
+              0.1608,
+              0.2667
+            ],
+            "alpha": 1,
+            "hex": "#1A2944"
+          },
+          "$description": "次色弱化版上的前景色"
+        },
+        "secondaryStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.4471,
+              0.5373,
+              0.6902
+            ],
+            "alpha": 1,
+            "hex": "#7289B0"
+          },
+          "$description": "次色强化版"
+        },
+        "onSecondaryStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.102,
+              0.1608,
+              0.2667
+            ],
+            "alpha": 1,
+            "hex": "#1A2944"
+          },
+          "$description": "次色强化版上的前景色"
+        }
+      },
+      "Brand": {
+        "brand": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.9961,
+              0.9098,
+              0.2549
+            ],
+            "alpha": 1,
+            "hex": "#FEE841"
+          },
+          "$description": "品牌色"
+        },
+        "onBrand": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.1294,
+              0.1176,
+              0.0471
+            ],
+            "alpha": 1,
+            "hex": "#211E0C"
+          },
+          "$description": "品牌色上的前景色"
+        },
+        "brandWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              1,
+              0.949,
+              0.6275
+            ],
+            "alpha": 1,
+            "hex": "#FFF2A0"
+          },
+          "$description": "品牌色弱化版"
+        },
+        "onBrandWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.1294,
+              0.1176,
+              0.0471
+            ],
+            "alpha": 1,
+            "hex": "#211E0C"
+          },
+          "$description": "品牌色弱化版上的前景色"
+        },
+        "brandStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.8157,
+              0.6902,
+              0.1216
+            ],
+            "alpha": 1,
+            "hex": "#D0B01F"
+          },
+          "$description": "品牌色强化版"
+        },
+        "onBrandStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.1294,
+              0.1176,
+              0.0471
+            ],
+            "alpha": 1,
+            "hex": "#211E0C"
+          },
+          "$description": "品牌色强化版上的前景色"
+        }
+      },
+      "Neutral": {
+        "neutral": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.6157,
+              0.6275,
+              0.6431
+            ],
+            "alpha": 1,
+            "hex": "#9DA0A4"
+          },
+          "$description": "中性色"
+        },
+        "onNeutral": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.1686,
+              0.1686,
+              0.1765
+            ],
+            "alpha": 1,
+            "hex": "#2B2B2D"
+          },
+          "$description": "中性色上的前景色"
+        },
+        "neutralWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.7882,
+              0.7961,
+              0.8078
+            ],
+            "alpha": 1,
+            "hex": "#C9CBCE"
+          },
+          "$description": "中性色弱化版"
+        },
+        "onNeutralWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.0863,
+              0.1059,
+              0.1333
+            ],
+            "alpha": 1,
+            "hex": "#161B22"
+          },
+          "$description": "中性色弱化版上的前景色"
+        },
+        "neutralStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.8824,
+              0.8902,
+              0.902
+            ],
+            "alpha": 1,
+            "hex": "#E1E3E6"
+          },
+          "$description": "中性色强化版"
+        },
+        "onNeutralStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.0863,
+              0.1059,
+              0.1333
+            ],
+            "alpha": 1,
+            "hex": "#161B22"
+          },
+          "$description": "中性色强化版上的前景色"
+        }
+      },
+      "Surface": {
+        "surface": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.0863,
+              0.1059,
+              0.1333
+            ],
+            "alpha": 1,
+            "hex": "#161B22"
+          },
+          "$description": "表面"
+        },
+        "onSurface": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.8431,
+              0.8549,
+              0.8549
+            ],
+            "alpha": 1,
+            "hex": "#D7DADA"
+          },
+          "$description": "表面上的前景色"
+        },
+        "surfaceWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.1294,
+              0.1569,
+              0.2
+            ],
+            "alpha": 1,
+            "hex": "#212833"
+          },
+          "$description": "表面弱化版"
+        },
+        "onSurfaceWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.902,
+              0.9137,
+              0.9373
+            ],
+            "alpha": 1,
+            "hex": "#E6E9EF"
+          },
+          "$description": "表面弱化版上的前景色"
+        },
+        "surfaceStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.0706,
+              0.0902,
+              0.1216
+            ],
+            "alpha": 1,
+            "hex": "#12171F"
+          },
+          "$description": "表面强化版"
+        },
+        "onSurfaceStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.902,
+              0.9137,
+              0.9373
+            ],
+            "alpha": 1,
+            "hex": "#E6E9EF"
+          },
+          "$description": "表面强化版上的前景色"
+        }
+      },
+      "Popover": {
+        "popover": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.0863,
+              0.1059,
+              0.1333
+            ],
+            "alpha": 1,
+            "hex": "#161B22"
+          },
+          "$description": "浮层"
+        },
+        "onPopover": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.902,
+              0.9137,
+              0.9373
+            ],
+            "alpha": 1,
+            "hex": "#E6E9EF"
+          },
+          "$description": "浮层上的前景色"
+        },
+        "popoverWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.1216,
+              0.149,
+              0.1882
+            ],
+            "alpha": 1,
+            "hex": "#1F2630"
+          },
+          "$description": "浮层弱化版"
+        },
+        "onPopoverWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.902,
+              0.9137,
+              0.9373
+            ],
+            "alpha": 1,
+            "hex": "#E6E9EF"
+          },
+          "$description": "浮层弱化版上的前景色"
+        },
+        "popoverStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.0588,
+              0.0745,
+              0.098
+            ],
+            "alpha": 1,
+            "hex": "#0F1319"
+          },
+          "$description": "浮层强化版"
+        },
+        "onPopoverStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.902,
+              0.9137,
+              0.9373
+            ],
+            "alpha": 1,
+            "hex": "#E6E9EF"
+          },
+          "$description": "浮层强化版上的前景色"
+        }
+      },
+      "Background": {
+        "background": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.0549,
+              0.0667,
+              0.0863
+            ],
+            "alpha": 1,
+            "hex": "#0E1116"
+          },
+          "$description": "背景"
+        }
+      },
+      "Foreground": {
+        "foreground": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.902,
+              0.9137,
+              0.9373
+            ],
+            "alpha": 1,
+            "hex": "#E6E9EF"
+          },
+          "$description": "前景"
+        }
+      },
+      "Danger": {
+        "danger": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.9412,
+              0.3137,
+              0.4314
+            ],
+            "alpha": 1,
+            "hex": "#F0506E"
+          },
+          "$description": "危险"
+        },
+        "onDanger": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              1,
+              0.8706,
+              0.902
+            ],
+            "alpha": 1,
+            "hex": "#FFDEE6"
+          },
+          "$description": "危险上的前景色"
+        },
+        "dangerWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.5176,
+              0.2275,
+              0.302
+            ],
+            "alpha": 1,
+            "hex": "#843A4D"
+          },
+          "$description": "危险弱化版"
+        },
+        "onDangerWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.9255,
+              0.7608,
+              0.8039
+            ],
+            "alpha": 1,
+            "hex": "#ECC2CD"
+          },
+          "$description": "危险弱化版上的前景色"
+        },
+        "dangerStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.7725,
+              0.2275,
+              0.3333
+            ],
+            "alpha": 1,
+            "hex": "#C53A55"
+          },
+          "$description": "危险强化版"
+        },
+        "onDangerStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              1,
+              1,
+              1
+            ],
+            "alpha": 1,
+            "hex": "#FFFFFF"
+          },
+          "$description": "危险强化版上的前景色"
+        }
+      },
+      "Warning": {
+        "warning": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.8784,
+              0.6353,
+              0.2353
+            ],
+            "alpha": 1,
+            "hex": "#E0A23C"
+          },
+          "$description": "警告"
+        },
+        "onWarning": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              1,
+              1,
+              1
+            ],
+            "alpha": 1,
+            "hex": "#FFFFFF"
+          },
+          "$description": "警告上的前景色"
+        },
+        "warningWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.6157,
+              0.4745,
+              0.2314
+            ],
+            "alpha": 1,
+            "hex": "#9D793B"
+          },
+          "$description": "警告弱化版"
+        },
+        "onWarningWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.9294,
+              0.8902,
+              0.6627
+            ],
+            "alpha": 1,
+            "hex": "#EDE3A9"
+          },
+          "$description": "警告弱化版上的前景色"
+        },
+        "warningStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.698,
+              0.502,
+              0.1765
+            ],
+            "alpha": 1,
+            "hex": "#B2802D"
+          },
+          "$description": "警告强化版"
+        },
+        "onWarningStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              1,
+              1,
+              1
+            ],
+            "alpha": 1,
+            "hex": "#FFFFFF"
+          },
+          "$description": "警告强化版上的前景色"
+        }
+      },
+      "Success": {
+        "success": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.2471,
+              0.7137,
+              0.5451
+            ],
+            "alpha": 1,
+            "hex": "#3FB68B"
+          },
+          "$description": "成功"
+        },
+        "onSuccess": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              1,
+              1,
+              1
+            ],
+            "alpha": 1,
+            "hex": "#FFFFFF"
+          },
+          "$description": "成功上的前景色"
+        },
+        "successWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.4392,
+              0.7569,
+              0.6157
+            ],
+            "alpha": 1,
+            "hex": "#70C19D"
+          },
+          "$description": "成功弱化版"
+        },
+        "onSuccessWeak": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.0863,
+              0.1059,
+              0.1333
+            ],
+            "alpha": 1,
+            "hex": "#161B22"
+          },
+          "$description": "成功弱化版上的前景色"
+        },
+        "successStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.1804,
+              0.5451,
+              0.4314
+            ],
+            "alpha": 1,
+            "hex": "#2E8B6E"
+          },
+          "$description": "成功强化版"
+        },
+        "onSuccessStrong": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              1,
+              1,
+              1
+            ],
+            "alpha": 1,
+            "hex": "#FFFFFF"
+          },
+          "$description": "成功强化版上的前景色"
+        }
+      },
+      "Ink": {
+        "ink": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              1,
+              1,
+              1
+            ],
+            "alpha": 1,
+            "hex": "#FFFFFF"
+          },
+          "$description": "水墨色(阴影/分割线/边框)"
+        }
+      }
+    }
+  },
+  "Dimension": {
+    "Spacing": {
+      "spacing0": {
+        "$type": "dimension",
+        "$value": {
+          "value": 0,
+          "unit": "px"
+        },
+        "$description": "间距 0px"
+      },
+      "spacing1": {
+        "$type": "dimension",
+        "$value": {
+          "value": 4,
+          "unit": "px"
+        },
+        "$description": "间距 4px"
+      },
+      "spacing2": {
+        "$type": "dimension",
+        "$value": {
+          "value": 8,
+          "unit": "px"
+        },
+        "$description": "间距 8px"
+      },
+      "spacing3": {
+        "$type": "dimension",
+        "$value": {
+          "value": 12,
+          "unit": "px"
+        },
+        "$description": "间距 12px"
+      },
+      "spacing4": {
+        "$type": "dimension",
+        "$value": {
+          "value": 16,
+          "unit": "px"
+        },
+        "$description": "间距 16px"
+      },
+      "spacing5": {
+        "$type": "dimension",
+        "$value": {
+          "value": 20,
+          "unit": "px"
+        },
+        "$description": "间距 20px"
+      },
+      "spacing6": {
+        "$type": "dimension",
+        "$value": {
+          "value": 24,
+          "unit": "px"
+        },
+        "$description": "间距 24px"
+      },
+      "spacing7": {
+        "$type": "dimension",
+        "$value": {
+          "value": 28,
+          "unit": "px"
+        },
+        "$description": "间距 28px"
+      },
+      "spacing8": {
+        "$type": "dimension",
+        "$value": {
+          "value": 32,
+          "unit": "px"
+        },
+        "$description": "间距 32px"
+      },
+      "spacing9": {
+        "$type": "dimension",
+        "$value": {
+          "value": 36,
+          "unit": "px"
+        },
+        "$description": "间距 36px"
+      },
+      "spacing10": {
+        "$type": "dimension",
+        "$value": {
+          "value": 40,
+          "unit": "px"
+        },
+        "$description": "间距 40px"
+      },
+      "spacing11": {
+        "$type": "dimension",
+        "$value": {
+          "value": 44,
+          "unit": "px"
+        },
+        "$description": "间距 44px"
+      },
+      "spacing12": {
+        "$type": "dimension",
+        "$value": {
+          "value": 48,
+          "unit": "px"
+        },
+        "$description": "间距 48px"
+      }
+    },
+    "Size": {
+      "size0": {
+        "$type": "dimension",
+        "$value": {
+          "value": 0,
+          "unit": "px"
+        },
+        "$description": "区块尺寸 0px"
+      },
+      "sizeXs": {
+        "$type": "dimension",
+        "$value": {
+          "value": 16,
+          "unit": "px"
+        },
+        "$description": "区块尺寸 Xs(16px)"
+      },
+      "sizeSm": {
+        "$type": "dimension",
+        "$value": {
+          "value": 24,
+          "unit": "px"
+        },
+        "$description": "区块尺寸 Sm(24px)"
+      },
+      "sizeMd": {
+        "$type": "dimension",
+        "$value": {
+          "value": 32,
+          "unit": "px"
+        },
+        "$description": "区块尺寸 Md(32px)"
+      },
+      "sizeLg": {
+        "$type": "dimension",
+        "$value": {
+          "value": 40,
+          "unit": "px"
+        },
+        "$description": "区块尺寸 Lg(40px)"
+      },
+      "sizeXl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 48,
+          "unit": "px"
+        },
+        "$description": "区块尺寸 Xl(48px)"
+      },
+      "size2xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 56,
+          "unit": "px"
+        },
+        "$description": "区块尺寸 2XL(56px)"
+      }
+    },
+    "Radius": {
+      "radius0": {
+        "$type": "dimension",
+        "$value": {
+          "value": 0,
+          "unit": "px"
+        },
+        "$description": "圆角 0px"
+      },
+      "radiusSm": {
+        "$type": "dimension",
+        "$value": {
+          "value": 4,
+          "unit": "px"
+        },
+        "$description": "圆角 4px"
+      },
+      "radiusMd": {
+        "$type": "dimension",
+        "$value": {
+          "value": 8,
+          "unit": "px"
+        },
+        "$description": "圆角 8px"
+      },
+      "radiusLg": {
+        "$type": "dimension",
+        "$value": {
+          "value": 12,
+          "unit": "px"
+        },
+        "$description": "圆角 12px"
+      },
+      "radiusXl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 16,
+          "unit": "px"
+        },
+        "$description": "圆角 16px"
+      },
+      "radius2xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 24,
+          "unit": "px"
+        },
+        "$description": "圆角 24px"
+      },
+      "radiusFull": {
+        "$type": "dimension",
+        "$value": {
+          "value": 9999,
+          "unit": "px"
+        },
+        "$description": "圆角 全圆(9999px)"
+      }
+    },
+    "Font Size": {
+      "fontSize4xs": {
+        "$type": "dimension",
+        "$value": {
+          "value": 6,
+          "unit": "px"
+        },
+        "$description": "字号 6px(源 token: 0.375rem)"
+      },
+      "fontSize3xs": {
+        "$type": "dimension",
+        "$value": {
+          "value": 8,
+          "unit": "px"
+        },
+        "$description": "字号 8px(源 token: 0.5rem)"
+      },
+      "fontSize2xs": {
+        "$type": "dimension",
+        "$value": {
+          "value": 10,
+          "unit": "px"
+        },
+        "$description": "字号 10px(源 token: 0.625rem)"
+      },
+      "fontSizeXs": {
+        "$type": "dimension",
+        "$value": {
+          "value": 12,
+          "unit": "px"
+        },
+        "$description": "字号 12px(源 token: 0.75rem)"
+      },
+      "fontSizeSm": {
+        "$type": "dimension",
+        "$value": {
+          "value": 14,
+          "unit": "px"
+        },
+        "$description": "字号 14px(源 token: 0.875rem)"
+      },
+      "fontSizeMd": {
+        "$type": "dimension",
+        "$value": {
+          "value": 16,
+          "unit": "px"
+        },
+        "$description": "字号 16px(源 token: 1rem)"
+      },
+      "fontSizeLg": {
+        "$type": "dimension",
+        "$value": {
+          "value": 18,
+          "unit": "px"
+        },
+        "$description": "字号 18px(源 token: 1.125rem)"
+      },
+      "fontSizeXl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 20,
+          "unit": "px"
+        },
+        "$description": "字号 20px(源 token: 1.25rem)"
+      },
+      "fontSize2xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 24,
+          "unit": "px"
+        },
+        "$description": "字号 24px(源 token: 1.5rem)"
+      },
+      "fontSize3xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 30,
+          "unit": "px"
+        },
+        "$description": "字号 30px(源 token: 1.875rem)"
+      },
+      "fontSize4xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 36,
+          "unit": "px"
+        },
+        "$description": "字号 36px(源 token: 2.25rem)"
+      },
+      "fontSize5xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 48,
+          "unit": "px"
+        },
+        "$description": "字号 48px(源 token: 3rem)"
+      },
+      "fontSizeMax": {
+        "$type": "dimension",
+        "$value": {
+          "value": 64,
+          "unit": "px"
+        },
+        "$description": "字号 64px(源 token: 4rem)"
+      }
+    },
+    "Border Width": {
+      "borderWidthThin": {
+        "$type": "dimension",
+        "$value": {
+          "value": 1,
+          "unit": "px"
+        },
+        "$description": "描边宽度 1px"
+      },
+      "borderWidthThick": {
+        "$type": "dimension",
+        "$value": {
+          "value": 2,
+          "unit": "px"
+        },
+        "$description": "描边宽度 2px"
+      },
+      "borderWidthExtraThick": {
+        "$type": "dimension",
+        "$value": {
+          "value": 4,
+          "unit": "px"
+        },
+        "$description": "描边宽度 4px"
+      }
+    },
+    "Font Weight": {
+      "fontWeightThin": {
+        "$type": "number",
+        "$value": 100,
+        "$description": "字重 100"
+      },
+      "fontWeightExtraLight": {
+        "$type": "number",
+        "$value": 200,
+        "$description": "字重 200"
+      },
+      "fontWeightLight": {
+        "$type": "number",
+        "$value": 300,
+        "$description": "字重 300"
+      },
+      "fontWeightNormal": {
+        "$type": "number",
+        "$value": 400,
+        "$description": "字重 400"
+      },
+      "fontWeightMedium": {
+        "$type": "number",
+        "$value": 500,
+        "$description": "字重 500"
+      },
+      "fontWeightSemiBold": {
+        "$type": "number",
+        "$value": 600,
+        "$description": "字重 600"
+      },
+      "fontWeightBold": {
+        "$type": "number",
+        "$value": 700,
+        "$description": "字重 700"
+      }
+    }
+  },
+  "Font Family": {
+    "body": {
+      "$type": "fontFamily",
+      "$value": "Figtree",
+      "$description": "正文/UI 字体。完整字体栈:Figtree, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'"
+    },
+    "heading": {
+      "$type": "fontFamily",
+      "$value": "Figtree",
+      "$description": "标题字体。完整字体栈:Figtree, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'"
+    },
+    "code": {
+      "$type": "fontFamily",
+      "$value": "SFMono-Regular",
+      "$description": "代码字体。完整字体栈:SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace"
+    }
+  },
+  "Duration": {
+    "durationFast": {
+      "$type": "duration",
+      "$value": {
+        "value": 0.12,
+        "unit": "s"
+      },
+      "$description": "动效时长 120ms"
+    },
+    "durationMediumMin": {
+      "$type": "duration",
+      "$value": {
+        "value": 0.15,
+        "unit": "s"
+      },
+      "$description": "动效时长 150ms"
+    }
+  },
+  "Shadow": {
+    "shadowLow": {
+      "$type": "string",
+      "$value": "0 1px 2px rgba(0, 0, 0, 0.4)",
+      "$description": "CSS box-shadow 值,仅作参考;实际效果请用 Effect style 实现"
+    },
+    "shadowMed": {
+      "$type": "string",
+      "$value": "0 4px 12px rgba(0, 0, 0, 0.4)",
+      "$description": "CSS box-shadow 值,仅作参考;实际效果请用 Effect style 实现"
+    },
+    "shadowHigh": {
+      "$type": "string",
+      "$value": "0 8px 24px rgba(0, 0, 0, 0.55)",
+      "$description": "CSS box-shadow 值,仅作参考;实际效果请用 Effect style 实现"
+    }
+  }
+}
