@@ -4,6 +4,9 @@ RUN npm install -g pnpm@9
 
 WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+# pnpm 的 patchedDependencies 在 install 时对所有 patch 文件做 hash——缺文件直接 ENOENT
+# （api 依赖树用不到 vinxi patch，但文件必须存在；--filter 不会应用它）
+COPY patches ./patches
 COPY services/api/package.json ./services/api/package.json
 RUN pnpm install --filter @dailogues/api --frozen-lockfile
 
