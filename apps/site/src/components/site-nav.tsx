@@ -1,8 +1,8 @@
-import { Show, createSignal, onCleanup, onMount } from "solid-js";
+import { Show, createSignal, onCleanup, onMount, type JSX } from "solid-js";
 import { A, useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { colors, dimensions, durations, easings, layouts } from "@dailogues/ui/theme.stylex";
-import { Button } from "@dailogues/ui";
+import { colors, dimensions, durations, easings, layouts,global,typography } from "@dailogues/ui/theme.stylex";
+import { Button, Icon } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { LangSwitch } from "./lang-switch";
 import { UserMenu, type NavUser } from "./user-menu";
@@ -117,10 +117,7 @@ const styles = stylex.create({
     ":last-child": { borderBottom: "none" },
   },
   navLink: {
-    color: colors.foreground,
-    fontSize: dimensions.fontSizeMd,
     textDecoration: "none",
-    ":hover": { color: colors.foreground },
   },
   login: {
     color: colors.neutral,
@@ -153,6 +150,14 @@ const styles = stylex.create({
     height: dimensions.sizeMd,
   },
 });
+
+const LinkItem = (props: { 
+  href: string; 
+  children: JSX.Element,
+  title: string 
+ }) => {
+  return <A href={props.href} {...stylex.props(global.linkText, typography.bodyMd, styles.navLink)} title={props?.title}>{props.children}</A>;
+};
 
 /** 消费端导航：brand + home/discover + [投稿] + 通知 + 头像菜单 + 语言切换。
  *  会话经 site 代理（/v1/auth/get-session）在 client 判定（cookie 同站自动携带）；
@@ -209,25 +214,27 @@ export function SiteNav() {
 
   // 退出登录：走全局确认守卫（确认后才真正登出；登出逻辑在 auth-guard）
 
+
+
   // 导航内容（桌面行内 + 移动浮层共用）
   const navContent = () => (
     <>
-      <A href="/" {...stylex.props(styles.navLink)}>{t("nav.home")}</A>
-      <A href="/discover" {...stylex.props(styles.navLink)}>{t("nav.discover")}</A>
-      <A href="/hosts" {...stylex.props(styles.navLink)}>{t("nav.hosts")}</A>
-      <A href="/guests" {...stylex.props(styles.navLink)}>{t("nav.guests")}</A>
+      <LinkItem href="/" >{t("nav.home")}</LinkItem>
+      <LinkItem href="/discover"  >{t("nav.discover")}</LinkItem>
+      <LinkItem href="/hosts">{t("nav.hosts")}</LinkItem>
+      <LinkItem href="/guests">{t("nav.guests")}</LinkItem>
       {/* 组件示例页：仅本地 dev 可见（生产构建 import.meta.env.DEV=false，整段不渲染） */}
       <Show when={import.meta.env.DEV}>
-        <A href="/example" {...stylex.props(styles.navLink)}>{t("nav.example")}</A>
+        <LinkItem href="/example">{t("nav.example")}</LinkItem>
       </Show>
       {/* 订阅页（各平台入口 + feed 地址） */}
-      <A href="/subscribe" {...stylex.props(styles.navLink)} title={t("nav.subscribe")}>
+      <LinkItem href="/subscribe"  title={t("nav.subscribe")}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <circle cx="6" cy="18" r="2.5" />
           <path d="M4 10.5a9.5 9.5 0 0 1 9.5 9.5h-2.6A6.9 6.9 0 0 0 4 13.1V10.5Z" />
           <path d="M4 4a16 16 0 0 1 16 16h-2.7A13.3 13.3 0 0 0 4 6.7V4Z" />
         </svg>
-      </A>
+      </LinkItem>
       {/* 投稿入口仅登录后显示（user 由 onMount 判定；首帧未确认前不显示） */}
       {/* <Show when={user()}>
         <Button size="sm" onClick={openImportDialog}>
@@ -246,19 +253,25 @@ export function SiteNav() {
                 <span {...stylex.props(styles.badge)}>{unread() > 99 ? "99+" : unread()}</span>
               </Show>
             </A>
-            <UserMenu user={u()} onSignOut={() => confirmSignOut()} />
+            {menuTriggerWrap(<UserMenu user={u()} onSignOut={() => confirmSignOut()} />)}
           </>
         )}
       </Show>
-      <LangSwitch />
+      {menuTriggerWrap(<LangSwitch />)}
     </>
+  );
+
+  // 二级菜单触发器标记（语言/头像）：点击不收起浮层（二级菜单要弹出）；
+  // 其余菜单项（链接/按钮）点击一律收起
+  const menuTriggerWrap = (node: JSX.Element) => (
+    <div data-menu-trigger={true}>{node}</div>
   );
 
   return (
     <>
     <header ref={headerRef} {...stylex.props(layouts.containerFull, styles.header, scrolled() && styles.headerScrolled)}>
       <A href="/" {...stylex.props(styles.brand)}>
-        <Logo {...stylex.props(styles.logo)}/>
+        <Logo {...stylex.props(styles.logo)} />
       </A>
       {/* 桌面：行内导航 */}
       <nav {...stylex.props(styles.nav)}>
@@ -271,7 +284,7 @@ export function SiteNav() {
         aria-label="menu"
         aria-expanded={menuOpen()}
       >
-        ☰
+        <Icon icon="iconoir:menu" width={24}/>
       </button>
     </header>
     {/* 移动端浮层：汉堡展开的导航面板（跟随 header 文档流）。
@@ -282,7 +295,9 @@ export function SiteNav() {
         {...stylex.props(styles.drawer)}
         onClick={(e) => {
           const t = e.target as HTMLElement;
-          if (t === e.currentTarget || t.closest("a")) setMenuOpen(false);
+          // 二级菜单触发器（语言/头像）：不收起（菜单要弹出）；其余（链接/按钮/空白）收起
+          if (t.closest("[data-menu-trigger]")) return;
+          setMenuOpen(false);
         }}
       >
         {navContent()}

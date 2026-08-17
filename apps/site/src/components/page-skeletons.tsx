@@ -1,6 +1,7 @@
-// 页面骨架屏（跟随页面自身排版结构）：
+// 页面数据区骨架屏（跟随页面自身排版结构）：
 // - 供各页面数据区 <Suspense fallback> 使用（骨架分散在各自内容容器中）
-// - 路由过渡期（isRouting）也复用同一套，保证切换与页面内骨架视觉一致
+// - 列表页（discover/hosts/guests）与详情页（episode/[slug]）保留骨架；
+//   其余页面用 PageSpinner（page-loading），需要时自行换成骨架。
 import { For } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
@@ -53,25 +54,6 @@ const skeleton = stylex.create({
   },
   lineShort: {
     width: "65%",
-  },
-  // 卡片网格（首页/通用）：移动优先 2 列 → 平板/桌面 4 列
-  cards: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    gap: dimensions.spacing4,
-    marginTop: dimensions.spacing4,
-    [TABLET]: {
-      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-      gap: dimensions.spacing5,
-    },
-    [DESKTOP]: {
-      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-      gap: dimensions.spacing5,
-    },
-  },
-  card: {
-    aspectRatio: "3 / 4",
-    borderRadius: dimensions.radiusMd,
   },
   // 详情页：左封面 + 右详情（与 episode/[slug].tsx body 布局一致）：移动优先竖排
   detailBody: {
@@ -144,22 +126,6 @@ const skeleton = stylex.create({
 });
 
 const status = { role: "status" as const, "aria-label": "loading" };
-
-/** 通用/首页骨架：标题 + 段落 + 卡片网格 */
-export function CardGridSkeleton() {
-  return (
-    <div {...stylex.props(skeleton.wrap)} {...status}>
-      <div {...stylex.props(skeleton.block, skeleton.title)} />
-      <div {...stylex.props(skeleton.block, skeleton.line)} />
-      <div {...stylex.props(skeleton.block, skeleton.line, skeleton.lineShort)} />
-      <div {...stylex.props(skeleton.cards)}>
-        <For each={[0, 1, 2, 3]}>
-          {() => <div {...stylex.props(skeleton.block, skeleton.card)} />}
-        </For>
-      </div>
-    </div>
-  );
-}
 
 /** 详情页骨架：左封面 + 右标题/段落（跟随 /episode 排版） */
 export function DetailSkeleton() {

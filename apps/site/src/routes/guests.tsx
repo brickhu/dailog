@@ -6,7 +6,7 @@ import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
-import { ListSkeleton } from "../components/route-skeletons";
+import { ListSkeleton } from "../components/page-skeletons";
 
 // 常驻 AI 嘉宾（/guests）：品牌声线宿主列表
 interface GuestRow { id: string; platform: string; name: string; avatar: string | null; intro: string | null; url: string | null; }
@@ -80,7 +80,7 @@ export default function GuestsPage() {
         <p {...stylex.props(layouts.fullRow, styles.desc)}>{t("guests.desc")}</p>
         <div {...stylex.props(layouts.fullRow)}>
         <Suspense fallback={<ListSkeleton />}>
-        <Show when={guests()?.length} fallback={<ListSkeleton />}>
+        <Show when={guests()?.length} fallback={<div {...stylex.props(styles.empty)}>{t("guests.empty")}</div>}>
           <div {...stylex.props(styles.grid)}>
             <For each={guests() ?? []}>
               {(g) => (

@@ -3,14 +3,25 @@ import * as stylex from "@stylexjs/stylex";
 import { colors } from "@dailogues/ui/theme.stylex";
 
 const styles = stylex.create({
-    fillBrand: {
-        fill : colors.brand
-    }
+  // 品牌色填充：直接引用主题 brand token（跟随浅/暗自动切换）。
+  // 不做外部覆盖——stylex 原子类按类名排序，CSS 变量类覆盖不可靠；
+  // 如需不同品牌色场景，走内联 style（--logo-brand）由调用方自行处理
+  fillBrand: {
+    fill: colors.brand,
+  },
 })
+
+
 
 const FullLogo = (props: { style?: JSX.CSSProperties; class?: string }) => {
     return(
-        <svg viewBox="0 0 288 104" fill="none" xmlns="http://www.w3.org/2000/svg" style={props.style} class={props.class}>
+        <svg
+          viewBox="0 0 288 104"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          style={props.style}
+          class={props.class}
+        >
             <path d="M52 32H28V64H52V72H20V24H52V32Z" fill="currentColor"/>
             <path d="M60 64H52V32H60V64Z" fill="currentColor"/>
             <path d="M212 72H188V64H212V72Z" fill="currentColor"/>
@@ -32,7 +43,13 @@ const FullLogo = (props: { style?: JSX.CSSProperties; class?: string }) => {
 }
 const Pattern = (props: { style?: JSX.CSSProperties; class?: string }) => {
     return(
-        <svg viewBox="0 0 104 104" fill="none" xmlns="http://www.w3.org/2000/svg" style={props.style} class={props.class}>
+        <svg
+          viewBox="0 0 104 104"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          style={props.style}
+          class={props.class}
+        >
             <path d="M66 80L74 72H82V80H78L70 88H62L54 80H22V72H58L66 80ZM30 40H54V24H62V64H54V48H30V64H22V24H30V40ZM82 64H74V16H82V64ZM54 24H30V16H54V24Z" fill="currentColor"/>
         </svg>
 

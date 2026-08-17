@@ -222,7 +222,7 @@ export function LoginForm(props: LoginFormProps) {
     <div {...stylex.props(styles.page)}>
       <div {...stylex.props(styles.formWrap)}>
       <Card>
-        <div {...stylex.props(styles.brand)}>dailog</div>
+        <div {...stylex.props(styles.brand)}>{t("auth.brand")}</div>
         <div {...stylex.props(styles.tagline)}>{t("auth.tagline")}</div>
         <Show when={!props.checkingSession} fallback={<div {...stylex.props(styles.loading)}>{t("auth.loading")}</div>}>
         <div>

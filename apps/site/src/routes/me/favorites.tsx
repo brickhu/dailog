@@ -1,11 +1,12 @@
 import { A, createAsync } from "@solidjs/router";
-import { For, Show } from "solid-js";
+import { For, Show, Suspense } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../../components/auth-gate";
+import { PageSpinner } from "../../components/page-loading";
 
 // 我的收藏（/me/favorites）：收藏的节目列表
 interface FavoriteRow {
@@ -76,6 +77,7 @@ export default function FavoritesPage() {
         <div {...stylex.props(layouts.containerSm)}>
           <Title>{t("me.favorites")} · dailog</Title>
           <div {...stylex.props(layouts.fullRow, styles.title)}>{t("me.favorites")}</div>
+          <Suspense fallback={<PageSpinner />}>
           <Show
             when={favorites()?.length}
             fallback={<div {...stylex.props(styles.empty)}>{t("me.empty")}</div>}
@@ -92,6 +94,7 @@ export default function FavoritesPage() {
               )}
             </For>
           </Show>
+          </Suspense>
         </div>
       </div>
       </AuthGate>

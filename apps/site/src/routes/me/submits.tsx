@@ -1,11 +1,12 @@
 import { A, createAsync } from "@solidjs/router";
-import { For, Show } from "solid-js";
+import { For, Show, Suspense } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../../components/auth-gate";
+import { PageSpinner } from "../../components/page-loading";
 
 // 我的投稿（本质版，2026-08-13）：投稿状态列表（审核中/投稿失败/已发布 + 最新节目状态）
 // 会话判定与 me.tsx 同模式（client 判定，未登录跳统一登录）
@@ -116,6 +117,7 @@ function SubmissionsList() {
   <div {...stylex.props(layouts.page)}>
     <div {...stylex.props(layouts.containerSm)}>
       <div {...stylex.props(layouts.fullRow, styles.title)}>{t("meSubmits.title")}</div>
+      <Suspense fallback={<PageSpinner />}>
       <Show
         when={submissions()?.length}
         fallback={
@@ -147,6 +149,7 @@ function SubmissionsList() {
           )}
         </For>
       </Show>
+      </Suspense>
     </div>
   </div>
   );

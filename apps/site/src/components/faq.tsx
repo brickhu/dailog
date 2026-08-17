@@ -13,13 +13,7 @@ const TABLET = "@media (640px <= width < 1024px)";
 
 const styles = stylex.create({
   wrap: {
-    padding: `0 0 ${dimensions.spacing8}`, // 移动优先
-    [TABLET]: {
-      padding: `0 0 ${dimensions.spacing12}`,
-    },
-    [DESKTOP]: {
-      padding: `0 0 ${dimensions.spacing12}`,
-    },
+
   },
   title: {
     fontSize: dimensions.fontSizeXl,
@@ -64,20 +58,6 @@ const styles = stylex.create({
     fontSize: dimensions.fontSizeMd,
     lineHeight: 1.7,
   },
-  quote: {
-    margin: `${dimensions.spacing8} 0 0`,
-    textAlign: "center",
-    fontSize: dimensions.fontSize2xl,
-    fontWeight: dimensions.fontWeightMedium,
-    color: colors.neutralWeak, // 引用文字用浅灰
-    lineHeight: 1.5,
-  },
-  quoteAuthor: {
-    margin: `${dimensions.spacing2} 0 0`,
-    textAlign: "center",
-    fontSize: dimensions.fontSizeSm,
-    color: colors.neutralWeak,
-  },
 });
 
 export function Faq() {
@@ -120,9 +100,6 @@ export function Faq() {
           );
         }}
       </For>
-      {/* 底部品牌金句：大字号居中 + 署名 */}
-      <p {...stylex.props(styles.quote)}>{t("home.faq.quote")}</p>
-      <p {...stylex.props(styles.quoteAuthor)}>— {t("home.faq.quoteAuthor")}</p>
     </section>
   );
 }

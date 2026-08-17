@@ -337,6 +337,7 @@ export const layouts = stylex.create({
     backgroundColor: colors.background,
     minWidth: "320px",
     overflowX: "hidden",
+
   },
 
   // —— 页面层（100vw）——
@@ -436,6 +437,16 @@ export const layouts = stylex.create({
       columnGap: dimensions.spacing5,
     },
   },
+})
+
+export const global = stylex.create({
+  linkText : {
+    color : colors.neutral,
+    textUnderlineOffset : "0.2em",
+    ":hover" : {
+      color: colors.neutralStrong
+    }
+  }
 })
 
 // 断点标签命名导出（全站统一引用；<640 无需声明——默认样式即移动端，移动优先）

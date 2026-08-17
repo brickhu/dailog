@@ -6,6 +6,8 @@ import { layouts } from "@dailogues/ui/theme.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { auth } from "../lib/auth-guard";
 import { openImportDialog } from "../components/import-dialog";
+// use:auth 指令的作用域绑定（babel 编译转换需要；TS 不识 JSX 指令故 void 消除未使用误报）
+void auth;
 
 export default function Example() {
   if (!import.meta.env.DEV) return null;

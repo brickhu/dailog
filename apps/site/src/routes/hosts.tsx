@@ -6,7 +6,7 @@ import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
-import { ListSkeleton } from "../components/route-skeletons";
+import { ListSkeleton } from "../components/page-skeletons";
 
 // 主播列表（/hosts）：在 Dailog 出过节目的主持人（按播放量 + 期数排序）
 interface HostRow { username: string; displayName: string; avatar: string | null; episodeCount: number; totalPlays: number; }
@@ -80,7 +80,7 @@ export default function HostsPage() {
         <p {...stylex.props(layouts.fullRow, styles.desc)}>{t("hosts.desc")}</p>
         <div {...stylex.props(layouts.fullRow)}>
         <Suspense fallback={<ListSkeleton />}>
-        <Show when={hosts()?.length} fallback={<ListSkeleton />}>
+        <Show when={hosts()?.length} fallback={<div {...stylex.props(styles.empty)}>{t("hosts.empty")}</div>}>
           <div {...stylex.props(styles.grid)}>
             <For each={hosts() ?? []}>
               {(h) => (

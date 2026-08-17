@@ -228,15 +228,18 @@ blocked by CORS policy: No 'Access-Control-Allow-Origin' header`。
   用 `proxyApi()` 转发 API（服务端 node fetch，无 CORS）。
 - **CORS 白名单补 `http://localhost:3000`**（dev 直连双保险）。
 - hosts/guests 数据区包**页面级 `<Suspense fallback={<ListSkeleton/>}>`**：
-  资源挂起显示页面排版骨架（外层 RouterOutlet 的 CardGridSkeleton 只作兜底）。
+  资源挂起显示页面排版骨架；外层 RouterOutlet 仅兜底懒加载 chunk（PageSpinner）。
 
 ### 注意事项
 - 新增 site 端代理后，**所有**浏览器端 `/v1/*` 请求都走同源（与既有
   interactions/submissions 代理一致）；SSR 端仍直连 API（保留 `apiBaseForFetch`）。
 - 页面数据加载统一模式：**createAsync + cache()**（SSR 序列化 + 客户端导航缓存命中，
-  体验最佳，discover 即此模式）；或 **createResource + 页面级 Suspense 骨架**。
+  体验最佳，discover 即此模式）；或 **createResource + 页面级 Suspense**（fallback 用
+  spinner/骨架均可，如 page-loading 的 PageSpinner / page-skeletons 的列表、详情骨架）。
+- 路由过渡不再做全局骨架屏（删除 isRouting/PageSkeleton 方案）：@solidjs/router 的
+  hover/触摸预载保证点击即提交，目标页壳立即渲染，异步数据由各页内部 Suspense 处理。
 - 骨架屏样式依赖 stylex 客户端注入，页面骨架组件应放在入口可及模块（如
-  route-skeletons.tsx），避免懒加载 chunk 首用无样式。
+  page-skeletons.tsx），避免懒加载 chunk 首用无样式。
 
 ## 10. Solid 1.9 hydration 与 JSX 元素 props（lazy props）的 Mismatch
 

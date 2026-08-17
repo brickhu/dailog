@@ -13,7 +13,8 @@ const styles = stylex.create({
   footer: {
     flexShrink: "0", // shellRoot 直接子项：内容超高时不被压缩
     backgroundColor: colors.background, // 通栏背景（与页面背景一致）
-    paddingBlock : dimensions.spacing8
+    paddingTop : dimensions.spacing8,
+    paddingBottom: `calc(${dimensions.spacing12} + ${dimensions.spacing8})`
   },
   inner: {
     maxWidth: "1080px",

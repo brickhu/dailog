@@ -56,6 +56,7 @@ export const zh = {
   "layout.sending": "发送中…",
 
   // ---- 登录/注册 ----
+  "auth.brand": "登录 dailog",
   "auth.tagline": "听见人类和 AI 的思想交锋",
   "auth.loginOrSignup": "登录 / 注册（新用户将收到邮箱验证码）",
   "auth.email": "邮箱",
@@ -230,8 +231,10 @@ export const zh = {
   "home.statEpisodesSub": "听见人类和 AI 的思想交锋",
   "hosts.title": "主播",
   "hosts.desc": "在 Dailog 出过节目的主持人",
+  "hosts.empty": "还没有主播",
   "guests.title": "常驻 AI 嘉宾",
   "guests.desc": "Dailog 的常驻 AI 受访嘉宾",
+  "guests.empty": "暂无常驻嘉宾",
   "guest.notFound": "嘉宾不存在",
   "guest.episodes": "参与的节目",
   "guest.noEpisodes": "暂无参与节目",
@@ -267,7 +270,7 @@ export const zh = {
   "home.faq.a5": "站内直接播放，或通过 dailog 单 feed RSS 订阅（Apple Podcasts、Spotify、小宇宙等平台）。",
   "home.faq.q6": "我的聊天记录会被怎么处理？",
   "home.faq.a6": "制作时会做隐私模糊化处理，节目仅呈现对话内容本身，不展示你的账号信息。",
-  "home.faq.quote": "“人类和AI在思想交融中的每一声回响，都是这段共同进化的历史痕迹。”",
+  "home.faq.quote": "人类和AI在思想交融中的每一声回响，都是这段共同进化的历史痕迹。",
   "home.faq.quoteAuthor": "Fei, Dailog 创始人",
 
   // ---- 管理员工作台（admin） ----
@@ -781,6 +784,7 @@ export const en: Dictionary = {
   "layout.sending": "Sending…",
 
   // ---- 登录/注册 ----
+  "auth.brand": "Sign in to dailog",
   "auth.tagline": "Hear the clash between humans and AI",
   "auth.loginOrSignup": "Log in / Sign up（new users get an email code）",
   "auth.email": "Email",
@@ -955,8 +959,10 @@ export const en: Dictionary = {
   "home.statEpisodesSub": "Hear the clash of human and AI ideas",
   "hosts.title": "Hosts",
   "hosts.desc": "Hosts who have published on Dailog",
+  "hosts.empty": "No hosts yet",
   "guests.title": "Resident AI guests",
   "guests.desc": "Dailog's resident AI interviewees",
+  "guests.empty": "No resident AI guests yet",
   "guest.notFound": "Guest not found",
   "guest.episodes": "Episodes",
   "guest.noEpisodes": "No episodes yet",
@@ -992,7 +998,7 @@ export const en: Dictionary = {
   "home.faq.a5": "Stream directly on this site, or subscribe via the dailog single-feed RSS (Apple Podcasts, Spotify, 小宇宙 and more).",
   "home.faq.q6": "What happens to my chat records?",
   "home.faq.a6": "Privacy redaction is applied during production; episodes only present the conversation itself and never expose your account details.",
-  "home.faq.quote": "\"Every echo of human-AI ideas in confluence is a trace of this co-evolving history.\"",
+  "home.faq.quote": "Every echo of human-AI ideas in confluence is a trace of this co-evolving history.",
   "home.faq.quoteAuthor": "Fei, Dailog Funder",
 
   // ---- Admin workbench ----

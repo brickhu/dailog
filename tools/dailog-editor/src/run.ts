@@ -4,7 +4,8 @@
 //   pnpm editor --api-base <url> <cmd> ...     临时直连指定地址
 //   DAILOG_ENV=<环境名> pnpm editor <cmd> ...  环境变量方式
 //
-//   pnpm editor login [--force] [--logout]     配对码登录（浏览器授权 → 粘贴配对码）
+//   pnpm editor login [--force] [--logout] [--code <配对码>]   配对码登录（浏览器授权 → 粘贴配对码；
+//                                          非交互环境用 --code <配对码> 提交回贴的码完成配对）
 //   pnpm editor auth-status                    当前环境授权状态（有效/无效/未登录）
 //   pnpm editor list                           待审队列
 //   pnpm editor overview                       工作台概要（环境/编辑/三类待办计数）

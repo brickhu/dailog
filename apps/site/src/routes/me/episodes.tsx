@@ -6,6 +6,7 @@ import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../../components/auth-gate";
+import { PageSpinner } from "../../components/page-loading";
 
 // 我的节目（/me/episodes）：已发布节目列表 + 下架/重新上架（切换 isPublic）。
 // 下架后从首页/RSS/公开接口消失，仅自己可见。
@@ -120,11 +121,16 @@ function EpisodesList() {
   createAsync<MyEpisode[] | null>(async () => {
     // SSR 首帧短路：相对路径在服务端无法解析（Node fetch 需绝对 URL）
     if (typeof window === "undefined") return null;
-    const res = await fetch("/v1/me/episodes");
-    if (!res.ok) return [];
-    const list = (await res.json()) as MyEpisode[];
-    setEpisodes(list);
-    return list;
+    try {
+      const res = await fetch("/v1/me/episodes");
+      if (!res.ok) return [];
+      const list = (await res.json()) as MyEpisode[];
+      setEpisodes(list);
+      return list;
+    } catch {
+      setEpisodes([]); // 网络异常：空态兜底，避免无限加载
+      return [];
+    }
   });
 
   // 下架/重新上架：PATCH 成功后本地更新（不整页刷新）
@@ -143,6 +149,7 @@ function EpisodesList() {
   <div {...stylex.props(layouts.page)}>
     <div {...stylex.props(layouts.containerSm)}>
       <div {...stylex.props(layouts.fullRow, styles.title)}>{t("me.episodes")}</div>
+      <Show when={episodes() !== null} fallback={<PageSpinner />}>
       <Show
         when={episodes()?.length}
         fallback={
@@ -180,6 +187,7 @@ function EpisodesList() {
             </div>
           )}
         </For>
+      </Show>
       </Show>
     </div>
   </div>

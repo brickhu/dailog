@@ -3,7 +3,7 @@ import { createAsync, useParams } from "@solidjs/router";
 import { Meta, Title } from "@solidjs/meta";
 import { Cover } from "../../components/cover";
 import { PlayControls } from "../../components/episode-card";
-import { DetailSkeleton } from "../../components/route-skeletons";
+import { DetailSkeleton } from "../../components/page-skeletons";
 import { EpisodeDetail } from "../../components/episode-detail";
 import { usePlayback, type QueueEpisode } from "../../lib/playback";
 import { getEpisodeCached } from "../../lib/episode-cache";

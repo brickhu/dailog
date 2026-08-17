@@ -1,8 +1,9 @@
 import { A, cache, createAsync } from "@solidjs/router";
-import { For, Show } from "solid-js";
+import { For, Show, Suspense } from "solid-js";
 import { useParams } from "@solidjs/router";
 import { getRequestEvent, isServer } from "solid-js/web";
 import { getChannel, type ChannelSummary, type EpisodeSummary } from "../lib/db";
+import { PageSpinner } from "../components/page-loading";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
@@ -109,6 +110,7 @@ export default function ChannelPage() {
     <div {...stylex.props(layouts.page)}>
       <div {...stylex.props(layouts.containerSm)}>
         <div {...stylex.props(layouts.fullRow)}>
+        <Suspense fallback={<PageSpinner />}>
         <Show
           when={data()?.channel}
           fallback={<div {...stylex.props(styles.notFound)}>{t("channel.notFound")}</div>}
@@ -136,6 +138,7 @@ export default function ChannelPage() {
             )}
           </For>
         </Show>
+        </Suspense>
         </div>
       </div>
     </div>

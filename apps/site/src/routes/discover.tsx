@@ -6,7 +6,7 @@ import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
-import { ListSkeleton } from "../components/route-skeletons";
+import { ListSkeleton } from "../components/page-skeletons";
 
 // 探索页（PRD §5 /discover）：新 / 热 / 精 / 荐 四个 tab。
 // v1（P4 前）：四个 tab 均展示最新节目列表；hot/picked/top 的真实排序与精选池随 P4 接入

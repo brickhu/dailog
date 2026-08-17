@@ -1,7 +1,8 @@
 import { A, cache, createAsync } from "@solidjs/router";
-import { For, Show } from "solid-js";
+import { For, Show, Suspense } from "solid-js";
 import { useParams } from "@solidjs/router";
 import { getGuest } from "../../lib/db";
+import { PageSpinner } from "../../components/page-loading";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
@@ -128,6 +129,7 @@ export default function GuestPage() {
     <div {...stylex.props(layouts.page)}>
       <div {...stylex.props(layouts.containerSm)}>
         <div {...stylex.props(layouts.fullRow)}>
+        <Suspense fallback={<PageSpinner />}>
         <Show
           when={data()}
           fallback={<div {...stylex.props(styles.notFound)}>{t("guest.notFound")}</div>}
@@ -166,6 +168,7 @@ export default function GuestPage() {
             </For>
           </Show>
         </Show>
+        </Suspense>
         </div>
       </div>
     </div>

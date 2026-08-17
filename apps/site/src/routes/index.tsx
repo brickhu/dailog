@@ -1,15 +1,15 @@
-import { createEffect, createResource, Show, For } from "solid-js";
+import { createEffect, createResource, Show, For, Suspense } from "solid-js";
 import { A } from "@solidjs/router";
 import { usePlayback, type QueueEpisode } from "../lib/playback";
 import { apiBaseForFetch } from "../lib/env";
 import { Faq } from "../components/faq";
 import { EpisodeCarousel } from "../components/episode-carousel";
 import { HeroFlow } from "../components/hero-flow";
-import { Button, Icon } from "@dailogues/ui";
+import { Button, Icon, Skeleton } from "@dailogues/ui";
 import * as stylex from "@stylexjs/stylex";
-import { layouts, typography } from "@dailogues/ui/theme.stylex";
-import { colors, dimensions } from "@dailogues/ui/theme.stylex";
+import { layouts, typography,global,colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
+import { PageSpinner } from "../components/page-loading";
 import { auth } from "../lib/auth-guard";
 import { openImportDialog } from "../components/import-dialog";
 // use:auth 指令的作用域绑定（babel 编译转换需要；TS 不识 JSX 指令故 void 消除未使用误报）
@@ -34,8 +34,13 @@ const styles = stylex.create({
     flexDirection: "column",
     width: "100%",
     // 高度由内部 containerLg 内容撑开（无固定高度）
-    paddingTop: dimensions.spacing12,
-    paddingBottom: dimensions.spacing12,
+    paddingBlock :dimensions.spacing8,
+    [TABLET] : {
+      paddingBlock :dimensions.spacing10,
+    },
+    [DESKTOP] : {
+      paddingBlock :dimensions.spacing12,
+    }
   },
   heroInner: {
     position: "relative", // 叠加层盖在动画背景之上
@@ -47,13 +52,13 @@ const styles = stylex.create({
     gap: dimensions.spacing3,
     gridColumn: "1 / -1", // 手机 <640 占满
     // 互斥 range 断点（stylex media 输出顺序不稳定，重叠断点会错乱）
-[TABLET]: {
-      gridColumn: "span 5", // 平板 8 列占 5
+    [TABLET]: {
+        gridColumn: "span 5", // 平板 8 列占 5
+      },
+    [DESKTOP]: {
+        gridColumn: "span 7", // 桌面 12 列占 7
+      },
     },
-[DESKTOP]: {
-      gridColumn: "span 7", // 桌面 12 列占 7
-    },
-  },
   tagline: {
     margin: 0,
   },
@@ -62,8 +67,7 @@ const styles = stylex.create({
     margin: 0,
   },
   ctaHint: {
-    color: colors.neutral,
-    fontSize: dimensions.fontSizeSm,
+    color: `color-mix(in srgb, ${colors.foreground} 80%, transparent)`,
     margin: 0,
   },
   ctaRow: {
@@ -97,12 +101,9 @@ const styles = stylex.create({
     fontSize: dimensions.fontSizeXl,
     fontWeight: dimensions.fontWeightBold,
   },
-  moreLink: {
-    color: colors.neutral,
-    fontSize: dimensions.fontSizeSm,
-    textDecoration: "none",
-    ":hover": { color: colors.primary },
-  },
+  // moreLink: {
+  //   fontSize: dimensions.fontSizeSm,
+  // },
   statCards: {
     // subgrid 继承 containerLg 轨道：列数/列宽/columnGap 全继承（4/8/12 列断点自动跟随），
     // 不再自声明 gridTemplateColumns；rowGap 需显式（subgrid 只继承列轨道）。
@@ -112,16 +113,16 @@ const styles = stylex.create({
     gridTemplateColumns: "subgrid",
     rowGap: dimensions.spacing4,
     paddingBottom: dimensions.spacing8, // 与 FAQ 的间距（垂直方向不影响列轨道对齐）
-[TABLET]: {
+    [TABLET]: {
       paddingBottom: dimensions.spacing12,
     },
   },
   statCard: {
     gridColumn: "span 4", // 手机 4 列占满 → 单列堆叠
-[TABLET]: {
+    [TABLET]: {
       gridColumn: "span 2", // 平板 8 列占 2 → 3 张一行
     },
-[DESKTOP]: {
+    [DESKTOP]: {
       gridColumn: "span 4", // 桌面 12 列占 4 → 3 张一行
     },
     display: "flex",
@@ -200,7 +201,38 @@ const styles = stylex.create({
     fontSize: dimensions.fontSizeSm,
     margin: 0,
   },
+  quote: {
+    paddingBlock : dimensions.spacing12,
+    textAlign: "center",
+    color: `color-mix(in srgb, ${colors.foreground} 30%, transparent)`,
+    display: "flex",
+    flexDirection : "column",
+    gap : dimensions.spacing4
+  },
+  quoteAuthor: {
+    margin: `${dimensions.spacing2} 0 0`,
+    textAlign: "center",
+    fontSize: dimensions.fontSizeSm,
+    color: colors.neutralWeak,
+  }
 });
+
+// 统计卡片加载/空数据占位：三张与真实卡片同构的骨架块（subgrid 轨道不变，避免布局跳动）
+function StatsCardsPlaceholder() {
+  return (
+    <div {...stylex.props(styles.statCards)} aria-busy="true">
+      <div {...stylex.props(styles.statCard)}>
+        <Skeleton width={140} height={18} radius={1} />
+      </div>
+      <div {...stylex.props(styles.statCard)}>
+        <Skeleton width={140} height={18} radius={1} />
+      </div>
+      <div {...stylex.props(styles.statCard)}>
+        <Skeleton width={140} height={18} radius={1} />
+      </div>
+    </div>
+  );
+}
 
 export default function HomePage() {
   const { t, locale } = useI18n();
@@ -240,7 +272,7 @@ export default function HomePage() {
         <div {...stylex.props(layouts.containerLg, styles.heroInner)}>
           <div {...stylex.props(styles.heroText)}>
             <h1 {...stylex.props(typography.displayMd, styles.tagline)}>{t("home.hero.tagline")}</h1>
-            <p {...stylex.props(typography.bodyXl, styles.what)}>{t("home.hero.what")}</p>
+            <p {...stylex.props(typography.bodyLg, styles.what)}>{t("home.hero.what")}</p>
             <div {...stylex.props(styles.ctaRow)}>
               <Button
                 use:auth={true}
@@ -251,7 +283,7 @@ export default function HomePage() {
                 {t("home.hero.submit")}
               </Button>
               {/* <A href="/submit" {...stylex.props(styles.cta)}><Icon icon="mdi:send" width={16} />{t("home.hero.submit")}</A> */}
-              <p {...stylex.props(styles.ctaHint)}>{t("home.hero.ctaHint")}</p>
+              <p {...stylex.props(typography.caption,styles.ctaHint)}>{t("home.hero.ctaHint")}</p>
             </div>
           </div>
         </div>
@@ -260,13 +292,16 @@ export default function HomePage() {
       <div {...stylex.props(layouts.containerLg)}>
       <div {...stylex.props(layouts.fullRow, styles.listTitleRow)}>
         <div {...stylex.props(styles.listTitle)}>{t("home.recommended")}</div>
-        <A href="/discover" {...stylex.props(styles.moreLink)}>{t("home.hero.browse")}</A>
+        <A href="/discover" {...stylex.props(global.linkText,typography.bodyMd)}>{t("home.hero.browse")}</A>
       </div>
 
+      {/* 数据区（推荐滚屏 + 统计卡片）：页面级 Suspense —— 点击导航立即提交，数据加载中
+          显示 spinner（后续可按需换成结构化骨架）；FAQ 静态区不受影响 */}
+      <Suspense fallback={<PageSpinner />}>
       <EpisodeCarousel episodes={list() ?? null} loading={list.loading} />
 
       {/* 站点头部统计卡片：主播 / AI 嘉宾 / 访谈期数（subgrid 继承容器轨道，等宽等高灰色区块） */}
-      <Show when={stats()}>
+      <Show when={stats()} fallback={<StatsCardsPlaceholder />}>
         <div {...stylex.props(styles.statCards)}>
           <A href="/hosts" {...stylex.props(styles.statCard)}>
             <div {...stylex.props(styles.statTitle)}>{t("home.statHosts", { count: stats()!.hostCount, plural: stats()!.hostCount === 1 ? "" : "s" })}</div>
@@ -299,10 +334,16 @@ export default function HomePage() {
           </A>
         </div>
       </Show>
+      </Suspense>
 
       {/* 常见问题（互斥手风琴，双语跟随语言切换） */}
       <div {...stylex.props(layouts.fullRow)}>
-      <Faq />
+        <Faq />
+      </div>
+      {/* 底部金句 */}
+      <div {...stylex.props(layouts.fullRow,styles.quote)}>
+        <p {...stylex.props(typography.displayMd)}>{t("home.faq.quote")}</p>
+        <p {...stylex.props(typography.caption)}>— {t("home.faq.quoteAuthor")}</p>
       </div>
       </div>
       </div>

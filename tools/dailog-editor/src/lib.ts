@@ -184,6 +184,11 @@ export function sessionPath(): string {
   return sessionFile;
 }
 
+/** 待配对授权缓存路径（配对码登录：--code 复用同一授权的中间态；随登录态绑定环境） */
+export function pendingDevicePath(): string {
+  return join(configDir, "pending-device.json");
+}
+
 /** 默认资产目录（intro/outro 片头片尾，按语言命名：assets/audio/intro.{lang}.mp3） */
 /** 资源目录（intro/outro/guest 品牌声线，按语言命名：{kind}.{lang}.mp3）。
  *  资源文件随子工程管理（tools/dailog-editor/assets/），构建时复制到产物
@@ -209,10 +214,12 @@ export function getToken(config: EditorConfig): string {
 
 /** multipart 序列化：undici dispatcher 路径下 FormData body 会失效（服务端收到空表单，
  *  guest-voice 上传曾 400 invalid_body）——自行编码为字节流 + boundary，不依赖 undici 版本行为 */
-async function serializeFormData(form: FormData): Promise<{ body: Uint8Array; contentType: string }> {
+// 返回体用 Uint8Array<ArrayBuffer> 显式标注——避免泛型 ArrayBufferLike 与 BodyInit 不兼容
+// 的 TS2336 类型报错（undici 的 BodyInit 期望 Uint8Array<ArrayBuffer>，而非宽泛的 ArrayBufferLike）
+async function serializeFormData(form: FormData): Promise<{ body: Uint8Array<ArrayBuffer>; contentType: string }> {
   const boundary = `----dailog-editor-${Math.random().toString(16).slice(2)}`;
   const enc = new TextEncoder();
-  const chunks: Uint8Array[] = [];
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
   const push = (s: string) => chunks.push(enc.encode(s));
   for (const [name, value] of form.entries()) {
     if (value instanceof Blob) {

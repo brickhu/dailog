@@ -1,12 +1,12 @@
-import { Router, RouterContext, useIsRouting, useLocation } from "@solidjs/router";
+import { Router, useLocation } from "@solidjs/router";
 import { FileRoutes } from "@solidjs/start/router";
-import { createEffect, Show, Suspense, useContext, type JSX } from "solid-js";
+import { createEffect, Suspense, type JSX } from "solid-js";
 import { MetaProvider } from "@solidjs/meta";
 import { getRequestEvent } from "solid-js/web";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
 import { I18nProvider, detectLocale } from "@dailogues/i18n";
-import { CardGridSkeleton, DetailSkeleton, ListSkeleton } from "./components/route-skeletons";
+import { PageSpinner } from "./components/page-loading";
 import { PlaybackProvider } from "./lib/playback";
 import { PlayerBar } from "./components/player-bar";
 import { AuthGuardDialog, SignOutConfirmDialog } from "./lib/auth-guard";
@@ -15,34 +15,12 @@ import { SiteNav } from "./components/site-nav";
 import { Footer } from "./components/footer";
 import "./app.css";
 
-// 路由切换过渡：点击后立即"进入"目标页面 —— 内容区渲染全局骨架屏（结构化 shimmer），
-// chunk/数据就绪后真实页面接管（骨架屏 → 内容，局部懒加载填充），不在原页面停留。
-// 导航栏/播放条在过渡容器外，不中断。
-// 路由出口：@solidjs/router 的导航是 transition（延迟提交）——chunk/数据加载完成前旧内容保持。
-// isRouting=true 期间立即渲染**目标页面排版对应的骨架屏**（pendingTarget 取目标路径），
-// 不在原页面停留；提交后真实页面接管。
-// 路由出口：@solidjs/router 的导航是 transition（延迟提交）——chunk/数据加载完成前旧内容保持。
-// isRouting=true 期间立即渲染**目标页面排版对应的骨架屏**（pendingTarget 取目标路径，
-// 复用页面自身使用的骨架组件，与页面内 Suspense fallback 视觉一致）。
-function PageSkeleton(props: { path: string }) {
-  if (props.path.startsWith("/episode/")) return <DetailSkeleton />;
-  if (["/discover", "/hosts", "/guests"].some((p) => props.path === p || props.path.startsWith(`${p}/`))) {
-    return <ListSkeleton />;
-  }
-  return <CardGridSkeleton />;
-}
-
+// 路由出口：不再做全局路由过渡骨架屏。@solidjs/router 导航是 transition（延迟提交），
+// 但 hover/触摸预载（router 默认 preload）保证点击时 chunk 已就绪 → 立即提交，
+// 目标页壳随即渲染；异步数据由各页面内部的 <Suspense fallback={spinner/骨架}> 处理。
+// 这里仅兜底懒加载 chunk（预载缺失时），用轻量 spinner 而非整页骨架屏。
 function RouterOutlet(props: { children: JSX.Element }) {
-  const isRouting = useIsRouting();
-  const router = useContext(RouterContext);
-  const targetPath = () => (isRouting() && router?.pendingTarget ? router.pendingTarget.value : "");
-  return (
-    <Show when={isRouting()} fallback={<Suspense fallback={<CardGridSkeleton />}>{props.children}</Suspense>}>
-      <div {...stylex.props(layouts.page)}>
-        <PageSkeleton path={targetPath()} />
-      </div>
-    </Show>
-  );
+  return <Suspense fallback={<PageSpinner />}>{props.children}</Suspense>;
 }
 
 // 消费端应用根：文件路由（src/routes/* 自动生成路由）+ 语言上下文 + 全局播放器。

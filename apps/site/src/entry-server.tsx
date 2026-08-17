@@ -24,16 +24,15 @@ export default createHandler(() => {
             <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
             {assets}
             {/* dev 消除 FOUC：首帧必须拿到样式才显示（见 entry-client 的 stylex-pre 移除逻辑）。
-                两个关键点：
-                1. vinxi 自动注入的 /_build/virtual:stylex.css 在 dev 服务器上返回 SSR HTML
-                   （路径被路由接管），不是样式——真实 CSS 在 /virtual:stylex.css（runtime 模块
-                   异步 fetch 后注入 style#__stylex_virtual__，首帧时未就绪）；
-                2. 这里手动补 render-blocking link（/virtual:stylex.css）——浏览器首帧渲染前
-                   必须加载完该样式，配合下面的 visibility 隐藏，彻底消除无样式 DOM 闪现 */}
+                样式交付 = unplugin runtimeInjection：每个模块转换后自带 _inject 调用，模块加载
+                时同步注入 <style data-stylex>（SPA 路由切换同样同步生效）。整页加载时 hydration
+                执行全部模块即完成注入；在注入完成前用 visibility 隐藏 body，杜绝无样式首帧。
+                注：unplugin 注入的 /_build/virtual:stylex.css 是坏链（vinxi base 前缀导致中间件
+                不命中、返回 SSR HTML），由 app.config 的 drop-broken-stylex-css-link 插件移除；
+                /virtual:stylex.css 在 runtimeInjection 模式下为空，不再手动挂载。 */}
             {import.meta.env.DEV && (
               <>
                 <script>{`document.documentElement.classList.add('stylex-pre');`}</script>
-                <link rel="stylesheet" href="/virtual:stylex.css" />
                 <style>{`.stylex-pre body{visibility:hidden}`}</style>
               </>
             )}

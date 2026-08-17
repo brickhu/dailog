@@ -4,26 +4,32 @@ const root = document.getElementById("app");
 if (!root) throw new Error("root #app not found");
 mount(() => <StartClient />, root);
 
-// dev 消除 FOUC（见 entry-server 的 stylex-pre）：guard 移除必须等「样式真正就绪」——
-// 两个就绪信号（任一即可）：
-//   1. render-blocking link（/virtual:stylex.css）已加载应用（cssRules 可读且非空）；
-//   2. stylex runtime 已异步 fetch 并注入 style#__stylex_virtual__（内容非空）。
-// 之前用 rAF 硬等：样式 fetch 未完成就移除 → 无样式 DOM 闪现（dev 冷编译/清缓存后必现）。
-// 5s 兜底：异常（如 CSS 路径失效）时无论如何显示，避免永久白屏。
+// dev 消除 FOUC（见 entry-server 的 stylex-pre）：guard 移除必须等「样式真正就绪」。
+// 样式交付 = unplugin runtimeInjection（app.config）：每个模块转换后自带 _inject 调用，
+// 模块加载时同步注入自身样式到 <style data-stylex>——SPA 路由切换时样式随路由模块同步
+// 到达（模块求值先于组件渲染），整页加载时 hydration 执行全部模块即完成注入。
+// 就绪判定（任一）：
+//   1. style[data-stylex] 已存在且非空（runtimeInjection 模式，主路径）；
+//   2. 旧 dev CSS 收集模式（容器重启前的过渡态）：style#__stylex_virtual__ 非空
+//      或 render-blocking link（/virtual:stylex.css）cssRules 非空。
+// 20s 兜底：异常时无论如何显示，避免永久白屏。
 if (import.meta.env.DEV) {
   const reveal = () => document.documentElement.classList.remove("stylex-pre");
   const stylesReady = () => {
     try {
+      const el = document.querySelector("style[data-stylex]") as HTMLStyleElement | null;
+      if (el && el.sheet && el.sheet.cssRules.length > 0) return true;
+    } catch { /* 忽略 */ }
+    try {
+      const v = document.getElementById("__stylex_virtual__");
+      if (v && v.textContent.trim().length > 0) return true;
       for (const sheet of document.styleSheets) {
         if (sheet.href?.includes("virtual:stylex.css") && sheet.cssRules.length > 0) return true;
       }
-    } catch {
-      /* 同源 sheet 可读；异常时忽略，走 runtime 注入检查 */
-    }
-    const el = document.getElementById("__stylex_virtual__");
-    return !!el && el.textContent.length > 0;
+    } catch { /* 忽略 */ }
+    return false;
   };
   const check = () => (stylesReady() ? reveal() : requestAnimationFrame(check));
   requestAnimationFrame(check);
-  setTimeout(reveal, 5000);
+  setTimeout(reveal, 20000);
 }

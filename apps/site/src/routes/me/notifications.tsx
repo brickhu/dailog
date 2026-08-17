@@ -1,5 +1,5 @@
 import { createAsync } from "@solidjs/router";
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, Show, Suspense } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
@@ -7,6 +7,7 @@ import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { Button } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../../components/auth-gate";
+import { PageSpinner } from "../../components/page-loading";
 
 // 我的通知（/me/notifications）：投稿状态变化（收录/拒绝/上线）
 // 数据组件在 AuthGate 内部（放行后才 fetch，避免登录判定前 401 缓存空数据）
@@ -98,6 +99,7 @@ function NotificationsList() {
           {t("notif.readAll")}
         </Button>
       </div>
+      <Suspense fallback={<PageSpinner />}>
       <Show
         when={notifications()?.length}
         fallback={<div {...stylex.props(styles.empty)}>{t("notif.empty")}</div>}
@@ -119,6 +121,7 @@ function NotificationsList() {
           )}
         </For>
       </Show>
+      </Suspense>
     </div>
   </div>
   );

@@ -1,12 +1,13 @@
 // 投稿详情页（/submissions/<id>）：当前用户单条投稿的状态/来源/节目信息
 import { A, createAsync, useParams } from "@solidjs/router";
-import { Show } from "solid-js";
+import { Show, Suspense } from "solid-js";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { apiBaseForFetch } from "../../lib/env";
+import { PageSpinner } from "../../components/page-loading";
 
 
 interface SubmissionDetail {
@@ -122,6 +123,7 @@ function SubmissionDetailPage() {
     <div {...stylex.props(layouts.page)}>
       <div {...stylex.props(layouts.containerSm)}>
         <Title>{data()?.title || t("common.unnamed")} · dailog</Title>
+        <Suspense fallback={<PageSpinner />}>
         <Show when={data()} fallback={<div {...stylex.props(styles.notFound)}>{t("common.empty")}</div>}>
           {(d) => (
             <div {...stylex.props(styles.card)}>
@@ -166,6 +168,7 @@ function SubmissionDetailPage() {
             </div>
           )}
         </Show>
+        </Suspense>
       </div>
     </div>
   );
