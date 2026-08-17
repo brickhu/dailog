@@ -39,7 +39,7 @@ const styles = stylex.create({
   // 节目卡片/灰块：12 列占 3（4 张一行）、8 列占 2（4 张一行）、4 列占 2（2×2）
   cardSpan: {
     gridColumn: "span 2",
-    "@media (min-width: 1025px)": {
+    "@media (width >= 1024px)": {
       gridColumn: "span 3",
     },
   },
@@ -49,10 +49,10 @@ const styles = stylex.create({
     // 固定高度：2×2 时第二行可能全是灰块（没有卡片撑起行高，空 div 高度 0 会塌陷）；
     // 高度按对应断点卡片高度取整（封面 aspect 1:1 + 标题/meta/按钮 ≈ +100px）
     minHeight: "270px",
-    "@media (min-width: 641px)": {
+    "@media (640px <= width < 1024px)": {
       minHeight: "310px",
     },
-    "@media (min-width: 1025px)": {
+    "@media (width >= 1024px)": {
       minHeight: "370px",
     },
   },

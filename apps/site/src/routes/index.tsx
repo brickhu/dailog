@@ -4,6 +4,7 @@ import { usePlayback, type QueueEpisode } from "../lib/playback";
 import { apiBaseForFetch } from "../lib/env";
 import { Faq } from "../components/faq";
 import { EpisodeCarousel } from "../components/episode-carousel";
+import { HeroFlow } from "../components/hero-flow";
 import { Button, Icon } from "@dailogues/ui";
 import * as stylex from "@stylexjs/stylex";
 import { layouts, typography } from "@dailogues/ui/theme.stylex";
@@ -23,14 +24,29 @@ void auth;
 const styles = stylex.create({
 
   hero: {
-    // padding: `${dimensions.spacing12} ${dimensions.spacing8} ${dimensions.spacing8}`,
+    position: "relative", // 动画背景（HeroFlow）绝对定位铺底
+    display: "flex",
+    flexDirection: "column",
+    width: "100%",
+    // 高度由内部 containerLg 内容撑开（无固定高度）
+    paddingTop: dimensions.spacing12,
+    paddingBottom: dimensions.spacing12,
+  },
+  heroInner: {
+    position: "relative", // 叠加层盖在动画背景之上
+    zIndex: 1,
+  },
+  heroText: {
     display: "flex",
     flexDirection: "column",
     gap: dimensions.spacing3,
-    gridColumn: "span 7", // 桌面 12 列占 7 / 平板 8 列占 7；手机 4 列必须占满（span 7 会撑隐式轨道）
-    paddingTop: dimensions.spacing12,
-    "@media (max-width: 640px)": {
-      gridColumn: "1 / -1",
+    gridColumn: "1 / -1", // 手机 <640 占满
+    // 互斥 range 断点（stylex media 输出顺序不稳定，重叠断点会错乱）
+    "@media (640px <= width < 1024px)": {
+      gridColumn: "span 5", // 平板 8 列占 5
+    },
+    "@media (width >= 1024px)": {
+      gridColumn: "span 7", // 桌面 12 列占 7
     },
   },
   tagline: {
@@ -93,20 +109,20 @@ const styles = stylex.create({
     gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
     columnGap: dimensions.spacing4,
     rowGap: dimensions.spacing4,
-    "@media (min-width: 641px)": {
+    "@media (640px <= width < 1024px)": {
       padding: `0 ${dimensions.spacing8} ${dimensions.spacing12}`,
       gridTemplateColumns: "repeat(8, minmax(0, 1fr))",
     },
-    "@media (min-width: 1025px)": {
+    "@media (width >= 1024px)": {
       gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
     },
   },
   statCard: {
     gridColumn: "span 4", // 手机 4 列占满 → 单列堆叠
-    "@media (min-width: 641px)": {
+    "@media (640px <= width < 1024px)": {
       gridColumn: "span 2", // 平板 8 列占 2 → 3 张一行
     },
-    "@media (min-width: 1025px)": {
+    "@media (width >= 1024px)": {
       gridColumn: "span 4", // 桌面 12 列占 4 → 3 张一行
     },
     display: "flex",
@@ -218,27 +234,31 @@ export default function HomePage() {
 
   return (
     <div {...stylex.props(layouts.page)}>
-      <div {...stylex.props(layouts.containerLg)}>
+      {/* 首页全屏动画背景（fixed 视口铺满，z -1 位于内容之下） */}
+      <HeroFlow />
+      {/* 首屏 hero：内容容器叠加在全屏背景上 */}
       <section {...stylex.props(styles.hero)}>
-        <h1 {...stylex.props(typography.displayMd, styles.tagline)}>{t("home.hero.tagline")}</h1>
-        <p {...stylex.props(typography.bodyXl, styles.what)}>{t("home.hero.what")}</p>
-        <div {...stylex.props(styles.ctaRow)}>
-          <Button
-            use:auth={true}
-            size="xl"
-            icon={<Icon icon="mdi:send" width={16} />}
-            onClick={openImportDialog}
-          >
-            {t("home.hero.submit")}
-          </Button>
-          {/* <A href="/submit" {...stylex.props(styles.cta)}><Icon icon="mdi:send" width={16} />{t("home.hero.submit")}</A> */}
-          <p {...stylex.props(styles.ctaHint)}>{t("home.hero.ctaHint")}</p>
+        <div {...stylex.props(layouts.containerLg, styles.heroInner)}>
+          <div {...stylex.props(styles.heroText)}>
+            <h1 {...stylex.props(typography.displayMd, styles.tagline)}>{t("home.hero.tagline")}</h1>
+            <p {...stylex.props(typography.bodyXl, styles.what)}>{t("home.hero.what")}</p>
+            <div {...stylex.props(styles.ctaRow)}>
+              <Button
+                use:auth={true}
+                size="xl"
+                icon={<Icon icon="mdi:send" width={16} />}
+                onClick={openImportDialog}
+              >
+                {t("home.hero.submit")}
+              </Button>
+              {/* <A href="/submit" {...stylex.props(styles.cta)}><Icon icon="mdi:send" width={16} />{t("home.hero.submit")}</A> */}
+              <p {...stylex.props(styles.ctaHint)}>{t("home.hero.ctaHint")}</p>
+            </div>
+          </div>
         </div>
-        
       </section>
-      
 
-
+      <div {...stylex.props(layouts.containerLg)}>
       <div {...stylex.props(layouts.fullRow, styles.listTitleRow)}>
         <div {...stylex.props(styles.listTitle)}>{t("home.recommended")}</div>
         <A href="/discover" {...stylex.props(styles.moreLink)}>{t("home.hero.browse")}</A>

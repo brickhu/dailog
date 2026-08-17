@@ -4,12 +4,12 @@ import * as stylex from "@stylexjs/stylex";
 // 注意：defineVars 文件必须保持 .stylex.ts 后缀（StyleX 编译器约定）。
 
 // A constant can be used to avoid repeating the media query
-// 断点用 min-width 移动优先链（base = 手机 <640；TABLET ≥640；DESKTOP ≥1024）：
-// stylex 不支持复合 media query（`and` 组合会被静默丢弃）——TABLET 写成
-// `min-width: 640px and max-width: 1023px` 时规则不生成，640-1023 视口无列数定义
+// 断点用互斥 range 区间（<640 / 640-1023 / ≥1024，不重叠）：
+// stylex 的 media 输出顺序随全局规则集合变化（不稳定）——重叠断点（min-width 链）的
+// "后者覆盖"前提会被破坏（大断点可能排到小断点前）；互斥区间在任何顺序下都正确
 const DARK = '@media (prefers-color-scheme: dark)';
-const DESKTOP = '@media (min-width: 1024px)';
-const TABLET = '@media (min-width: 640px)';
+const DESKTOP = '@media (width >= 1024px)';
+const TABLET = '@media (640px <= width < 1024px)';
 
 // 颜色
 export const colors = stylex.defineVars({
@@ -329,8 +329,8 @@ export const layouts = stylex.create({
     width: "100%",
   },
 
-  // 大容器：max-width 1128px，居中；网格列数 <640 为 4 列 / 640-1023 为 8 列 / ≥1024 为 12 列。
-  // 移动优先 min-width 链（base 手机 + TABLET + DESKTOP；stylex 不支持复合 media）。
+  // 大容器：max-width 1128px，居中；网格列数 <640 为 4 列 / 640-1023 为 8 列 / ≥1024 为 12 列
+  // （互斥 range 断点，顺序无关）。
   // 轨道用 minmax(0, 1fr)：1fr 默认有 min-content 下限，内容（hero/长标题）会把轨道撑成
   // 非均分（subgrid 继承后卡片不等宽）；minmax(0) 保证轨道严格均分
   containerLg: {
