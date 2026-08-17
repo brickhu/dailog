@@ -11,7 +11,7 @@ import { openImportDialog } from "./import-dialog";
 
 const styles = stylex.create({
   header: {
-    height: "56px",
+    height: dimensions.size2xl,
     flexShrink: "0", // shellRoot 纵向 flex 容器：内容超高时不被压缩（保持吸顶高度）
     boxSizing: "border-box",
     padding: `0 ${dimensions.spacing8}`,
@@ -28,11 +28,11 @@ const styles = stylex.create({
     },
   },
   brand: {
-    fontSize: "18px",
-    fontWeight: dimensions.fontWeightBold,
-    color: colors.primary,
     textDecoration: "none",
     display: "inline-flex",
+    // 必须显式继承：A 标签 UA 默认 color 是链接蓝（-webkit-link），会阻断 shellRoot
+    // foreground 的继承——logo 的 fill="currentColor" 取到的就是蓝色而非前景色
+    color: "inherit",
   },
   nav: {
     display: "flex",
@@ -78,8 +78,8 @@ const styles = stylex.create({
     ":last-child": { borderBottom: "none" },
   },
   navLink: {
-    color: colors.neutral,
-    fontSize: dimensions.fontSizeSm,
+    color: colors.foreground,
+    fontSize: dimensions.fontSizeMd,
     textDecoration: "none",
     ":hover": { color: colors.foreground },
   },
@@ -111,7 +111,7 @@ const styles = stylex.create({
     padding: "0 3px",
   },
   logo: {
-    height: "32px",
+    height: dimensions.sizeMd,
   },
 });
 

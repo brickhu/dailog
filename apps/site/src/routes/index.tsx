@@ -103,18 +103,16 @@ const styles = stylex.create({
     ":hover": { color: colors.primary },
   },
   statCards: {
-    padding: `0 ${dimensions.spacing4} ${dimensions.spacing8}`,
+    // subgrid 继承 containerLg 轨道：列数/列宽/columnGap 全继承（4/8/12 列断点自动跟随），
+    // 不再自声明 gridTemplateColumns；rowGap 需显式（subgrid 只继承列轨道）。
+    // 左右 padding 必须去掉——subgrid 轨道与容器轨道对齐，内缩 padding 会让卡片错位
+    gridColumn: "1 / -1",
     display: "grid",
-    // 列数跟随 containerLg 断点：4 列（手机单列堆叠）/ 8 列（3 张一行）/ 12 列（3 张一行）
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-    columnGap: dimensions.spacing4,
+    gridTemplateColumns: "subgrid",
     rowGap: dimensions.spacing4,
+    paddingBottom: dimensions.spacing8, // 与 FAQ 的间距（垂直方向不影响列轨道对齐）
     "@media (640px <= width < 1024px)": {
-      padding: `0 ${dimensions.spacing8} ${dimensions.spacing12}`,
-      gridTemplateColumns: "repeat(8, minmax(0, 1fr))",
-    },
-    "@media (width >= 1024px)": {
-      gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
+      paddingBottom: dimensions.spacing12,
     },
   },
   statCard: {
@@ -266,8 +264,7 @@ export default function HomePage() {
 
       <EpisodeCarousel episodes={list() ?? null} loading={list.loading} />
 
-      {/* 站点头部统计卡片：主播 / AI 嘉宾 / 访谈期数（等宽等高灰色区块） */}
-      <div {...stylex.props(layouts.fullRow)}>
+      {/* 站点头部统计卡片：主播 / AI 嘉宾 / 访谈期数（subgrid 继承容器轨道，等宽等高灰色区块） */}
       <Show when={stats()}>
         <div {...stylex.props(styles.statCards)}>
           <A href="/hosts" {...stylex.props(styles.statCard)}>
@@ -301,7 +298,6 @@ export default function HomePage() {
           </A>
         </div>
       </Show>
-      </div>
 
       {/* 常见问题（互斥手风琴，双语跟随语言切换） */}
       <div {...stylex.props(layouts.fullRow)}>

@@ -1,33 +1,42 @@
-// 封面播放卡（统一封面组件）：
-// - 结构：底部封面图 + 透明覆盖层 + 右下角圆角图标按钮（全局 Button 组件）
-// - 三态：待播放（hover 封面 → play 按钮从下方划入）/ 加载中（disabled + spinner）/
-//         播放中（长显 pause 按钮）
-// - 状态：playing 受控（外部播放器传入）；loading 组件内部（点击 play → 直到 playing 变
-//         true 或超时兜底）——与 playback.play 时序天然匹配（audio.play() pending 期间
-//         playing 为 false，就绪后才 true）
-// - interactive=false：纯封面（无透明层/无按钮）——compact 与列表模式封面用
-// - 事件：onPlay / onPause 暴露，外部接入全局播放器
-import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
+// 封面图（统一封面组件）：只负责显示图片，无交互/无按钮。
+// - LQIP 渐进：先加载最小尺寸（160w）高斯模糊铺底，大图（srcset/sizes 响应式）就绪后
+//   淡入变清晰——首帧不空白，慢网也有模糊预览
+// - 大图就绪判定不依赖 onLoad 事件（hydration 时序下图片可能先于事件绑定完成加载，
+//   onLoad 丢失会卡在模糊态）：onMount 用 img.complete 同步检查（缓存/已加载直接清晰）
+// - 无圆角 + inset 描边（前景色 20% 透明，画在盒子内不占布局）
+// - 三态播放按钮（play/loading/pause，hover 划入）在 episode-card（PlayControls，
+//   grid 封面划入 / list 右侧）与详情页封面（PlayControls 覆盖右下角）——按钮归卡片层
+import { Show, createSignal, onMount, type JSX } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import { Button, Icon } from "@dailogues/ui";
-import { colors, dimensions } from "@dailogues/ui/theme.stylex";
-import { useI18n } from "@dailogues/i18n";
+import { colors } from "@dailogues/ui/theme.stylex";
 import { DETAIL_COVER_SIZES, episodeCoverSrcset, episodeCoverUrl } from "../lib/env";
 import type { QueueEpisode } from "../lib/playback";
 
-/** 加载超时兜底：10s 未进入播放（网络失败等）→ 回待播放态 */
-const LOADING_TIMEOUT_MS = 10_000;
+/** LQIP 占位尺寸（?w= 白名单最小档）：模糊底图足够轻，只提供"有内容"的预览 */
+const LQIP_WIDTH = 160;
 
 const styles = stylex.create({
   wrap: {
     position: "relative",
     width: "100%",
     aspectRatio: "1 / 1",
-    borderRadius: dimensions.radiusLg,
     overflow: "hidden",
     backgroundColor: colors.surface,
     userSelect: "none",
     flexShrink: 0,
+    // 默认描边：前景色 20% 透明；inset 画在盒子内部（不占布局、不随内容裁切）
+    // currentColor 跟随页面前景色（浅/暗色主题自动适配）
+    boxShadow: "inset 0 0 0 1px color-mix(in srgb, currentColor 20%, transparent)",
+  },
+  // LQIP 底图：最小尺寸 + 高斯模糊；放大防模糊边缘露出背景色
+  blurImg: {
+    position: "absolute",
+    inset: 0,
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    filter: "blur(24px)",
+    transform: "scale(1.15)",
   },
   img: {
     position: "absolute",
@@ -36,11 +45,14 @@ const styles = stylex.create({
     height: "100%",
     objectFit: "cover",
     pointerEvents: "none",
+    // 大图未就绪：透明（模糊底图垫底）；就绪后淡入变清晰
+    opacity: 0,
+    transitionProperty: "opacity",
+    transitionDuration: "0.35s",
+    transitionTimingFunction: "ease",
   },
-  // 透明覆盖层：承载 hover（划入 play 按钮）；本身透明无视觉
-  overlay: {
-    position: "absolute",
-    inset: 0,
+  imgLoaded: {
+    opacity: 1,
   },
   placeholder: {
     position: "absolute",
@@ -53,209 +65,55 @@ const styles = stylex.create({
     color: colors.neutral,
     pointerEvents: "none",
   },
-  // 按钮槽：右下角
-  btnSlot: {
-    position: "absolute",
-    right: dimensions.spacing3,
-    bottom: dimensions.spacing3,
-    zIndex: 1,
-  },
-  // 待播放：默认藏在封面下方，hover 封面划入；触摸设备（无 hover）常显
-  btnIdle: {
-    transform: "translateY(110%)",
-    opacity: 0,
-    transitionProperty: "transform, opacity",
-    transitionDuration: "0.25s, 0.2s",
-    transitionTimingFunction: "ease",
-    "@media (hover: none)": {
-      transform: "translateY(0)",
-      opacity: 1,
-    },
-  },
-  btnIdleVisible: {
-    transform: "translateY(0)",
-    opacity: 1,
-  },
 });
 
-/**
- * 三态播放按钮（play / loading spinner / pause）+ loading 状态机。
- * 供 Cover（封面右下角）与 EpisodeCard 列表模式（右侧靠右）复用。
- */
-export function CoverControls(props: {
-  /** 是否播放中（外部受控）；true 时 loading 自动结束 */
-  playing: boolean;
-  /** 待播放点击（进入加载中）——外部接入全局播放器 */
-  onPlay?: () => void;
-  /** 播放中点击暂停——外部接入全局播放器 */
-  onPause?: () => void;
-  /** 待播放按钮 hover 划入（封面 overlay 场景）；列表模式常显传 false */
-  revealOnHover?: boolean;
-  /** hover 状态（revealOnHover 时由外部传入：封面 hover → 划入） */
-  hovered?: boolean;
-  /** 按钮尺寸（列表模式小一号）@default "lg" */
-  size?: "sm" | "md" | "lg";
-  /** 按钮外观：缺省自动（触摸设备 ghost / 桌面 fill） */
-  appear?: "fill" | "ghost";
-}) {
-  const { t } = useI18n();
-  const [loading, setLoading] = createSignal(false);
-  // 触摸设备（手机/平板无 hover）→ ghost 按钮（半透明底，弱化实心色块）；
-  // SSR 端默认 fill（桌面），客户端 hydration 后按 matchMedia 修正
-  const [isTouch, setIsTouch] = createSignal(false);
-  onMount(() => {
-    setIsTouch((typeof window !== "undefined" && window.matchMedia?.("(hover: none)").matches) ?? false);
-  });
-  const appear = () => props.appear ?? (isTouch() ? "ghost" : "fill");
-  // ghost 按钮在封面上的可见性：半透明深底（Button xstyle 最后合并覆盖）
-  const ghostBg = stylex.create({ base: { backgroundColor: "rgba(0,0,0,0.3)" } });
-  const ghostStyle = () => (appear() === "ghost" ? ghostBg.base : undefined);
-
-  // playing 变 true → 加载完成；外部停止（false）→ 待播放
-  createEffect(() => {
-    if (props.playing) setLoading(false);
-  });
-
-  // 加载超时兜底：10s 未进入播放 → 回待播放
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  createEffect(() => {
-    if (loading()) {
-      timer = setTimeout(() => setLoading(false), LOADING_TIMEOUT_MS);
-    } else {
-      clearTimeout(timer);
-    }
-  });
-  onCleanup(() => clearTimeout(timer));
-
-  const handlePlay = () => {
-    if (loading()) return;
-    setLoading(true);
-    props.onPlay?.();
-  };
-
-  // 按钮点击只触发播放/暂停事件，不冒泡到卡片容器（卡片主体点击才是进详情）
-  const stop = (fn?: () => void) => (e: MouseEvent) => {
-    e.stopPropagation();
-    fn?.();
-  };
-
-  const btn = (interactive: boolean) => (
-    <>
-      <Show when={props.playing}>
-        <Button
-          round="full"
-          size={props.size ?? "lg"}
-          appear={appear()}
-          variant="brand"
-          isIconOnly
-          icon={<Icon icon="mdi:pause" width={20} />}
-          label={t("common.pause")}
-          xstyle={ghostStyle()}
-          onClick={stop(props.onPause)}
-        />
-      </Show>
-      <Show when={loading() && !props.playing}>
-        <Button
-          round="full"
-          size={props.size ?? "lg"}
-          appear={appear()}
-          variant="brand"
-          isIconOnly
-          isLoading
-          label={t("common.play")}
-          xstyle={ghostStyle()}
-        />
-      </Show>
-      <Show when={!props.playing && !loading()}>
-        {interactive ? (
-          <div {...stylex.props(styles.btnIdle, props.hovered && styles.btnIdleVisible)}>
-            <Button
-              round="full"
-              size={props.size ?? "lg"}
-              appear={appear()}
-              variant="brand"
-              isIconOnly
-              icon={<Icon icon="mdi:play" width={20} />}
-              label={t("common.play")}
-              xstyle={ghostStyle()}
-              onClick={stop(handlePlay)}
-            />
-          </div>
-        ) : (
-          <Button
-            round="full"
-            size={props.size ?? "lg"}
-            appear={appear()}
-            variant="brand"
-            isIconOnly
-            icon={<Icon icon="mdi:play" width={20} />}
-            label={t("common.play")}
-            xstyle={ghostStyle()}
-            onClick={stop(handlePlay)}
-          />
-        )}
-      </Show>
-    </>
-  );
-
-  // 只有一处渲染出口（条件分支都在 btn 内）
-  return <>{btn(props.revealOnHover ?? false)}</>;
-}
-
 export function Cover(props: {
-  /** 节目 meta（id / coverUrl / audioUrl / title 等） */
+  /** 节目 meta（id / coverUrl / title） */
   episode: QueueEpisode;
-  /** 是否播放中（外部受控，来自全局播放器） */
-  playing: boolean;
-  /** 待播放点击（组件进入加载中）——外部接入全局播放器 */
-  onPlay?: () => void;
-  /** 播放中点击暂停——外部接入全局播放器 */
-  onPause?: () => void;
-  /** 交互模式：false = 纯封面（无透明层/无按钮）@default true */
-  interactive?: boolean;
   /** 封面 sizes（响应式选图）；缺省详情页档 */
   sizes?: string;
   /** CSS 控制显示大小（透传；默认 width 100% 由父级控制） */
   style?: JSX.CSSProperties;
   class?: string;
 }) {
-  const interactive = () => props.interactive ?? true;
-  const [hover, setHover] = createSignal(false);
-  // 仅错误态（图片加载失败 → 占位覆盖）；加载成功不依赖 onLoad——
-  // hydration 时序下图片可能先于 onLoad 绑定完成加载，事件丢失会卡在隐藏态
   const [imgError, setImgError] = createSignal(false);
+  // 大图是否就绪（模糊 → 清晰切换）
+  const [loaded, setLoaded] = createSignal(false);
+  let imgRef: HTMLImageElement | undefined;
 
-  const src = () => episodeCoverUrl(props.episode.id, props.episode.coverUrl);
+  // 不依赖 onLoad 事件（hydration 时序下可能丢失）：挂载时同步检查 complete——
+  // 已加载（缓存/SSR 期间请求完成）直接清晰；未加载靠 onLoad 事件补
+  onMount(() => {
+    if (imgRef?.complete && imgRef.naturalWidth > 0) setLoaded(true);
+  });
 
   return (
-    <div
-      {...stylex.props(styles.wrap)}
-      style={props.style}
-      class={props.class}
-      onPointerEnter={interactive() ? () => setHover(true) : undefined}
-      onPointerLeave={interactive() ? () => setHover(false) : undefined}
-    >
-      <Show when={src()} fallback={<div {...stylex.props(styles.placeholder)}>🎙</div>}>
-        {/* img 始终显示（加载成功自然可见，不依赖 onLoad）；失败时占位覆盖 */}
+    <div {...stylex.props(styles.wrap)} style={props.style} class={props.class}>
+      <Show
+        when={episodeCoverUrl(props.episode.id, props.episode.coverUrl)}
+        fallback={<div {...stylex.props(styles.placeholder)}>🎙</div>}
+      >
+        {/* LQIP 底图：最小尺寸 + 高斯模糊（装饰层，读屏忽略） */}
         <img
+          src={episodeCoverUrl(props.episode.id, props.episode.coverUrl, LQIP_WIDTH)!}
+          alt=""
+          aria-hidden="true"
+          {...stylex.props(styles.blurImg)}
+        />
+        {/* 大图：响应式 srcset/sizes；就绪后淡入覆盖模糊层；失败时 🎙 占位覆盖 */}
+        <img
+          ref={imgRef}
           src={episodeCoverUrl(props.episode.id, props.episode.coverUrl, 960)!}
           srcset={episodeCoverSrcset(props.episode.id, props.episode.coverUrl) ?? undefined}
           sizes={props.sizes ?? DETAIL_COVER_SIZES}
           alt={props.episode.title || ""}
           onError={() => setImgError(true)}
-          {...stylex.props(styles.img)}
+          onLoad={() => setLoaded(true)}
+          {...stylex.props(styles.img, loaded() && styles.imgLoaded)}
         />
         <Show when={imgError()}>
           <div {...stylex.props(styles.placeholder)}>🎙</div>
         </Show>
-      </Show>
-      <Show when={interactive()}>
-        {/* 透明覆盖层（hover 划入按钮的交互载体） */}
-        <div {...stylex.props(styles.overlay)} />
-        {/* 右下角三态按钮（播放中 pause 长显 / 加载中 spinner / 待播放 hover 划入） */}
-        <div {...stylex.props(styles.btnSlot)}>
-          <CoverControls playing={props.playing} onPlay={props.onPlay} onPause={props.onPause} revealOnHover hovered={hover()} />
-        </div>
       </Show>
     </div>
   );

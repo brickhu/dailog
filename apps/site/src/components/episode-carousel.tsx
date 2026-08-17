@@ -3,9 +3,10 @@
 // - subgrid 继承 containerLg 轨道：根 1/-1 → 卡片 span 3(≥1025)/span 2（8 列 4 张一行、4 列 2×2）
 // - 屏们重叠在同一行（grid-row: 1），切换 = 每屏自身 translateX((i-cur)*100%) 平移
 // - 数据由调用方传入（null = 加载中显示骨架屏）；分页/播放/预取/灰块补齐内置
-import { createEffect, createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, For, onMount, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
+import { Button, Icon } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { usePlayback, type QueueEpisode } from "../lib/playback";
@@ -20,12 +21,63 @@ const styles = stylex.create({
     gridColumn: "1 / -1", // 占满 containerLg 全部轨道（12/8/4 列均生效）
     display: "grid",
     gridTemplateColumns: "subgrid",
+    position: "relative", // 外侧翻页按钮的定位容器
   },
   viewport: {
     gridColumn: "1 / -1",
     display: "grid",
     gridTemplateColumns: "subgrid",
     overflow: "hidden",
+    // 滑动切换的交互区域（触摸/拖动）；卡片点击（进详情）不受影响
+    touchAction: "pan-y", // 横向手势归本组件（纵向滚动交给页面）
+    userSelect: "none",
+  },
+  // 外侧翻页按钮：hover 容器时淡入，垂直居中于容器中线。
+  // 完全位于容器之外：-52px = 按钮宽 40px + 距容器边缘 12px（按钮右/左缘贴 12px 间距）
+  sideNav: {
+    position: "absolute",
+    top: "50%",
+    transform: "translateY(-50%)",
+    zIndex: 2,
+    opacity: 0,
+    transitionProperty: "opacity",
+    transitionDuration: "0.2s",
+    transitionTimingFunction: "ease",
+    // 触摸设备无 hover + 窄视口（容器贴边时外侧按钮会被裁剪）→ 不显示（滑动/拖动替代）。
+    // 1280 视口下容器居中（1128 宽），按钮 -52px 两侧仍可见；1279 及以下贴边才隐藏
+    "@media (hover: none)": { display: "none" },
+    "@media (max-width: 1279px)": { display: "none" },
+  },
+  sideNavVisible: {
+    opacity: 1,
+  },
+  sideNavPrev: {
+    left: "-52px", // 按钮右缘距容器左缘 12px
+  },
+  sideNavNext: {
+    right: "-52px", // 按钮左缘距容器右缘 12px
+  },
+  // ---- 底部圆点指示器（可点击跳转；纯圆点，无箭头） ----
+  dots: {
+    gridColumn: "1 / -1",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: dimensions.spacing2,
+    paddingTop: dimensions.spacing4,
+  },
+  dot: {
+    width: "8px",
+    height: "8px",
+    padding: 0,
+    borderRadius: dimensions.radiusFull,
+    backgroundColor: colors.surfaceStrong,
+    cursor: "pointer",
+    ":hover": { backgroundColor: colors.neutral },
+  },
+  dotActive: {
+    backgroundColor: colors.brand,
+    ":hover": { backgroundColor: colors.brand },
   },
   pagePane: {
     gridColumn: "1 / -1",
@@ -55,51 +107,6 @@ const styles = stylex.create({
     "@media (width >= 1024px)": {
       minHeight: "370px",
     },
-  },
-  // ---- 分页控制：‹ 圆点 › ----
-  controls: {
-    padding: `${dimensions.spacing3} 0 ${dimensions.spacing12}`,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: dimensions.spacing4,
-    "@media (max-width: 640px)": {
-      padding: `${dimensions.spacing3} 0 ${dimensions.spacing8}`,
-      gap: dimensions.spacing3,
-    },
-  },
-  navBtn: {
-    width: "32px",
-    height: "32px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: dimensions.radiusFull,
-    backgroundColor: colors.surface,
-    color: colors.foreground,
-    fontSize: "20px",
-    lineHeight: 1,
-    cursor: "pointer",
-    ":hover": { backgroundColor: colors.surfaceStrong },
-    ":disabled": { opacity: 0.35, cursor: "default" },
-  },
-  dots: {
-    display: "flex",
-    alignItems: "center",
-    gap: dimensions.spacing2,
-  },
-  dot: {
-    width: "8px",
-    height: "8px",
-    padding: 0,
-    borderRadius: dimensions.radiusFull,
-    backgroundColor: colors.surfaceStrong,
-    cursor: "pointer",
-    ":hover": { backgroundColor: colors.neutral },
-  },
-  dotActive: {
-    backgroundColor: colors.brand,
-    ":hover": { backgroundColor: colors.brand },
   },
   // ---- 骨架屏（异步加载占位）：subgrid 继承 containerLg 轨道，卡片同真实卡片 span ----
   skeletonGrid: {
@@ -226,6 +233,12 @@ export function EpisodeCarousel(props: {
   const playback = usePlayback();
   const navigate = useNavigate();
   const [page, setPage] = createSignal(0); // 当前屏
+  const [hovered, setHovered] = createSignal(false); // 容器 hover（外侧翻页按钮显示）
+  // 触摸设备（无 hover）：外侧翻页按钮直接不渲染（CSS hover:none 隐藏 + 组件层双保险）
+  const [isTouch, setIsTouch] = createSignal(false);
+  onMount(() => {
+    setIsTouch((typeof window !== "undefined" && window.matchMedia?.("(hover: none)").matches) ?? false);
+  });
 
   // 数据刷新（引用变化）→ 回到第一屏（clamp 保护）
   createEffect(() => {
@@ -242,8 +255,128 @@ export function EpisodeCarousel(props: {
   const pageItems = (i: number) => props.episodes!.slice(i * PAGE_SIZE, (i + 1) * PAGE_SIZE);
   const curPage = () => Math.max(0, Math.min(page(), pageCount() - 1));
 
+  // ---- 滑动切换（触摸/拖动 + macOS 触控板 wheel）：横向手势跟随/累积，超阈值翻页 ----
+  const SWIPE_THRESHOLD = 80; // px：超过才切换
+  let paneRefs: (HTMLDivElement | undefined)[] = [];
+  let dragStartX = 0;
+  let dragging = false;
+  let moved = false; // 是否已确认为拖动（超过 8px 才开始捕获指针/移动内容）
+  // 触控板横向滚动（wheel deltaX）累积翻页；一次手势最多翻一屏：
+  // 事件间隔超过 GESTURE_GAP_MS 视为新手势（重置累积与翻页标记）——
+  // 大幅横扫的惯性事件流（连续触发）不会连续翻页
+  // 触控板横向滚动（wheel deltaX）累积翻页；单次手势最多翻一屏：
+  // 手势边界 = 事件流停顿（间隔 ≥ GESTURE_GAP 判定新手势，重置累积与翻页标记）。
+  // 所有事件都刷新时间戳：惯性是连续事件流（间隔 8-16ms）永远不触发边界 → 不连翻；
+  // 停顿后（无论多久）再滑必然触发边界 → 立即生效
+  let wheelAccum = 0;
+  let wheelLastTs = 0;
+  let wheelGestured = false; // 当前手势是否已翻页
+  const WHEEL_GESTURE_GAP_MS = 50;
+
+  // 拖动中：所有屏统一加 delta 偏移（跟随手指）
+  const applyDrag = (delta: number) => {
+    for (let i = 0; i < paneRefs.length; i++) {
+      const el = paneRefs[i];
+      if (!el) continue;
+      el.style.transform = `translateX(calc(${(i - curPage()) * 100}% + ${delta}px))`;
+    }
+  };
+  // 弹回/复位：transition 已恢复 → 平滑回到各屏原位
+  const resetDrag = () => {
+    for (let i = 0; i < paneRefs.length; i++) {
+      const el = paneRefs[i];
+      if (!el) continue;
+      el.style.transition = "";
+      el.style.transform = `translateX(${(i - curPage()) * 100}%)`;
+    }
+  };
+
+  const onPointerDown = (e: PointerEvent) => {
+    if (pageCount() <= 1) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return; // 仅左键/触摸
+    dragging = true;
+    dragStartX = e.clientX;
+    moved = false;
+    for (const el of paneRefs) if (el) el.style.transition = "none"; // 拖动中不跟过渡
+    // 不立即捕获指针：纯点击（播放按钮等）保持正常 click——capture 后 pointerup
+    // 重定向到视口，与按下目标不一致会吞掉 click
+  };
+  const onPointerMove = (e: PointerEvent) => {
+    if (!dragging) return;
+    const delta = e.clientX - dragStartX;
+    // 确认是拖动（超过 8px）后才捕获：保证移出视口时手势不中断，同时纯点击不受影响
+    if (!moved && Math.abs(delta) > 8) {
+      moved = true;
+      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    }
+    if (moved) applyDrag(delta);
+  };
+  const onPointerEnd = (e: PointerEvent) => {
+    if (!dragging) return;
+    dragging = false;
+    const delta = e.clientX - dragStartX;
+    const canPrev = curPage() > 0;
+    const canNext = curPage() < pageCount() - 1;
+    // 恢复过渡（拖动中禁用）：翻页时 Solid 重渲染更新 transform，从拖动位置动画到目标屏；
+    // 弹回时 resetDrag 手动复位（同样带过渡）
+    for (const el of paneRefs) if (el) el.style.transition = "";
+    // swipe 方向：从右往左拖（向左）→ 下一页；从左往右拖（向右）→ 上一页
+    if (Math.abs(delta) >= SWIPE_THRESHOLD && delta < 0 && canNext) setPage(curPage() + 1);
+    else if (Math.abs(delta) >= SWIPE_THRESHOLD && delta > 0 && canPrev) setPage(curPage() - 1);
+    else resetDrag(); // 未达阈值或已在边界：弹回原点
+    // 拖动超过 5px 视为手势：吞掉随后的 click（防止松手误触卡片进详情）
+    if (Math.abs(delta) > 5) {
+      const viewport = e.currentTarget as HTMLElement;
+      const swallow = (ev: Event) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        viewport.removeEventListener("click", swallow, true);
+      };
+      viewport.addEventListener("click", swallow, true);
+    }
+  };
+  // macOS 触控板横扫 / 鼠标横向滚轮：wheel deltaX 累积，超阈值翻页（纵向滚动不拦截）。
+  // 单次手势最多一屏：事件流停顿（GESTURE_GAP）即新手势边界
+  const onWheel = (e: WheelEvent) => {
+    if (pageCount() <= 1) return;
+    if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) return; // 纵向意图（页面滚动）→ 放行
+    const now = Date.now();
+    if (now - wheelLastTs >= WHEEL_GESTURE_GAP_MS) {
+      wheelAccum = 0;
+      wheelGestured = false; // 事件流停顿 → 新手势（重置累积与翻页标记）
+    }
+    wheelLastTs = now; // 每次事件都刷新：惯性连续流不触发边界 → 不连翻
+    if (wheelGestured) return; // 本次手势已翻页：后续（惯性）忽略
+    wheelAccum += e.deltaX;
+    const canPrev = curPage() > 0;
+    const canNext = curPage() < pageCount() - 1;
+    if (Math.abs(wheelAccum) >= SWIPE_THRESHOLD) {
+      // 横扫方向与拖动一致：从右往左滑（deltaX 正）→ 下一页；从左往右滑（deltaX 负）→ 上一页
+      if (wheelAccum > 0 && canNext) {
+        setPage(curPage() + 1);
+        wheelAccum = 0;
+        wheelGestured = true;
+      } else if (wheelAccum < 0 && canPrev) {
+        setPage(curPage() - 1);
+        wheelAccum = 0;
+        wheelGestured = true;
+      } else {
+        wheelAccum = 0; // 边界：重置
+      }
+    }
+    e.preventDefault(); // 阻止页面横向滚动（横向意图归本组件）
+  };
+  // 阻止原生拖拽（拖卡片图片会触发浏览器 drag ghost，打断 pointer 拖动）
+  const onDragStart = (e: DragEvent) => {
+    if (pageCount() > 1) e.preventDefault();
+  };
+
   return (
-    <div {...stylex.props(styles.root)}>
+    <div
+      {...stylex.props(styles.root)}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+    >
       <Show
         when={props.episodes?.length}
         fallback={
@@ -264,11 +397,24 @@ export function EpisodeCarousel(props: {
           </Show>
         }
       >
-        {/* 滚屏：屏们重叠在同一行，各自 translateX 平移（当前屏居中，相邻屏从两侧滑入） */}
-        <div {...stylex.props(styles.viewport)}>
+        {/* 滚屏：屏们重叠在同一行，各自 translateX 平移（当前屏居中，相邻屏从两侧滑入）。
+            视口承载滑动手势（触摸/拖动）；卡片点击（进详情）由拖动距离判定不误触 */}
+        <div
+          {...stylex.props(styles.viewport)}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerEnd}
+          onPointerCancel={onPointerEnd}
+          onWheel={onWheel}
+          onDragStart={onDragStart}
+        >
           <For each={pageIndexes()}>
             {(i) => (
-              <div {...stylex.props(styles.pagePane)} style={{ transform: `translateX(${(i - curPage()) * 100}%)` }}>
+              <div
+                {...stylex.props(styles.pagePane)}
+                ref={(el) => (paneRefs[i] = el)}
+                style={{ transform: `translateX(${(i - curPage()) * 100}%)` }}
+              >
                 <For each={pageItems(i)}>
                   {(ep) => (
                     // grid 模式节目卡片：封面三态按钮（hover 划入）+ 标题 + 时间 + 时长；
@@ -293,36 +439,47 @@ export function EpisodeCarousel(props: {
             )}
           </For>
         </div>
-        {/* 分页控制：仅多屏时显示（‹ 上一页 · 圆点 · 下一页 ›） */}
-        <Show when={pageCount() > 1}>
-          <div {...stylex.props(styles.controls)}>
-            <button
-              {...stylex.props(styles.navBtn)}
-              disabled={curPage() === 0}
-              aria-label={t("home.recommended.prev")}
+        {/* 外侧翻页按钮：hover 容器时淡入（垂直居中于容器中线）；触摸设备不渲染 */}
+        <Show when={pageCount() > 1 && !isTouch()}>
+          <div {...stylex.props(styles.sideNav, styles.sideNavPrev, hovered() && styles.sideNavVisible)}>
+            <Button
+              round="full"
+              size="lg"
+              variant="neutral"
+              appear="fill"
+              isIconOnly
+              isDisabled={curPage() === 0}
+              icon={<Icon icon="mdi:chevron-left" width={20} />}
+              label={t("home.recommended.prev")}
               onClick={() => setPage((p) => Math.max(0, p - 1))}
-            >
-              ‹
-            </button>
-            <div {...stylex.props(styles.dots)}>
-              <For each={pageIndexes()}>
-                {(i) => (
-                  <button
-                    {...stylex.props(styles.dot, i === curPage() && styles.dotActive)}
-                    aria-label={t("home.recommended.page", { page: i + 1 })}
-                    onClick={() => setPage(i)}
-                  />
-                )}
-              </For>
-            </div>
-            <button
-              {...stylex.props(styles.navBtn)}
-              disabled={curPage() >= pageCount() - 1}
-              aria-label={t("home.recommended.next")}
+            />
+          </div>
+          <div {...stylex.props(styles.sideNav, styles.sideNavNext, hovered() && styles.sideNavVisible)}>
+            <Button
+              round="full"
+              size="lg"
+              variant="neutral"
+              appear="fill"
+              isIconOnly
+              isDisabled={curPage() >= pageCount() - 1}
+              icon={<Icon icon="mdi:chevron-right" width={20} />}
+              label={t("home.recommended.next")}
               onClick={() => setPage((p) => Math.min(pageCount() - 1, p + 1))}
-            >
-              ›
-            </button>
+            />
+          </div>
+        </Show>
+        {/* 底部圆点指示器：可点击跳转（多屏时显示） */}
+        <Show when={pageCount() > 1}>
+          <div {...stylex.props(styles.dots)}>
+            <For each={pageIndexes()}>
+              {(i) => (
+                <button
+                  {...stylex.props(styles.dot, i === curPage() && styles.dotActive)}
+                  aria-label={t("home.recommended.page", { page: i + 1 })}
+                  onClick={() => setPage(i)}
+                />
+              )}
+            </For>
           </div>
         </Show>
       </Show>

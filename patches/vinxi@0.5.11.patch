@@ -1,13 +1,24 @@
 diff --git a/lib/dev-server.js b/lib/dev-server.js
-index ff72b45a9929c23d19de67950cd584e0320dbd3e..a9c9c22a1612151bf63214e02fbbf7bccf4fc1b0 100644
+index ff72b45a9929c23d19de67950cd584e0320dbd3e..2c397f74e33a1bbde779e5c427619231c826e00c 100644
 --- a/lib/dev-server.js
 +++ b/lib/dev-server.js
-@@ -50,7 +50,7 @@ export async function createViteDevServer(config) {
+@@ -50,7 +50,18 @@ export async function createViteDevServer(config) {
  export async function createViteHandler(router, app, serveConfig) {
  	const vite = await import("vite");
  	const { getRandomPort } = await import("get-port-please");
 -	const port = router.server?.hmr?.port ?? (await getRandomPort());
-+	const port = router.server?.hmr?.port ?? Number(process.env.VINXI_HMR_PORT) ?? (await getRandomPort());
++	// HMR 端口：显式配置（router.server.hmr.port / VINXI_HMR_PORT）优先；否则随机。
++	// 注意：vinxi 为 ssr/client 两个 vite 实例并发调用本函数，get-port-please 的随机
++	// 探测存在竞态（两实例可能拿到同一端口 → 后建 WebSocket server 报 EADDRINUSE，
++	// vite-ping 降级）。模块级记录已分配端口，保证实例间互不冲突。
++	let port = router.server?.hmr?.port ?? Number(process.env.VINXI_HMR_PORT);
++	if (!port) {
++		const used = (globalThis.__vinxiHmrPorts ??= new Set());
++		do {
++			port = await getRandomPort();
++		} while (used.has(port));
++		used.add(port);
++	}
  	const plugins = [
  		// ...(serveConfig.devtools ? [inspect()] : []),
  		...(((await router.internals.type.dev.plugins?.(router, app)) ?? []).filter(

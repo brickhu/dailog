@@ -1,7 +1,8 @@
-import { Show, Suspense, createEffect, onMount } from "solid-js";
+import { Show, Suspense, createEffect, createSignal, onMount } from "solid-js";
 import { createAsync, useParams } from "@solidjs/router";
 import { Meta, Title } from "@solidjs/meta";
 import { Cover } from "../../components/cover";
+import { PlayControls } from "../../components/episode-card";
 import { DetailSkeleton } from "../../components/route-skeletons";
 import { EpisodeDetail } from "../../components/episode-detail";
 import { usePlayback, type QueueEpisode } from "../../lib/playback";
@@ -40,11 +41,25 @@ const styles = stylex.create({
   coverCol: {
     flexShrink: 0,
     width: "min(380px, 40vw)",
+    position: "relative", // 三态播放按钮（PlayControls）覆盖右下角
     "@media (max-width: 640px)": {
       width: "100%",
       maxWidth: "280px",
       margin: "0 auto",
     },
+  },
+  // 播放按钮槽：封面右下角（固定尺寸 + flex——与 episode-card 的 btnSlot 同构：
+  // 槽高不随内容类型变化，三态按钮位置恒定）
+  coverBtnSlot: {
+    position: "absolute",
+    right: dimensions.spacing3,
+    bottom: dimensions.spacing3,
+    zIndex: 1,
+    width: dimensions.sizeLg,
+    height: dimensions.sizeLg,
+    display: "flex",
+    alignItems: "flex-end",
+    justifyContent: "flex-end",
   },
   detailCol: {
     flex: 1,
@@ -73,6 +88,7 @@ export default function EpisodeDetailPage() {
   const { t, locale } = useI18n();
   const params = useParams<{ slug: string }>();
   const playback = usePlayback();
+  const [coverHover, setCoverHover] = createSignal(false);
   const data = createAsync(() => getEpisodeCached(params.slug));
   const ep = () => data();
 
@@ -151,14 +167,22 @@ export default function EpisodeDetailPage() {
           <Meta property="og:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
         </Show>
         <div {...stylex.props(layouts.fullRow, styles.body)}>
-          <div {...stylex.props(styles.coverCol)}>
-            <Cover
-              episode={asQueue(ep()!)}
+          <div
+          {...stylex.props(styles.coverCol)}
+          onPointerEnter={() => setCoverHover(true)}
+          onPointerLeave={() => setCoverHover(false)}
+        >
+          <Cover episode={asQueue(ep()!)} />
+          <div {...stylex.props(styles.coverBtnSlot)}>
+            <PlayControls
               playing={isThisPlaying() && playback.playing()}
               onPlay={() => playback.play(asQueue(ep()!))}
               onPause={() => playback.toggle()}
+              revealOnHover
+              hovered={coverHover()}
             />
           </div>
+        </div>
           <div {...stylex.props(styles.detailCol)}>
             <EpisodeDetail episode={asQueue(ep()!)} />
           </div>

@@ -18,11 +18,17 @@ export default createHandler(() => {
             <meta name="viewport" content="width=device-width, initial-scale=1" />
             <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
             {assets}
-            {/* dev 消除 FOUC：首帧无样式（stylex 样式靠 runtime JS 注入），先隐藏页面，
-                客户端 hydration + 样式注入完成后移除（见 entry-client）——避免无样式 DOM 闪现 */}
+            {/* dev 消除 FOUC：首帧必须拿到样式才显示（见 entry-client 的 stylex-pre 移除逻辑）。
+                两个关键点：
+                1. vinxi 自动注入的 /_build/virtual:stylex.css 在 dev 服务器上返回 SSR HTML
+                   （路径被路由接管），不是样式——真实 CSS 在 /virtual:stylex.css（runtime 模块
+                   异步 fetch 后注入 style#__stylex_virtual__，首帧时未就绪）；
+                2. 这里手动补 render-blocking link（/virtual:stylex.css）——浏览器首帧渲染前
+                   必须加载完该样式，配合下面的 visibility 隐藏，彻底消除无样式 DOM 闪现 */}
             {import.meta.env.DEV && (
               <>
                 <script>{`document.documentElement.classList.add('stylex-pre');`}</script>
+                <link rel="stylesheet" href="/virtual:stylex.css" />
                 <style>{`.stylex-pre body{visibility:hidden}`}</style>
               </>
             )}
