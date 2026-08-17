@@ -27,11 +27,11 @@ export const colors = stylex.defineVars({
   secondaryStrong: {default: "#101a33", [DARK]: "#7289b0"},
   onSecondaryStrong: {default: "#ffffff", [DARK]: "#1a2944"},
   // 品牌专属色
-  brand: {default: "#fee841", [DARK]: "#fee841"},
+  brand: {default: "#01C82C", [DARK]: "#01C82C"},
   onBrand: {default: "#211e0c", [DARK]: "#211e0c"},
-  brandWeak: {default: "#fff2a0", [DARK]: "#fff2a0"},
+  brandWeak: {default: "#46F26B", [DARK]: "#03A526"},
   onBrandWeak: {default: "#211e0c", [DARK]: "#211e0c"},
-  brandStrong: {default: "#d0b01f", [DARK]: "#d0b01f"},
+  brandStrong: {default: "#03A526", [DARK]: "#46F26B"},
   onBrandStrong: {default: "#211e0c", [DARK]: "#211e0c"},
 
   // 自然色
@@ -60,7 +60,7 @@ export const colors = stylex.defineVars({
   // 背景色
   background: {default: "#f9f9f9", [DARK]: "#0e1116"},
   // 前景色
-  foreground: {default: "#0e1116", [DARK]: "#e6e9ef"},
+  foreground: {default: "#2b2f35", [DARK]: "#b8bdc5"},
   // 危险色
   danger: {default: "#f0506e", [DARK]: "#f0506e"},
   onDanger: {default: "#ffdee6", [DARK]: "#ffdee6"},
@@ -181,54 +181,81 @@ export const typography = stylex.create({
   headingXl: {
     fontFamily: fontfamilies.heading,
     fontSize: dimensions.fontSize5xl,
+     [DESKTOP]: {
+      fontSize: dimensions.fontSize5xl,
+    },
     fontWeight: dimensions.fontWeightBold,
     lineHeight: "1.2",
   },
   headingLg: {
     fontFamily: fontfamilies.heading,
     fontSize: dimensions.fontSize4xl,
+     [DESKTOP]: {
+      fontSize: dimensions.fontSize5xl,
+    },
     fontWeight: dimensions.fontWeightBold,
     lineHeight: "1.2",
   },
   headingMd: {
     fontFamily: fontfamilies.heading,
     fontSize: dimensions.fontSize3xl,
+     [DESKTOP]: {
+      fontSize: dimensions.fontSize4xl,
+    },
     fontWeight: dimensions.fontWeightBold,
     lineHeight: "1.2",
   },
   headingSm: {
     fontFamily: fontfamilies.heading,
     fontSize: dimensions.fontSize2xl,
+     [DESKTOP]: {
+      fontSize: dimensions.fontSize3xl,
+    },
     fontWeight: dimensions.fontWeightBold,
     lineHeight: "1.2",
   },
   headingXs: {
     fontFamily: fontfamilies.heading,
     fontSize: dimensions.fontSizeXl,
+     [DESKTOP]: {
+      fontSize: dimensions.fontSize2xl,
+    },
     fontWeight: dimensions.fontWeightBold,
     lineHeight: "1.2",
   },
   bodyXl: {
     fontFamily: fontfamilies.body,
     fontSize: dimensions.fontSizeXl,
+     [DESKTOP]: {
+      fontSize: dimensions.fontSize2xl,
+    },
     fontWeight: dimensions.fontWeightNormal,
     lineHeight: "1.5",
   },
   bodyLg: {
     fontFamily: fontfamilies.body,
     fontSize: dimensions.fontSizeMd,
+     [DESKTOP]: {
+      fontSize: dimensions.fontSizeLg,
+    },
     fontWeight: dimensions.fontWeightNormal,
     lineHeight: "1.5",
   },
   bodyMd: {
     fontFamily: fontfamilies.body,
     fontSize: dimensions.fontSizeSm,
+     [DESKTOP]: {
+      fontSize: dimensions.fontSizeMd,
+    },
     fontWeight: dimensions.fontWeightNormal,
     lineHeight: "1.5",
   },
   label:{
     fontFamily: fontfamilies.body,
     fontSize: dimensions.fontSizeSm,
+     [DESKTOP]: {
+      fontSize: dimensions.fontSizeMd,
+    },
     fontWeight: dimensions.fontWeightMedium,
     lineHeight: "1.5",
   },
@@ -237,18 +264,27 @@ export const typography = stylex.create({
     fontSize: dimensions.fontSizeXs,
     fontWeight: dimensions.fontWeightNormal,
     lineHeight: "1.5",
+    [DESKTOP]: {
+      fontSize: dimensions.fontSizeSm,
+    },
   },
   code: {
     fontFamily: fontfamilies.code,
     fontSize: dimensions.fontSizeSm,
     fontWeight: dimensions.fontWeightNormal,
     lineHeight: "1.5",
+    [DESKTOP]: {
+      fontSize: dimensions.fontSizeMd,
+    },
   },
   displayLg: {
     fontFamily: fontfamilies.heading,
-    fontSize: dimensions.fontSizeMax,
+    fontSize: dimensions.fontSizeLg,
     fontWeight: dimensions.fontWeightBold,
     lineHeight: "1.2",
+    [DESKTOP]: {
+      fontSize: dimensions.fontSizeMax,
+    },
   },
   displayMd: {
     fontFamily: fontfamilies.heading,
@@ -262,9 +298,12 @@ export const typography = stylex.create({
   },
   displaySm: {
     fontFamily: fontfamilies.heading,
-    fontSize: dimensions.fontSize4xl,
+    fontSize: dimensions.fontSize3xl,
     fontWeight: dimensions.fontWeightBold,
     lineHeight: "1.2",
+    [DESKTOP]: {
+      fontSize: dimensions.fontSize4xl,
+    },
   },
 })
 
@@ -342,6 +381,9 @@ export const layouts = stylex.create({
     paddingRight: dimensions.spacing4,
     gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
     columnGap: dimensions.spacing4,
+    // 纵向间距：直接子项（多个 fullRow 块）之间的行距；subgrid 子项不继承 rowGap
+    //（subgrid 只继承列轨道，行 gap 需各自显式），所以不影响卡片网格内部行距
+    rowGap: dimensions.spacing8,
     alignItems: "start",
     [TABLET]: {
       gridTemplateColumns: "repeat(8, minmax(0, 1fr))",

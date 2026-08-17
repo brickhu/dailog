@@ -8,6 +8,7 @@ import { LangSwitch } from "./lang-switch";
 import { UserMenu, type NavUser } from "./user-menu";
 import { confirmSignOut } from "../lib/auth-guard";
 import { openImportDialog } from "./import-dialog";
+import { Logo } from "./logo";
 
 // 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
 // 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
@@ -16,10 +17,14 @@ const TABLET = "@media (640px <= width < 1024px)";
 
 const styles = stylex.create({
   header: {
-    height: dimensions.size2xl,
+    // iOS 沉浸：高度 = 常规高度 + safe-area（状态栏/刘海），内容下移避开；
+    // 非 iOS 环境 env() = 0 无影响。背景色随 headerScrolled 覆盖状态栏区域
+    height: `calc(${dimensions.size2xl} + env(safe-area-inset-top))`,
+    paddingTop: "env(safe-area-inset-top)",
     flexShrink: "0", // shellRoot 纵向 flex 容器：内容超高时不被压缩（保持吸顶高度）
     boxSizing: "border-box",
-    padding: `0 ${dimensions.spacing4}`, // 移动优先
+    paddingLeft: dimensions.spacing4,
+    paddingRight: dimensions.spacing4,
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
@@ -253,24 +258,7 @@ export function SiteNav() {
     <>
     <header ref={headerRef} {...stylex.props(layouts.containerFull, styles.header, scrolled() && styles.headerScrolled)}>
       <A href="/" {...stylex.props(styles.brand)}>
-        <svg {...stylex.props(styles.logo)} viewBox="0 0 288 104" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M52 32H28V64H52V72H20V24H52V32Z" fill="currentColor"/>
-          <path d="M60 64H52V32H60V64Z" fill="currentColor"/>
-          <path d="M212 72H188V64H212V72Z" fill="currentColor"/>
-          <path d="M188 64H180V32H188V64Z" fill="currentColor"/>
-          <path d="M220 64H212V32H220V64Z" fill="currentColor"/>
-          <path d="M212 32H188V24H212V32Z" fill="currentColor"/>
-          <path d="M260 72H236V64H260V72Z" fill="currentColor"/>
-          <path d="M236 64H228V32H236V64Z" fill="currentColor"/>
-          <path d="M268 48V64H260V56H252V48H268Z" fill="currentColor"/>
-          <path d="M268 40H260V32H268V40Z" fill="currentColor"/>
-          <path d="M260 32H236V24H260V32Z" fill="currentColor"/>
-          <path d="M128 72H120V24H128V72Z" fill="#01C82C"/>
-          <path d="M148 64H172V72H140V24H148V64Z" fill="currentColor"/>
-          <path d="M76 48H100V32H108V72H100V56H76V72H68V32H76V48Z" fill="#01C82C"/>
-          <path d="M100 32H76V24H100V32Z" fill="#01C82C"/>
-          <path d="M116 96H108L100 88H68V80H104L112 88L120 80H128V88H124L116 96Z" fill="#01C82C"/>
-          </svg>
+        <Logo {...stylex.props(styles.logo)}/>
       </A>
       {/* 桌面：行内导航 */}
       <nav {...stylex.props(styles.nav)}>
@@ -286,9 +274,17 @@ export function SiteNav() {
         ☰
       </button>
     </header>
-    {/* 移动端浮层：汉堡展开的导航面板（跟随 header 文档流） */}
+    {/* 移动端浮层：汉堡展开的导航面板（跟随 header 文档流）。
+        关闭策略：点空白（drawer 自身）或导航链接（a）→ 收起；点二级菜单按钮
+        （语言切换/头像）不收起——否则菜单刚弹出就被冒泡的 drawer onClick 关闭 */}
     <Show when={menuOpen()}>
-      <div {...stylex.props(styles.drawer)} onClick={() => setMenuOpen(false)}>
+      <div
+        {...stylex.props(styles.drawer)}
+        onClick={(e) => {
+          const t = e.target as HTMLElement;
+          if (t === e.currentTarget || t.closest("a")) setMenuOpen(false);
+        }}
+      >
         {navContent()}
       </div>
     </Show>

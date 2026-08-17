@@ -407,7 +407,9 @@ void main() {
   float fade = fadeBottom * fadeTop;
   col += (hash(vUv * u_resolution) - 0.5) * u_grain;
 
-  fragColor = vec4(col, fade);
+  // 预乘 alpha（Safari 对非预乘 canvas 合成有差异，渐变透明区域会失效）——
+  // 标准做法：颜色乘 alpha 输出 + premultipliedAlpha: true
+  fragColor = vec4(col * fade, fade);
 }`;
 
 interface FlowTarget {
@@ -418,7 +420,7 @@ interface FlowTarget {
 function initHeroFlow(canvas: HTMLCanvasElement, probe: HTMLDivElement): () => void {
   const gl = canvas.getContext("webgl2", {
     alpha: true,
-    premultipliedAlpha: false,
+    premultipliedAlpha: true, // 配合 shader 预乘输出（Safari 合成兼容）
     powerPreference: "low-power",
   });
   if (!gl) return () => {};

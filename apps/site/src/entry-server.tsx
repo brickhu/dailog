@@ -15,7 +15,12 @@ export default createHandler(() => {
         <html lang={locale === "zh" ? "zh-CN" : "en"}>
           <head>
             <meta charset="utf-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            {/* viewport-fit=cover：iOS 允许内容延伸到安全区（状态栏/刘海区域），
+                配合 theme-color + safe-area-inset 实现沉浸式顶栏 */}
+            <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+            {/* 状态栏/顶栏着色（iOS 15+ Safari 支持 theme-color；浅/暗跟随系统） */}
+            <meta name="theme-color" content="#f9f9f9" media="(prefers-color-scheme: light)" />
+            <meta name="theme-color" content="#0e1116" media="(prefers-color-scheme: dark)" />
             <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
             {assets}
             {/* dev 消除 FOUC：首帧必须拿到样式才显示（见 entry-client 的 stylex-pre 移除逻辑）。

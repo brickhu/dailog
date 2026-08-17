@@ -1,7 +1,7 @@
 // 全局页脚：最大宽度与内容区一致（1080px）——左侧版权，右侧 X / GitHub / RSS 图标。
 // 挂载于根布局（与导航/播放条同级）；底部预留播放条高度（fixed 播放条不遮挡）。
 import * as stylex from "@stylexjs/stylex";
-import { colors, dimensions } from "@dailogues/ui/theme.stylex";
+import { colors, dimensions, layouts } from "@dailogues/ui/theme.stylex";
 import { A } from "@solidjs/router";
 
 // 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
@@ -13,8 +13,7 @@ const styles = stylex.create({
   footer: {
     flexShrink: "0", // shellRoot 直接子项：内容超高时不被压缩
     backgroundColor: colors.background, // 通栏背景（与页面背景一致）
-    // stylex 不支持模板字符串内插 token（`1px solid ${colors.ink}` 会被静默丢弃），
-    // 单边边框必须拆 longhand + 直接 token 引用
+    paddingBlock : dimensions.spacing8
   },
   inner: {
     maxWidth: "1080px",
@@ -32,17 +31,38 @@ const styles = stylex.create({
     },
   },
   copyright: {
-    color: colors.neutral,
+    color: `color-mix(in srgb, ${colors.foreground} 85%, transparent)`,
     fontSize: dimensions.fontSizeSm,
     margin: 0,
+    gridColumn: "1 / -1", 
+    display: "flex",
+    justifyContent: "center",
+    [TABLET]: {
+          gridColumn: "span 5", // 平板 8 列占 5
+          justifyContent: "start",
+        },
+    [DESKTOP]: {
+          gridColumn: "span 8", // 桌面 12 列占 7
+          justifyContent: "start",
+        },
   },
   links: {
     display: "flex",
     alignItems: "center",
     gap: dimensions.spacing4,
+    justifyContent : "center",
+    gridColumn: "1 / -1", // 手机 <640 占满
+    [TABLET]: {
+      gridColumn: "span 3", // 平板 8 列占 5
+      justifyContent : "flex-end",
+    },
+    [DESKTOP]: {
+      gridColumn: "span 4", // 桌面 12 列占 7
+      justifyContent : "flex-end",
+    },
   },
   icon: {
-    color: colors.neutral,
+    color: "currentColor",
     display: "inline-flex",
     ":hover": { color: colors.primary },
   },
@@ -51,7 +71,7 @@ const styles = stylex.create({
 export function Footer() {
   return (
     <footer {...stylex.props(styles.footer)}>
-      <div {...stylex.props(styles.inner)}>
+      <div {...stylex.props(layouts.containerLg)}>
         <p {...stylex.props(styles.copyright)}>© 2026 dailog.fm</p>
         <div {...stylex.props(styles.links)}>
         {/* X */}
