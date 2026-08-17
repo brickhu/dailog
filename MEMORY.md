@@ -12,3 +12,4 @@
 - 浏览器端 API 请求必须走 site 同源代理（/v1/*），否则 SPA fallback 返回 200+HTML 导致登录态误判
 - 坑全集：developer-guide.md §1–§10（FOUC / transition / grid min-content / 壳布局 / HMR ws TLS / loadIcon / CORS 代理 / lazy props 等）
 - [2026-08-17] stylex media 规则输出顺序随全局规则集变化（不稳定）——重叠断点（min-width 链）的“后者覆盖”会被破坏（大断点排到小断点前 → 桌面回退小断点列数）；断点一律用互斥 range 区间（`@media (640px <= width < 1024px)` / `@media (width >= 1024px)`），顺序无关才可靠
+- [2026-08-17] StyleX dev 必须 runtimeInjection:true（每模块自带 _inject 同步注入 <style data-stylex>），否则 SPA 路由切换（点击进页面）样式迟到/丢、刷新才好；生产保持 false
