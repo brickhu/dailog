@@ -13,6 +13,12 @@ import { usePlayback, type QueueEpisode } from "../lib/playback";
 import { getEpisodeCached } from "../lib/episode-cache";
 import { EpisodeCard } from "./episode-card";
 
+
+// 断点标签（值同 theme.stylex.const.ts——stylex babel 插件不支持跨文件常量解析，
+// 本地定义保持一致；改断点请同步 theme.stylex.const.ts）
+const DESKTOP = "@media (width >= 1024px)";
+const TABLET = "@media (640px <= width < 1024px)";
+
 const styles = stylex.create({
   // subgrid 只能继承直接父 grid 的轨道 → 链路每层都必须是 grid + subgrid：
   // 根(1/-1) → viewport(1/-1) → 屏(1/-1, grid-row:1 重叠) → 卡片(span 3/2/2)。
@@ -91,7 +97,7 @@ const styles = stylex.create({
   // 节目卡片/灰块：12 列占 3（4 张一行）、8 列占 2（4 张一行）、4 列占 2（2×2）
   cardSpan: {
     gridColumn: "span 2",
-    "@media (width >= 1024px)": {
+[DESKTOP]: {
       gridColumn: "span 3",
     },
   },
@@ -101,10 +107,10 @@ const styles = stylex.create({
     // 固定高度：2×2 时第二行可能全是灰块（没有卡片撑起行高，空 div 高度 0 会塌陷）；
     // 高度按对应断点卡片高度取整（封面 aspect 1:1 + 标题/meta/按钮 ≈ +100px）
     minHeight: "270px",
-    "@media (640px <= width < 1024px)": {
+[TABLET]: {
       minHeight: "310px",
     },
-    "@media (width >= 1024px)": {
+[DESKTOP]: {
       minHeight: "370px",
     },
   },
@@ -427,6 +433,7 @@ export function EpisodeCarousel(props: {
                         onPause={() => playback.toggle()}
                         onClick={() => navigate(`/episode/${ep.slug}`)}
                         onHover={() => void getEpisodeCached(ep.slug)}
+                        audioError={ep.audioUrl == null || (isCurrent(ep.id) && playback.audioError())}
                       />
                     </div>
                   )}

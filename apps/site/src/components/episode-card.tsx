@@ -145,6 +145,8 @@ export function PlayControls(props: {
   size?: "sm" | "md" | "lg";
   /** 按钮外观：缺省自动（触摸设备 ghost / 桌面 fill） */
   appear?: "fill" | "ghost";
+  /** 音源不可用（无音源/加载失败）——按钮区显示警告图标（不提供播放） */
+  audioError?: boolean;
 }) {
   const { t } = useI18n();
   const [loading, setLoading] = createSignal(false);
@@ -199,8 +201,22 @@ export function PlayControls(props: {
 
   const btn = (interactive: boolean) => (
     <>
+      {/* 音源不可用（无音源/加载失败）：警告图标（disabled 按钮，不提供播放） */}
+      <Show when={props.audioError}>
+        <Button
+          round="full"
+          size={props.size ?? "lg"}
+          appear={appear()}
+          variant="neutral"
+          isIconOnly
+          isDisabled
+          icon={<Icon icon="mdi:alert" width={20} />}
+          label={t("common.audioError")}
+          xstyle={ghostStyle()}
+        />
+      </Show>
       {/* 播放中（且加载反馈已结束）→ pause */}
-      <Show when={props.playing && !loading()}>
+      <Show when={!props.audioError && props.playing && !loading()}>
         <Button
           round="full"
           size={props.size ?? "lg"}
@@ -215,7 +231,7 @@ export function PlayControls(props: {
       </Show>
       {/* 加载中 → spinner（不看 playing：音频就绪瞬间若直接切 pause，最短显示时间失效，
           loading 清掉后（minTimer/超时）才切走） */}
-      <Show when={loading()}>
+      <Show when={!props.audioError && loading()}>
         <Button
           round="full"
           size={props.size ?? "lg"}
@@ -227,7 +243,7 @@ export function PlayControls(props: {
           xstyle={ghostStyle()}
         />
       </Show>
-      <Show when={!props.playing && !loading()}>
+      <Show when={!props.audioError && !props.playing && !loading()}>
         {interactive ? (
           <div {...stylex.props(styles.btnIdle, props.hovered && styles.btnIdleVisible)}>
             <Button
@@ -287,6 +303,8 @@ export function EpisodeCard(props: {
   onHover?: () => void;
   /** 新节目标记：true 时日期前显示 brand 色小圆点 @default false */
   isNew?: boolean;
+  /** 音源不可用（无音源/加载失败）——按钮区显示警告图标 */
+  audioError?: boolean;
   /** CSS 控制显示大小（透传） */
   style?: JSX.CSSProperties;
   class?: string;
@@ -336,7 +354,13 @@ export function EpisodeCard(props: {
         </div>
         <div {...stylex.props(styles.listRight)}>
           <span {...stylex.props(styles.duration)}>{fmtDuration(props.episode.durationSeconds)}</span>
-          <PlayControls playing={props.playing} onPlay={props.onPlay} onPause={props.onPause} size="sm" />
+          <PlayControls
+            playing={props.playing}
+            onPlay={props.onPlay}
+            onPause={props.onPause}
+            size="sm"
+            audioError={props.audioError}
+          />
         </div>
       </div>
     );
@@ -360,6 +384,7 @@ export function EpisodeCard(props: {
             onPause={props.onPause}
             revealOnHover
             hovered={hover()}
+            audioError={props.audioError}
           />
         </div>
       </div>

@@ -19,6 +19,7 @@ export const zh = {
   // ---- 通用 ----
   "common.play": "播放",
   "common.pause": "暂停",
+  "common.audioError": "音源不可用",
   "common.loading": "加载中…",
   "common.save": "保存",
   "common.cancel": "取消",
@@ -743,6 +744,7 @@ export const en: Dictionary = {
   // ---- 通用 ----
   "common.play": "Play",
   "common.pause": "Pause",
+  "common.audioError": "Audio unavailable",
   "common.loading": "Loading…",
   "common.save": "Save",
   "common.cancel": "Cancel",

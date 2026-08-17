@@ -13,6 +13,8 @@ export interface QueueEpisode {
   title: string | null;
   description: string | null;
   coverUrl: string | null;
+  /** 音频地址（null = 无音源——按钮区显示警告，不提供播放） */
+  audioUrl: string | null;
   language: string;
   durationSeconds: number | null;
   publishedAt: Date | null;
@@ -33,6 +35,8 @@ export interface PlaybackContextValue {
   /** 当前节目（封面/详情渲染用） */
   current: () => QueueEpisode | null;
   playing: () => boolean;
+  /** 当前节目音源加载失败（audio error 事件；切歌时重置）——按钮区显示警告 */
+  audioError: () => boolean;
   /** 当前进度（秒）与总时长（秒）——封面进度条用 */
   progress: () => number;
   duration: () => number;
@@ -71,6 +75,7 @@ export function PlaybackProvider(props: ParentProps) {
   const [queue, setQueueSignal] = createSignal<QueueEpisode[]>([]);
   const [index, setIndex] = createSignal(0);
   const [playing, setPlaying] = createSignal(false);
+  const [audioError, setAudioError] = createSignal(false);
   const [progress, setProgress] = createSignal(0);
   const [duration, setDuration] = createSignal(0);
   // 用户主动选择（play/toggle）→ 激活播放条；setQueue 自动加载不激活
@@ -97,10 +102,11 @@ export function PlaybackProvider(props: ParentProps) {
     setIndex(i);
     setProgress(0);
     setDuration(0);
+    setAudioError(false); // 切节目：重置音源错误标记
     a.src = episodeAudioUrl(ep.id);
     a.load();
     if (opts.autoplay) {
-      void a.play().then(() => setPlaying(true)).catch(() => setPlaying(false)); // 被拒（罕见）→ 停住等用户
+      void a.play().catch(() => setPlaying(false)); // playing 由 "playing" 事件驱动（真正出声才置 true）；被拒（罕见）→ 停住等用户
       reportStat(ep.id, "play");
     }
     // 预加载下一期（<link rel=preload as=audio>——只发起缓存下载，不创建 Audio 元素，
@@ -123,7 +129,7 @@ export function PlaybackProvider(props: ParentProps) {
     if (i >= 0) {
       if (i === index()) {
         // 当前期：直接播放（不重复上报 play——同 session 已去重）
-        void audio()?.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+        void audio()?.play().catch(() => setPlaying(false));
       } else {
         loadEpisode(i, { autoplay: true });
       }
@@ -140,7 +146,7 @@ export function PlaybackProvider(props: ParentProps) {
     const a = audio();
     if (!a) return;
     if (a.paused) {
-      void a.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+      void a.play().catch(() => setPlaying(false));
     } else {
       a.pause();
       setPlaying(false);
@@ -161,7 +167,7 @@ export function PlaybackProvider(props: ParentProps) {
     if (!wasPlaying()) return;
     const a = audio();
     if (!a) return;
-    void a.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+    void a.play().catch(() => setPlaying(false));
   };
 
   const next = () => {
@@ -201,17 +207,23 @@ export function PlaybackProvider(props: ParentProps) {
       if (ep) reportStat(ep.id, "completion");
       next();
     };
-    const onPlay = () => setPlaying(true);
+    // playing 信号用 'playing' 事件驱动（实际开始渲染音频/出声）——'play' 事件在
+    // play() 调用时即触发（缓冲中），会让封面按钮提前切到 pause（loading 未覆盖加载期）
+    const onPlaying = () => setPlaying(true);
     const onPause = () => setPlaying(false);
+    // 音源加载失败（404/网络/解码）→ audioError（封面按钮区显示警告图标）
+    const onError = () => setAudioError(true);
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("ended", onEnded);
-    a.addEventListener("play", onPlay);
+    a.addEventListener("playing", onPlaying);
     a.addEventListener("pause", onPause);
+    a.addEventListener("error", onError);
     onCleanup(() => {
       a.removeEventListener("timeupdate", onTime);
       a.removeEventListener("ended", onEnded);
-      a.removeEventListener("play", onPlay);
+      a.removeEventListener("playing", onPlaying);
       a.removeEventListener("pause", onPause);
+      a.removeEventListener("error", onError);
     });
   });
 
@@ -219,6 +231,7 @@ export function PlaybackProvider(props: ParentProps) {
     queue,
     current,
     playing,
+    audioError,
     progress,
     duration,
     play,
