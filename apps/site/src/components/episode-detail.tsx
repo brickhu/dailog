@@ -7,7 +7,7 @@ import { useI18n } from "@dailogues/i18n";
 import { apiBaseForFetch } from "../lib/env";
 import type { QueueEpisode } from "../lib/playback";
 import { InteractButtons } from "./interact-buttons";
-import { ShareButtons } from "./share-buttons";
+import { ShareButton } from "./share-buttons";
 
 const styles = stylex.create({
   root: {
@@ -125,7 +125,7 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
       </Show>
       {/* 统计行已请求同一 stats 端点：like/fav 计数直接复用，避免重复请求 */}
       <InteractButtons episodeId={ep().id} counts={stats()} />
-      <ShareButtons episode={ep()} />
+      <ShareButton episode={ep()} />
       <Show when={ep().description} fallback={<p {...stylex.props(styles.noDesc)}>{t("episode.noDescription")}</p>}>
         <p {...stylex.props(styles.desc)}>{ep().description}</p>
       </Show>

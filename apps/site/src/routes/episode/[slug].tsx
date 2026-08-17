@@ -17,36 +17,67 @@ import { useI18n } from "@dailogues/i18n";
 // 详情页（传统博客式）：dailog.fm/<episode_id> —— SSR 渲染（可索引/分享）。
 // 布局：封面（左/上，内嵌播放控件）+ 详情（右/下）；播放由全局播放条贯通，
 // 进入时节目进队列首位 + 推荐填充（播完自动连播下一期）。
+// 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
+// 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
+const DESKTOP = "@media (width >= 1024px)";
+
 const styles = stylex.create({
-  page: {
+  // page: {
+  //   minHeight: "100vh",
+  //   backgroundColor: colors.background,
+  //   color: colors.foreground,
+  //   fontFamily: "system-ui, -apple-system, sans-serif",
+  //   paddingBottom: "72px", // 播放条高度预留
+  // },
+  // 背景装饰：封面图作为内容的一部分（absolute 随页面滚动自然滚走），
+  // 高斯模糊 + 渐变遮罩 + 20% 透明度
+  detail:{
     minHeight: "100vh",
     backgroundColor: colors.background,
-    color: colors.foreground,
-    fontFamily: "system-ui, -apple-system, sans-serif",
-    paddingBottom: "72px", // 播放条高度预留
+    paddingBottom: "72px",
+    position: "relative", // 背景层（absolute）的定位基准
   },
-  body: {
-    maxWidth: "1080px",
-    margin: "0 auto",
-    padding: `${dimensions.spacing8}`,
-    display: "flex",
-    gap: dimensions.spacing8,
-    alignItems: "flex-start",
-    "@media (max-width: 640px)": {
-      flexDirection: "column",
-      gap: dimensions.spacing5,
-      padding: dimensions.spacing4,
-    },
+  bg: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "50vh", // 只占首屏上半（跟随内容滚动，滚出视口自然消失）
+    overflow: "hidden",
+    pointerEvents: "none", // 纯装饰：不挡交互
+    zIndex: 0,
   },
+  bgImg: {
+    width: "100%",
+    height: "50vh",
+    objectFit: "cover",
+    filter: "blur(40px)",
+    transform: "scale(1.15)", // 防模糊边缘露出底色
+    opacity: 0.2, // 整体透明度 20%
+  },
+  bgGradient: {
+    position: "absolute",
+    inset: 0,
+    // 顶部渐变遮罩：从顶到底——0% 处背景色 80% 显示（明显遮罩，图被盖住大半），
+    // 50% 处 0%（全透明），下半程完全露出背景图。顶部融入页面背景、向下平滑过渡。
+    // 20% 强度视觉几乎不可见（背景色只混入 1/5）；80% 让渐变清晰。
+    // 不用 linear-gradient(背景色) 模板——stylex 编译期无法解析模板内引用的跨文件 var
+    // backgroundColor: colors.background,
+    maskImage: "linear-gradient(90deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 10%)",
+    WebkitMaskImage: "linear-gradient(90deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 10%)",
+  },
+  // 内容层（containerLg 网格内）：盖在背景之上
+  content: {
+    position: "relative",
+    zIndex: 1,
+    paddingTop: dimensions.spacing8,
+    paddingBottom: dimensions.spacing12,
+  },
+  // 封面列：span 4 通用（移动 4 列全宽 / 平板 8 列占 4 / 桌面 12 列占 4）
   coverCol: {
-    flexShrink: 0,
-    width: "min(380px, 40vw)",
+    gridColumn: "span 4",
     position: "relative", // 三态播放按钮（PlayControls）覆盖右下角
-    "@media (max-width: 640px)": {
-      width: "100%",
-      maxWidth: "280px",
-      margin: "0 auto",
-    },
+    minWidth: 0,
   },
   // 播放按钮槽：封面右下角（固定尺寸 + flex——与 episode-card 的 btnSlot 同构：
   // 槽高不随内容类型变化，三态按钮位置恒定）
@@ -61,10 +92,13 @@ const styles = stylex.create({
     alignItems: "flex-end",
     justifyContent: "flex-end",
   },
+  // 内容列：移动 4 列全宽（自动折行）→ 平板 4 列（与封面并列）→ 桌面 8 列
   detailCol: {
-    flex: 1,
+    gridColumn: "span 4",
     minWidth: 0,
-    maxWidth: "640px",
+    [DESKTOP]: {
+      gridColumn: "span 8",
+    },
   },
   notFound: {
     maxWidth: "720px",
@@ -99,6 +133,7 @@ export default function EpisodeDetailPage() {
     title: e.title,
     description: e.description,
     coverUrl: e.coverUrl,
+    audioUrl: e.audioUrl,
     language: e.language ?? "zh",
     durationSeconds: e.durationSeconds,
     publishedAt: e.publishedAt,
@@ -145,8 +180,7 @@ export default function EpisodeDetailPage() {
   };
 
   return (
-    <div {...stylex.props(layouts.page)}>
-      <div {...stylex.props(layouts.containerMd)}>
+    <div {...stylex.props(layouts.page,styles.detail)}>
       {/* 兜底标题：数据未就绪/404 时 head 也有 title（Suspense 内数据到达后 cascading 替换） */}
       <Title>dailog</Title>
       {/* OG 标签：社交分享卡片（og:image = 封面，各平台抓取展示）。
@@ -166,30 +200,42 @@ export default function EpisodeDetailPage() {
         <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
           <Meta property="og:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
         </Show>
-        <div {...stylex.props(layouts.fullRow, styles.body)}>
-          <div
-          {...stylex.props(styles.coverCol)}
-          onPointerEnter={() => setCoverHover(true)}
-          onPointerLeave={() => setCoverHover(false)}
-        >
-          <Cover episode={asQueue(ep()!)} />
-          <div {...stylex.props(styles.coverBtnSlot)}>
-            <PlayControls
-              playing={isThisPlaying() && playback.playing()}
-              onPlay={() => playback.play(asQueue(ep()!))}
-              onPause={() => playback.toggle()}
-              revealOnHover
-              hovered={coverHover()}
+        {/* 背景装饰：小号封面图全屏铺底（fixed 视口固定）——模糊 + 上下渐变 + 20% 透明度 */}
+        <div {...stylex.props(styles.bg)} aria-hidden="true">
+          <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
+            <img
+              src={episodeCoverUrl(ep()!.id, ep()!.coverUrl, 320)!}
+              alt=""
+              {...stylex.props(styles.bgImg)}
             />
-          </div>
+          </Show>
+          <div {...stylex.props(styles.bgGradient)} />
         </div>
+        {/* 内容：containerLg 网格（移动封面 4 列 + 内容 4 列折行；平板 4+4 并列；桌面 4+8 并列） */}
+        <div {...stylex.props(layouts.containerLg, styles.content)}>
+          <div
+            {...stylex.props(styles.coverCol)}
+            onPointerEnter={() => setCoverHover(true)}
+            onPointerLeave={() => setCoverHover(false)}
+          >
+            <Cover episode={asQueue(ep()!)} />
+            <div {...stylex.props(styles.coverBtnSlot)}>
+              <PlayControls
+                playing={isThisPlaying() && playback.playing()}
+                onPlay={() => playback.play(asQueue(ep()!))}
+                onPause={() => playback.toggle()}
+                revealOnHover
+                hovered={coverHover()}
+                audioError={ep()!.audioUrl == null || (isThisPlaying() && playback.audioError())}
+              />
+            </div>
+          </div>
           <div {...stylex.props(styles.detailCol)}>
             <EpisodeDetail episode={asQueue(ep()!)} />
           </div>
         </div>
       </Show>
       </Suspense>
-      </div>
     </div>
   );
 }
