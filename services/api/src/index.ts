@@ -75,6 +75,10 @@ const auth = createAuth({
     baseURL: env.BETTER_AUTH_URL,
     trustedOrigins: [
       ...env.APP_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean),
+      // 消费站基址自动可信：site → api 的代理请求带 Origin（proxyApi 显式设置），
+      // better-auth CORS 校验 Origin 是否在白名单——漏配 APP_ORIGINS 时带 Origin 的
+      // 会话请求会被拒（401 → 导航误判未登录），而无 Origin 的请求正常（登录页误判已登录）
+      new URL(env.SITE_BASE_URL).origin,
       // api 自身域名自动可信（授权页在 API 域内同源登录——CSRF 白名单必须包含）
       new URL(env.BETTER_AUTH_URL).origin,
     ],
