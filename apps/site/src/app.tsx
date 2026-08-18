@@ -1,6 +1,6 @@
 import { Router, useLocation } from "@solidjs/router";
 import { FileRoutes } from "@solidjs/start/router";
-import { createEffect, Suspense, type JSX } from "solid-js";
+import { createEffect, onMount, Suspense, type JSX } from "solid-js";
 import { MetaProvider } from "@solidjs/meta";
 import { getRequestEvent } from "solid-js/web";
 import * as stylex from "@stylexjs/stylex";
@@ -11,8 +11,10 @@ import { PlaybackProvider } from "./lib/playback";
 import { PlayerBar } from "./components/player-bar";
 import { AuthGuardDialog, SignOutConfirmDialog } from "./lib/auth-guard";
 import { ImportDialog } from "./components/import-dialog";
+import { SearchDialog } from "./components/search-dialog";
 import { SiteNav } from "./components/site-nav";
 import { Footer } from "./components/footer";
+import { initInstallStore } from "./lib/install-store";
 import "./app.css";
 
 // 路由出口：不再做全局路由过渡骨架屏。@solidjs/router 导航是 transition（延迟提交），
@@ -30,6 +32,8 @@ function RouterOutlet(props: { children: JSX.Element }) {
 function AppShell(props: { children: JSX.Element }) {
   const location = useLocation();
   let shellRef: HTMLDivElement | undefined;
+  // 全局捕获 beforeinstallprompt（footer 安装入口 / /install 引导页用）
+  onMount(() => initInstallStore());
   // 路由切换后整壳回顶（shellRoot 为纵向滚动容器）
   createEffect(() => {
     location.pathname;
@@ -46,6 +50,8 @@ function AppShell(props: { children: JSX.Element }) {
       <AuthGuardDialog />
       <SignOutConfirmDialog />
       <ImportDialog />
+      {/* 全局内容搜索（Cmd/Ctrl+K / "/" / 导航栏搜索按钮打开） */}
+      <SearchDialog />
     </div>
   );
 }

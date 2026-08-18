@@ -1,0 +1,38 @@
+{
+  "name": "dailog — 听见人类和 AI 的思想交锋",
+  "short_name": "dailog",
+  "description": "一档将 AI 聊天记录模拟为真人采访 AI 的访谈式播客：单期 5-10 分钟，呈现原始对话里的精华——交锋、新知、情感与经验。",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f9f9f9",
+  "theme_color": "#f9f9f9",
+  "lang": "zh-CN",
+  "categories": [
+    "podcast",
+    "education",
+    "entertainment"
+  ],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

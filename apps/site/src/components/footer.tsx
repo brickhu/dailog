@@ -3,6 +3,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions, layouts } from "@dailogues/ui/theme.stylex";
 import { A } from "@solidjs/router";
+import { useI18n } from "@dailogues/i18n";
 
 // 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
 // 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
@@ -14,22 +15,16 @@ const styles = stylex.create({
     flexShrink: "0", // shellRoot 直接子项：内容超高时不被压缩
     backgroundColor: colors.background, // 通栏背景（与页面背景一致）
     paddingTop : dimensions.spacing8,
-    paddingBottom: `calc(${dimensions.spacing12} + ${dimensions.spacing8})`
+    paddingBottom: `calc(96px + ${dimensions.spacing8})`,
   },
   inner: {
-    maxWidth: "1080px",
-    margin: "0 auto",
-    padding: `${dimensions.spacing5} ${dimensions.spacing4} 88px`, // 移动优先；底部 88px 预留播放条
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: dimensions.spacing4,
-    [TABLET]: {
-      padding: `${dimensions.spacing6} ${dimensions.spacing8} 88px`,
-    },
-    [DESKTOP]: {
-      padding: `${dimensions.spacing6} ${dimensions.spacing8} 88px`,
-    },
+    rowGap: dimensions.spacing2,
+    borderTop: "1px",
+    borderTopColor : colors.surface,
+    background: colors.surface,
+    borderTopWidth: dimensions.borderWidthThin,
+    borderTopStyle : "solid",
+    paddingBlock: dimensions.spacing8
   },
   copyright: {
     color: `color-mix(in srgb, ${colors.foreground} 85%, transparent)`,
@@ -67,12 +62,23 @@ const styles = stylex.create({
     display: "inline-flex",
     ":hover": { color: colors.primary },
   },
+  // PWA 安装入口：图标 + 文字，hover 主题色
+  installLink: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: dimensions.spacing1,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    textDecoration: "none",
+    ":hover": { color: colors.primary },
+  },
 });
 
 export function Footer() {
+  const { t } = useI18n();
   return (
     <footer {...stylex.props(styles.footer)}>
-      <div {...stylex.props(layouts.containerLg)}>
+      <div {...stylex.props(layouts.containerLg,styles.inner)}>
         <p {...stylex.props(styles.copyright)}>© 2026 dailog.fm</p>
         <div {...stylex.props(styles.links)}>
         {/* X */}
@@ -88,12 +94,20 @@ export function Footer() {
           </svg>
         </a>
         {/* RSS（订阅） */}
-        <A href="/feed.xml" {...stylex.props(styles.icon)} aria-label="RSS">
+        <A href="/subscribe" {...stylex.props(styles.icon)} aria-label="RSS">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <circle cx="6" cy="18" r="2.5" />
             <path d="M4 10.5a9.5 9.5 0 0 1 9.5 9.5h-2.6A6.9 6.9 0 0 0 4 13.1V10.5Z" />
             <path d="M4 4a16 16 0 0 1 16 16h-2.7A13.3 13.3 0 0 0 4 6.7V4Z" />
           </svg>
+        </A>
+        {/* 安装 App（PWA 引导页） */}
+        <A href="/install" {...stylex.props(styles.installLink)} aria-label={t("footer.install")}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <rect x="7" y="2" width="10" height="20" rx="2" />
+            <path d="M12 18h.01" />
+          </svg>
+          {t("footer.install")}
         </A>
         </div>
       </div>

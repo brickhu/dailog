@@ -209,6 +209,9 @@ const styles = stylex.create({
     flexDirection : "column",
     gap : dimensions.spacing4
   },
+  quoteContent: {
+    fontWeight: dimensions.fontWeightThin
+  },
   quoteAuthor: {
     margin: `${dimensions.spacing2} 0 0`,
     textAlign: "center",
@@ -342,7 +345,7 @@ export default function HomePage() {
       </div>
       {/* 底部金句 */}
       <div {...stylex.props(layouts.fullRow,styles.quote)}>
-        <p {...stylex.props(typography.displayMd)}>{t("home.faq.quote")}</p>
+        <p {...stylex.props(typography.displayMd,styles.quoteContent)}>{t("home.faq.quote")}</p>
         <p {...stylex.props(typography.caption)}>— {t("home.faq.quoteAuthor")}</p>
       </div>
       </div>

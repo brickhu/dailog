@@ -1,13 +1,14 @@
 import { Show, createSignal, onCleanup, onMount, type JSX } from "solid-js";
 import { A, useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { colors, dimensions, durations, easings, layouts,global,typography } from "@dailogues/ui/theme.stylex";
+import { colors, dimensions, durations, easings, fontfamilies, layouts,global,typography } from "@dailogues/ui/theme.stylex";
 import { Button, Icon } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { LangSwitch } from "./lang-switch";
 import { UserMenu, type NavUser } from "./user-menu";
 import { confirmSignOut } from "../lib/auth-guard";
 import { openImportDialog } from "./import-dialog";
+import { openSearchDialog } from "./search-dialog";
 import { Logo } from "./logo";
 
 // 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
@@ -33,11 +34,11 @@ const styles = stylex.create({
     top: 0,
     zIndex: 40,
     // 默认透明，滚动后（scrolled）过渡到半透明毛玻璃背景 + 底部 border——页面内容压过导航时保证可读性
-    backgroundColor: "transparent",
+    backgroundImage: `linear-gradient(to bottom, transparent 0%, transparent 100%)`,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: "transparent",
-    transitionProperty: "background-color, border-color, backdrop-filter, -webkit-backdrop-filter",
+    transitionProperty: "backgroundImage, border-color, backdrop-filter, -webkit-backdrop-filter",
     transitionDuration: durations.durationMediumMin,
     transitionTimingFunction: easings.easeInOut,
     [TABLET]: {
@@ -50,7 +51,7 @@ const styles = stylex.create({
   headerScrolled: {
     // 背景 85% 半透明 + 毛玻璃（与 player-bar 同款 blur）；color-mix 让 token 的
     // 双主题（default/DARK）自动适配，不硬编码 rgba
-    backgroundColor: `color-mix(in srgb, ${colors.background} 85%, transparent)`,
+    backgroundImage: `linear-gradient(to bottom,  ${colors.background} 20%, color-mix(in srgb, ${colors.background} 80%, transparent) 100%)`,
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
     // color-mix 百分比必须跟在颜色后（`颜色 10%`）；currentColor = 页面前景色，
@@ -149,14 +150,63 @@ const styles = stylex.create({
   logo: {
     height: dimensions.sizeMd,
   },
+  // 搜索入口：移动端图标按钮（<640，汉堡旁）……
+  searchIconBtn: {
+    display: "inline-flex",
+    width: "40px",
+    height: "40px",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: dimensions.radiusSm,
+    background: "transparent",
+    color: colors.foreground,
+    cursor: "pointer",
+    fontSize: "18px",
+  },
+  // ……桌面端胶囊（点击打开搜索；⌘K 快捷键提示）
+  searchPill: {
+    display: "none",
+    alignItems: "center",
+    gap: dimensions.spacing2,
+    height: "36px",
+    paddingInline: dimensions.spacing3,
+    borderRadius: dimensions.radiusFull,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: "color-mix(in srgb, currentColor 18%, transparent)",
+    backgroundColor: `color-mix(in srgb, ${colors.surface} 55%, transparent)`,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    cursor: "pointer",
+    transitionProperty: "color, border-color, background-color",
+    transitionDuration: durations.durationFast,
+    ":hover": {
+      color: colors.foreground,
+      borderColor: "color-mix(in srgb, currentColor 35%, transparent)",
+    },
+    [TABLET]: { display: "inline-flex" },
+    [DESKTOP]: { display: "inline-flex" },
+  },
+  searchKbd: {
+    fontFamily: fontfamilies.code,
+    fontSize: "11px",
+    lineHeight: 1,
+    padding: "3px 6px",
+    borderRadius: dimensions.radiusSm,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: "color-mix(in srgb, currentColor 20%, transparent)",
+    backgroundColor: `color-mix(in srgb, ${colors.surface} 80%, transparent)`,
+    color: "inherit",
+  },
 });
 
-const LinkItem = (props: { 
-  href: string; 
-  children: JSX.Element,
-  title: string 
- }) => {
-  return <A href={props.href} {...stylex.props(global.linkText, typography.bodyMd, styles.navLink)} title={props?.title}>{props.children}</A>;
+const LinkItem = (props: {
+  href: string;
+  children: JSX.Element;
+  title?: string;
+}) => {
+  return <A href={props.href} {...stylex.props(global.linkText, typography.bodyMd, styles.navLink)} title={props.title}>{props.children}</A>;
 };
 
 /** 消费端导航：brand + home/discover + [投稿] + 通知 + 头像菜单 + 语言切换。
@@ -219,22 +269,40 @@ export function SiteNav() {
   // 导航内容（桌面行内 + 移动浮层共用）
   const navContent = () => (
     <>
-      <LinkItem href="/" >{t("nav.home")}</LinkItem>
-      <LinkItem href="/discover"  >{t("nav.discover")}</LinkItem>
-      <LinkItem href="/hosts">{t("nav.hosts")}</LinkItem>
-      <LinkItem href="/guests">{t("nav.guests")}</LinkItem>
+      <LinkItem href="/" title={t("nav.home")}>{t("nav.home")}</LinkItem>
+      <LinkItem href="/discover" title={t("nav.discover")}>{t("nav.discover")}</LinkItem>
+      <LinkItem href="/hosts" title={t("nav.hosts")}>{t("nav.hosts")}</LinkItem>
+      <LinkItem href="/guests" title={t("nav.guests")}>{t("nav.guests")}</LinkItem>
       {/* 组件示例页：仅本地 dev 可见（生产构建 import.meta.env.DEV=false，整段不渲染） */}
       <Show when={import.meta.env.DEV}>
-        <LinkItem href="/example">{t("nav.example")}</LinkItem>
+        <LinkItem href="/example" title={t("nav.example")}>{t("nav.example")}</LinkItem>
       </Show>
       {/* 订阅页（各平台入口 + feed 地址） */}
-      <LinkItem href="/subscribe"  title={t("nav.subscribe")}>
+      {/* <LinkItem href="/subscribe"  title={t("nav.subscribe")}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <circle cx="6" cy="18" r="2.5" />
           <path d="M4 10.5a9.5 9.5 0 0 1 9.5 9.5h-2.6A6.9 6.9 0 0 0 4 13.1V10.5Z" />
           <path d="M4 4a16 16 0 0 1 16 16h-2.7A13.3 13.3 0 0 0 4 6.7V4Z" />
         </svg>
-      </LinkItem>
+      </LinkItem> */}
+
+      {/* <button
+        type="button"
+        onClick={openSearchDialog}
+        {...stylex.props(styles.searchPill)}
+      >
+        <Icon icon="iconoir:search" width={16} />
+        <span>{t("search.title")}</span>
+        <kbd {...stylex.props(styles.searchKbd)}>⌘K</kbd>
+      </button> */}
+      <button
+        type="button"
+        onClick={openSearchDialog}
+        {...stylex.props(styles.searchIconBtn)}
+        aria-label={t("search.title")}
+      >
+        <Icon icon="iconoir:search" />
+      </button>
       {/* 投稿入口仅登录后显示（user 由 onMount 判定；首帧未确认前不显示） */}
       {/* <Show when={user()}>
         <Button size="sm" onClick={openImportDialog}>
@@ -273,6 +341,7 @@ export function SiteNav() {
       <A href="/" {...stylex.props(styles.brand)}>
         <Logo {...stylex.props(styles.logo)} />
       </A>
+
       {/* 桌面：行内导航 */}
       <nav {...stylex.props(styles.nav)}>
         {navContent()}

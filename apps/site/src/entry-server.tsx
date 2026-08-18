@@ -22,6 +22,14 @@ export default createHandler(() => {
             <meta name="theme-color" content="#f9f9f9" media="(prefers-color-scheme: light)" />
             <meta name="theme-color" content="#0e1116" media="(prefers-color-scheme: dark)" />
             <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+            {/* PWA：manifest 使站点可安装（Android Chrome 地址栏/菜单出现「安装应用」）+
+                iOS Safari 安装元数据（apple-touch-icon 不带圆角——iOS 自动切圆） */}
+            <link rel="manifest" href="/manifest.webmanifest" />
+            <meta name="mobile-web-app-capable" content="yes" />
+            <meta name="apple-mobile-web-app-capable" content="yes" />
+            <meta name="apple-mobile-web-app-title" content="dailog" />
+            <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+            <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
             {assets}
             {/* dev 消除 FOUC：首帧必须拿到样式才显示（见 entry-client 的 stylex-pre 移除逻辑）。
                 样式交付 = unplugin runtimeInjection：每个模块转换后自带 _inject 调用，模块加载

@@ -50,6 +50,22 @@ export const zh = {
   "nav.episodes": "节目",
   "nav.settings": "设置",
   "nav.example": "组件示例",
+
+  // ---- 搜索 ----
+  "search.title": "搜索",
+  "search.placeholder": "搜索节目、嘉宾、主播…",
+  "search.hint": "输入关键词，查找节目、嘉宾或主播",
+  "search.loading": "搜索中…",
+  "search.empty": "未找到与「{q}」相关的内容",
+  "search.error": "搜索失败，请稍后重试",
+  "search.footer": "↑↓ 选择 · ↵ 打开 · esc 关闭",
+  "search.episodes": "节目",
+  "search.guests": "嘉宾",
+  "search.hosts": "主播",
+  "search.episodeNumber": "第 {n} 期",
+  "search.episodeCount": "{n} 期",
+  "search.clear": "清空",
+  "search.close": "关闭",
   "layout.unverified": "邮箱尚未验证，请查收验证邮件；未收到可重新发送。",
   "layout.resend": "重新发送验证邮件",
   "layout.resendSent": "已重新发送，请查收邮箱。",
@@ -727,6 +743,20 @@ export const zh = {
   "studio.generate.back": "返回修改脚本",
   "studio.generate.listen": "试听你的节目",
 
+  // ---- PWA 安装（footer 入口 + /install 引导页） ----
+  "footer.install": "安装 App",
+  "install.title": "安装 dailog",
+  "install.desc": "把 dailog 添加到主屏幕，像原生 App 一样使用，离线也能听",
+  "install.cta": "立即安装",
+  "install.ctaDesc": "点击下方按钮，浏览器会弹出安装确认框",
+  "install.installed": "dailog 已安装 ✓",
+  "install.installedDesc": "你可以从主屏幕直接打开 dailog，享受独立窗口和离线收听",
+  "install.iosHint": "iOS 不支持网页一键安装，请按以下步骤手动添加：",
+  "install.iosStep1": "点击 Safari 底部工具栏的「分享」按钮",
+  "install.iosStep2": "向下滑动选择「添加到主屏幕」",
+  "install.iosStep3": "点击右上角「添加」，dailog 图标即出现在主屏幕",
+  "install.fallbackDesc": "当前浏览器暂未提供一键安装。请点击地址栏右侧或浏览器菜单中的「安装应用 / 添加到主屏幕」。",
+
 } as const;
 
 // ---------- 英文（fallback 语言；结构必须与 zh 完全对齐）----------
@@ -778,6 +808,22 @@ export const en: Dictionary = {
   "nav.episodes": "Episodes",
   "nav.settings": "Settings",
   "nav.example": "Components",
+
+  // ---- Search ----
+  "search.title": "Search",
+  "search.placeholder": "Search episodes, guests, hosts…",
+  "search.hint": "Type to find episodes, guests or hosts",
+  "search.loading": "Searching…",
+  "search.empty": "No results for “{q}”",
+  "search.error": "Search failed, please retry",
+  "search.footer": "↑↓ navigate · ↵ open · esc close",
+  "search.episodes": "Episodes",
+  "search.guests": "Guests",
+  "search.hosts": "Hosts",
+  "search.episodeNumber": "Ep. {n}",
+  "search.episodeCount": "{n} episodes",
+  "search.clear": "Clear",
+  "search.close": "Close",
   "layout.unverified": "Email not verified — check your inbox or resend.",
   "layout.resend": "Resend verification email",
   "layout.resendSent": "Resent, check your inbox.",
@@ -1451,6 +1497,20 @@ export const en: Dictionary = {
   "studio.generate.retry": "Retry",
   "studio.generate.back": "Back to edit script",
   "studio.generate.listen": "Listen to your episode",
+
+  // ---- PWA install (footer entry + /install page) ----
+  "footer.install": "Install App",
+  "install.title": "Install dailog",
+  "install.desc": "Add dailog to your home screen — use it like a native app, even offline",
+  "install.cta": "Install now",
+  "install.ctaDesc": "Tap the button below and your browser will ask you to confirm",
+  "install.installed": "dailog is installed ✓",
+  "install.installedDesc": "Open dailog from your home screen — standalone window, works offline",
+  "install.iosHint": "iOS doesn't support one-tap web install. Follow these steps:",
+  "install.iosStep1": "Tap the “Share” button in Safari's toolbar",
+  "install.iosStep2": "Scroll down and choose “Add to Home Screen”",
+  "install.iosStep3": "Tap “Add” in the top-right corner — the dailog icon appears on your home screen",
+  "install.fallbackDesc": "Your browser doesn't offer one-tap install right now. Use “Install app / Add to home screen” from the address bar or browser menu.",
 
 };
 
