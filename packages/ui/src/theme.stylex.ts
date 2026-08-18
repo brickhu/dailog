@@ -13,12 +13,12 @@ const TABLET = "@media (640px <= width < 1024px)";
 // 颜色
 export const colors = stylex.defineVars({
   // 主色调
-  primary: {default: "#211e0c", [DARK]: "#eeeacb"},
-  onPrimary: {default: "#eeeacb", [DARK]: "#211e0c"},
-  primaryWeak: {default: "#9e9b8c", [DARK]: "#848274"},
-  onPrimaryWeak: {default: "#211e0c", [DARK]: "#211e0c"},
-  primaryStrong: {default: "#0a0903", [DARK]: "#fdfbee"},
-  onPrimaryStrong: {default: "#fdfbee", [DARK]: "#211e0c"},
+  primary: {default: "#2b2717", [DARK]: "#acab9c"},
+  onPrimary: {default: "#eeeacb", [DARK]: "#2b2717"},
+  primaryWeak: {default: "#403d32", [DARK]: "#79776c"},
+  onPrimaryWeak: {default: "#eeeacb", [DARK]: "#2b2717"},
+  primaryStrong: {default: "#0a0903", [DARK]: "#d4d2c4"},
+  onPrimaryStrong: {default: "#eeeacb", [DARK]: "#2b2717"},
   // 次色调
   secondary: {default: "#1a2944", [DARK]: "#9baac7"},
   onSecondary: {default: "#9baac7", [DARK]: "#1a2944"},
@@ -29,7 +29,7 @@ export const colors = stylex.defineVars({
   // 品牌专属色
   brand: {default: "#01C82C", [DARK]: "#01C82C"},
   onBrand: {default: "#211e0c", [DARK]: "#211e0c"},
-  brandWeak: {default: "#46F26B", [DARK]: "#03A526"},
+  brandWeak: {default: "#46F26B", [DARK]: "#03771c"},
   onBrandWeak: {default: "#211e0c", [DARK]: "#211e0c"},
   brandStrong: {default: "#03A526", [DARK]: "#46F26B"},
   onBrandStrong: {default: "#211e0c", [DARK]: "#211e0c"},
@@ -39,15 +39,15 @@ export const colors = stylex.defineVars({
   onNeutral: {default: "#ffffff", [DARK]: "#2b2b2d"},
   neutralWeak: {default: "#6b6c70", [DARK]: "#c9cbce"},
   onNeutralWeak: {default: "#ffffff", [DARK]: "#161b22"},
-  neutralStrong: {default: "#1f2023", [DARK]: "#e1e3e6"},
+  neutralStrong: {default: "#1f2023", [DARK]: "#bbbbbb"},
   onNeutralStrong: {default: "#ffffff", [DARK]: "#161b22"},
   
   // 表面区域色
-  surface: {default: "#dbdbdb", [DARK]: "#161b22"},
+  surface: {default: "#d0cfcf", [DARK]: "#23272d"},
   onSurface: {default: "#161b22", [DARK]: "#d7dada"},
   surfaceWeak: {default: "#e7e9ec", [DARK]: "#212833"},
   onSurfaceWeak: {default: "#161b22", [DARK]: "#e6e9ef"},
-  surfaceStrong: {default: "#c2c6c8", [DARK]: "#12171f"},
+  surfaceStrong: {default: "#c2c6c8", [DARK]: "#393e45"},
   onSurfaceStrong: {default: "#161b22", [DARK]: "#e6e9ef"},
   
   // 突显区域色

@@ -331,9 +331,15 @@ const styles = stylex.create({
     opacity: 0.5,
     cursor: "not-allowed",
   },
+  // 主题色变量（默认 primary / surfaceWeak）：经根容器 --slider-accent、
+  // --slider-track 下发，消费方用 xstyle 覆盖即可定制进度条/轨道颜色
+  accentVars: {
+    "--slider-accent": colors.primary,
+    "--slider-track": colors.primaryWeak,
+  },
   track: {
     position: "absolute",
-    backgroundColor: colors.surfaceWeak,
+    backgroundColor: `color-mix(in srgb, var(--slider-track) 60%, transparent)`,
     borderRadius: dimensions.radiusFull,
   },
   trackHorizontal: {
@@ -352,7 +358,7 @@ const styles = stylex.create({
   },
   filledTrack: {
     position: "absolute",
-    backgroundColor: colors.primary,
+    backgroundColor: "var(--slider-accent)",
     borderRadius: dimensions.radiusFull,
   },
   filledTrackHorizontal: {
@@ -370,7 +376,7 @@ const styles = stylex.create({
     width: THUMB_SIZE,
     height: THUMB_SIZE,
     borderRadius: dimensions.radiusFull,
-    backgroundColor: colors.primary,
+    backgroundColor: "var(--slider-accent)",
     // 水平方向：insetInlineStart 在 RTL 下从右侧解析，居中 transform 是物理变换，
     // 需在 RTL 下翻转 X 方向保持居中在值点上（Astryx 同款）
     transform: {
@@ -390,18 +396,18 @@ const styles = stylex.create({
   },
   thumbHover: {
     backgroundColor: {
-      default: colors.primary,
+      default: "var(--slider-accent)",
       ":hover": {
-        "@media (hover: hover)": `color-mix(in srgb, ${colors.primary}, ${colors.ink} 10%)`,
+        "@media (hover: hover)": `color-mix(in srgb, var(--slider-accent), ${colors.ink} 10%)`,
       },
     },
   },
   thumbDisabled: {
-    backgroundColor: colors.surfaceStrong,
+    backgroundColor: colors.primaryStrong,
     cursor: "not-allowed",
   },
   focusVisible: {
-    outline: { default: null, ":focus-visible": `2px solid ${colors.primary}` },
+    outline: { default: null, ":focus-visible": "2px solid var(--slider-accent)" },
     outlineOffset: { default: "0", ":focus-visible": "2px" },
   },
   // 自绘值气泡（同 button.tsx tooltip 做法）：随 thumb 定位，无需 JS 计算
@@ -832,7 +838,7 @@ export function Slider(props: SliderProps) {
   // 外部 class/className 不能走 rest 透传（后 spread 的 class 会整体覆盖内部
   // stylex 类名），必须显式拼接；xstyle 放 stylex.props 末尾以覆盖同名内部属性
   const rootAttrs = () => {
-    const attrs = stylex.props(local.xstyle);
+    const attrs = stylex.props(styles.accentVars, local.xstyle);
     const external = local.class ?? local.className;
     if (external == null) {
       return { ...attrs, ...rest };

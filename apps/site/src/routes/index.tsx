@@ -333,7 +333,7 @@ export default function HomePage() {
         <div {...stylex.props(layouts.containerLg, styles.heroInner)}>
           <div {...stylex.props(styles.heroText)}>
             <h1 {...stylex.props(typography.displayMd, styles.tagline)}>{t("home.hero.tagline")}</h1>
-            <p {...stylex.props(typography.bodyLg, styles.what)}>{t("home.hero.what")}</p>
+            <p {...stylex.props(typography.bodyXl, styles.what)}>{t("home.hero.what")}</p>
             <div {...stylex.props(styles.ctaRow)}>
               <Button
                 use:auth={true}

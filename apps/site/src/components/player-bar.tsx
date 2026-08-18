@@ -19,19 +19,21 @@ const styles = stylex.create({
     borderColor: colors.surfaceStrong,
     borderStyle: "solid",
     borderWidth: `1px 1px 1px 1px`,
-    left: dimensions.spacing4,
-    right: dimensions.spacing4,
-    bottom: dimensions.spacing4,
+    left: dimensions.spacing3,
+    right: dimensions.spacing3,
+    bottom: dimensions.spacing3,
     borderRadius: dimensions.radiusLg,
-    padding: `${dimensions.spacing2} ${dimensions.spacing2}`,
+    padding: `${dimensions.spacing3} ${dimensions.spacing3}`,
+    flexWrap: "wrap",
     [DESKTOP]: {
       left: "0",
       right: "0",
       bottom: "0",
       borderRadius: dimensions.radius0,
-      borderWidth: `1px,0,0,0`,
+      borderWidth: `1px 0px 0px 0px`,
       padding: `${dimensions.spacing2} ${dimensions.spacing3}`,
       gap: dimensions.spacing8,
+      flexWrap: "nowrap"
     },
     zIndex: 50,
     display: "flex",
@@ -50,13 +52,20 @@ const styles = stylex.create({
     objectFit: "cover",
     flexShrink: 0,
     display: "block",
+    borderRadius: dimensions.radiusSm,
+    boxSizing : "border-box",
+    borderColor : colors.surfaceStrong,
+    borderWidth : "1px",
+    borderStyle : "solid",
+    backgroundColor : colors.successStrong
   },
   info: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: dimensions.spacing4,
-    maxWidth: "20%"
+    maxWidth: "50%",
+    order: 1,
     // [DESKTOP]:{
     //    minWidth: "20%",
     //   display: "flex",
@@ -65,7 +74,7 @@ const styles = stylex.create({
     // }
   },
   title: {
-    display: "none",
+    // display: "none",
     textOverflow: "ellipsis",
     overflow: "hidden",
     flex:1,
@@ -89,23 +98,26 @@ const styles = stylex.create({
     display: "flex",
     gap: dimensions.spacing2,
     minWidth: `calc(${dimensions.spacing12} *3 )`,
-    justifyContent : "end"
+    justifyContent : "end",
+    order: 2,
+    [DESKTOP]:{
+      order: 3,
+    }
   },
   progress: {
-    
-  
-    display: "none",
+    display : "flex",
     alignItems: "center",
-    
+    order: 3,
     gap: dimensions.spacing4,
     flex: 1,
     [DESKTOP]: {
-      display : "flex"
+      order: 2
     }
   },
   time: {
     fontVariantNumeric: "tabular-nums",
     flexShrink: 0,
+    opacity: "0.5"
   },
   slider: {
     // width: "100%", // 移动优先（<640）；平板/桌面加宽
@@ -113,6 +125,8 @@ const styles = stylex.create({
     // borderRadius: "2px",
     // cursor: "pointer",
     flex: 1,
+  
+    background: colors.brandWeak
     //   [TABLET]: {
     //   width: "140px",
     // },
@@ -189,12 +203,13 @@ export function PlayerBar() {
         <div {...stylex.props(styles.progress)}>
           <span {...stylex.props(styles.time,typography.caption)}>{fmt(pb.progress())}</span>
           <Slider 
-            label="音量" 
+            label="audio process" 
             value={Math.min(pb.progress(), pb.duration() || 0)}
             onChange={(v) => pb.seek(Number(v))}
             step={0.5}
             min={0}
             xstyle={styles.slider}
+            valueDisplay="none"
             isLabelHidden
           />
           <span {...stylex.props(styles.time, typography.caption)}>{fmt(pb.duration())}</span>

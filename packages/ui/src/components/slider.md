@@ -78,6 +78,26 @@ const pageStyles = stylex.create({
 <Slider label="音量" value={50} class="my-slider" />
 ```
 
+### 颜色定制
+
+进度条与圆点颜色经根容器下发的 CSS 变量控制，用 `xstyle` 覆盖即可（默认走 `theme.stylex`）：
+
+| 变量 | 作用 | 默认 |
+|---|---|---|
+| `--slider-accent` | 进度条（filled track）+ 圆点（thumb），hover 加深与 focus 描边跟随 | `colors.primary` |
+| `--slider-track` | 背景轨道 | `colors.surfaceWeak` |
+
+```tsx
+const myStyles = stylex.create({
+  warm: {
+    "--slider-accent": colors.danger,   // 进度条 + 圆点
+    "--slider-track": colors.warningWeak, // 背景轨道
+  },
+});
+
+<Slider label="音量" value={50} xstyle={myStyles.warm} />
+```
+
 ## 用法示例
 
 ### 基础单值（受控）
