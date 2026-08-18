@@ -5,12 +5,14 @@ import { createApp, type AppDeps, type AuthLike } from "../src/app";
 import { createAuth } from "../src/auth/better-auth";
 import { createDb } from "../src/db/client";
 import * as schema from "../src/db/schema";
+import { fakePlaylistsRepo } from "./helpers/fake-playlists";
 
 // 认证全链路测试：真实 better-auth + 本地 PG（门控；无 DATABASE_URL 时跳过）
 const hasDb = Boolean(process.env.DATABASE_URL);
 
 function fakeRepo(): AppDeps["repo"] {
   return {
+    playlists: fakePlaylistsRepo(),
     notifications: {
       create: async () => {},
       listByUser: async () => [],

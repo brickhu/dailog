@@ -50,6 +50,21 @@ export function episodeCoverUrl(
   return coverUrl;
 }
 
+/** 播放列表封面 URL：R2 key（covers/ 前缀）→ 公开端点（/v1/public/playlists/:id/cover）；非 R2 → null。
+ *  列表封面为编辑自定义上传（sharp 归一 1400² JPEG）；无自定义封面时调用方回退首期节目封面。 */
+export function playlistCoverUrl(
+  id: string | null | undefined,
+  coverUrl: string | null | undefined,
+  w?: number,
+): string | null {
+  if (!id || !coverUrl) return null;
+  if (coverUrl.startsWith("covers/")) {
+    const base = `${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/playlists/${id}/cover`;
+    return w ? `${base}?w=${w}` : base;
+  }
+  return coverUrl;
+}
+
 /** 封面响应式规格：320/640/960/1280（2x 屏覆盖到 640px 显示宽） */
 export const COVER_SRC_WIDTHS = [320, 640, 960, 1280] as const;
 

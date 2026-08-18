@@ -36,6 +36,8 @@
 //   pnpm editor publish <submissionId> --title "..." [--audio final.mp3] [--cover c.jpg]
 //                                               [--description ...] [--tags a,b] [--language zh] [--guest claude]
 //   pnpm editor reject <submissionId> --reason "..."
+//   pnpm editor playlist <list|create|episodes|add|remove|reorder|pick|unpick|public|private|delete|cover> [args]
+//                                               平台播放列表管理（策展/加节目/重排/封面）
 import { loadConfig } from "./lib.js";
 
 // 全局参数（环境选择）在分发前剥离，避免混入子命令参数；命令名 = 第一个非全局参数
@@ -180,9 +182,14 @@ async function main() {
       await reject(config, args);
       break;
     }
+    case "playlist": {
+      const { playlist } = await import("./playlist.js");
+      await playlist(config, args);
+      break;
+    }
     default:
       console.error(`未知命令: ${cmd}\n\n` +
-        "用法：pnpm editor <login|auth-status|overview|list|batch|batch-reject|batch-scripts|produce|detail|fetch|rule-test|console-script|paste|guests|guest-voice|guest-set|progress|script-preview|tts|merge|cover|publish|reject> [args]");
+        "用法：pnpm editor <login|auth-status|overview|list|batch|batch-reject|batch-scripts|produce|detail|fetch|rule-test|console-script|paste|guests|guest-voice|guest-set|progress|script-preview|tts|merge|cover|publish|reject|playlist> [args]");
       process.exit(1);
   }
 }

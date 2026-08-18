@@ -197,6 +197,123 @@ export interface GuestDetail {
   episodes: EpisodeSummary[];
 }
 
+// ---------------------------------------------------------------------------
+// 播放列表（0032）：公开列表索引 + 详情 + 节目页「收录于」反查
+// 封面 MVP 自动取首期公开节目封面（playlists.cover_url 预留自定义，当前恒 null）
+// ---------------------------------------------------------------------------
+
+export interface PlaylistSummary {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  coverUrl: string | null;
+  language: string;
+  isPicked: boolean;
+  episodeCount: number;
+  /** 首期公开节目封面（封面 MVP 自动取首期；无 → null） */
+  firstCover: string | null;
+  /** 首期公开节目 id（拼公开封面 URL 用；无 → null） */
+  firstEpisodeId: string | null;
+  updatedAt: Date | null;
+}
+
+/** 公开播放列表索引（平台策展优先，精选在前）。
+ *  lang 可选（"zh"|"en"）：**同语言列表优先**（ORDER BY 匹配降序），数量不足自然回退到其他语言
+ *  ——与节目推荐的语言偏好分流同模式。/playlists 页 + 首页横滑区 + 发现页列表 tab 用。 */
+export async function listPublicPlaylists(limit = 12, lang?: "zh" | "en"): Promise<PlaylistSummary[]> {
+  return withDb((db) => db`
+    SELECT p.id, p.slug, p.title, p.description,
+           p.cover_url AS "coverUrl", p.language, p.is_picked AS "isPicked",
+           p.updated_at AS "updatedAt",
+      (SELECT count(*)::int FROM playlist_episodes pe
+       JOIN episodes e ON e.id = pe.episode_id
+       WHERE pe.playlist_id = p.id AND e.status = 'published' AND e.is_public = true) AS "episodeCount",
+      (SELECT e.cover_url FROM playlist_episodes pe
+       JOIN episodes e ON e.id = pe.episode_id
+       WHERE pe.playlist_id = p.id AND e.status = 'published' AND e.is_public = true
+         AND e.cover_url IS NOT NULL
+       ORDER BY pe.position LIMIT 1) AS "firstCover",
+      (SELECT e.id FROM playlist_episodes pe
+       JOIN episodes e ON e.id = pe.episode_id
+       WHERE pe.playlist_id = p.id AND e.status = 'published' AND e.is_public = true
+       ORDER BY pe.position LIMIT 1) AS "firstEpisodeId"
+    FROM playlists p
+    WHERE p.kind = 'platform' AND p.is_public = true
+    ORDER BY ${lang ? db`(p.language = ${lang}) DESC, ` : db``} p.is_picked DESC, p.updated_at DESC
+    LIMIT ${limit}
+  ` as unknown as Promise<PlaylistSummary[]>);
+}
+
+export interface PlaylistDetail {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  /** 自定义封面（编辑上传；null = 回退首期节目封面） */
+  coverUrl: string | null;
+  language: string;
+  isPicked: boolean;
+  episodeCount: number;
+  updatedAt: Date | null;
+  /** 公开节目（position 排序，仅 published + is_public） */
+  episodes: Array<EpisodeSummary & { position: number }>;
+}
+
+/** 播放列表详情（公开：kind 不限——用户公开列表也可访问）；不存在/未公开 → null */
+export async function getPlaylist(slug: string): Promise<PlaylistDetail | null> {
+  return withDb(async (db) => {
+    const rows = await db`
+      SELECT p.id, p.slug, p.title, p.description, p.language,
+             p.cover_url AS "coverUrl",
+             p.is_picked AS "isPicked", p.updated_at AS "updatedAt"
+      FROM playlists p
+      WHERE p.slug = ${slug} AND p.is_public = true
+      LIMIT 1
+    `;
+    if (rows.length === 0) return null;
+    const raw = rows[0] as Record<string, unknown>;
+    const episodes = await db`
+      SELECT e.id, e.slug, e.title, e.description,
+             e.duration_seconds AS "durationSeconds",
+             e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
+             e.language, e.audio_url AS "audioUrl",
+             u.name AS username, p.display_name AS "displayName",
+             s.call_name AS "callName", pe.position
+      FROM playlist_episodes pe
+      JOIN episodes e ON e.id = pe.episode_id
+      JOIN submissions s ON s.id = e.submission_id
+      JOIN profiles p ON p.id = e.user_id
+      JOIN "user" u ON u.id = p.id
+      WHERE pe.playlist_id = ${String(raw.id)} AND e.status = 'published' AND e.is_public = true
+      ORDER BY pe.position
+    `;
+    return {
+      id: String(raw.id),
+      slug: String(raw.slug),
+      title: String(raw.title),
+      description: raw.description == null ? null : String(raw.description),
+      coverUrl: raw.coverUrl == null ? null : String(raw.coverUrl),
+      language: String(raw.language),
+      isPicked: Boolean(raw.isPicked),
+      episodeCount: episodes.length,
+      updatedAt: raw.updatedAt == null ? null : (raw.updatedAt as Date),
+      episodes: episodes as unknown as Array<EpisodeSummary & { position: number }>,
+    };
+  });
+}
+
+/** 节目收录于哪些公开列表（节目页「收录于」反查） */
+export async function getPlaylistsByEpisode(episodeId: string): Promise<Array<{ id: string; slug: string; title: string }>> {
+  return withDb((db) => db`
+    SELECT pl.id, pl.slug, pl.title
+    FROM playlist_episodes pe
+    JOIN playlists pl ON pl.id = pe.playlist_id
+    WHERE pe.episode_id = ${episodeId} AND pl.is_public = true
+    ORDER BY pl.updated_at DESC
+  ` as unknown as Promise<Array<{ id: string; slug: string; title: string }>>);
+}
+
 export async function getGuest(id: string): Promise<GuestDetail | null> {
   return withDb(async (db) => {
     const rows = await db`

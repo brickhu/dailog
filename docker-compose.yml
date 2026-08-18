@@ -87,7 +87,9 @@ services:
       DATABASE_URL: postgres://dailogues:dailogues@postgres:5432/dailogues
       # 统一 VITE_ 一套（构建期注入；服务端代理转发与客户端共用）
       # 服务端代理（node fetch）必须 http：OrbStack 自签证书不被 Node 信任（SELF_SIGNED_CERT_IN_CHAIN）
-      VITE_API_BASE_URL: http://api.dailog.orb.local
+      # 用 compose 服务名 api:8787 而非 *.orb.local 域名——域名路由在 api 容器重启后曾丢失
+      # （NXDOMAIN → site 全部 fetch failed/503），服务名经 Docker 内嵌 DNS 恒可靠
+      VITE_API_BASE_URL: http://api:8787
       # 浏览器端媒体/API 直连：localhost（http 页面加载 http 资源无 mixed content 问题）
       VITE_PUBLIC_API_BASE_URL: http://localhost:8787
       VITE_SITE_BASE_URL: http://localhost:3000

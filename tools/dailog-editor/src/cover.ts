@@ -5,8 +5,9 @@
 //   · 渲染：渐变底色 + SVG pattern 纹理 + 噪点 → resvg → 1400×1400 标准 JPEG
 //   · --image-url：编辑不满意时贴图片 URL → 下载 → ffmpeg 裁 1400×1400
 //   · 产物：drafts/{submissionId}/cover.jpg
-import { writeFileSync, existsSync, rmSync } from "node:fs";
+import { writeFileSync, existsSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { Resvg } from "@resvg/resvg-js";
 // color-hash 是 CJS（__esModule + default）：Node ESM 下 default import 拿到 module.exports
@@ -276,15 +277,34 @@ function svgTemplate(textureName: string, base: string, textureColor: string, st
 </svg>`;
 }
 
-export async function cover(config: EditorConfig, args: string[]): Promise<void> {
-  const { submissionId, texture, colors, imageUrl, strokeWidth: strokeWidthArg } = parseArgs(args);
-  let strokeWidth = strokeWidthArg;
+/** 封面渲染元信息（日志/固定复现提示用） */
+export interface CoverRenderMeta {
+  presetName: string;
+  textureName: string;
+  base: string;
+  textureColor: string;
+  strokeWidth: number;
+  cells: number;
+  /** 外部图片裁剪（--image-url）时 true */
+  fromImage: boolean;
+}
+
+/** 生成封面 JPEG 字节（纹理 SVG+resvg 或外部图片裁剪）——不落盘，调用方决定写哪里。
+ *  seed = 确定性底色哈希源（投稿 id / 播放列表 id）。
+ *  供 cover（写草稿目录）与 playlist cover（直接上传）复用。 */
+export async function renderCoverImage(opts: {
+  seed: string;
+  texture?: string | null;
+  colors?: [string, string] | null;
+  imageUrl?: string | null;
+  strokeWidth?: number;
+}): Promise<{ bytes: Uint8Array; meta: CoverRenderMeta }> {
+  const { seed, texture, colors, imageUrl } = opts;
+  let strokeWidth = opts.strokeWidth ?? 2;
   let textureName = texture ?? TEXTURE_NAMES[Math.floor(Math.random() * TEXTURE_NAMES.length)];
-  const dir = draftDir(submissionId);
-  const outPath = join(dir, "cover.jpg");
 
   if (imageUrl) {
-    // 编辑不满意 → 贴图片 URL：下载 → ffmpeg 裁 1400×1400
+    // 编辑不满意 → 贴图片 URL：下载 → ffmpeg 裁 1400×1400（临时目录，不污染草稿）
     console.log(`[cover] 下载外部图片：${imageUrl}`);
     let res: Response;
     try {
@@ -297,18 +317,19 @@ export async function cover(config: EditorConfig, args: string[]): Promise<void>
       console.error(`[cover] 图片下载失败（HTTP ${res.status}）`);
       process.exit(1);
     }
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    const tmpPath = join(dir, "_cover-src.bin");
-    writeFileSync(tmpPath, bytes);
+    const src = new Uint8Array(await res.arrayBuffer());
+    const tmp = join(tmpdir(), `dailog-cover-${Date.now()}-${Math.random().toString(16).slice(2)}.bin`);
+    const out = tmp.replace(/\.bin$/, ".jpg");
+    writeFileSync(tmp, src);
     execFileSync("ffmpeg", [
-      "-y", "-i", tmpPath,
+      "-y", "-i", tmp,
       "-vf", "scale=1400:1400:force_original_aspect_ratio=increase,crop=1400:1400",
-      "-q:v", "2", outPath,
+      "-q:v", "2", out,
     ], { stdio: "ignore" });
-    rmSync(tmpPath, { force: true });
-    writeProgress(submissionId, "covered");
-    console.log(`[cover] ✅ 外部图片已裁剪 → ${outPath}`);
-    return;
+    rmSync(tmp, { force: true });
+    const bytes = new Uint8Array(readFileSync(out));
+    rmSync(out, { force: true });
+    return { bytes, meta: { presetName: "外部图片", textureName, base: "", textureColor: "", strokeWidth, cells: 0, fromImage: true } };
   }
 
   // 默认：从页面指令预置库随机选 1 条完整执行（纹理+密度+线宽+颜色一起随机）
@@ -321,25 +342,42 @@ export async function cover(config: EditorConfig, args: string[]): Promise<void>
     textureName = preset.texture;
     cells = preset.cells ?? PATTERN_CELLS;
     strokeWidth = preset.strokeWidth ?? strokeWidth;
-    base = preset.background ?? hashColor.hex(submissionId); // 底色 = 指令指定 或 投稿 id 哈希
+    base = preset.background ?? hashColor.hex(seed); // 底色 = 指令指定 或 seed 哈希
     textureColor = preset.stroke ?? pickTextureColor(base);
     presetName = preset.name;
   } else {
-    // 手动指定（--texture/--colors）→ 底色 = 指定 或 投稿 id 哈希；纹理色 = 指定 或 对比选
-    base = colors ? colors[0] : hashColor.hex(submissionId);
+    // 手动指定（--texture/--colors）→ 底色 = 指定 或 seed 哈希；纹理色 = 指定 或 对比选
+    base = colors ? colors[0] : hashColor.hex(seed);
     textureColor = colors ? colors[1] : pickTextureColor(base);
   }
 
   const svg = svgTemplate(textureName, base, textureColor, strokeWidth, cells);
   const resvg = new Resvg(svg, { fitTo: { mode: "width", value: COVER_SIZE } });
   const png = resvg.render().asPng();
-  const pngPath = join(dir, "_cover-render.png");
+  const pngPath = join(tmpdir(), `dailog-cover-${Date.now()}-${Math.random().toString(16).slice(2)}.png`);
+  const jpgPath = pngPath.replace(/\.png$/, ".jpg");
   writeFileSync(pngPath, png);
-  execFileSync("ffmpeg", ["-y", "-i", pngPath, "-q:v", "2", outPath], { stdio: "ignore" });
+  execFileSync("ffmpeg", ["-y", "-i", pngPath, "-q:v", "2", jpgPath], { stdio: "ignore" });
   rmSync(pngPath, { force: true });
+  const bytes = new Uint8Array(readFileSync(jpgPath));
+  rmSync(jpgPath, { force: true });
+  return { bytes, meta: { presetName, textureName, base, textureColor, strokeWidth, cells, fromImage: false } };
+}
+
+export async function cover(config: EditorConfig, args: string[]): Promise<void> {
+  const { submissionId, texture, colors, imageUrl, strokeWidth: strokeWidthArg } = parseArgs(args);
+  const dir = draftDir(submissionId);
+  const outPath = join(dir, "cover.jpg");
+  const { bytes, meta } = await renderCoverImage({ seed: submissionId, texture, colors, imageUrl, strokeWidth: strokeWidthArg });
+  writeFileSync(outPath, bytes);
   writeProgress(submissionId, "covered");
-  console.log(`[cover] ✅ 封面已生成（指令 ${presetName} → ${textureName} / 底色 ${base} / 纹理色 ${textureColor} / 线宽 ${strokeWidth}px / ${cells}×${cells}）`);
+  if (meta.fromImage) {
+    console.log(`[cover] ✅ 外部图片已裁剪 → ${outPath}`);
+    return;
+  }
+  console.log(`[cover] ✅ 封面已生成（指令 ${meta.presetName} → ${meta.textureName} / 底色 ${meta.base} / 纹理色 ${meta.textureColor} / 线宽 ${meta.strokeWidth}px / ${meta.cells}×${meta.cells}）`);
   console.log(`[cover]   → ${outPath}`);
-  console.log(`[cover]   固定复现：--texture ${textureName} --colors "${base},${textureColor}"`);
+  console.log(`[cover]   固定复现：--texture ${meta.textureName} --colors "${meta.base},${meta.textureColor}"`);
   console.log(`[cover]   不满意？贴图重做：--image-url <URL>`);
 }
+

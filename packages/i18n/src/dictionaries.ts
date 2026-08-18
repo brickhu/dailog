@@ -31,6 +31,10 @@ export const zh = {
   "common.back": "返回",
   "common.unnamed": "未命名节目",
 
+  // ---- 表单字段 ----
+  "field.required": "必填",
+  "field.optional": "选填",
+
   // ---- 导航 ----
   "nav.account": "账号",
   "nav.login": "登录",
@@ -264,10 +268,10 @@ export const zh = {
   "home.topHosts": "热门主播",
   "home.guests": "常驻 AI 嘉宾",
   "home.guestIntro": "{platform} · {intro}",
-  "home.hero.tagline": "听见人类和AI的思想交锋",
-"home.hero.what": "dailog 是一档将「AI聊天记录」模拟为真人采访AI的播客，单期5-10分钟呈现原始对话里的思想精华：交锋、新知、情感与经验。",
+  "home.hero.tagline": "听见人类和AI的思想交锋 🎧",
+"home.hero.what": "dailog 是一档将「AI聊天记录」模拟为真人采访AI的播客，单期5-10分钟呈现对话原文的精华内容：思想交锋、新知、情感与经验。",
   "home.hero.submit": "立即投稿",
-  "home.hero.ctaHint": "提交你和 AI 的聊天记录，人人都能成为主播",
+  "home.hero.ctaHint": "提交「AI聊天记录」，录制声音采样，秒变主播。",
   "home.hero.browse": "浏览节目",
   "home.hero.playerTitle": "精选节目",
   "home.hero.playerFallback": "暂无已发布节目",
@@ -745,6 +749,7 @@ export const zh = {
 
   // ---- PWA 安装（footer 入口 + /install 引导页） ----
   "footer.install": "安装 App",
+  "footer.terms": "使用条款",
   "install.title": "安装 dailog",
   "install.desc": "把 dailog 添加到主屏幕，像原生 App 一样使用，离线也能听",
   "install.cta": "立即安装",
@@ -756,6 +761,41 @@ export const zh = {
   "install.iosStep2": "向下滑动选择「添加到主屏幕」",
   "install.iosStep3": "点击右上角「添加」，dailog 图标即出现在主屏幕",
   "install.fallbackDesc": "当前浏览器暂未提供一键安装。请点击地址栏右侧或浏览器菜单中的「安装应用 / 添加到主屏幕」。",
+
+  // ---- 播放列表 ----
+  "playlists.title": "播放列表",
+  "playlists.desc": "编辑精选的主题合集，一口气听完",
+  "playlists.empty": "还没有播放列表",
+  "playlists.episodeCount": "{count} 期节目",
+  "playlist.notFound": "播放列表不存在或未公开",
+  "playlist.playAll": "播放全部",
+  "playlist.episodes": "节目列表",
+  "playlist.updatedAt": "更新于 {date}",
+  "playlist.in": "收录于",
+  "playlist.addTo": "加入播放列表",
+  "playlist.added": "已加入",
+  "playlist.remove": "移除",
+  "playlist.done": "完成",
+  "playlist.new": "新建播放列表",
+  "playlist.newTitle": "标题",
+  "playlist.newTitlePlaceholder": "列表名称（1-80 字）",
+  "playlist.newDesc": "简介（可选）",
+  "playlist.newDescPlaceholder": "这个列表讲什么？",
+  "playlist.create": "创建",
+  "playlist.public": "公开",
+  "playlist.private": "私有",
+  "playlist.publicHint": "公开后可通过链接分享",
+  "playlist.delete": "删除列表",
+  "playlist.deleteConfirm": "确定删除「{title}」？列表中的节目不会受影响。",
+  "playlist.edit": "编辑",
+  "playlist.share": "分享",
+  "playlist.copied": "已复制 ✓",
+  "playlist.emptyEpisodes": "还没有节目——在节目页点「加入播放列表」添加",
+  "playlist.loginHint": "登录后即可创建播放列表",
+  "home.playlists": "播放列表",
+  "me.playlists": "我的播放列表",
+  "me.playlistsDesc": "把喜欢的节目打包成列表，公开后可分享",
+  "discover.lists": "列表",
 
 } as const;
 
@@ -788,6 +828,10 @@ export const en: Dictionary = {
   "common.minutes": "min",
   "common.back": "Back",
   "common.unnamed": "Untitled episode",
+
+  // ---- Form fields ----
+  "field.required": "Required",
+  "field.optional": "Optional",
 
   // ---- 导航 ----
   "nav.account": "Account",
@@ -1022,10 +1066,10 @@ export const en: Dictionary = {
   "home.topHosts": "Top hosts",
   "home.guests": "Resident AI guests",
   "home.guestIntro": "{platform} · {intro}",
-  "home.hero.tagline": "Hear the clash between humans and AI",
+  "home.hero.tagline": "Hear the clash between humans and AI 🎧",
 "home.hero.what": "dailog turns your AI chat records into simulated human-AI interviews — 5–10 mins of the intellectual essence of raw conversations: clashes, insights, feelings & experience.",
   "home.hero.submit": "Submit your chat",
-  "home.hero.ctaHint": "Submit your AI conversations — everyone can be a host",
+  "home.hero.ctaHint": "Submit AI chats, record your voice, become a host",
   "home.hero.browse": "Browse episodes",
   "home.hero.playerTitle": "Featured episodes",
   "home.hero.playerFallback": "No published episodes yet",
@@ -1500,6 +1544,7 @@ export const en: Dictionary = {
 
   // ---- PWA install (footer entry + /install page) ----
   "footer.install": "Install App",
+  "footer.terms": "Terms",
   "install.title": "Install dailog",
   "install.desc": "Add dailog to your home screen — use it like a native app, even offline",
   "install.cta": "Install now",
@@ -1511,6 +1556,41 @@ export const en: Dictionary = {
   "install.iosStep2": "Scroll down and choose “Add to Home Screen”",
   "install.iosStep3": "Tap “Add” in the top-right corner — the dailog icon appears on your home screen",
   "install.fallbackDesc": "Your browser doesn't offer one-tap install right now. Use “Install app / Add to home screen” from the address bar or browser menu.",
+
+  // ---- Playlists ----
+  "playlists.title": "Playlists",
+  "playlists.desc": "Curated collections — binge-worthy listening",
+  "playlists.empty": "No playlists yet",
+  "playlists.episodeCount": "{count} episodes",
+  "playlist.notFound": "Playlist not found or private",
+  "playlist.playAll": "Play all",
+  "playlist.episodes": "Episodes",
+  "playlist.updatedAt": "Updated {date}",
+  "playlist.in": "In playlists",
+  "playlist.addTo": "Add to playlist",
+  "playlist.added": "Added",
+  "playlist.remove": "Remove",
+  "playlist.done": "Done",
+  "playlist.new": "New playlist",
+  "playlist.newTitle": "Title",
+  "playlist.newTitlePlaceholder": "Playlist name (1-80 chars)",
+  "playlist.newDesc": "Description (optional)",
+  "playlist.newDescPlaceholder": "What is this playlist about?",
+  "playlist.create": "Create",
+  "playlist.public": "Public",
+  "playlist.private": "Private",
+  "playlist.publicHint": "Public playlists can be shared by link",
+  "playlist.delete": "Delete playlist",
+  "playlist.deleteConfirm": "Delete「{title}」? Episodes in it are not affected.",
+  "playlist.edit": "Edit",
+  "playlist.share": "Share",
+  "playlist.copied": "Copied ✓",
+  "playlist.emptyEpisodes": "No episodes yet — add some with「Add to playlist」on an episode page",
+  "playlist.loginHint": "Sign in to create playlists",
+  "home.playlists": "Playlists",
+  "me.playlists": "My playlists",
+  "me.playlistsDesc": "Bundle episodes into lists — share when public",
+  "discover.lists": "Lists",
 
 };
 

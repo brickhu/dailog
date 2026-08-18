@@ -295,6 +295,86 @@ export interface EpisodesRepo {
   updateChannel(userId: string, row: { displayName?: string; bio?: string | null; gender?: string | null; profession?: string | null; age?: string | null; nationality?: string | null; socialLinks?: Record<string, string> | null }): Promise<{ ok: true }>;
 }
 
+// ---------------------------------------------------------------------------
+// 播放列表（内容类型）：把不同节目打包成有序列表。
+//  kind=platform（平台策展，编辑/管理员创建，isPicked 精选，公开索引露出）
+//  kind=user（用户自建，ownerId=用户，isPublic 公开可分享——节目页反查「收录于」）
+//  封面 MVP 自动取首期公开节目封面（coverUrl 预留自定义）。
+// ---------------------------------------------------------------------------
+
+export interface PlaylistRow {
+  id: string;
+  slug: string;
+  kind: "platform" | "user";
+  ownerId: string | null;
+  title: string;
+  description: string | null;
+  coverUrl: string | null;
+  language: string;
+  isPublic: boolean;
+  isPicked: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PlaylistEpisodeRow {
+  position: number;
+  episodeId: string;
+  slug: string;
+  title: string | null;
+  coverUrl: string | null;
+  durationSeconds: number | null;
+  publishedAt: Date | null;
+  language: string;
+  audioUrl: string;
+  username: string;
+  displayName: string;
+  callName: string | null;
+}
+
+export interface PlaylistsRepo {
+  /** 创建列表（slug 随机 hex，与节目 slug 同风格） */
+  create(row: {
+    kind: "platform" | "user";
+    ownerId: string | null;
+    title: string;
+    description?: string | null;
+    language?: string;
+    isPublic?: boolean;
+    isPicked?: boolean;
+  }): Promise<{ id: string; slug: string }>;
+  /** 公开列表索引（平台策展为主：kind=platform + isPublic）。
+   *  lang 可选（"zh"|"en"）：**同语言列表优先**（ORDER BY 匹配降序），数量不足时按
+   *  isPicked/updated 自然回退到其他语言（与节目推荐的语言偏好分流同模式）。
+   *  附带公开节目数、首期公开节目封面与首期节目 id（封面 MVP 自动取首期——按 id 拼公开封面 URL）。 */
+  listPublic(opts?: { lang?: string; limit?: number }): Promise<Array<PlaylistRow & { episodeCount: number; firstCover: string | null; firstEpisodeId: string | null }>>;
+  /** 编辑端清单：全部平台列表（含 is_public=false 草稿态；isPicked 优先、更新倒序） */
+  listEditor(opts?: { limit?: number }): Promise<Array<PlaylistRow & { episodeCount: number; firstCover: string | null; firstEpisodeId: string | null }>>;
+  /** 公开详情（含节目列表，仅公开节目按 position 排序）；不存在/未公开 → null */
+  getPublicBySlug(slug: string): Promise<(PlaylistRow & { episodes: PlaylistEpisodeRow[] }) | null>;
+  /** 单查（路由层归属/存在校验用；不校验公开性） */
+  getById(id: string): Promise<PlaylistRow | null>;
+  /** 我的列表（含私有；附带条目数）——/me/playlists。
+   *  containsEpisodeId 给定时附带 contains 布尔（该节目是否已在此列表——节目页「加入播放列表」勾选态） */
+  listByUser(userId: string, opts?: { containsEpisodeId?: string }): Promise<Array<PlaylistRow & { episodeCount: number; contains: boolean }>>;
+  /** 更新元信息（title/description/isPublic/isPicked/language/coverUrl）——归属校验由路由层做 */
+  update(id: string, row: { title?: string; description?: string | null; isPublic?: boolean; isPicked?: boolean; language?: string; coverUrl?: string | null }): Promise<void>;
+  /** 公开读列表封面（公开播放列表的 cover_url；不存在/未公开 → null）——公开封面端点用 */
+  getPublicCover(playlistId: string): Promise<string | null>;
+  /** 删除列表（级联清条目） */
+  remove(id: string): Promise<void>;
+  /** 列表节目（含 position；publicOnly=true 只留已发布公开节目——私有列表归属人可见全部） */
+  listEpisodes(playlistId: string, opts?: { publicOnly?: boolean }): Promise<PlaylistEpisodeRow[]>;
+  /** 添加节目（position = max+1 追加末尾；已存在 → added=false 幂等） */
+  addEpisode(playlistId: string, episodeId: string): Promise<{ added: boolean }>;
+  /** 移除节目（不存在静默） */
+  removeEpisode(playlistId: string, episodeId: string): Promise<void>;
+  /** 重排（事务：按数组顺序重写 position；数组中未出现的既有条目保留在末尾） */
+  reorder(playlistId: string, orderedEpisodeIds: string[]): Promise<void>;
+  /** 节目收录于哪些公开列表（节目页「收录于」反查） */
+  listByEpisode(episodeId: string): Promise<Array<{ id: string; slug: string; title: string }>>;
+}
+
 export interface GuestVoiceSampleRow {
   id: string;
   guestId: string;
@@ -354,6 +434,7 @@ export type Repos = {
   submissions: SubmissionsRepo;
   episodes: EpisodesRepo;
   notifications: NotificationsRepo;
+  playlists: PlaylistsRepo;
 };
 
 export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
@@ -1291,6 +1372,299 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           })
           .where(eq(schema.profiles.id, userId));
         return { ok: true };
+      },
+    },
+
+    playlists: {
+      /** 创建列表（slug 随机 hex，与节目 slug 同风格） */
+      async create(row) {
+        const inserted = await db.insert(schema.playlists).values({
+          slug: randomSlug(),
+          kind: row.kind,
+          ownerId: row.ownerId ?? null,
+          title: row.title,
+          description: row.description ?? null,
+          coverUrl: null,
+          language: row.language ?? "zh",
+          isPublic: row.isPublic ?? true,
+          isPicked: row.isPicked ?? false,
+        }).returning({ id: schema.playlists.id, slug: schema.playlists.slug });
+        return { id: inserted[0].id, slug: inserted[0].slug };
+      },
+      /** 公开列表索引（平台策展：kind=platform + isPublic；精选优先、更新倒序） */
+      async listPublic(opts: { lang?: string; limit?: number } = {}) {
+        const limit = Math.min(opts.limit ?? 20, 50);
+        return db.select({
+          id: schema.playlists.id,
+          slug: schema.playlists.slug,
+          kind: schema.playlists.kind,
+          ownerId: schema.playlists.ownerId,
+          title: schema.playlists.title,
+          description: schema.playlists.description,
+          coverUrl: schema.playlists.coverUrl,
+          language: schema.playlists.language,
+          isPublic: schema.playlists.isPublic,
+          isPicked: schema.playlists.isPicked,
+          createdAt: schema.playlists.createdAt,
+          updatedAt: schema.playlists.updatedAt,
+          episodeCount: sql<number>`(
+            SELECT count(*)::int FROM ${schema.playlistEpisodes} pe
+            JOIN ${schema.episodes} e ON e.id = pe.episode_id
+            WHERE pe.playlist_id = ${schema.playlists}."id"
+              AND e.status = 'published' AND e.is_public = true
+          )`,
+          firstCover: sql<string | null>`(
+            SELECT e.cover_url FROM ${schema.playlistEpisodes} pe
+            JOIN ${schema.episodes} e ON e.id = pe.episode_id
+            WHERE pe.playlist_id = ${schema.playlists}."id"
+              AND e.status = 'published' AND e.is_public = true
+              AND e.cover_url IS NOT NULL
+            ORDER BY pe.position LIMIT 1
+          )`,
+          firstEpisodeId: sql<string | null>`(
+            SELECT e.id FROM ${schema.playlistEpisodes} pe
+            JOIN ${schema.episodes} e ON e.id = pe.episode_id
+            WHERE pe.playlist_id = ${schema.playlists}."id"
+              AND e.status = 'published' AND e.is_public = true
+            ORDER BY pe.position LIMIT 1
+          )`,
+        })
+          .from(schema.playlists)
+          .where(and(eq(schema.playlists.kind, "platform"), eq(schema.playlists.isPublic, true)))
+          .orderBy(
+            ...(opts.lang ? [sql`(${schema.playlists.language} = ${opts.lang}) DESC`] : []),
+            desc(schema.playlists.isPicked),
+            desc(schema.playlists.updatedAt),
+          )
+          .limit(limit);
+      },
+      /** 编辑端清单：全部平台列表（含未公开草稿态） */
+      async listEditor(opts = {}) {
+        const limit = Math.min(opts.limit ?? 100, 200);
+        return db.select({
+          id: schema.playlists.id,
+          slug: schema.playlists.slug,
+          kind: schema.playlists.kind,
+          ownerId: schema.playlists.ownerId,
+          title: schema.playlists.title,
+          description: schema.playlists.description,
+          coverUrl: schema.playlists.coverUrl,
+          language: schema.playlists.language,
+          isPublic: schema.playlists.isPublic,
+          isPicked: schema.playlists.isPicked,
+          createdAt: schema.playlists.createdAt,
+          updatedAt: schema.playlists.updatedAt,
+          episodeCount: sql<number>`(
+            SELECT count(*)::int FROM ${schema.playlistEpisodes} pe
+            WHERE pe.playlist_id = ${schema.playlists}."id"
+          )`,
+          firstCover: sql<string | null>`(
+            SELECT e.cover_url FROM ${schema.playlistEpisodes} pe
+            JOIN ${schema.episodes} e ON e.id = pe.episode_id
+            WHERE pe.playlist_id = ${schema.playlists}."id"
+              AND e.cover_url IS NOT NULL
+            ORDER BY pe.position LIMIT 1
+          )`,
+          firstEpisodeId: sql<string | null>`(
+            SELECT e.id FROM ${schema.playlistEpisodes} pe
+            JOIN ${schema.episodes} e ON e.id = pe.episode_id
+            WHERE pe.playlist_id = ${schema.playlists}."id"
+            ORDER BY pe.position LIMIT 1
+          )`,
+        })
+          .from(schema.playlists)
+          .where(eq(schema.playlists.kind, "platform"))
+          .orderBy(desc(schema.playlists.isPicked), desc(schema.playlists.updatedAt))
+          .limit(limit);
+      },
+      /** 公开详情（含节目，仅公开节目按 position 排序）；不存在/未公开 → null */
+      async getPublicBySlug(slug) {
+        const rows = await db
+          .select({
+            id: schema.playlists.id,
+            slug: schema.playlists.slug,
+            kind: schema.playlists.kind,
+            ownerId: schema.playlists.ownerId,
+            title: schema.playlists.title,
+            description: schema.playlists.description,
+            coverUrl: schema.playlists.coverUrl,
+            language: schema.playlists.language,
+            isPublic: schema.playlists.isPublic,
+            isPicked: schema.playlists.isPicked,
+            createdAt: schema.playlists.createdAt,
+            updatedAt: schema.playlists.updatedAt,
+          })
+          .from(schema.playlists)
+          .where(and(eq(schema.playlists.slug, slug), eq(schema.playlists.isPublic, true)))
+          .limit(1);
+        const row = rows[0];
+        if (!row) return null;
+        const episodes = await this.listEpisodes(row.id, { publicOnly: true });
+        return { ...row, episodes };
+      },
+      async getById(id) {
+        const rows = await db
+          .select({
+            id: schema.playlists.id,
+            slug: schema.playlists.slug,
+            kind: schema.playlists.kind,
+            ownerId: schema.playlists.ownerId,
+            title: schema.playlists.title,
+            description: schema.playlists.description,
+            coverUrl: schema.playlists.coverUrl,
+            language: schema.playlists.language,
+            isPublic: schema.playlists.isPublic,
+            isPicked: schema.playlists.isPicked,
+            createdAt: schema.playlists.createdAt,
+            updatedAt: schema.playlists.updatedAt,
+          })
+          .from(schema.playlists)
+          .where(eq(schema.playlists.id, id))
+          .limit(1);
+        return rows[0] ?? null;
+      },
+      async listByUser(userId, opts = {}) {
+        return db.select({
+          id: schema.playlists.id,
+          slug: schema.playlists.slug,
+          kind: schema.playlists.kind,
+          ownerId: schema.playlists.ownerId,
+          title: schema.playlists.title,
+          description: schema.playlists.description,
+          coverUrl: schema.playlists.coverUrl,
+          language: schema.playlists.language,
+          isPublic: schema.playlists.isPublic,
+          isPicked: schema.playlists.isPicked,
+          createdAt: schema.playlists.createdAt,
+          updatedAt: schema.playlists.updatedAt,
+          episodeCount: sql<number>`(
+            SELECT count(*)::int FROM ${schema.playlistEpisodes} pe
+            WHERE pe.playlist_id = ${schema.playlists}."id"
+          )`,
+          contains: opts.containsEpisodeId
+            ? sql<boolean>`EXISTS (
+                SELECT 1 FROM ${schema.playlistEpisodes} pe
+                WHERE pe.playlist_id = ${schema.playlists}."id"
+                  AND pe.episode_id = ${opts.containsEpisodeId}
+              )`
+            : sql<boolean>`false`,
+        })
+          .from(schema.playlists)
+          .where(eq(schema.playlists.ownerId, userId))
+          .orderBy(desc(schema.playlists.updatedAt));
+      },
+      async update(id, row) {
+        await db.update(schema.playlists)
+          .set({
+            ...(row.title !== undefined ? { title: row.title } : {}),
+            ...(row.description !== undefined ? { description: row.description } : {}),
+            ...(row.isPublic !== undefined ? { isPublic: row.isPublic } : {}),
+            ...(row.isPicked !== undefined ? { isPicked: row.isPicked } : {}),
+            ...(row.language !== undefined ? { language: row.language } : {}),
+            ...(row.coverUrl !== undefined ? { coverUrl: row.coverUrl } : {}),
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.playlists.id, id));
+      },
+      async getPublicCover(playlistId) {
+        const rows = await db
+          .select({ coverUrl: schema.playlists.coverUrl })
+          .from(schema.playlists)
+          .where(and(eq(schema.playlists.id, playlistId), eq(schema.playlists.isPublic, true)))
+          .limit(1);
+        return rows[0]?.coverUrl ?? null;
+      },
+      async remove(id) {
+        await db.delete(schema.playlists).where(eq(schema.playlists.id, id));
+      },
+      /** 列表节目（含 position；publicOnly 只留已发布公开节目） */
+      async listEpisodes(playlistId, opts = {}) {
+        return db.select({
+          position: schema.playlistEpisodes.position,
+          episodeId: schema.episodes.id,
+          slug: schema.episodes.slug,
+          title: schema.episodes.title,
+          coverUrl: schema.episodes.coverUrl,
+          durationSeconds: schema.episodes.durationSeconds,
+          publishedAt: schema.episodes.publishedAt,
+          language: schema.episodes.language,
+          audioUrl: schema.episodes.audioUrl,
+          username: schema.authUsers.name,
+          displayName: schema.profiles.displayName,
+          callName: schema.submissions.callName,
+        })
+          .from(schema.playlistEpisodes)
+          .innerJoin(schema.episodes, eq(schema.episodes.id, schema.playlistEpisodes.episodeId))
+          .innerJoin(schema.submissions, eq(schema.submissions.id, schema.episodes.submissionId))
+          .innerJoin(schema.profiles, eq(schema.profiles.id, schema.episodes.userId))
+          .innerJoin(schema.authUsers, eq(schema.authUsers.id, schema.profiles.id))
+          .where(and(
+            eq(schema.playlistEpisodes.playlistId, playlistId),
+            opts.publicOnly
+              ? and(eq(schema.episodes.status, "published"), eq(schema.episodes.isPublic, true))
+              : undefined,
+          ))
+          .orderBy(schema.playlistEpisodes.position);
+      },
+      /** 添加节目（position = max+1 追加末尾；重复收录 → added=false 幂等） */
+      async addEpisode(playlistId, episodeId) {
+        const [maxRow] = await db
+          .select({ max: sql<number>`COALESCE(MAX(${schema.playlistEpisodes.position}), -1)` })
+          .from(schema.playlistEpisodes)
+          .where(eq(schema.playlistEpisodes.playlistId, playlistId));
+        const position = (maxRow?.max ?? -1) + 1;
+        try {
+          await db.insert(schema.playlistEpisodes).values({ playlistId, episodeId, position });
+          return { added: true };
+        } catch (err) {
+          if (isUniqueViolation(err)) return { added: false }; // 已存在 → 幂等
+          throw err;
+        }
+      },
+      async removeEpisode(playlistId, episodeId) {
+        await db.delete(schema.playlistEpisodes)
+          .where(and(
+            eq(schema.playlistEpisodes.playlistId, playlistId),
+            eq(schema.playlistEpisodes.episodeId, episodeId),
+          ));
+      },
+      /** 重排（事务：按数组顺序重写 position；未列出的既有条目保留末尾） */
+      async reorder(playlistId, orderedEpisodeIds) {
+        await db.transaction(async (tx) => {
+          const rows = await tx
+            .select({ episodeId: schema.playlistEpisodes.episodeId })
+            .from(schema.playlistEpisodes)
+            .where(eq(schema.playlistEpisodes.playlistId, playlistId));
+          const existing = rows.map((r) => r.episodeId);
+          const ordered = [...new Set(orderedEpisodeIds.filter((id) => existing.includes(id)))];
+          const rest = existing.filter((id) => !ordered.includes(id));
+          const final = [...ordered, ...rest];
+          // 条目量小（列表 ≤ 数十期），事务内逐条重写 position 可接受
+          await Promise.all(final.map((episodeId, i) =>
+            tx.update(schema.playlistEpisodes)
+              .set({ position: i })
+              .where(and(
+                eq(schema.playlistEpisodes.playlistId, playlistId),
+                eq(schema.playlistEpisodes.episodeId, episodeId),
+              )),
+          ));
+        });
+      },
+      /** 节目收录于哪些公开列表（节目页「收录于」反查） */
+      async listByEpisode(episodeId) {
+        return db
+          .select({
+            id: schema.playlists.id,
+            slug: schema.playlists.slug,
+            title: schema.playlists.title,
+          })
+          .from(schema.playlistEpisodes)
+          .innerJoin(schema.playlists, eq(schema.playlists.id, schema.playlistEpisodes.playlistId))
+          .where(and(
+            eq(schema.playlistEpisodes.episodeId, episodeId),
+            eq(schema.playlists.isPublic, true),
+          ))
+          .orderBy(desc(schema.playlists.updatedAt));
       },
     },
   };

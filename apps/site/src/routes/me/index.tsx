@@ -103,6 +103,7 @@ export default function MePage() {
     { href: `/${profile()?.nickname ?? "me"}`, title: t("me.hostProfile"), desc: t("me.hostProfileDesc", { name: profile()?.nickname ?? "" }), icon: "🏠" },
     { href: "/settings", title: t("me.settings"), desc: t("me.settingsDesc"), icon: "⚙️" },
     { href: "/me/episodes", title: t("me.episodes"), desc: t("me.episodesDesc"), icon: "🎙️" },
+    { href: "/me/playlists", title: t("me.playlists"), desc: t("me.playlistsDesc"), icon: "📃" },
     { href: "/me/submits", title: t("me.submissions"), desc: t("me.submissionsDesc"), icon: "📮" },
     { href: "/me/favorites", title: t("me.favorites"), desc: t("me.favoritesDesc"), icon: "⭐" },
     { href: "/me/notifications", title: t("me.notifications"), desc: t("me.notificationsDesc"), icon: "🔔", badge: unread() > 0 ? (unread() > 99 ? "99+" : unread()) : null },

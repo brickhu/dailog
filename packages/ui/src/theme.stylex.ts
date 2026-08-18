@@ -329,14 +329,18 @@ export const layouts = stylex.create({
     flexDirection: "column",
     overflowY: "auto",
     overscrollBehavior: "contain", // 滚动链限制在壳内
-    fontFamily: fontfamilies.body,
-    fontSize: dimensions.fontSizeSm,
-    fontWeight: dimensions.fontWeightNormal,
-    lineHeight: "1.5",
+
     color: colors.foreground,
     backgroundColor: colors.background,
     minWidth: "320px",
     overflowX: "hidden",
+    fontFamily: fontfamilies.body,
+    fontWeight : dimensions.fontWeightNormal,
+    fontSize: dimensions.fontSizeSm,
+     [DESKTOP]: {
+      fontSize: dimensions.fontSizeMd,
+    },
+    lineHeight: "1.5",
 
   },
 

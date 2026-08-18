@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import { ttsRoutes, type TtsDeps } from "../src/routes/tts";
+import { fakePlaylistsRepo } from "./helpers/fake-playlists";
 import type { AuthEnv } from "../src/middleware/auth";
 import type { Repos } from "../src/repo";
 
@@ -25,6 +26,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       update: async () => {},
       listVoiceSamples: async () => [],
     },
+    playlists: fakePlaylistsRepo(),
     notifications: {
       create: async () => {},
       listByUser: async () => [],

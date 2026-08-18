@@ -28,6 +28,18 @@ export {
 export { Card } from "./components/card";
 export { Skeleton, type SkeletonProps, type SkeletonRadius } from "./components/skeleton";
 export { TextField, type TextFieldProps } from "./components/text-field";
+export {
+  Slider,
+  type SliderProps,
+  type SliderBaseProps,
+  type SliderSingleProps,
+  type SliderRangeProps,
+  type SliderOrientation,
+  type SliderValueDisplay,
+  type SliderStatus,
+  type SliderStatusType,
+  type SliderMark,
+} from "./components/slider";
 export { Spinner } from "./components/spinner";
 export { Avatar, type AvatarProps } from "./components/avatar";
 export { default as Examples } from "./examples";

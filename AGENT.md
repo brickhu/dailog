@@ -44,12 +44,12 @@
 dailog/
 ├── apps/
 │   └── site/                   # dailog.fm — 内容站 + 投稿人端 SSR（SolidStart + CF adapter）
-│       └── src/routes/         #   /（landing） /discover /submit（URL+采样） /me/* /episode/:id /feed.xml /@username
+│       └── src/routes/         #   /（landing） /discover /submit（URL+采样） /me/* /playlists /playlist/:slug /episode/:id /feed.xml /@username
 ├── services/
 │   └── api/                    # api.dailog.fm — 统一后端（Railway，Node + Hono + Drizzle）
 │       ├── src/routes/         #   submissions（投稿） / editor（队列/详情/拒审/发布/嘉宾/采样下载）
-│       │                       #   voice（采样上传） / profile / notifications / favorites / auth
-│       ├── repo/               #   submissions / episodes / guests / notifications
+│       │                       #   voice（采样上传） / profile / notifications / favorites / playlists / auth
+│       ├── repo/               #   submissions / episodes / guests / notifications / playlists
 │       └── db/                 #   Drizzle schema + migrations（Railway Postgres）
 ├── tools/
 │   └── dailog-editor/            # 编辑本地 Agent **源码工程**（src CLI + skill/ + templates/ + assets/ 资源 + build.mjs）
@@ -91,9 +91,10 @@ dailog/
 - **服务端无采集/LLM**——内容拉取、脚本生成、音频拼接、封面在编辑本地完成；
   **含统一 TTS 端点** `/v1/editor/tts`（Fish TTS + ffmpeg 转 wav，编辑本地一次调用）
 - 存储：R2/fs（voice_samples / episodes 音频 / covers）；`STORAGE_DRIVER=fs|r2`
-- 数据模型（本质版五表核心）：`submissions`（投稿：URL + 状态 submitted/rejected/published）
+- 数据模型（本质版核心）：`submissions`（投稿：URL + 状态 submitted/rejected/published）
   → `episodes`（成品：submissionId 关联、audioUrl 直读、期号 max+1、published 即公开）；
-  `guests`/`guest_voice_samples`（品牌声线宿主，编辑 TTS 取用）；`voice_samples`（投稿人采样）
+  `guests`/`guest_voice_samples`（品牌声线宿主，编辑 TTS 取用）；`voice_samples`（投稿人采样）；
+  `playlists`/`playlist_episodes`（0032 播放列表：平台策展 + 用户自建，有序集合；封面 MVP 取首期节目封面）
 - 编辑端点：`requireRole(editor|admin)`；`ADMIN_EMAILS` 环境变量 = 部署自动预留管理员
 - 通知：站内 notifications + Resend 邮件（拒审 / 上线「dailog 第 N 期」）
 - 成本：除 LLM/TTS（编辑本地按量）/Resend 外：CF/R2 免费 + better-auth $0 + Railway ~$5–15/月
@@ -107,7 +108,8 @@ dailog/
    `batch-scripts`（脚本批次汇总）/ `produce`（制作流水线 tts→merge→cover）/
    `fetch`（采集+解码，规则自进化）/ `script-preview`（脚本确认门）/ `tts` / `merge` / `cover` /
    `publish`（发布=状态+通知+邮件+草稿清理）/ `reject` / `guests` / `guest-voice` / `guest-set` /
-   `progress`（中断恢复）/ `login` / `auth-status` / `list` / `detail` 等
+   `playlist`（平台播放列表：list/create/add/remove/reorder/pick/cover 等）/ `progress`（中断恢复）/
+   `login` / `auth-status` / `list` / `detail` 等
 4. 完整流程与规范：`.agents/skills/dailog-editor/SKILL.md`（含 `prompts/script-generation.md` 提示词模板；
    批量两级流程：提取分组处置 → 自动质量检查/脚本生成 → 脚本分组处置 → 选号 produce → 两个确认点 → publish）
 5. 草稿：`.dailog-editor/drafts/{submissionId}/`（gitignored；发布后自动清理）

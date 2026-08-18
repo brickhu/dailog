@@ -1,13 +1,16 @@
 // 节目详情面板（首页详情态 + /<episode_id> 直链复用）：
 // 标题/主持人/日期时长/播放统计/简介/台本（折叠）/原始对话/点赞收藏
-import { Show, createResource, createSignal } from "solid-js";
+import { For, Show, createResource, createSignal } from "solid-js";
+import { A } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { apiBaseForFetch } from "../lib/env";
 import type { QueueEpisode } from "../lib/playback";
+import { getPlaylistsByEpisode } from "../lib/db";
 import { InteractButtons } from "./interact-buttons";
 import { ShareButton } from "./share-buttons";
+import { AddToPlaylist } from "./add-to-playlist";
 
 const styles = stylex.create({
   root: {
@@ -105,6 +108,11 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
       return r.ok ? ((await r.json()) as { plays: number; completions: number; likes?: number; favorites?: number }) : null;
     },
   );
+  // 收录于哪些公开播放列表（「收录于」反查——服务端函数 RPC）
+  const [inPlaylists] = createResource(
+    () => ep().id,
+    (id) => getPlaylistsByEpisode(id).catch(() => []),
+  );
 
   return (
     <div {...stylex.props(styles.root)}>
@@ -125,7 +133,24 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
       </Show>
       {/* 统计行已请求同一 stats 端点：like/fav 计数直接复用，避免重复请求 */}
       <InteractButtons episodeId={ep().id} counts={stats()} />
-      <ShareButton episode={ep()} />
+      <div style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
+        <AddToPlaylist episodeId={ep().id} />
+        <ShareButton episode={ep()} />
+      </div>
+      {/* 收录于：公开播放列表反查 */}
+      <Show when={inPlaylists() && inPlaylists()!.length > 0}>
+        <p {...stylex.props(styles.meta)}>
+          {t("playlist.in")}{" "}
+          <For each={inPlaylists()}>
+            {(pl, i) => (
+              <>
+                {i() > 0 ? "、" : ""}
+                <A href={`/playlist/${pl.slug}`} style={{ color: colors.primary, "text-decoration": "none" }}>「{pl.title}」</A>
+              </>
+            )}
+          </For>
+        </p>
+      </Show>
       <Show when={ep().description} fallback={<p {...stylex.props(styles.noDesc)}>{t("episode.noDescription")}</p>}>
         <p {...stylex.props(styles.desc)}>{ep().description}</p>
       </Show>

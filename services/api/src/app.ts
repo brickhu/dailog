@@ -14,6 +14,7 @@ import { favoritesRoutes, type FavoritesRepo } from "./routes/favorites";
 import { editorRoutes, type EditorDeps } from "./routes/editor";
 import { devicePublicRoutes, deviceApproveRoutes, createDeviceStore, type DeviceStore } from "./routes/device";
 import { ttsRoutes, type TtsDeps } from "./routes/tts";
+import { playlistPublicRoutes, playlistUserRoutes, playlistEditorRoutes } from "./routes/playlists";
 import type { Repos } from "./repo";
 
 export type { AuthLike };
@@ -120,6 +121,29 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
           headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" },
         });
       }
+      const { data } = await deps.voice.storage.get(cover);
+      if (!data) return c.json({ error: "not_found" }, 404);
+      return new Response(data as unknown as BodyInit, {
+        headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" },
+      });
+    } catch {
+      return c.json({ error: "not_found" }, 404);
+    }
+  });
+  // 播放列表封面（公开）：仅公开列表可读；缓存 86400s（与单集封面同模式）
+  app.openapi(createRoute({
+    method: "get",
+    path: "/v1/public/playlists/:id/cover",
+    request: { params: IdParam },
+    responses: {
+      200: { content: { "image/jpeg": { schema: z.any() } }, description: "播放列表封面（公开，缓存 86400s）" },
+      404: { content: { "application/json": { schema: ErrorResp } }, description: "封面不存在" },
+    },
+  }), async (c) => {
+    if (!UUID_RE.test(c.req.param("id"))) return c.json({ error: "not_found" }, 404);
+    const cover = await deps.repo.playlists.getPublicCover(c.req.param("id"));
+    if (!cover) return c.json({ error: "not_found" }, 404);
+    try {
       const { data } = await deps.voice.storage.get(cover);
       if (!data) return c.json({ error: "not_found" }, 404);
       return new Response(data as unknown as BodyInit, {
@@ -340,6 +364,9 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
     return c.json(row);
   }) as unknown as RouteHandler<typeof publicSubmissionRoute, AuthEnv>);
 
+  // 播放列表公开端点（免鉴权）：平台列表索引 + 详情——必须在鉴权中间件之前注册
+  app.route("/", playlistPublicRoutes(deps.repo));
+
   app.use("/v1/*", createAuthMiddleware(deps.auth, async (userId) => (await deps.repo.episodes.getRole?.(userId)) ?? null));
 
   app.openapi(createRoute({
@@ -360,12 +387,16 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
   app.route("/", profileRoutes({ repo: deps.repo }));
   app.route("/", notificationsRoutes(deps.repo));
   app.route("/", meEpisodesRoutes(deps.repo));
+  // 我的播放列表（登录 + 归属校验）
+  app.route("/", playlistUserRoutes(deps.repo));
   app.route("/", voiceRoutes(deps.voice));
   app.route("/", favoritesRoutes(deps.favorites));
   // 设备授权确认（cookie 会话 + editor/admin 角色）——挂在认证中间件之后
   app.route("/", deviceApproveRoutes(deviceStore, deps.auth));
   // 编辑端（本质版）：队列/详情/拒审/发布/嘉宾/采样下载——requireRole(editor|admin) 在 editorRoutes 内部施加
   app.route("/", editorRoutes(deps.editor));
+  // 编辑端播放列表（平台策展）——requireRole 在 playlistEditorRoutes 内部施加；封面上传复用 editor storage
+  app.route("/", playlistEditorRoutes({ repo: deps.repo, storage: deps.editor.storage }));
   // 统一 TTS（编辑本地合成语音走此端点；requireRole 在 ttsRoutes 内部施加）
   app.route("/", ttsRoutes(deps.tts));
 

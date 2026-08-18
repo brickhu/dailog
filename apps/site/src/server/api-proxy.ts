@@ -8,6 +8,10 @@ export async function proxyApi(path: string, request: Request, method?: string):
   if (cookie) headers["Cookie"] = cookie;
   if (contentType) headers["Content-Type"] = contentType;
   const finalMethod = method ?? request.method;
+  // 保留 query 字符串（?lang=zh&limit=20 等）：路径参数路由（:id）拼 path 时 query 在
+  // request.url 上——不拼接则语言偏好/分页等参数在代理处丢失（recommended/playlists 均曾受影响）
+  const query = new URL(request.url).search;
+  const fullPath = query && !path.includes("?") ? path + query : path;
   // multipart（录音采样上传）必须按二进制转发——request.text() 会把二进制按 UTF-8 解码，
   // 无效字节被替换成 U+FFFD（efbfbd），R2 里存下损坏文件（TTS 参考音频解析失败）
   const isMultipart = (contentType ?? "").includes("multipart/form-data");
@@ -16,7 +20,7 @@ export async function proxyApi(path: string, request: Request, method?: string):
     : isMultipart
       ? await request.arrayBuffer()
       : await request.text().catch(() => "");
-  const res = await fetch(`${env.apiBaseUrl}${path}`, {
+  const res = await fetch(`${env.apiBaseUrl}${fullPath}`, {
     method: finalMethod,
     headers,
     body,

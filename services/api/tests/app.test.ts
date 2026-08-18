@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createApp, type AppDeps } from "../src/app";
 import type { Env } from "../src/config/env";
+import { fakePlaylistsRepo } from "./helpers/fake-playlists";
 
 function fakeRepo(): AppDeps["repo"] {
   return {
+    playlists: fakePlaylistsRepo(),
     notifications: {
       create: async () => {},
       listByUser: async () => [],

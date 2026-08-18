@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import { createApp, type AppDeps } from "../src/app";
 import type { Env } from "../src/config/env";
 import type { Repos } from "../src/repo";
+import { fakePlaylistsRepo } from "./helpers/fake-playlists";
 
 // /api/me/profile、/api/me/channel 端点测试：fake repo 注入行为，覆盖校验/冲突/成功分支
 
 function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
   return {
+    playlists: fakePlaylistsRepo(),
     notifications: {
       create: async () => {},
       listByUser: async () => [],

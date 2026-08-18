@@ -109,6 +109,10 @@ export function Footer() {
           </svg>
           {t("footer.install")}
         </A>
+        {/* 使用条款 */}
+        <A href="/terms" {...stylex.props(styles.installLink)} aria-label={t("footer.terms")}>
+          {t("footer.terms")}
+        </A>
         </div>
       </div>
     </footer>

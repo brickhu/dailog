@@ -405,6 +405,29 @@ pnpm editor reject <id> --reason "拒审原因（必填，投稿人可见）"
 两级决策点 + 两个确认点介入——每批一次决策，不逐个打断；发布成功自动完成
 状态流转 + 通知 + 邮件 + 草稿清理。
 
+### ⑨ 播放列表（平台策展，0032）
+
+> 平台把已发布节目打包成主题列表（首页横滑区 / /playlists / 节目页「收录于」）。
+> 数据模型：`playlists`（kind=platform/user）+ `playlist_episodes`（position 有序）。
+
+```
+pnpm editor playlist list                                  # 平台列表清单（期数/精选/公开）
+pnpm editor playlist create "<标题>" [--desc "..."] [--picked] [--private]
+pnpm editor playlist episodes <playlistId>                 # 列表节目（id + /episode 链接）
+pnpm editor playlist add <playlistId> <episodeId|#期号>     # 加节目（#N 按期号解析）
+pnpm editor playlist remove <playlistId> <episodeId>       # 移除
+pnpm editor playlist reorder <playlistId> <id1,id2,...>    # 重排（逗号分隔有序 id）
+pnpm editor playlist pick <playlistId> | unpick <playlistId>   # 精选标记（首页/发现页露出）
+pnpm editor playlist public <playlistId> | private <playlistId> # 公开/下架
+pnpm editor playlist delete <playlistId>                   # 删除（级联清条目）
+pnpm editor playlist cover <playlistId> [--texture ...] [--colors "#hex,#hex"] [--image-url <URL>]
+```
+
+- **封面**：复用本地模板渲染（与单集 cover 同一引擎）→ 直接上传服务端
+  （R2 `covers/playlists/{id}.jpg`，sharp 归一 1400²）；无自定义封面时前端自动取首期节目封面
+- 节目引用支持 **#期号**（如 `playlist add <id> #7`——从编辑端节目清单按期号解析）
+- 收录节目仅限已发布公开节目（服务端校验）；列表删除/节目删除均级联清理条目
+
 ## 进度与恢复（会话中断不丢）
 
 每个命令完成时自动写进度标记 `drafts/{id}/progress.json`（step + 时间）。对话中断/退出后，

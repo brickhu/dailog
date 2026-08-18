@@ -6,6 +6,7 @@ import { createAuth } from "../src/auth/better-auth";
 import { createDb } from "../src/db/client";
 import * as schema from "../src/db/schema";
 import { createFavoritesRepo } from "../src/routes/favorites";
+import { fakePlaylistsRepo } from "./helpers/fake-playlists";
 
 // 消费端互动全链路（真实本地 PG）：注册 → 收藏/点赞 toggle → 列表
 
@@ -13,6 +14,7 @@ const hasDb = Boolean(process.env.DATABASE_URL);
 
 function fakeRepo(): AppDeps["repo"] {
   return {
+    playlists: fakePlaylistsRepo(),
     notifications: {
       create: async () => {},
       listByUser: async () => [],

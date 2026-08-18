@@ -77,6 +77,11 @@ published + 期号 max+1）→ 投稿人收到通知（站内 + 邮件）。内�
 | `GET /v1/public/episodes/:id/audio\|cover` | — | 公开播放（仅 published + is_public；音频 ETag 缓存） |
 | `GET /v1/public/episodes/:id/stats`、`POST /v1/public/episodes/:id/stats/:type` | — | 播放/完播统计（播放器上报）+ **点赞/收藏计数**（实时 COUNT，详情页按钮展示） |
 | `GET /v1/public/episodes/recommended` | — | 推荐队列（热度分排序 + 语言优先；首页滚屏每屏 4 条 × 最多 5 屏 / 发现页） |
+| `GET /v1/public/playlists`、`GET /v1/public/playlists/:slug` | — | **播放列表**（0032）：平台公开列表索引（`?lang=zh|en` 语言偏好优先 + 精选优先，不足自然回退；附节目数与首期封面）+ 详情（仅公开节目，position 排序） |
+| `POST/GET/PATCH/DELETE /v1/me/playlists`、`/v1/me/playlists/:id` | ✓ | **我的播放列表**：创建（kind=user）/ 列表（含私有，?contains= 附带收录标记）/ 编辑 / 删除（归属校验 404） |
+| `POST/DELETE /v1/me/playlists/:id/episodes`、`PUT .../episodes/reorder` | ✓ | **我的列表条目**：加节目（校验公开、重复幂等）/ 移除 / 重排（有序 episodeIds） |
+| `POST/GET/PATCH/DELETE /v1/editor/playlists`、`/v1/editor/playlists/:id` | editor | **平台策展列表**（kind=platform，isPicked 精选标记）+ 条目管理（同 /me 形态，requireRole 守卫） |
+| `POST /v1/editor/playlists/:id/cover`、`GET /v1/public/playlists/:id/cover` | editor / — | **列表封面**：multipart 上传（sharp 归一 1400² JPEG → R2 `covers/playlists/{id}.jpg`）/ 公开读取（缓存 86400s） |
 | `GET /v1/public/stats`、`/hosts`、`/guests`、`/guests/:id` | — | 站点头部数据 / 热门主播 / 嘉宾列表 / 嘉宾详情（含参与节目） |
 | `GET /v1/me/episodes`、`PATCH /v1/me/episodes/:id` | ✓ | **我的节目**（列表含已下架）/ 下架·重新上架（切换 is_public，仅归属人） |
 | `GET /v1/editor/submissions?status=` | editor | **待审队列**（先到先审；含投稿人邮箱/显示名/采样就绪标记） |
@@ -100,6 +105,8 @@ published + 期号 max+1）→ 投稿人收到通知（站内 + 邮件）。内�
 | `profiles` | `id`(=auth.users), `display_name`, `bio`, `persona`(JSONB) | 主持人档案（账号级属性在 user 表：`name`=@slug、`role`(user/editor/admin)、`image`） |
 | `notifications` | `user_id`, `type`(rejected/published), `title`, `body`, `link` | 站内通知（拒审/上线） |
 | `favorites` / `likes` | `user_id`, `episode_id` | 消费端互动 |
+| `playlists` | `slug`(唯一), `kind`(platform/user), `owner_id`, `title`, `description`, `cover_url`, `is_public`, `is_picked`, `language` | **播放列表**（0032）：平台策展（编辑创建，精选标记）/ 用户自建（公开可分享）；封面 = 编辑自定义上传（R2 covers/playlists/，无则自动取首期节目封面） |
+| `playlist_episodes` | `playlist_id`+ `episode_id`(唯一), `position` | **列表条目**（有序集合）：删列表/删节目级联清理；索引 (playlist_id, position) 顺序读 + (episode_id) 反查「收录于」 |
 | auth 表（`user`/`session`/`account`/`verification`） | better-auth 官方字段 | 认证 |
 
 **已删除表（0026 迁移）**：`snapshots`、`polishes`、`transcripts`、`tracks`、`generation_jobs`、`payments`、`subscriptions`（内容五层旧模型；支付 v1 无）。
@@ -117,7 +124,7 @@ covers/{submissionId}.jpg                  ← 封面（可选；无封面播放
   编辑账号 / FISH_API_KEY / PEXELS_API_KEY / GUEST_REFERENCE_ID；模板 `.env.example`
 - **草稿**：`.dailog-editor/drafts/{submissionId}/`（gitignored）——脚本 JSON、采样（webm/wav/transcript）、
   分段音频、final.mp3、封面；发布成功后保留（可重新生成对比）
-- **命令**：`overview / batch / batch-reject / batch-scripts / produce / fetch / script-preview / tts / merge / cover / publish / reject / guests / guest-voice / guest-set / progress` 等（源码 `tools/dailog-editor/src/`，编译产物 `.agents/skills/dailog-editor/scripts/*.js`）
+- **命令**：`overview / batch / batch-reject / batch-scripts / produce / fetch / script-preview / tts / merge / cover / publish / reject / guests / guest-voice / guest-set / playlist / progress` 等（源码 `tools/dailog-editor/src/`，编译产物 `.agents/skills/dailog-editor/scripts/*.js`）
 - **认证**：编辑账号登录（better-auth sign-in/email）→ bearer token（内存缓存）
 - **工作流规范**（脚本生成标准/情绪标签/开场白结构）：`.agents/skills/dailog-editor/SKILL.md`
 

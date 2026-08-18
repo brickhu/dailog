@@ -248,6 +248,49 @@ export const likes = pgTable(
   (t) => [uniqueIndex("likes_user_episode").on(t.userId, t.episodeId)],
 );
 
+/** 播放列表（内容类型）：把不同节目打包成有序列表。
+ *  kind=platform：平台策展（编辑/管理员创建，is_picked 精选标记，首页/发现页列表区露出）；
+ *  kind=user：用户自建（ownerId=用户，is_public 公开可分享，节目页反查「收录于」）。
+ *  封面 MVP 自动取首期节目封面（coverUrl 字段预留自定义，不新增 R2 路径）。 */
+export const playlists = pgTable("playlists", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  /** 公开页 URL 标识（/playlist/<slug>） */
+  slug: text("slug").notNull().unique(),
+  /** 列表类型：platform（平台策展）/ user（用户自建） */
+  kind: text("kind", { enum: ["platform", "user"] }).notNull().default("platform"),
+  /** 创建者（平台列表 = 编辑/管理员账号；用户列表 = 用户本人） */
+  ownerId: text("owner_id").references(() => authUsers.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  /** 列表封面（预留：MVP 自动取首期节目封面） */
+  coverUrl: text("cover_url"),
+  language: text("language").notNull().default("zh"),
+  /** 公开状态：平台列表恒公开；用户列表 false = 私有（仅自己可见） */
+  isPublic: boolean("is_public").notNull().default(true),
+  /** 平台精选标记（首页/发现页列表区优先露出） */
+  isPicked: boolean("is_picked").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** 播放列表条目（有序集合）：position 显式排序；唯一 (playlist_id, episode_id) 防重复收录；
+ *  删列表/删节目均级联清理（onDelete cascade）。 */
+export const playlistEpisodes = pgTable(
+  "playlist_episodes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    playlistId: uuid("playlist_id").notNull().references(() => playlists.id, { onDelete: "cascade" }),
+    episodeId: uuid("episode_id").notNull().references(() => episodes.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("playlist_episodes_playlist_episode_unique").on(t.playlistId, t.episodeId),
+    index("playlist_episodes_playlist_position_idx").on(t.playlistId, t.position),
+    index("playlist_episodes_episode_idx").on(t.episodeId),
+  ],
+);
+
 /** 站内通知（投稿状态变化：拒审/上线）——site /me/notifications 展示 */
 export const notifications = pgTable(
   "notifications",

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { submissionsRoutes } from "../src/routes/submissions";
 import type { Repos } from "../src/repo";
+import { fakePlaylistsRepo } from "./helpers/fake-playlists";
 
 // 投稿端点（本质版）测试：fake repo 注入 + fetch mock（触达性探活）。
 // 覆盖：URL 合法性 / 触达性 / 并发上限 / 重复提交 / 成功入库
@@ -23,6 +24,7 @@ function makeApp(repo: Partial<Repos["submissions"]> = {}) {
       update: async () => {},
       listVoiceSamples: async () => [],
     },
+    playlists: fakePlaylistsRepo(),
     notifications: {
       create: async () => {},
       listByUser: async () => [],

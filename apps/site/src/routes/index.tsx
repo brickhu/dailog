@@ -1,7 +1,7 @@
 import { createEffect, createResource, Show, For, Suspense } from "solid-js";
 import { A } from "@solidjs/router";
 import { usePlayback, type QueueEpisode } from "../lib/playback";
-import { apiBaseForFetch } from "../lib/env";
+import { apiBaseForFetch, episodeCoverUrl, playlistCoverUrl } from "../lib/env";
 import { Faq } from "../components/faq";
 import { EpisodeCarousel } from "../components/episode-carousel";
 import { HeroFlow } from "../components/hero-flow";
@@ -201,6 +201,55 @@ const styles = stylex.create({
     fontSize: dimensions.fontSizeSm,
     margin: 0,
   },
+  playlistRail: {
+    gridColumn: "1 / -1",
+    display: "flex",
+    gap: dimensions.spacing3,
+    overflowX: "auto",
+    paddingBottom: dimensions.spacing8,
+    scrollbarWidth: "none",
+  },
+  playlistCard: {
+    flexShrink: 0,
+    width: "168px",
+    display: "flex",
+    flexDirection: "column",
+    gap: dimensions.spacing1,
+    padding: dimensions.spacing3,
+    borderRadius: dimensions.radiusMd,
+    backgroundColor: colors.surface,
+    textDecoration: "none",
+    color: "inherit",
+    ":hover": { borderColor: colors.primary },
+  },
+  playlistCover: {
+    width: "100%",
+    aspectRatio: "1",
+    borderRadius: dimensions.radiusSm,
+    objectFit: "cover",
+  },
+  playlistCoverFallback: {
+    width: "100%",
+    aspectRatio: "1",
+    borderRadius: dimensions.radiusSm,
+    backgroundColor: colors.ink,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "28px",
+    color: colors.foreground,
+  },
+  playlistTitle: {
+    fontSize: dimensions.fontSizeMd,
+    fontWeight: dimensions.fontWeightMedium,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  playlistMeta: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+  },
   quote: {
     paddingBlock : dimensions.spacing12,
     textAlign: "center",
@@ -260,6 +309,15 @@ export default function HomePage() {
     const r = await fetch(`${apiBaseForFetch}/v1/public/stats`);
     return r.ok ? await r.json() : null;
   });
+  // 播放列表横滑区（平台策展；语言偏好 = 界面语言，同语言列表优先 + 自然回退）
+  const [playlists] = createResource(async () => {
+    const lang = locale() === "en" ? "en" : "zh";
+    const r = await fetch(`${apiBaseForFetch}/v1/public/playlists?lang=${lang}&limit=8`);
+    const d: unknown = r.ok ? await r.json() : null;
+    return Array.isArray(d) && d.length > 0
+      ? (d as Array<{ id: string; slug: string; title: string; episodeCount: number; coverUrl: string | null; firstCover: string | null; firstEpisodeId: string | null }>)
+      : null;
+  });
   const [guestLogos] = createResource(async () => {
     const r = await fetch(`${apiBaseForFetch}/v1/public/guests`);
     const d: unknown = r.ok ? await r.json() : null;
@@ -302,6 +360,27 @@ export default function HomePage() {
           显示 spinner（后续可按需换成结构化骨架）；FAQ 静态区不受影响 */}
       <Suspense fallback={<PageSpinner />}>
       <EpisodeCarousel episodes={list() ?? null} loading={list.loading} />
+
+      {/* 播放列表横滑区：平台策展的主题合集（封面 = 首期节目封面） */}
+      <Show when={playlists() && playlists()!.length > 0}>
+        <div {...stylex.props(layouts.fullRow, styles.listTitleRow)}>
+          <div {...stylex.props(styles.listTitle)}>{t("home.playlists")}</div>
+          <A href="/playlists" {...stylex.props(global.linkText, typography.bodyMd)}>{t("home.hero.browse")}</A>
+        </div>
+        <div {...stylex.props(layouts.fullRow, styles.playlistRail)}>
+          <For each={playlists()}>
+            {(pl) => (
+              <A href={`/playlist/${pl.slug}`} {...stylex.props(styles.playlistCard)}>
+                <Show when={playlistCoverUrl(pl.id, pl.coverUrl, 320) ?? episodeCoverUrl(pl.firstEpisodeId ?? "", pl.firstCover, 320)} fallback={<div {...stylex.props(styles.playlistCoverFallback)}>🎧</div>}>
+                  {(cover) => <img src={cover()} alt={pl.title} {...stylex.props(styles.playlistCover)} />}
+                </Show>
+                <div {...stylex.props(styles.playlistTitle)}>{pl.title}</div>
+                <div {...stylex.props(styles.playlistMeta)}>{t("playlists.episodeCount", { count: pl.episodeCount })}</div>
+              </A>
+            )}
+          </For>
+        </div>
+      </Show>
 
       {/* 站点头部统计卡片：主播 / AI 嘉宾 / 访谈期数（subgrid 继承容器轨道，等宽等高灰色区块） */}
       <Show when={stats()} fallback={<StatsCardsPlaceholder />}>

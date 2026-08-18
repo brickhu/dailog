@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createApp, type AppDeps } from "../src/app";
 import type { Env } from "../src/config/env";
+import { fakePlaylistsRepo } from "./helpers/fake-playlists";
 
 // 播放/完播统计端点（公开免鉴权）：上报 +1（session 去重在前端）/ 读取计数
 
@@ -20,6 +21,7 @@ function makeEnv(): Env {
 
 function makeApp(overrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
   const repo = {
+    playlists: fakePlaylistsRepo(),
     notifications: {
       create: async () => {},
       listByUser: async () => [],

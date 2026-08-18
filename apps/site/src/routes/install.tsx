@@ -13,6 +13,8 @@ import { canInstall, isInstalled, isSafariIOS, requestInstall } from "../lib/ins
 // mounted 门控：安装状态只在客户端可知，初始渲染保持与 SSR 一致避免 hydration 错位
 const styles = stylex.create({
   page: {
+    width: "100vw",
+    flexShrink: "0", // shellRoot 纵向 flex：防止盒子被压缩钳制在 100vh 以下，导致正文溢出被 footer 覆盖
     minHeight: "100vh",
     backgroundColor: colors.background,
     color: colors.foreground,

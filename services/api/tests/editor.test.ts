@@ -4,6 +4,7 @@ import { editorRoutes, type EditorDeps } from "../src/routes/editor";
 import type { AuthEnv } from "../src/middleware/auth";
 import type { Repos } from "../src/repo";
 import type { Env } from "../src/config/env";
+import { fakePlaylistsRepo } from "./helpers/fake-playlists";
 
 // 编辑端端点（本质版）测试：fake repo + fake storage 注入，覆盖角色守卫/队列/详情/拒审/发布/嘉宾/采样下载。
 // 编辑工作流在本地 Agent 完成，服务端只有这 4 个动作 + 素材下载。
@@ -22,6 +23,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       update: async () => {},
       listVoiceSamples: async () => [],
     },
+    playlists: fakePlaylistsRepo(),
     notifications: {
       create: async () => {},
       listByUser: async () => [],
