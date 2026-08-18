@@ -224,9 +224,12 @@ export default function EpisodeDetailPage() {
                 playing={isThisPlaying() && playback.playing()}
                 onPlay={() => playback.play(asQueue(ep()!))}
                 onPause={() => playback.toggle()}
-                revealOnHover
+                revealOnHover={!!ep()!.audioUrl} // audio 缺失：不启用 hover 划入，仅常显警告图标
                 hovered={coverHover()}
-                audioError={ep()!.audioUrl == null || (isThisPlaying() && playback.audioError())}
+                // 无音源判定用 !audioUrl（schema notNull：库里是空串 '' 而非 NULL，== null 永远 false）
+                // preloadError：点击 play 预加载失败（音频不存在）→ 封面显示警告
+                audioError={!ep()!.audioUrl || (isThisPlaying() && playback.audioError()) || playback.preloadError() === ep()!.id}
+                buffering={isThisPlaying() && playback.buffering()}
               />
             </div>
           </div>

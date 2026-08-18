@@ -147,6 +147,8 @@ export function PlayControls(props: {
   appear?: "fill" | "ghost";
   /** 音源不可用（无音源/加载失败）——按钮区显示警告图标（不提供播放） */
   audioError?: boolean;
+  /** 缓冲/加载中（全局播放器 waiting 事件）——按钮区显示 spinner 并禁用 */
+  buffering?: boolean;
 }) {
   const { t } = useI18n();
   const [loading, setLoading] = createSignal(false);
@@ -186,8 +188,31 @@ export function PlayControls(props: {
   });
   onCleanup(() => clearTimeout(minTimer));
 
+  // 播放器确认失败（audioError）→ 立即结束本地 loading（不用等 10s 超时）：
+  // 点击播放后 404/挂起，audioError 一到就切警告图标，不残留 spinner
+  createEffect(() => {
+    if (props.audioError) setLoading(false);
+  });
+
+  // 缓冲结束但从未进入播放（切到别的节目/失败）→ 本地 loading 清除：
+  // 点 A 播放后马上点 B，A 的 spinner 不应残留到 10s 超时。
+  // 短延迟让 playing 事件先到（正常缓冲就绪时 canplay→playing 几乎同时，
+  // 避免闪现 play 按钮）；确未进入播放（切歌/失败）则 120ms 后清 loading
+  let sawBuffering = false;
+  let stallTimer: ReturnType<typeof setTimeout> | undefined;
+  createEffect(() => {
+    const b = props.buffering;
+    if (b) {
+      sawBuffering = true;
+    } else if (sawBuffering && !props.playing && loading()) {
+      sawBuffering = false;
+      stallTimer = setTimeout(() => setLoading(false), 120);
+    }
+  });
+  onCleanup(() => clearTimeout(stallTimer));
+
   const handlePlay = () => {
-    if (loading()) return;
+    if (loading() || props.buffering) return; // 缓冲中不重复触发播放
     clickAt = performance.now();
     setLoading(true);
     props.onPlay?.();
@@ -201,7 +226,8 @@ export function PlayControls(props: {
 
   const btn = (interactive: boolean) => (
     <>
-      {/* 音源不可用（无音源/加载失败）：警告图标（disabled 按钮，不提供播放） */}
+      {/* 音源不可用（无音源/加载失败）：警告图标直接常显——不依赖 hover 划入，
+          也不渲染任何播放/暂停/spinner（disabled 按钮，不提供播放） */}
       <Show when={props.audioError}>
         <Button
           round="full"
@@ -215,8 +241,21 @@ export function PlayControls(props: {
           xstyle={ghostStyle()}
         />
       </Show>
+      {/* 缓冲/加载中（waiting 或点击反馈）→ spinner（isLoading 自动禁用，防误触） */}
+      <Show when={!props.audioError && (props.buffering || loading())}>
+        <Button
+          round="full"
+          size={props.size ?? "lg"}
+          appear={appear()}
+          variant="brand"
+          isIconOnly
+          isLoading
+          label={t("common.play")}
+          xstyle={ghostStyle()}
+        />
+      </Show>
       {/* 播放中（且加载反馈已结束）→ pause */}
-      <Show when={!props.audioError && props.playing && !loading()}>
+      <Show when={!props.audioError && !props.buffering && props.playing && !loading()}>
         <Button
           round="full"
           size={props.size ?? "lg"}
@@ -229,21 +268,7 @@ export function PlayControls(props: {
           onClick={stop(props.onPause)}
         />
       </Show>
-      {/* 加载中 → spinner（不看 playing：音频就绪瞬间若直接切 pause，最短显示时间失效，
-          loading 清掉后（minTimer/超时）才切走） */}
-      <Show when={!props.audioError && loading()}>
-        <Button
-          round="full"
-          size={props.size ?? "lg"}
-          appear={appear()}
-          variant="brand"
-          isIconOnly
-          isLoading
-          label={t("common.play")}
-          xstyle={ghostStyle()}
-        />
-      </Show>
-      <Show when={!props.audioError && !props.playing && !loading()}>
+      <Show when={!props.audioError && !props.buffering && !props.playing && !loading()}>
         {interactive ? (
           <div {...stylex.props(styles.btnIdle, props.hovered && styles.btnIdleVisible)}>
             <Button
@@ -305,6 +330,8 @@ export function EpisodeCard(props: {
   isNew?: boolean;
   /** 音源不可用（无音源/加载失败）——按钮区显示警告图标 */
   audioError?: boolean;
+  /** 缓冲/加载中（全局播放器 waiting 事件）——封面按钮显示 spinner */
+  buffering?: boolean;
   /** CSS 控制显示大小（透传） */
   style?: JSX.CSSProperties;
   class?: string;
@@ -360,6 +387,7 @@ export function EpisodeCard(props: {
             onPause={props.onPause}
             size="sm"
             audioError={props.audioError}
+            buffering={props.buffering}
           />
         </div>
       </div>
@@ -382,9 +410,10 @@ export function EpisodeCard(props: {
             playing={props.playing}
             onPlay={props.onPlay}
             onPause={props.onPause}
-            revealOnHover
+            revealOnHover={!props.audioError} // audio 缺失：不启用 hover 划入播放按钮，仅常显警告图标
             hovered={hover()}
             audioError={props.audioError}
+            buffering={props.buffering}
           />
         </div>
       </div>

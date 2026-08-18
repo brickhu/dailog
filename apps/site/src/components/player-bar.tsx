@@ -40,8 +40,6 @@ const styles = stylex.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: dimensions.spacing3,
-
-    
     backgroundImage: `linear-gradient(to bottom,  color-mix(in srgb, ${colors.surface} 80%, transparent) 20%, ${colors.surface} 100%)`,
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
@@ -49,16 +47,25 @@ const styles = stylex.create({
     
   },
   cover: {
-    blockSize : dimensions.sizeLg,
+    width: dimensions.sizeLg,
+    height: dimensions.sizeLg,
     objectFit: "cover",
     flexShrink: 0,
-    display: "block",
+    display: "flex",
     borderRadius: dimensions.radiusSm,
     boxSizing : "border-box",
     borderColor : colors.surfaceStrong,
     borderWidth : "1px",
     borderStyle : "solid",
-    backgroundColor : colors.successStrong
+    backgroundColor : colors.surfaceWeak,
+    justifyContent: "center",
+    alignItems: "center",
+    color: colors.onSurfaceWeak,
+    ":visited" : colors.onSurfaceWeak,
+  },
+  audioErrorIcon: {
+    color: colors.onSurface,
+    ":visited": colors.onSurface,
   },
   info: {
     display: "flex",
@@ -67,12 +74,7 @@ const styles = stylex.create({
     gap: dimensions.spacing4,
     maxWidth: "50%",
     order: 1,
-    // [DESKTOP]:{
-    //    minWidth: "20%",
-    //   display: "flex",
-    //   flexDirection: "column",
-    //   gap: "2px",
-    // }
+
   },
   title: {
     // display: "none",
@@ -89,8 +91,6 @@ const styles = stylex.create({
 
   },
   btn: {
-    // width: dimensions.sizeMd,
-    // height: dimensions.sizeMd,
     [DESKTOP]: {
       width: dimensions.sizeLg
     }
@@ -121,19 +121,7 @@ const styles = stylex.create({
     opacity: "0.5"
   },
   slider: {
-    // width: "100%", // 移动优先（<640）；平板/桌面加宽
-    // background: colors.ink,
-    // borderRadius: "2px",
-    // cursor: "pointer",
     flex: 1,
-  
-    background: colors.brandWeak
-    //   [TABLET]: {
-    //   width: "140px",
-    // },
-    // [DESKTOP]: {
-    //   width: "140px",
-    // },
   }
 });
 
@@ -143,6 +131,8 @@ function fmt(sec: number): string {
   const s = Math.floor(sec % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
 }
+
+
 
 export function PlayerBar() {
   const pb = usePlayback();
@@ -194,7 +184,7 @@ export function PlayerBar() {
         
         <div {...stylex.props(styles.info)}>
           <A href={`/episode/${ep()!.slug}`}>
-          <Show when={episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
+          <Show when={episodeCoverUrl(ep()!.id, ep()!.coverUrl)} fallback={<div {...stylex.props(styles.cover)}><Icon icon="iconoir:warning-triangle" width={16} {...stylex.props(styles.audioErrorIcon)}/></div>}>
             {/* 播放条封面 ~48px：直接请求 160 缩略规格，不拉原图 */}
             <img src={episodeCoverUrl(ep()!.id, ep()!.coverUrl, 160)!} alt="" {...stylex.props(styles.cover)} />
           </Show>
@@ -207,6 +197,7 @@ export function PlayerBar() {
             label="audio process" 
             value={Math.min(pb.progress(), pb.duration() || 0)}
             onChange={(v) => pb.seek(Number(v))}
+            isDisabled={pb.buffering() || pb.audioError()}
             step={0.5}
             min={0}
             xstyle={styles.slider}
@@ -215,18 +206,7 @@ export function PlayerBar() {
           />
           <span {...stylex.props(styles.time, typography.caption)}>{fmt(pb.duration())}</span>
         </div>
-        {/* <span {...stylex.props(styles.time)}>{fmt(pb.progress())}</span>
-        <input
-          type="range"
-          min={0}
-          max={Math.max(pb.duration(), 1)}
-          step={0.5}
-          value={Math.min(pb.progress(), pb.duration() || 0)}
-          {...stylex.props(styles.progress)}
-          onInput={(e) => pb.seek(Number(e.currentTarget.value))}
-        />
-        <span {...stylex.props(styles.time)}>{fmt(pb.duration())}</span> */}
-        {/* <div {...stylex.props(styles.btns)}></div> */}
+  
         <div {...stylex.props(styles.btns)}>
           <Button
             {...stylex.props(styles.btn)}
@@ -243,9 +223,9 @@ export function PlayerBar() {
           <Button
             {...stylex.props(styles.btn)}
             onClick={pb.toggle}
-            aria-label="prev"
-            appear={pb.playing() ? "outline":"fill"}
+            aria-label={pb.playing() ? "pause" : "play"}
             icon={pb.playing() ? <Icon icon="iconoir:pause-solid" /> : <Icon icon="iconoir:play-solid" />}
+            isDisabled={pb.buffering() || pb.audioError()}
             isIconOnly
             round="full"
             size="lg"

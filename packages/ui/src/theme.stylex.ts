@@ -45,7 +45,7 @@ export const colors = stylex.defineVars({
   // 表面区域色
   surface: {default: "#d0cfcf", [DARK]: "#23272d"},
   onSurface: {default: "#161b22", [DARK]: "#d7dada"},
-  surfaceWeak: {default: "#e7e9ec", [DARK]: "#212833"},
+  surfaceWeak: {default: "#e7e9ec", [DARK]: "#24272b"},
   onSurfaceWeak: {default: "#161b22", [DARK]: "#e6e9ef"},
   surfaceStrong: {default: "#c2c6c8", [DARK]: "#393e45"},
   onSurfaceStrong: {default: "#161b22", [DARK]: "#e6e9ef"},

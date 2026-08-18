@@ -1,5 +1,5 @@
-import { Show, createSignal, onCleanup, onMount, type JSX } from "solid-js";
-import { A, useNavigate } from "@solidjs/router";
+import { Show, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js";
+import { A, useLocation, useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions, durations, easings, fontfamilies, layouts,global,typography } from "@dailogues/ui/theme.stylex";
 import { Button, Icon } from "@dailogues/ui";
@@ -63,7 +63,7 @@ const styles = stylex.create({
     display: "inline-flex",
     // 必须显式继承：A 标签 UA 默认 color 是链接蓝（-webkit-link），会阻断 shellRoot
     // foreground 的继承——logo 的 fill="currentColor" 取到的就是蓝色而非前景色
-    color: "inherit",
+    color: colors.primary,
   },
   nav: {
     display: "none", // 移动优先：<640 折叠进汉堡浮层
@@ -119,6 +119,14 @@ const styles = stylex.create({
   },
   navLink: {
     textDecoration: "none",
+  },
+  // 当前路由高亮：品牌绿 + 加粗；hover 保持高亮（覆盖 global.linkText 的 hover 变色），
+  // cursor 变 default 提示"当前页不可点"（点击已被劫持）
+  navLinkActive: {
+    color: colors.brandStrong,
+    fontWeight: dimensions.fontWeightMedium,
+    cursor: "default",
+    ":hover": { color: colors.brandStrong },
   },
   login: {
     color: colors.neutral,
@@ -201,12 +209,39 @@ const styles = stylex.create({
   },
 });
 
+// 路由感知导航链接：命中当前路由时高亮（navLinkActive）并劫持点击（不可跳转）。
+// 匹配语义与 @solidjs/router 的 <A> 同款：忽略大小写/尾部斜杠；end=true 仅精确匹配
+// （首页 "/" 必须 end——否则前缀匹配下任意路径都以 "/" 开头而常亮）。
+// 劫持原理：router 在 document 上的 click 监听先检查 evt.defaultPrevented，命中即放弃
+// 导航；Solid 的委托事件处理器先于该监听执行（router 内部先调 delegateEvents），
+// 因此这里 preventDefault 即可可靠拦下（含键盘 Enter 触发的 click）。
 const LinkItem = (props: {
   href: string;
   children: JSX.Element;
   title?: string;
+  /** 精确匹配（end）：仅当前路径完全等于 href 时高亮/劫持 */
+  end?: boolean;
 }) => {
-  return <A href={props.href} {...stylex.props(global.linkText, typography.bodyMd, styles.navLink)} title={props.title}>{props.children}</A>;
+  const location = useLocation();
+  const isActive = createMemo(() => {
+    const path = props.href.split(/[?#]/, 1)[0].toLowerCase().replace(/\/$/, "");
+    const loc = decodeURI(location.pathname.toLowerCase().replace(/\/$/, ""));
+    return props.end ? path === loc : loc.startsWith(path + "/") || loc === path;
+  });
+  return (
+    <A
+      href={props.href}
+      end={props.end}
+      onClick={(e) => {
+        // 当前路由的链接：劫持点击——preventDefault 后 router 监听直接 return，不导航
+        if (isActive()) e.preventDefault();
+      }}
+      {...stylex.props(global.linkText, typography.bodyMd, styles.navLink, isActive() && styles.navLinkActive)}
+      title={props.title}
+    >
+      {props.children}
+    </A>
+  );
 };
 
 /** 消费端导航：brand + home/discover + [投稿] + 通知 + 头像菜单 + 语言切换。
@@ -269,7 +304,7 @@ export function SiteNav() {
   // 导航内容（桌面行内 + 移动浮层共用）
   const navContent = () => (
     <>
-      <LinkItem href="/" title={t("nav.home")}>{t("nav.home")}</LinkItem>
+      <LinkItem href="/" end title={t("nav.home")}>{t("nav.home")}</LinkItem>
       <LinkItem href="/discover" title={t("nav.discover")}>{t("nav.discover")}</LinkItem>
       <LinkItem href="/hosts" title={t("nav.hosts")}>{t("nav.hosts")}</LinkItem>
       <LinkItem href="/guests" title={t("nav.guests")}>{t("nav.guests")}</LinkItem>

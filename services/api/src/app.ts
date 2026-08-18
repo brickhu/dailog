@@ -359,6 +359,8 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
     },
   });
   app.openapi(publicSubmissionRoute, (async (c: Context) => {
+    // 非 uuid 直接 404（避免 uuid cast 错误 500——与 episodes 公开端点一致）
+    if (!UUID_RE.test(c.req.param("id")!)) return c.json({ error: "not_found" }, 404);
     const row = await deps.repo.submissions.getPublicById(c.req.param("id")!);
     if (!row) return c.json({ error: "not_found" }, 404);
     return c.json(row);

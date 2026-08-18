@@ -433,7 +433,10 @@ export function EpisodeCarousel(props: {
                         onPause={() => playback.toggle()}
                         onClick={() => navigate(`/episode/${ep.slug}`)}
                         onHover={() => void getEpisodeCached(ep.slug)}
-                        audioError={ep.audioUrl == null || (isCurrent(ep.id) && playback.audioError())}
+                        // 无音源判定用 !audioUrl（schema notNull：库里是空串 '' 而非 NULL，== null 永远 false）
+                        // preloadError：点击 play 预加载失败（音频不存在）→ 该卡片显示警告
+                        audioError={!ep.audioUrl || (isCurrent(ep.id) && playback.audioError()) || playback.preloadError() === ep.id}
+                        buffering={isCurrent(ep.id) && playback.buffering()}
                       />
                     </div>
                   )}

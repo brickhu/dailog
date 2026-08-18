@@ -34,9 +34,9 @@ const styles = stylex.create({
     flexDirection: "column",
     width: "100%",
     // 高度由内部 containerLg 内容撑开（无固定高度）
-    paddingBlock :dimensions.spacing8,
+    paddingBlock :dimensions.spacing10,
     [TABLET] : {
-      paddingBlock :dimensions.spacing10,
+      paddingBlock :dimensions.spacing11,
     },
     [DESKTOP] : {
       paddingBlock :dimensions.spacing12,
