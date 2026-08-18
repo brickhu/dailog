@@ -45,6 +45,7 @@ const styles = stylex.create({
     backgroundImage: `linear-gradient(to bottom,  color-mix(in srgb, ${colors.surface} 80%, transparent) 20%, ${colors.surface} 100%)`,
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
+    color: colors.onSurface
     
   },
   cover: {
@@ -80,7 +81,7 @@ const styles = stylex.create({
     flex:1,
     whiteSpace: "nowrap" ,
     textDecoration: "none",
-    color: `color-mix(in srgb, ${colors.foreground} 80%, transparent)`,
+    color: colors.onSurface,
     [DESKTOP]: {
       display : "block",
       // color: `color-mix(in sgba, currentColor 50%, transparent)`
