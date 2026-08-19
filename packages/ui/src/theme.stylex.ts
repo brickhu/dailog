@@ -164,7 +164,7 @@ export const fontfamilies = stylex.defineVars({
 
 // 阴影
 export const shadows = stylex.defineVars({
-  shadowLow: "0 1px 2px rgba(0, 0, 0, 0.4)",
+  shadowLow: "0 2px 4px rgba(25, 30, 40, 0.04),0 10px 20px rgba(25, 30, 40, 0.08),0 20px 40px rgba(25, 30, 40, 0.06)",
   shadowMed: "0 4px 12px rgba(0, 0, 0, 0.4)",
   shadowHigh: "0 8px 24px rgba(0, 0, 0, 0.55)",
 });

@@ -68,14 +68,23 @@ const COMPLETE_RATIO = 0.95;
 // 清缓冲并置 audioError（否则 spinner 无限转 = 用户看到"一直 loading"）
 const BUFFERING_TIMEOUT_MS = 10_000;
 
-/** 统计上报（0036 恢复；每 session 每期每事件一次；sessionStorage 去重——隐私模式静默） */
+/** 统计上报（0036 恢复；每 session 每期每事件一次；sessionStorage 去重——隐私模式静默）
+ *  去重 key 在 POST **成功**后才写入：若首次上报失败（网络/CORS/服务端 404），
+ *  该 session 内后续播放可重试，不会因失败残留的 key 永久短路（播放多次但统计恒 0 的隐患）。
+ *  key 带 v2 版本前缀：旧版（无前缀，先写 key 后发请求）残留的短路 key 自动失效，
+ *  无需用户手动清 sessionStorage */
 function reportStat(id: string, type: "play" | "completion") {
-  const key = `dailog-stat-${id}-${type}`;
+  const key = `dailog-stat-v2-${id}-${type}`;
   try {
     if (sessionStorage.getItem(key)) return;
-    sessionStorage.setItem(key, "1");
   } catch { /* 隐私模式 */ }
-  void fetch(`${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/episodes/${id}/stats/${type}`, { method: "POST" }).catch(() => {});
+  void fetch(`${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/episodes/${id}/stats/${type}`, { method: "POST" })
+    .then((r) => {
+      if (r.ok) {
+        try { sessionStorage.setItem(key, "1"); } catch { /* 隐私模式 */ }
+      }
+    })
+    .catch(() => {});
 }
 
 export function PlaybackProvider(props: ParentProps) {
@@ -124,9 +133,11 @@ export function PlaybackProvider(props: ParentProps) {
   const current = () => queue()[index()] ?? null;
 
   /**
-   * 加载队列第 i 期：切 src；autoplay=true 时尝试播放并上报 play（用户已解锁场景：
-   * play/next/prev）；false 只加载不播不报（setQueue 首期——等用户点击封面解锁）。
+   * 加载队列第 i 期：切 src；autoplay=true 时尝试播放（用户已解锁场景：play/next/prev）；
+   * false 只加载不播（setQueue 首期——等用户点击封面解锁）。
    * 加载同时预载下一期音频（无缝连播）。
+   * 统计上报不在加载处：play 统一由 audio "playing" 事件（真正出声）上报——覆盖
+   * 封面/卡片 play()、播放条 toggle()、连播 next/prev 等全部入口（sessionStorage 去重）。
    */
   const loadEpisode = (i: number, opts: { autoplay?: boolean } = {}) => {
     const ep = queue()[i];
@@ -142,7 +153,6 @@ export function PlaybackProvider(props: ParentProps) {
     a.load();
     if (opts.autoplay) {
       void a.play().catch(() => setPlaying(false)); // playing 由 "playing" 事件驱动（真正出声才置 true）；被拒（罕见）→ 停住等用户
-      reportStat(ep.id, "play");
     }
     // 预加载下一期（<link rel=preload as=audio>——只发起缓存下载，不创建 Audio 元素，
     // 不会触发自动播放；避免 new Audio()+preload=auto 在解锁页面真的开始播放导致双声）
@@ -180,7 +190,8 @@ export function PlaybackProvider(props: ParentProps) {
   const play = (ep: QueueEpisode) => {
     const a = audio();
     const i = queue().findIndex((q) => q.id === ep.id);
-    // 目标就是当前节目：已加载，直接播放（不重复上报 play——同 session 已去重）
+    // 目标就是当前节目：已加载，直接播放（play 上报统一在 "playing" 事件，不在此重复——
+    // 修复详情页封面播放当前集时不上报的漏记；sessionStorage 去重保证每 session 每期一次）
     if (i >= 0 && i === index()) {
       setActivated(true);
       abortPreload();
@@ -291,8 +302,14 @@ export function PlaybackProvider(props: ParentProps) {
       next();
     };
     // playing 信号用 'playing' 事件驱动（实际开始渲染音频/出声）——'play' 事件在
-    // play() 调用时即触发（缓冲中），会让封面按钮提前切到 pause（loading 未覆盖加载期）
-    const onPlaying = () => setPlaying(true);
+    // play() 调用时即触发（缓冲中），会让封面按钮提前切到 pause（loading 未覆盖加载期）。
+    // play 统计上报统一在此：每次真正开始播放即上报（sessionStorage 每 session 每期去重，
+    // 暂停续播/连播切集不叠加）——覆盖详情页封面、首页卡片、播放条 toggle、next/prev 全部入口
+    const onPlaying = () => {
+      setPlaying(true);
+      const ep = current();
+      if (ep) reportStat(ep.id, "play");
+    };
     const onPause = () => setPlaying(false);
     // 缓冲/加载中：waiting（播放因数据不足停住——初次加载/拖动 seek/断网续拉）→ true；
     // canplay（数据足够可播）/playing（真正出声）/seeked（拖动完成）/error（失败）→ false

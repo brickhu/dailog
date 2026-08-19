@@ -15,11 +15,11 @@ import { openImportDialog } from "../components/import-dialog";
 // use:auth 指令的作用域绑定（babel 编译转换需要；TS 不识 JSX 指令故 void 消除未使用误报）
 void auth;
 
-// 首页（传统博客式）：hero 品牌区 + 推荐节目滚屏（EpisodeCarousel 组件，subgrid 继承容器轨道）。
-// 播放由全局播放条（PlayerBar）接管——点卡片播放按钮即入队连播，播完自动切下一期；
-// 点卡片进详情页（/<episode_id>）。列表数据 = 推荐队列 API（热度分排序 + 语言优先）。
-// 推荐区滚屏：每屏 4 条（移动端 2×2）、最多 5 屏（limit=20），末屏不足 4 条灰块补齐；
-// 异步加载期间骨架屏占位（透明度脉冲，颜色跟随 surface token 自动适配暗色模式）。
+// 首页（传统博客式）：hero 品牌区 + 推荐节目滚屏（EpisodeCarousel 组件，基于共享
+// Carousel 原生横向滚动容器）。播放由全局播放条（PlayerBar）接管——点卡片播放按钮即入队
+// 连播，播完自动切下一期；点卡片进详情页（/<episode_id>）。列表数据 = 推荐队列 API
+// （热度分排序 + 语言优先，limit=20 一次拉全、连续横滑）。异步加载期间骨架屏占位
+// （透明度脉冲，颜色跟随 surface token 自动适配暗色模式）。
 
 // 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
 // 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）

@@ -4,6 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions, layouts } from "@dailogues/ui/theme.stylex";
 import { A } from "@solidjs/router";
 import { useI18n } from "@dailogues/i18n";
+import { Logo } from "@dailogues/ui";
 
 // 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
 // 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
@@ -33,6 +34,8 @@ const styles = stylex.create({
     gridColumn: "1 / -1", 
     display: "flex",
     justifyContent: "center",
+    alignItems: "center",
+    gap: "1em",
     [TABLET]: {
           gridColumn: "span 5", // 平板 8 列占 5
           justifyContent: "start",
@@ -62,6 +65,9 @@ const styles = stylex.create({
     display: "inline-flex",
     ":hover": { color: colors.primary },
   },
+  logo:{
+    height: "1em",
+  },
   // PWA 安装入口：图标 + 文字，hover 主题色
   installLink: {
     display: "inline-flex",
@@ -79,7 +85,7 @@ export function Footer() {
   return (
     <footer {...stylex.props(styles.footer)}>
       <div {...stylex.props(layouts.containerLg,styles.inner)}>
-        <p {...stylex.props(styles.copyright)}>© 2026 dailog.fm</p>
+        <p {...stylex.props(styles.copyright)}><Logo variant="pattern" {...stylex.props(styles.logo)}/>© 2026 dailog.fm</p>
         <div {...stylex.props(styles.links)}>
         {/* X */}
         <a href="https://x.com/" target="_blank" rel="noopener noreferrer" {...stylex.props(styles.icon)} aria-label="X">

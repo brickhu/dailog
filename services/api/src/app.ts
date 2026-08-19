@@ -238,13 +238,17 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
     if (!UUID_RE.test(id)) return c.json({ error: "not_found" }, 404);
     const exists = await deps.repo.episodes.getPublicAudioKey(id);
     if (!exists) return c.json({ error: "not_found" }, 404);
-    // 限频：同 IP 同 episode 同事件 5 分钟内只计一次（CF 代理头优先；本地无头 → 空串）
+    // 限频：同 IP 同 episode 同事件 5 分钟内只计一次（CF 代理头优先；本地无头 → 空串）。
+    // ip 为空（本地直连/无代理）时跳过限频：本地所有请求共享 "" 这个 key，限频会让
+    // 任何一次测试/播放阻断同节目后续 5 分钟的全部上报（开发环境互相干扰，已踩坑）
     const ip = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
-    const key = statKey(ip, id, type);
-    const now = Date.now();
-    const last = statCooldown.get(key) ?? 0;
-    if (now - last < STAT_WINDOW_MS) return c.json({ ok: true }); // 窗口内重复：静默忽略不计数
-    statCooldown.set(key, now);
+    if (ip) {
+      const key = statKey(ip, id, type);
+      const now = Date.now();
+      const last = statCooldown.get(key) ?? 0;
+      if (now - last < STAT_WINDOW_MS) return c.json({ ok: true }); // 窗口内重复：静默忽略不计数
+      statCooldown.set(key, now);
+    }
     await deps.repo.episodes.recordStat(id, type);
     return c.json({ ok: true });
   }) as RouteHandler<typeof statsPostRoute, AuthEnv>);

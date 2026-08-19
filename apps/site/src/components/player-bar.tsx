@@ -3,7 +3,7 @@
 import { Show, onCleanup, onMount } from "solid-js";
 import { A } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { colors, dimensions, typography,global } from "@dailogues/ui/theme.stylex";
+import { colors, dimensions, typography,global, shadows } from "@dailogues/ui/theme.stylex";
 import { episodeCoverUrl } from "../lib/env";
 import { usePlayback } from "../lib/playback";
 import { Icon,Button,Slider } from "@dailogues/ui";
@@ -40,11 +40,11 @@ const styles = stylex.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: dimensions.spacing3,
-    backgroundImage: `linear-gradient(to bottom,  color-mix(in srgb, ${colors.surface} 80%, transparent) 20%, ${colors.surface} 100%)`,
-    backdropFilter: "blur(12px)",
-    WebkitBackdropFilter: "blur(12px)",
-    color: colors.onSurface
-    
+    backgroundImage: `linear-gradient(to bottom,  color-mix(in srgb, ${colors.surfaceWeak} 80%, transparent) 0%, ${colors.surfaceWeak} 100%)`,
+    backdropFilter: "blur(24px)",
+    WebkitBackdropFilter: "blur(24px)",
+    color: colors.onSurfaceWeak,
+    filter: `drop-shadow(${shadows.shadowLow})`
   },
   cover: {
     width: dimensions.sizeLg,

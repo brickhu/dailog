@@ -2,14 +2,13 @@ import { Show, createMemo, createSignal, onCleanup, onMount, type JSX } from "so
 import { A, useLocation, useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions, durations, easings, fontfamilies, layouts,global,typography } from "@dailogues/ui/theme.stylex";
-import { Button, Icon } from "@dailogues/ui";
+import { Button, Icon, Logo } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { LangSwitch } from "./lang-switch";
 import { UserMenu, type NavUser } from "./user-menu";
 import { confirmSignOut } from "../lib/auth-guard";
 import { openImportDialog } from "./import-dialog";
 import { openSearchDialog } from "./search-dialog";
-import { Logo } from "./logo";
 
 // 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
 // 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
@@ -62,8 +61,12 @@ const styles = stylex.create({
     textDecoration: "none",
     display: "inline-flex",
     // 必须显式继承：A 标签 UA 默认 color 是链接蓝（-webkit-link），会阻断 shellRoot
-    // foreground 的继承——logo 的 fill="currentColor" 取到的就是蓝色而非前景色
+    // foreground 的继承——logo 的 fill 未注入 CSS 变量时回落到 currentColor，取到的就是蓝色而非前景色
     color: colors.primary,
+    "--fill-pattern" : colors.brand,
+    ":hover" : {
+      "--fill-pattern" : colors.primary,
+    }
   },
   nav: {
     display: "none", // 移动优先：<640 折叠进汉堡浮层
@@ -157,6 +160,7 @@ const styles = stylex.create({
   },
   logo: {
     height: dimensions.sizeMd,
+    
   },
   // 搜索入口：移动端图标按钮（<640，汉堡旁）……
   searchIconBtn: {

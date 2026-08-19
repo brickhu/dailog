@@ -1,5 +1,6 @@
 import { Button } from "./components/button";
 import { ButtonGroup } from "./components/button-group";
+import { Badge } from "./components/badge";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "./theme.stylex";
 import { Icon, addIcon } from './components/icon';
@@ -67,6 +68,19 @@ export default function Examples() {
             注：Solid 1.9 hydration 下部分 Banner 特性组合（isDismissable/endContent/
             defaultIsExpanded 等与相邻 Banner 共存）会触发 Hydration Mismatch（dev-only
             展示页问题，站点页面无 Banner 不受影响），示例暂不在 example 页展示 */}
+        {/* Badge 徽章（复刻 Astryx Badge，组件特性见 badge.md） */}
+        <div style={{ padding: "16px 0" }}>
+          <h2>徽章 Badge</h2>
+          <div style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap", padding: "12px 0" }}>
+            <Badge label="Badge" />
+            <Badge variant="info" label="Info" />
+            <Badge variant="success" label="Active" />
+            <Badge variant="warning" label="Action Required" />
+            <Badge variant="error" label="Failed" />
+            <Badge variant="success" label="Verified" icon={<Icon icon="mdi:check" width={14} height={14} />} />
+            <Badge variant="neutral" label="Engineering" />
+          </div>
+        </div>
         {/* 图标 Icon：按需注入（iconify API 单图标拉取，内联 SVG） */}
         <div style={{ padding: "16px 0" }}>
           <h2>图标 Icon</h2>

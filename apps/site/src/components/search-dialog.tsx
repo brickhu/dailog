@@ -62,8 +62,17 @@ const styles = stylex.create({
   body: {
     display: "flex",
     flexDirection: "column",
-    height: "100%",
+    // 弹窗高度取确定值（移动端 75dvh 底部弹层 / 桌面 70vh 居中面板，均与 dialog 实际高度一致）：
+    // 结果区（flex:1 + overflow-y:auto）在 body 内滚动，输入行/快捷键提示固定。
+    // 不能用 height:100%——iOS WebKit 对 fit-content/auto 高度父级的高度百分比解析为 0，
+    // 结果区会塌成不可见的 0 高度
+    height: "75dvh",
     minHeight: 0,
+    // 桌面面板实际高度恒为 70vh（dialog 触及 max-height，Chrome/WebKit 均如此），
+    // body 直接取 70vh 与 dialog 对齐——比 min(70vh, 520px) 更贴合实际渲染，无底部空隙
+    [CENTERED]: {
+      height: "70vh",
+    },
   },
   inputRow: {
     display: "flex",

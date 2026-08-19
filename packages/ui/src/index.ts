@@ -25,7 +25,24 @@ export {
   type DialogContextValue,
   type SpacingStep,
 } from "./components/dialog";
+export {
+  Carousel,
+  type CarouselProps,
+  type CarouselHandle,
+  type CarouselHandleRef,
+  type CarouselGap,
+  type CarouselPadding,
+} from "./components/carousel";
 export { Card } from "./components/card";
+export {
+  Grid,
+  GRID_MAX_COLUMNS,
+  type GridProps,
+  type GridColumns,
+  type GridColumnCount,
+  type GridAlignment,
+} from "./components/grid";
+export { GridSpan, type GridSpanProps } from "./components/grid-span";
 export { Skeleton, type SkeletonProps, type SkeletonRadius } from "./components/skeleton";
 export { TextField, type TextFieldProps } from "./components/text-field";
 export {
@@ -42,7 +59,9 @@ export {
 } from "./components/slider";
 export { Spinner } from "./components/spinner";
 export { Avatar, type AvatarProps } from "./components/avatar";
+export { Badge, type BadgeProps, type BadgeVariant } from "./components/badge";
 export { default as Examples } from "./examples";
 export { Icon, type IconProps } from "./components/icon";
+export { Logo, type LogoColorVars } from "./components/logo";
 
 export { registerDirective, getDirective } from "./directives";

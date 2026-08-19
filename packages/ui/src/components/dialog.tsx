@@ -122,8 +122,10 @@ const styles = stylex.create({
       backdropFilter: "blur(2px)",
     },
   },
-  // 打开时显式 display（不依赖 :where([open]) 选择器——零特异性，会被作者样式覆盖）
-  open: { display: "flex" },
+  // 打开时显式 display（不依赖 :where([open]) 选择器——零特异性，会被作者样式覆盖）。
+  // 不用 flex：iOS WebKit 下 dialog 上 flex + max-height 不会给子元素建立确定高度，
+  // 子元素百分比高度会塌成 0（弹窗被压缩成细条）——块级布局 + 子元素自身 max-height 才稳
+  open: { display: "block" },
   fullscreen: {
     width: "100dvw",
     height: "100dvh",
@@ -133,12 +135,14 @@ const styles = stylex.create({
     margin: 0,
     inset: 0,
   },
-  // 内容容器：flex 纵向 + 圆角裁切；内容超高时在框内滚动（maxHeight 约束生效）
+  // 内容容器：flex 纵向 + 圆角裁切；内容超高时在框内滚动。
+  // 高度不用百分比（height:100% 在 iOS WebKit 下对 fit-content/auto 高度的 dialog
+  // 解析为 0 → 弹窗被压成细条、内容不可见），改由 JS 注入 max-height（与 dialog 的
+  // max-height 同步、扣除内边距），浏览器原生按内容高度收缩、超限滚动
   inner: {
     display: "flex",
     flexDirection: "column",
     width: "100%",
-    height: "100%",
     overflow: "auto",
     borderRadius: "inherit",
   },
@@ -152,6 +156,21 @@ const styles = stylex.create({
 });
 
 // padding 档位 → 项目 spacing tokens（0.5/1.5 为 2px/6px，token 无此档位）
+// padding 档位 → 像素（供 inner 的 max-height 计算扣除内边距，与 paddingStyles 一致）
+const PADDING_PX: Record<SpacingStep, number> = {
+  0: 0,
+  0.5: 2,
+  1: 4,
+  1.5: 6,
+  2: 8,
+  3: 12,
+  4: 16,
+  5: 20,
+  6: 24,
+  8: 32,
+  10: 40,
+};
+
 const paddingStyles = stylex.create({
   s0: { padding: dimensions.spacing0 },
   s0_5: { padding: "2px" },
@@ -383,6 +402,18 @@ export function Dialog(props: DialogProps) {
     if (allowBackdropClick()) props.onOpenChange(false);
   };
 
+  // 内容容器高度（运行时值，走内联 style）：
+  // - fullscreen：dialog 高度 100dvh 是确定值，inner height:100% 可安全解析（含 iOS WebKit）
+  // - 标准弹窗：dialog 高度是 fit-content（随内容），不能用百分比高度（iOS WebKit 解析为 0）；
+  //   改给 inner 注入与 dialog max-height 同步的 max-height（扣除上下内边距），
+  //   内容超高时 inner 在框内滚动，短内容时随内容收缩
+  const innerStyle = (): JSX.CSSProperties => {
+    if (isFullscreen()) return { height: "100%" };
+    const cap = toLength(props.maxHeight, "75vh");
+    const pad = PADDING_PX[props.padding ?? 4];
+    return pad > 0 ? { "max-height": `calc(${cap} - ${pad * 2}px)` } : { "max-height": cap };
+  };
+
   // 动态尺寸（width/maxHeight/position 是运行时值，走内联 style；fullscreen 为静态类）
   const mergedStyle = () => {
     const dynamic: JSX.CSSProperties = {};
@@ -472,7 +503,7 @@ export function Dialog(props: DialogProps) {
       style={mergedStyle()}
       {...modalProps()}
     >
-      <div {...stylex.props(styles.inner)}>{innerContent}</div>
+      <div style={innerStyle()} {...stylex.props(styles.inner)}>{innerContent}</div>
     </dialog>
   );
 }

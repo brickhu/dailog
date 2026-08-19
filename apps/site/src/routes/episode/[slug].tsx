@@ -172,13 +172,6 @@ export default function EpisodeDetailPage() {
     }
   });
 
-  // 本页节目的播放状态：本页节目是当前 → 暂停/继续；否则 → 播放本页（切歌）
-  const thisEpisode = () => (ep() ? asQueue(ep()!) : null);
-  const isThisPlaying = () => {
-    const t = thisEpisode();
-    return !!t && playback.current()?.id === t.id;
-  };
-
   return (
     <div {...stylex.props(layouts.page,styles.detail)}>
       {/* 兜底标题：数据未就绪/404 时 head 也有 title（Suspense 内数据到达后 cascading 替换） */}
@@ -221,15 +214,9 @@ export default function EpisodeDetailPage() {
             <Cover episode={asQueue(ep()!)} />
             <div {...stylex.props(styles.coverBtnSlot)}>
               <PlayControls
-                playing={isThisPlaying() && playback.playing()}
-                onPlay={() => playback.play(asQueue(ep()!))}
-                onPause={() => playback.toggle()}
+                episode={asQueue(ep()!)}
                 revealOnHover={!!ep()!.audioUrl} // audio 缺失：不启用 hover 划入，仅常显警告图标
                 hovered={coverHover()}
-                // 无音源判定用 !audioUrl（schema notNull：库里是空串 '' 而非 NULL，== null 永远 false）
-                // preloadError：点击 play 预加载失败（音频不存在）→ 封面显示警告
-                audioError={!ep()!.audioUrl || (isThisPlaying() && playback.audioError()) || playback.preloadError() === ep()!.id}
-                buffering={isThisPlaying() && playback.buffering()}
               />
             </div>
           </div>

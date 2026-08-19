@@ -241,9 +241,11 @@ export const zh = {
 
   // ---- 首页 hero ----
   "home.recommended": "推荐节目",
-  "home.recommended.prev": "上一页",
-  "home.recommended.next": "下一页",
-  "home.recommended.page": "第 {page} 页",
+  // ---- Carousel（通用轮播）----
+  "carousel.label": "轮播",
+  "carousel.slideLabel": "第 {current} 张，共 {total} 张",
+  "carousel.prev": "向左滚动",
+  "carousel.next": "向右滚动",
   "home.statHosts": "{count} 个主播",
   "home.statGuests": "{count} 个 AI 嘉宾",
   "home.statEpisodes": "{count} 期访谈",
@@ -1035,9 +1037,11 @@ export const en: Dictionary = {
 
   // ---- Home hero ----
   "home.recommended": "Recommended",
-  "home.recommended.prev": "Previous",
-  "home.recommended.next": "Next",
-  "home.recommended.page": "Page {page}",
+  // ---- Carousel（通用轮播）----
+  "carousel.label": "Carousel",
+  "carousel.slideLabel": "Slide {current} of {total}",
+  "carousel.prev": "Scroll left",
+  "carousel.next": "Scroll right",
   "home.statHosts": "{count} host{plural}",
   "home.statGuests": "{count} AI guest{plural2}",
   "home.statEpisodes": "{count} episode{plural3}",

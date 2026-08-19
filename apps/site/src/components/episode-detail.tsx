@@ -1,12 +1,12 @@
 // 节目详情面板（首页详情态 + /<episode_id> 直链复用）：
 // 标题/主持人/日期时长/播放统计/简介/台本（折叠）/原始对话/点赞收藏
-import { For, Show, createResource, createSignal } from "solid-js";
+import { For, Show, createEffect, createResource, createSignal, onCleanup } from "solid-js";
 import { A } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { apiBaseForFetch } from "../lib/env";
-import type { QueueEpisode } from "../lib/playback";
+import { usePlayback, type QueueEpisode } from "../lib/playback";
 import { getPlaylistsByEpisode } from "../lib/db";
 import { InteractButtons } from "./interact-buttons";
 import { ShareButton } from "./share-buttons";
@@ -101,13 +101,25 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
   const hostName = () => ep().callName ?? ep().displayName ?? ep().username;
   const [showTranscript, setShowTranscript] = createSignal(false);
   // 播放/完播统计（0036 恢复）：createResource 独立加载；likes 计数由 InteractButtons 复用 stats
-  const [stats] = createResource(
+  const [stats, { refetch: refetchStats }] = createResource(
     () => ep().id,
     async (id) => {
       const r = await fetch(`${apiBaseForFetch}/v1/public/episodes/${id}/stats`);
       return r.ok ? ((await r.json()) as { plays: number; completions: number; likes?: number }) : null;
     },
   );
+  // 本集开始播放 → 重新拉取统计（play 上报后数字即时刷新，无需手动刷新页面）；
+  // 暂停续播重复触发时 refetch 幂等（同一 session 已去重，计数不叠加）
+  // 延后 ~600ms 再拉取：reportStat 是 fire-and-forget 的 POST，立即 refetch 可能抢在
+  // 上报落库前读到旧值（显示仍是 0）；短暂延迟让上报先到达
+  const { current: pbCurrent, playing } = usePlayback();
+  createEffect(() => {
+    const cur = pbCurrent();
+    if (cur?.id === ep().id && playing()) {
+      const timer = setTimeout(() => void refetchStats(), 600);
+      onCleanup(() => clearTimeout(timer));
+    }
+  });
   // 收录于哪些公开播放列表（「收录于」反查——服务端函数 RPC）
   const [inPlaylists] = createResource(
     () => ep().id,
