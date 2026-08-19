@@ -14,3 +14,4 @@
 - [2026-08-17] stylex media 规则输出顺序随全局规则集变化（不稳定）——重叠断点（min-width 链）的“后者覆盖”会被破坏（大断点排到小断点前 → 桌面回退小断点列数）；断点一律用互斥 range 区间（`@media (640px <= width < 1024px)` / `@media (width >= 1024px)`），顺序无关才可靠
 - [2026-08-17] StyleX dev 必须 runtimeInjection:true（每模块自带 _inject 同步注入 <style data-stylex>），否则 SPA 路由切换（点击进页面）样式迟到/丢、刷新才好；生产保持 false
 - [2026-08-18] api 的 `column reference "id" is ambiguous`(Postgres 42702)是开发中间态的历史错误(05:57 集中出现后未重现)——当前 repo/index.ts 全部 JOIN 查询均带表前缀,无隐患;submissions 公开端点已补 uuid 校验(非 uuid → 404)
+- [2026-08-20] studio 工程已废弃，不再维护/使用；开发与维护以 dailog 主工程为准
