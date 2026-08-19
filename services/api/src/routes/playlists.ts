@@ -159,6 +159,7 @@ export function playlistUserRoutes(repo: Repos) {
     const userId = c.get("userId") as string;
     const pl = await owned(c.req.param("id")!, userId);
     if (!pl) return c.json({ error: "not_found" }, 404);
+    if (pl.isDefault) return c.json({ error: "default_playlist_locked", detail: "系统内置「我的收藏」不可编辑" }, 400);
     const body = (await c.req.json().catch(() => null)) as { title?: unknown; description?: unknown; isPublic?: unknown } | null;
     if (!body || Object.keys(body).length === 0) return c.json({ error: "invalid_input", detail: "无更新字段" }, 400);
     const patch: { title?: string; description?: string | null; isPublic?: boolean } = {};
@@ -193,6 +194,7 @@ export function playlistUserRoutes(repo: Repos) {
     const userId = c.get("userId") as string;
     const pl = await owned(c.req.param("id")!, userId);
     if (!pl) return c.json({ error: "not_found" }, 404);
+    if (pl.isDefault) return c.json({ error: "default_playlist_locked", detail: "系统内置「我的收藏」不可删除" }, 400);
     await repo.playlists.remove(pl.id);
     return c.json({ ok: true });
   }) as unknown as RouteHandler<typeof rDelete, { Variables: { userId: string } }>);
@@ -254,6 +256,7 @@ export function playlistUserRoutes(repo: Repos) {
     const userId = c.get("userId") as string;
     const pl = await owned(c.req.param("id")!, userId);
     if (!pl) return c.json({ error: "not_found" }, 404);
+    if (pl.isDefault) return c.json({ error: "default_playlist_locked", detail: "系统内置「我的收藏」按加入时间排序，不可重排" }, 400);
     const body = (await c.req.json().catch(() => null)) as { episodeIds?: unknown } | null;
     const ids = Array.isArray(body?.episodeIds)
       ? (body.episodeIds as unknown[]).filter((v): v is string => typeof v === "string")
@@ -368,6 +371,7 @@ export function playlistEditorRoutes(deps: PlaylistEditorDeps) {
   app.openapi(rPatch, (async (c: Context) => {
     const pl = await get(c.req.param("id")!);
     if (!pl) return c.json({ error: "not_found" }, 404);
+    if (pl.isDefault) return c.json({ error: "default_playlist_locked" }, 400);
     const body = (await c.req.json().catch(() => null)) as {
       title?: unknown; description?: unknown; language?: unknown; isPublic?: unknown; isPicked?: unknown;
     } | null;
@@ -411,6 +415,7 @@ export function playlistEditorRoutes(deps: PlaylistEditorDeps) {
   app.openapi(rDelete, (async (c: Context) => {
     const pl = await get(c.req.param("id")!);
     if (!pl) return c.json({ error: "not_found" }, 404);
+    if (pl.isDefault) return c.json({ error: "default_playlist_locked" }, 400);
     await repo.playlists.remove(pl.id);
     return c.json({ ok: true });
   }) as unknown as RouteHandler<typeof rDelete, AuthEnv>);

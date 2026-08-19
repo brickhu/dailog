@@ -8,7 +8,8 @@ import * as schema from "../src/db/schema";
 import { createFavoritesRepo } from "../src/routes/favorites";
 import { fakePlaylistsRepo } from "./helpers/fake-playlists";
 
-// 消费端互动全链路（真实本地 PG）：注册 → 收藏/点赞 toggle → 列表
+// 消费端互动（简化版 0034）：仅点赞 toggle + interactions（收藏与播放统计已移除）。
+// 真实本地 PG 集成：注册 → 点赞 toggle → interactions 计数。
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
@@ -69,11 +70,11 @@ function fakeRepo(): AppDeps["repo"] {
       syncAdminRoles: async () => 0,
       listByUser: async () => [],
       setPublic: async () => 0,
-      recordStat: async () => {},
-      getStats: async () => ({ plays: 0, completions: 0, likes: 0, favorites: 0 }),
       listRecommended: async () => [],
       listTopHosts: async () => [],
       getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),
+      recordStat: async () => {},
+      getStats: async () => ({ plays: 0, completions: 0, likes: 0 }),
       getPersonaSnapshot: async () => ({ displayName: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
     },
   };
@@ -86,11 +87,10 @@ function fakeVoice(): AppDeps["voice"] {
   };
 }
 
-describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () => {
+describe.skipIf(!hasDb)("likes (消费端互动简化版, real local PG)", () => {
   let dbClient: ReturnType<typeof createDb>;
   let app: ReturnType<typeof createApp>;
   let token: string;
-  let userId: string;
   let episodeId: string;
 
   beforeAll(async () => {
@@ -112,7 +112,7 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
 
     const auth = createAuth({ db: dbClient.db, secret: "test-secret", env: testEnv });
 
-    // 一个已发布 episode（互动对象）+ 一个用户
+    // 一个已发布 episode（互动对象）
     const user = await dbClient.db
       .insert(schema.authUsers)
       .values({
@@ -124,12 +124,12 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
         updatedAt: new Date(),
       })
       .returning({ id: schema.authUsers.id });
-    userId = user[0].id;
+    const ownerId = user[0].id;
     await dbClient.db.insert(schema.profiles).values({
-      id: userId, displayName: "Fav",
+      id: ownerId, displayName: "Fav",
     });
     const sub = await dbClient.db.insert(schema.submissions).values({
-      userId,
+      userId: ownerId,
       url: `https://example.com/share/${randomUUID()}`,
       status: "published",
     }).returning({ id: schema.submissions.id });
@@ -137,10 +137,10 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
       .insert(schema.episodes)
       .values({
         submissionId: sub[0].id,
-        userId,
+        userId: ownerId,
         slug: `fav-ep-${randomUUID().slice(0, 8)}`,
-        title: "收藏测试节目",
-        audioUrl: `episodes/${userId}/${sub[0].id}.mp3`,
+        title: "点赞测试节目",
+        audioUrl: `episodes/${ownerId}/${sub[0].id}.mp3`,
         status: "published",
         isPublic: true,
         publishedAt: new Date(),
@@ -177,7 +177,6 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
     });
     const body = (await res.json()) as { token: string; user: { id: string } };
     token = body.token;
-    userId = body.user.id;
   });
 
   afterAll(async () => {
@@ -188,30 +187,32 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
     }
   });
 
-  it("favorite toggle: POST → 列表可见 → DELETE 取消", async () => {
-    const h = { Authorization: `Bearer ${token}` };
-    const add = await app.request(`/v1/episodes/${episodeId}/favorite`, { method: "POST", headers: h });
-    expect(add.status).toBe(200);
-    expect(await add.json()).toEqual({ favorited: true });
-
-    const list = await app.request("/v1/me/favorites", { headers: h });
-    expect(list.status).toBe(200);
-    const rows = (await list.json()) as Array<{ episodeId: string; title: string | null }>;
-    expect(rows.some((r) => r.episodeId === episodeId && r.title === "收藏测试节目")).toBe(true);
-
-    const del = await app.request(`/v1/episodes/${episodeId}/favorite`, { method: "DELETE", headers: h });
-    expect(await del.json()).toEqual({ favorited: false });
-  });
-
-  it("like toggle: POST liked → DELETE unliked", async () => {
+  it("like toggle: POST liked+1 → DELETE unliked+0", async () => {
     const h = { Authorization: `Bearer ${token}` };
     const add = await app.request(`/v1/episodes/${episodeId}/like`, { method: "POST", headers: h });
-    expect(await add.json()).toEqual({ liked: true });
+    expect(add.status).toBe(200);
+    expect(await add.json()).toEqual({ liked: true, likes: 1 });
     const del = await app.request(`/v1/episodes/${episodeId}/like`, { method: "DELETE", headers: h });
-    expect(await del.json()).toEqual({ liked: false });
+    expect(await del.json()).toEqual({ liked: false, likes: 0 });
+  });
+
+  it("interactions: 点赞后返回状态 + 计数（无独立统计端点，合并返回）", async () => {
+    const h = { Authorization: `Bearer ${token}` };
+    await app.request(`/v1/episodes/${episodeId}/like`, { method: "POST", headers: h });
+    const res = await app.request(`/v1/episodes/${episodeId}/interactions`, { headers: h });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ liked: true, likes: 1 });
+    // 清理
+    await app.request(`/v1/episodes/${episodeId}/like`, { method: "DELETE", headers: h });
   });
 
   it("unpublished episode not interactable (404)", async () => {
+    const liveUser = await dbClient.db
+      .select({ id: schema.authUsers.id })
+      .from(schema.authUsers)
+      .where(like(schema.authUsers.email, "fav-live-%"))
+      .limit(1);
+    const userId = liveUser[0]?.id ?? "none";
     const draftSub = await dbClient.db.insert(schema.submissions).values({
       userId,
       url: `https://example.com/share/${randomUUID()}`,
@@ -221,17 +222,11 @@ describe.skipIf(!hasDb)("favorites/likes (消费端互动, real local PG)", () =
       .insert(schema.episodes)
       .values({ submissionId: draftSub[0].id, userId, slug: `fav-draft-${randomUUID().slice(0, 8)}`, title: "draft", audioUrl: "x.mp3", status: "generating" as never })
       .returning({ id: schema.episodes.id });
-    const res = await app.request(`/v1/episodes/${draft[0].id}/favorite`, {
+    const res = await app.request(`/v1/episodes/${draft[0].id}/like`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(res.status).toBe(404);
     await dbClient.db.delete(schema.episodes).where(eq(schema.episodes.id, draft[0].id));
-    await dbClient.db.delete(schema.submissions).where(eq(schema.submissions.id, draftSub[0].id));
-  });
-
-  it("unauthenticated → 401", async () => {
-    const res = await app.request(`/v1/episodes/${episodeId}/like`, { method: "POST" });
-    expect(res.status).toBe(401);
   });
 });

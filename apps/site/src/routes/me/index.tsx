@@ -9,7 +9,7 @@ import { AuthGate } from "../../components/auth-gate";
 
 // 个人中心（/me）：个人视角首页——用户信息 + 全部功能入口
 //   · 账户设置 /settings（资料/昵称/密码/主持人档案/声音采样）
-//   · 我的收藏 /me/favorites
+//   · 我的播放列表 /me/playlists（收藏已并入——收藏功能移除，0034）
 //   · 我的投稿 /me/submits
 //   · 通知 /me/notifications
 const styles = stylex.create({
@@ -105,7 +105,6 @@ export default function MePage() {
     { href: "/me/episodes", title: t("me.episodes"), desc: t("me.episodesDesc"), icon: "🎙️" },
     { href: "/me/playlists", title: t("me.playlists"), desc: t("me.playlistsDesc"), icon: "📃" },
     { href: "/me/submits", title: t("me.submissions"), desc: t("me.submissionsDesc"), icon: "📮" },
-    { href: "/me/favorites", title: t("me.favorites"), desc: t("me.favoritesDesc"), icon: "⭐" },
     { href: "/me/notifications", title: t("me.notifications"), desc: t("me.notificationsDesc"), icon: "🔔", badge: unread() > 0 ? (unread() > 99 ? "99+" : unread()) : null },
   ];
 

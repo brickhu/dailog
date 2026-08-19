@@ -232,6 +232,34 @@
       "when": 1788566400000,
       "tag": "0032_playlists",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1788652800000,
+      "tag": "0033_favorites_to_playlist",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1788739200000,
+      "tag": "0034_remove_favorites_stats",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1788825600000,
+      "tag": "0035_restore_default_playlist",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788912000000,
+      "tag": "0036_restore_episode_stats",
+      "breakpoints": true
     }
   ]
 }

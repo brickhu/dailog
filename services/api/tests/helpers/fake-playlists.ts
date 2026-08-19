@@ -11,6 +11,7 @@ export function fakePlaylistsRepo(): PlaylistsRepo {
     listByUser: async () => [],
     update: async () => {},
     getPublicCover: async () => null,
+    getOrCreateDefault: async () => ({ id: "pl-default" }),
     remove: async () => {},
     listEpisodes: async () => [],
     addEpisode: async () => ({ added: true }),

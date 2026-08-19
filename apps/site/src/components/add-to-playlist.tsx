@@ -12,6 +12,8 @@ interface MyPlaylist {
   title: string;
   episodeCount: number;
   isPublic: boolean;
+  /** 系统内置「我的收藏」默认列表（置顶展示，标题用 i18n） */
+  isDefault: boolean;
   contains: boolean;
 }
 
@@ -101,7 +103,11 @@ export function AddToPlaylist(props: { episodeId: string }) {
       return;
     }
     setUnauthorized(false);
-    if (res.ok) setList((await res.json()) as MyPlaylist[]);
+    if (res.ok) {
+      const rows = (await res.json()) as MyPlaylist[];
+      // 默认列表（我的收藏）置顶
+      setList([...rows.filter((p) => p.isDefault), ...rows.filter((p) => !p.isDefault)]);
+    }
   };
 
   const openDialog = async () => {
@@ -169,7 +175,7 @@ export function AddToPlaylist(props: { episodeId: string }) {
                     {(pl) => (
                       <div {...stylex.props(styles.row)}>
                         <div>
-                          <div {...stylex.props(styles.rowTitle)}>{pl.title}</div>
+                          <div {...stylex.props(styles.rowTitle)}>{pl.isDefault ? t("me.favorites") : pl.title}</div>
                           <div {...stylex.props(styles.rowMeta)}>
                             {t("playlists.episodeCount", { count: pl.episodeCount })} · {pl.isPublic ? t("playlist.public") : t("playlist.private")}
                           </div>

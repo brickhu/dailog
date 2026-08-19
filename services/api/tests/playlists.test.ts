@@ -21,6 +21,7 @@ const OWNED_PL: PlaylistRow = {
   language: "zh",
   isPublic: true,
   isPicked: false,
+  isDefault: false,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -63,11 +64,11 @@ function fakeRepo(overrides: Partial<Repos["playlists"]> = {}, episodesOverrides
       syncAdminRoles: async () => 0,
       listByUser: async () => [],
       setPublic: async () => 0,
-      recordStat: async () => {},
-      getStats: async () => ({ plays: 0, completions: 0, likes: 0, favorites: 0 }),
-      listRecommended: async () => [],
+                  listRecommended: async () => [],
       listTopHosts: async () => [],
       getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),
+      recordStat: async () => {},
+      getStats: async () => ({ plays: 0, completions: 0, likes: 0 }),
       getPersonaSnapshot: async () => ({ displayName: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
       ...episodesOverrides,
     },
@@ -241,6 +242,25 @@ describe("我的播放列表端点", () => {
     const res = await app.request(`/v1/me/playlists/${PLAYLIST_ID}`, { method: "DELETE" });
     expect(res.status).toBe(404);
   });
+
+  it("默认列表（is_default）不可编辑/删除/重排 → 400", async () => {
+    const DEFAULT_PL = { ...OWNED_PL, isDefault: true };
+    const update = vi.fn(async () => {});
+    const remove = vi.fn(async () => {});
+    const reorder = vi.fn(async () => {});
+    const app = userApp(fakeRepo({ getById: async () => DEFAULT_PL, update, remove, reorder }));
+    const patch = await app.request(`/v1/me/playlists/${PLAYLIST_ID}`, { ...json({ title: "改名" }), method: "PATCH" });
+    expect(patch.status).toBe(400);
+    expect((await patch.json()) as { error: string }).toMatchObject({ error: "default_playlist_locked" });
+    const del = await app.request(`/v1/me/playlists/${PLAYLIST_ID}`, { method: "DELETE" });
+    expect(del.status).toBe(400);
+    const ro = await app.request(`/v1/me/playlists/${PLAYLIST_ID}/episodes/reorder`, { ...json({ episodeIds: [EPISODE_ID] }), method: "PUT" });
+    expect(ro.status).toBe(400);
+    expect(update).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    expect(reorder).not.toHaveBeenCalled();
+  });
+
 
   it("POST /v1/me/playlists/:id/episodes 公开节目 → 添加（重复幂等 added=false）", async () => {
     const addEpisode = vi.fn(async () => ({ added: false }));

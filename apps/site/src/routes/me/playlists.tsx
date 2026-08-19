@@ -22,6 +22,8 @@ interface MyPlaylist {
   updatedAt: string;
   episodeCount: number;
   contains: boolean;
+  /** 系统内置「我的收藏」默认列表（不可编辑/删除/改公开） */
+  isDefault: boolean;
 }
 
 interface PlaylistEpRow {
@@ -244,8 +246,13 @@ export default function MePlaylistsPage() {
                 {(pl) => (
                   <div {...stylex.props(layouts.fullRow, styles.card)}>
                     <div {...stylex.props(styles.cardHead)}>
-                      <h3 {...stylex.props(styles.cardTitle)}>{pl.title}</h3>
-                      <span {...stylex.props(styles.badge)}>{pl.isPublic ? t("playlist.public") : t("playlist.private")}</span>
+                      <h3 {...stylex.props(styles.cardTitle)}>{pl.isDefault ? t("me.favorites") : pl.title}</h3>
+                      <Show when={pl.isDefault}>
+                        <span {...stylex.props(styles.badge)}>{t("me.favorites")}</span>
+                      </Show>
+                      <Show when={!pl.isDefault}>
+                        <span {...stylex.props(styles.badge)}>{pl.isPublic ? t("playlist.public") : t("playlist.private")}</span>
+                      </Show>
                     </div>
                     <p {...stylex.props(styles.meta)}>
                       {t("playlists.episodeCount", { count: pl.episodeCount })}
@@ -255,11 +262,13 @@ export default function MePlaylistsPage() {
                       <button type="button" {...stylex.props(styles.actionBtn)} onClick={() => toggleExpand(pl)}>
                         {expandedId() === pl.id ? t("common.cancel") : t("playlist.episodes")}
                       </button>
-                      <button type="button" {...stylex.props(styles.actionBtn)} onClick={() => startEdit(pl)}>{t("playlist.edit")}</button>
-                      <button type="button" {...stylex.props(styles.actionBtn)} onClick={() => share(pl)} disabled={!pl.isPublic}>
-                        {copiedSlug() === pl.slug ? t("playlist.copied") : t("playlist.share")}
-                      </button>
-                      <button type="button" {...stylex.props(styles.actionBtn, styles.dangerBtn)} onClick={() => remove(pl)}>{t("playlist.delete")}</button>
+                      <Show when={!pl.isDefault}>
+                        <button type="button" {...stylex.props(styles.actionBtn)} onClick={() => startEdit(pl)}>{t("playlist.edit")}</button>
+                        <button type="button" {...stylex.props(styles.actionBtn)} onClick={() => share(pl)} disabled={!pl.isPublic}>
+                          {copiedSlug() === pl.slug ? t("playlist.copied") : t("playlist.share")}
+                        </button>
+                        <button type="button" {...stylex.props(styles.actionBtn, styles.dangerBtn)} onClick={() => remove(pl)}>{t("playlist.delete")}</button>
+                      </Show>
                     </div>
 
                     {/* 编辑态 */}

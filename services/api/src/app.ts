@@ -213,7 +213,7 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
     }
   });
 
-  // 播放/完播上报 + 统计读取（公开播放器；仅已发布公开节目）。
+  // 播放/完播上报 + 统计读取（公开播放器；仅已发布公开节目）——0036 恢复展示。
   // 鉴权策略：免登录（未登录听众也计入，保证统计口径）；防刷 = 前端 session 级去重
   // + 服务端同 IP 同节目 5 分钟窗口限频（内存表；服务重启清空可接受，防 curl 连刷）
   const statCooldown = new Map<string, number>();
@@ -253,7 +253,7 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
     path: "/v1/public/episodes/:id/stats",
     request: { params: IdParam },
     responses: {
-      200: { content: { "application/json": { schema: z.any() } }, description: "播放/完播/点赞/收藏计数" },
+      200: { content: { "application/json": { schema: z.any() } }, description: "播放/完播/点赞计数" },
       404: { content: { "application/json": { schema: ErrorResp } }, description: "节目不存在" },
     },
   });

@@ -100,12 +100,12 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
   const ep = () => props.episode;
   const hostName = () => ep().callName ?? ep().displayName ?? ep().username;
   const [showTranscript, setShowTranscript] = createSignal(false);
-  // 播放/完播统计：createResource（内置 loading/error），组件级独立加载，不阻塞页面主体
+  // 播放/完播统计（0036 恢复）：createResource 独立加载；likes 计数由 InteractButtons 复用 stats
   const [stats] = createResource(
     () => ep().id,
     async (id) => {
       const r = await fetch(`${apiBaseForFetch}/v1/public/episodes/${id}/stats`);
-      return r.ok ? ((await r.json()) as { plays: number; completions: number; likes?: number; favorites?: number }) : null;
+      return r.ok ? ((await r.json()) as { plays: number; completions: number; likes?: number }) : null;
     },
   );
   // 收录于哪些公开播放列表（「收录于」反查——服务端函数 RPC）
@@ -123,7 +123,7 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
           return `${hostName()} · ${pub ? new Date(pub).toLocaleDateString("zh-CN") : ""}${ep().durationSeconds ? ` · ${fmtDuration(ep().durationSeconds)}` : ""}`;
         })()}
       </p>
-      {/* 统计行：组件级骨架（加载中灰条，独立于页面主体） */}
+      {/* 统计行：播放/完播次数（组件级骨架；0036 恢复） */}
       <Show when={!stats.loading} fallback={<span {...stylex.props(styles.statsSkeleton)} />}>
         <Show when={stats()}>
           <p {...stylex.props(styles.meta)}>
@@ -131,7 +131,6 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
           </p>
         </Show>
       </Show>
-      {/* 统计行已请求同一 stats 端点：like/fav 计数直接复用，避免重复请求 */}
       <InteractButtons episodeId={ep().id} counts={stats()} />
       <div style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
         <AddToPlaylist episodeId={ep().id} />

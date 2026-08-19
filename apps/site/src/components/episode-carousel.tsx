@@ -261,24 +261,12 @@ export function EpisodeCarousel(props: {
   const pageItems = (i: number) => props.episodes!.slice(i * PAGE_SIZE, (i + 1) * PAGE_SIZE);
   const curPage = () => Math.max(0, Math.min(page(), pageCount() - 1));
 
-  // ---- 滑动切换（触摸/拖动 + macOS 触控板 wheel）：横向手势跟随/累积，超阈值翻页 ----
+  // ---- 拖动切换（触摸/鼠标指针拖动）：横向手势跟随/累积，超阈值翻页 ----
   const SWIPE_THRESHOLD = 80; // px：超过才切换
   let paneRefs: (HTMLDivElement | undefined)[] = [];
   let dragStartX = 0;
   let dragging = false;
   let moved = false; // 是否已确认为拖动（超过 8px 才开始捕获指针/移动内容）
-  // 触控板横向滚动（wheel deltaX）累积翻页；一次手势最多翻一屏：
-  // 事件间隔超过 GESTURE_GAP_MS 视为新手势（重置累积与翻页标记）——
-  // 大幅横扫的惯性事件流（连续触发）不会连续翻页
-  // 触控板横向滚动（wheel deltaX）累积翻页；单次手势最多翻一屏：
-  // 手势边界 = 事件流停顿（间隔 ≥ GESTURE_GAP 判定新手势，重置累积与翻页标记）。
-  // 所有事件都刷新时间戳：惯性是连续事件流（间隔 8-16ms）永远不触发边界 → 不连翻；
-  // 停顿后（无论多久）再滑必然触发边界 → 立即生效
-  let wheelAccum = 0;
-  let wheelLastTs = 0;
-  let wheelGestured = false; // 当前手势是否已翻页
-  const WHEEL_GESTURE_GAP_MS = 50;
-
   // 拖动中：所有屏统一加 delta 偏移（跟随手指）
   const applyDrag = (delta: number) => {
     for (let i = 0; i < paneRefs.length; i++) {
@@ -341,37 +329,6 @@ export function EpisodeCarousel(props: {
       viewport.addEventListener("click", swallow, true);
     }
   };
-  // macOS 触控板横扫 / 鼠标横向滚轮：wheel deltaX 累积，超阈值翻页（纵向滚动不拦截）。
-  // 单次手势最多一屏：事件流停顿（GESTURE_GAP）即新手势边界
-  const onWheel = (e: WheelEvent) => {
-    if (pageCount() <= 1) return;
-    if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) return; // 纵向意图（页面滚动）→ 放行
-    const now = Date.now();
-    if (now - wheelLastTs >= WHEEL_GESTURE_GAP_MS) {
-      wheelAccum = 0;
-      wheelGestured = false; // 事件流停顿 → 新手势（重置累积与翻页标记）
-    }
-    wheelLastTs = now; // 每次事件都刷新：惯性连续流不触发边界 → 不连翻
-    if (wheelGestured) return; // 本次手势已翻页：后续（惯性）忽略
-    wheelAccum += e.deltaX;
-    const canPrev = curPage() > 0;
-    const canNext = curPage() < pageCount() - 1;
-    if (Math.abs(wheelAccum) >= SWIPE_THRESHOLD) {
-      // 横扫方向与拖动一致：从右往左滑（deltaX 正）→ 下一页；从左往右滑（deltaX 负）→ 上一页
-      if (wheelAccum > 0 && canNext) {
-        setPage(curPage() + 1);
-        wheelAccum = 0;
-        wheelGestured = true;
-      } else if (wheelAccum < 0 && canPrev) {
-        setPage(curPage() - 1);
-        wheelAccum = 0;
-        wheelGestured = true;
-      } else {
-        wheelAccum = 0; // 边界：重置
-      }
-    }
-    e.preventDefault(); // 阻止页面横向滚动（横向意图归本组件）
-  };
   // 阻止原生拖拽（拖卡片图片会触发浏览器 drag ghost，打断 pointer 拖动）
   const onDragStart = (e: DragEvent) => {
     if (pageCount() > 1) e.preventDefault();
@@ -404,14 +361,13 @@ export function EpisodeCarousel(props: {
         }
       >
         {/* 滚屏：屏们重叠在同一行，各自 translateX 平移（当前屏居中，相邻屏从两侧滑入）。
-            视口承载滑动手势（触摸/拖动）；卡片点击（进详情）由拖动距离判定不误触 */}
+            视口承载拖动翻屏手势（触摸/鼠标指针拖动）；卡片点击（进详情）由拖动距离判定不误触 */}
         <div
           {...stylex.props(styles.viewport)}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerEnd}
           onPointerCancel={onPointerEnd}
-          onWheel={onWheel}
           onDragStart={onDragStart}
         >
           <For each={pageIndexes()}>

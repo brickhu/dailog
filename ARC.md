@@ -73,9 +73,9 @@ published + 期号 max+1）→ 投稿人收到通知（站内 + 邮件）。内�
 | `GET/POST /v1/me/voice-sample`、`GET /v1/me/voice-sample/audio` | ✓ | 声音采样上传/回读/试听（R2） |
 | `GET/PATCH /v1/me/profile`、`PATCH /v1/me/persona` | ✓ | 账号档案 + 主持人默认人设 |
 | `GET /v1/me/notifications*` | ✓ | 站内通知（拒审/上线） |
-| `POST/DELETE /v1/episodes/:id/favorite\|like`、`GET /v1/episodes/:id/interactions`、`GET /v1/me/favorites` | ✓ | 消费端互动（toggle 返回最新计数；interactions = 当前用户状态，未登录 401 → 客户端跳登录） |
+| `POST/DELETE /v1/episodes/:id/like`、`GET /v1/episodes/:id/interactions` | ✓ | 消费端互动（简化版 0034）：仅点赞 toggle（返回最新计数）+ interactions 合并返回点赞状态与计数；收藏已移除（由「加入播放列表」+ 默认列表覆盖） |
 | `GET /v1/public/episodes/:id/audio\|cover` | — | 公开播放（仅 published + is_public；音频 ETag 缓存） |
-| `GET /v1/public/episodes/:id/stats`、`POST /v1/public/episodes/:id/stats/:type` | — | 播放/完播统计（播放器上报）+ **点赞/收藏计数**（实时 COUNT，详情页按钮展示） |
+| `GET /v1/public/episodes/:id/stats`、`POST /v1/public/episodes/:id/stats/:type` | — | 播放/完播统计（0036 恢复展示：详情页播放/完播次数 + 点赞计数；播放器上报 + 限频） |
 | `GET /v1/public/episodes/recommended` | — | 推荐队列（热度分排序 + 语言优先；首页滚屏每屏 4 条 × 最多 5 屏 / 发现页） |
 | `GET /v1/public/playlists`、`GET /v1/public/playlists/:slug` | — | **播放列表**（0032）：平台公开列表索引（`?lang=zh|en` 语言偏好优先 + 精选优先，不足自然回退；附节目数与首期封面）+ 详情（仅公开节目，position 排序） |
 | `POST/GET/PATCH/DELETE /v1/me/playlists`、`/v1/me/playlists/:id` | ✓ | **我的播放列表**：创建（kind=user）/ 列表（含私有，?contains= 附带收录标记）/ 编辑 / 删除（归属校验 404） |
@@ -105,7 +105,8 @@ published + 期号 max+1）→ 投稿人收到通知（站内 + 邮件）。内�
 | `profiles` | `id`(=auth.users), `display_name`, `bio`, `persona`(JSONB) | 主持人档案（账号级属性在 user 表：`name`=@slug、`role`(user/editor/admin)、`image`） |
 | `notifications` | `user_id`, `type`(rejected/published), `title`, `body`, `link` | 站内通知（拒审/上线） |
 | `favorites` / `likes` | `user_id`, `episode_id` | 消费端互动 |
-| `playlists` | `slug`(唯一), `kind`(platform/user), `owner_id`, `title`, `description`, `cover_url`, `is_public`, `is_picked`, `language` | **播放列表**（0032）：平台策展（编辑创建，精选标记）/ 用户自建（公开可分享）；封面 = 编辑自定义上传（R2 covers/playlists/，无则自动取首期节目封面） |
+| `playlists` | `slug`(唯一), `kind`(platform/user), `owner_id`, `title`, `description`, `cover_url`, `is_public`, `is_picked`, `is_default`, `language` | **播放列表**（0032；0033/0035）：平台策展（编辑创建，精选标记）/ 用户自建（公开可分享）+ **每个用户一个 is_default「我的收藏」默认列表**（Spotify 式，强制私有、不可编辑/删除）；封面 = 编辑自定义上传（无则自动取首期节目封面） |
+| ~~`favorites`~~ / `episode_stats` | — | 收藏表已移除（0033，并入默认播放列表）；`episode_stats` 播放/完播统计保留（0036 恢复）；`likes` 保留 |
 | `playlist_episodes` | `playlist_id`+ `episode_id`(唯一), `position` | **列表条目**（有序集合）：删列表/删节目级联清理；索引 (playlist_id, position) 顺序读 + (episode_id) 反查「收录于」 |
 | auth 表（`user`/`session`/`account`/`verification`） | better-auth 官方字段 | 认证 |
 

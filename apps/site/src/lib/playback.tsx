@@ -68,7 +68,7 @@ const COMPLETE_RATIO = 0.95;
 // 清缓冲并置 audioError（否则 spinner 无限转 = 用户看到"一直 loading"）
 const BUFFERING_TIMEOUT_MS = 10_000;
 
-/** 统计上报（每 session 每期每事件一次；sessionStorage 去重——隐私模式静默） */
+/** 统计上报（0036 恢复；每 session 每期每事件一次；sessionStorage 去重——隐私模式静默） */
 function reportStat(id: string, type: "play" | "completion") {
   const key = `dailog-stat-${id}-${type}`;
   try {
@@ -279,7 +279,7 @@ export function PlaybackProvider(props: ParentProps) {
     const onTime = () => {
       setProgress(a.currentTime);
       setDuration(a.duration || 0);
-      // 完播判定（进度 ≥95%，ended 之外的保险；reportStat 内部 session 去重）
+      // 完播判定（进度 ≥95%，ended 之外的保险；统计上报 session 去重）
       if (a.duration > 0 && a.currentTime / a.duration >= COMPLETE_RATIO) {
         const ep = current();
         if (ep) reportStat(ep.id, "completion");

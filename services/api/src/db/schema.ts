@@ -217,7 +217,7 @@ export const episodes = pgTable("episodes", {
   publishedAt: timestamp("published_at", { withTimezone: true }),
 });
 
-/** 播放/完播统计（每期一行计数；公开播放器上报，前端 session 级去重防刷） */
+/** 播放/完播统计（每期一行计数；公开播放器上报，前端 session 级去重防刷）——0036 恢复展示 */
 export const episodeStats = pgTable("episode_stats", {
   episodeId: uuid("episode_id").primaryKey().references(() => episodes.id, { onDelete: "cascade" }),
   plays: integer("plays").notNull().default(0),
@@ -225,18 +225,8 @@ export const episodeStats = pgTable("episode_stats", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// 消费端互动：user_id 引用 better-auth user（未登录用户不能收藏/点赞）
-export const favorites = pgTable(
-  "favorites",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
-    episodeId: uuid("episode_id").notNull().references(() => episodes.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [uniqueIndex("favorites_user_episode").on(t.userId, t.episodeId)],
-);
-
+// 消费端互动：收藏已并入默认播放列表（0033，playlist_episodes + playlists.is_default）；
+// 点赞保留独立表（情感互动，与收藏不重叠）。user_id 引用 better-auth user（未登录不能点赞）。
 export const likes = pgTable(
   "likes",
   {
@@ -269,6 +259,9 @@ export const playlists = pgTable("playlists", {
   isPublic: boolean("is_public").notNull().default(true),
   /** 平台精选标记（首页/发现页列表区优先露出） */
   isPicked: boolean("is_picked").notNull().default(false),
+  /** 系统内置默认列表（Spotify「Liked Songs」式，0033 引入 / 0035 恢复）：每个用户一个「我的收藏」，
+   *  强制私有、不可编辑/删除/重排；节目经「加入播放列表」加入；独立收藏按钮与统计已移除（0034） */
+  isDefault: boolean("is_default").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

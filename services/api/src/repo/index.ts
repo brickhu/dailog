@@ -163,21 +163,20 @@ export interface EpisodesRepo {
     displayName: string;
     callName: string | null;
   } | null>;
-  /** 播放/完播计数 +1（upsert；公开播放器上报） */
+  /** 播放/完播计数 +1（upsert；公开播放器上报）——0036 恢复 */
   recordStat(episodeId: string, type: "play" | "completion"): Promise<void>;
-  /** 公开读取播放/完播/点赞/收藏统计（未统计过 → 0；like/favorite 计数实时 COUNT） */
-  getStats(episodeId: string): Promise<{ plays: number; completions: number; likes: number; favorites: number }>;
+  /** 公开读取播放/完播/点赞统计（未统计过 → 0；like 计数实时 COUNT）——0036 恢复 */
+  getStats(episodeId: string): Promise<{ plays: number; completions: number; likes: number }>;
   /** 站点头部数据（公开）：主播数/嘉宾数/节目期数/最热主播——首页宣传语用 */
   getSiteStats(): Promise<{ hostCount: number; guestCount: number; episodeCount: number; topHost: string | null; topHostAvatar: string | null; topTags: string[] }>;
-  /** 热门主播（公开）：按节目播放总量 + 期数排序（个人主页入口展示） */
+  /** 热门主播（公开）：按期数排序（0034 起不含播放统计；个人主页入口展示） */
   listTopHosts(limit?: number): Promise<Array<{
     username: string;
     displayName: string;
     avatar: string | null;
     episodeCount: number;
-    totalPlays: number;
   }>>;
-  /** 推荐队列（公开）：热度分排序；lang 匹配加分、exclude 排除已看 */
+  /** 推荐队列（公开）：新鲜度 + 精选 + 语言偏好排序（0034 起不含播放统计）；exclude 排除已看 */
   listRecommended(opts?: { lang?: string; limit?: number; exclude?: string[] }): Promise<Array<{
     id: string;
     slug: string;
@@ -192,10 +191,6 @@ export interface EpisodesRepo {
     username: string;
     displayName: string;
     callName: string | null;
-    plays: number;
-    completions: number;
-    likes: number;
-    favorites: number;
   }>>;
   /** 编辑端节目详情（无归属校验） */
   getById(id: string): Promise<{
@@ -313,6 +308,8 @@ export interface PlaylistRow {
   language: string;
   isPublic: boolean;
   isPicked: boolean;
+  /** 系统内置默认列表（每个用户一个「我的收藏」；强制私有、不可编辑/删除/重排） */
+  isDefault: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -361,6 +358,8 @@ export interface PlaylistsRepo {
   update(id: string, row: { title?: string; description?: string | null; isPublic?: boolean; isPicked?: boolean; language?: string; coverUrl?: string | null }): Promise<void>;
   /** 公开读列表封面（公开播放列表的 cover_url；不存在/未公开 → null）——公开封面端点用 */
   getPublicCover(playlistId: string): Promise<string | null>;
+  /** 用户默认列表（「我的收藏」）：不存在则创建（kind=user + is_default + 强制私有）——每个用户自动拥有 */
+  getOrCreateDefault(userId: string): Promise<{ id: string }>;
   /** 删除列表（级联清条目） */
   remove(id: string): Promise<void>;
   /** 列表节目（含 position；publicOnly=true 只留已发布公开节目——私有列表归属人可见全部） */
@@ -951,7 +950,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         )).limit(1);
         return byId[0] ?? null;
       },
-      /** 播放/完播计数 +1（upsert 行；仅已发布公开节目——调用方先校验存在） */
+      /** 播放/完播计数 +1（upsert 行；仅已发布公开节目——调用方先校验存在）——0036 恢复 */
       async recordStat(episodeId, type: "play" | "completion") {
         await db.insert(schema.episodeStats).values({
           episodeId,
@@ -966,22 +965,20 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           },
         });
       },
-      /** 公开读取播放/完播/点赞/收藏统计（未统计过 → 0） */
+      /** 公开读取播放/完播/点赞统计（未统计过 → 0）——0036 恢复 */
       async getStats(episodeId) {
-        const [stats, like, fav] = await Promise.all([
+        const [stats, like] = await Promise.all([
           db
             .select({ plays: schema.episodeStats.plays, completions: schema.episodeStats.completions })
             .from(schema.episodeStats)
             .where(eq(schema.episodeStats.episodeId, episodeId))
             .limit(1),
           db.select({ n: count() }).from(schema.likes).where(eq(schema.likes.episodeId, episodeId)),
-          db.select({ n: count() }).from(schema.favorites).where(eq(schema.favorites.episodeId, episodeId)),
         ]);
         return {
           plays: stats[0]?.plays ?? 0,
           completions: stats[0]?.completions ?? 0,
           likes: like[0]?.n ?? 0,
-          favorites: fav[0]?.n ?? 0,
         };
       },
       /** 站点头部数据：主播/嘉宾/节目计数 + 最热主播 */
@@ -1013,7 +1010,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           topTags,
         };
       },
-      /** 热门主播：按节目播放总量 + 期数排序 */
+      /** 热门主播：按期数排序（0034 起不含播放统计） */
       async listTopHosts(limit = 8) {
         const rows = await db
           .select({
@@ -1021,19 +1018,17 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             displayName: schema.profiles.displayName,
             avatar: schema.authUsers.image,
             episodeCount: sql<number>`count(DISTINCT ${schema.episodes.id})::int`,
-            totalPlays: sql<number>`COALESCE(sum(${schema.episodeStats.plays}), 0)::int`,
           })
           .from(schema.episodes)
           .innerJoin(schema.profiles, eq(schema.profiles.id, schema.episodes.userId))
           .innerJoin(schema.authUsers, eq(schema.authUsers.id, schema.profiles.id))
-          .leftJoin(schema.episodeStats, eq(schema.episodeStats.episodeId, schema.episodes.id))
           .where(and(eq(schema.episodes.status, "published"), eq(schema.episodes.isPublic, true)))
           .groupBy(schema.authUsers.name, schema.profiles.displayName, schema.authUsers.image)
-          .orderBy(desc(sql`COALESCE(sum(${schema.episodeStats.plays}), 0)`), desc(sql`count(DISTINCT ${schema.episodes.id})`))
+          .orderBy(desc(sql`count(DISTINCT ${schema.episodes.id})`))
           .limit(Math.min(limit, 20));
         return rows;
       },
-      /** 推荐队列（抖音流/首页播放器用）：完播率/互动率/新鲜度/精选 加权热度分。
+      /** 推荐队列（抖音流/首页播放器用）：新鲜度 + 精选 + 语言偏好 加权（0034 起不含播放统计）。
        *  lang 匹配加分（不足时自然 fallback 其他语言）；exclude 排除已播/已看节目。 */
       async listRecommended(opts: { lang?: string; limit?: number; exclude?: string[] } = {}) {
         const rows = await db
@@ -1051,16 +1046,11 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             username: schema.authUsers.name,
             displayName: schema.profiles.displayName,
             callName: schema.submissions.callName,
-            plays: sql<number>`COALESCE(${schema.episodeStats.plays}, 0)`,
-            completions: sql<number>`COALESCE(${schema.episodeStats.completions}, 0)`,
-            likes: sql<number>`(SELECT count(*) FROM ${schema.likes} l WHERE l.episode_id = ${schema.episodes.id})`,
-            favorites: sql<number>`(SELECT count(*) FROM ${schema.favorites} f WHERE f.episode_id = ${schema.episodes.id})`,
           })
           .from(schema.episodes)
           .innerJoin(schema.submissions, eq(schema.submissions.id, schema.episodes.submissionId))
           .innerJoin(schema.profiles, eq(schema.profiles.id, schema.episodes.userId))
           .innerJoin(schema.authUsers, eq(schema.authUsers.id, schema.profiles.id))
-          .leftJoin(schema.episodeStats, eq(schema.episodeStats.episodeId, schema.episodes.id))
           .where(and(
             eq(schema.episodes.status, "published"),
             eq(schema.episodes.isPublic, true),
@@ -1072,16 +1062,11 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         const now = Date.now();
         const scored = rows
           .map((r) => {
-            const plays = r.plays;
-            // 热度分：完播率为主信号，互动率次之，新鲜度衰减，精选加权，语言匹配加分
-            const completionRate = plays > 0 ? r.completions / plays : 0;
-            const likeRate = plays > 0 ? r.likes / plays : 0;
-            const favoriteRate = plays > 0 ? r.favorites / plays : 0;
+            // 热度分（0034 简化）：新鲜度为主 + 精选加权 + 语言偏好（播放/完播统计已移除）
             const days = Math.max(0, (now - (r.publishedAt ?? new Date(0)).getTime()) / 86_400_000);
             const recency = 1 / (1 + days / 30);
             const langBoost = lang && r.language === lang ? 0.3 : 0;
-            const score = completionRate * 0.4 + likeRate * 0.15 + favoriteRate * 0.15 + recency * 0.2
-              + (r.isPicked ? 0.1 : 0) + langBoost;
+            const score = recency * 0.6 + (r.isPicked ? 0.2 : 0) + langBoost;
             return { ...r, score };
           })
           .sort((a, b) => b.score - a.score);
@@ -1405,6 +1390,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           language: schema.playlists.language,
           isPublic: schema.playlists.isPublic,
           isPicked: schema.playlists.isPicked,
+          isDefault: schema.playlists.isDefault,
           createdAt: schema.playlists.createdAt,
           updatedAt: schema.playlists.updatedAt,
           episodeCount: sql<number>`(
@@ -1452,6 +1438,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           language: schema.playlists.language,
           isPublic: schema.playlists.isPublic,
           isPicked: schema.playlists.isPicked,
+          isDefault: schema.playlists.isDefault,
           createdAt: schema.playlists.createdAt,
           updatedAt: schema.playlists.updatedAt,
           episodeCount: sql<number>`(
@@ -1491,6 +1478,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             language: schema.playlists.language,
             isPublic: schema.playlists.isPublic,
             isPicked: schema.playlists.isPicked,
+            isDefault: schema.playlists.isDefault,
             createdAt: schema.playlists.createdAt,
             updatedAt: schema.playlists.updatedAt,
           })
@@ -1515,6 +1503,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             language: schema.playlists.language,
             isPublic: schema.playlists.isPublic,
             isPicked: schema.playlists.isPicked,
+            isDefault: schema.playlists.isDefault,
             createdAt: schema.playlists.createdAt,
             updatedAt: schema.playlists.updatedAt,
           })
@@ -1535,6 +1524,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           language: schema.playlists.language,
           isPublic: schema.playlists.isPublic,
           isPicked: schema.playlists.isPicked,
+          isDefault: schema.playlists.isDefault,
           createdAt: schema.playlists.createdAt,
           updatedAt: schema.playlists.updatedAt,
           episodeCount: sql<number>`(
@@ -1573,6 +1563,39 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .where(and(eq(schema.playlists.id, playlistId), eq(schema.playlists.isPublic, true)))
           .limit(1);
         return rows[0]?.coverUrl ?? null;
+      },
+      /** 用户默认列表（「我的收藏」）：slug = 'favorites-' + userId 确定性；不存在则创建 */
+      async getOrCreateDefault(userId) {
+        const rows = await db
+          .select({ id: schema.playlists.id })
+          .from(schema.playlists)
+          .where(and(eq(schema.playlists.ownerId, userId), eq(schema.playlists.isDefault, true)))
+          .limit(1);
+        if (rows[0]) return { id: rows[0].id };
+        // 竞态兜底：并发首访时唯一约束 slug 冲突 → 重查
+        try {
+          const inserted = await db.insert(schema.playlists).values({
+            slug: `favorites-${userId}`,
+            kind: "user",
+            ownerId: userId,
+            title: "我的收藏",
+            language: "zh",
+            isPublic: false, // 默认列表强制私有
+            isPicked: false,
+            isDefault: true,
+          }).returning({ id: schema.playlists.id });
+          return { id: inserted[0].id };
+        } catch (err) {
+          if (isUniqueViolation(err)) {
+            const again = await db
+              .select({ id: schema.playlists.id })
+              .from(schema.playlists)
+              .where(and(eq(schema.playlists.ownerId, userId), eq(schema.playlists.isDefault, true)))
+              .limit(1);
+            if (again[0]) return { id: again[0].id };
+          }
+          throw err;
+        }
       },
       async remove(id) {
         await db.delete(schema.playlists).where(eq(schema.playlists.id, id));

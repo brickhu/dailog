@@ -108,6 +108,7 @@ const styles = stylex.create({
   progress: {
     display : "flex",
     alignItems: "center",
+    justifyContent: "flex-end",
     order: 3,
     gap: dimensions.spacing4,
     flex: 1,
@@ -122,6 +123,8 @@ const styles = stylex.create({
   },
   slider: {
     flex: 1,
+    maxWidth: "360px",
+    minWidth: "36px"
   }
 });
 

@@ -67,11 +67,11 @@ function fakeRepo(): AppDeps["repo"] {
       syncAdminRoles: async () => 0,
       listByUser: async () => [],
       setPublic: async () => 0,
-      recordStat: async () => {},
-      getStats: async () => ({ plays: 0, completions: 0, likes: 0, favorites: 0 }),
-      listRecommended: async () => [],
+                  listRecommended: async () => [],
       listTopHosts: async () => [],
       getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),
+      recordStat: async () => {},
+      getStats: async () => ({ plays: 0, completions: 0, likes: 0 }),
       getPersonaSnapshot: async () => ({ displayName: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
     },
   };
@@ -129,10 +129,8 @@ describe.skipIf(!hasDb)("auth (better-auth, real local PG)", () => {
       },
       favorites: {
         getPublishableEpisode: async () => null,
-        toggleFavorite: async () => ({ favorited: true, favorites: 0 }),
-        toggleLike: async () => ({ liked: true, likes: 0 }),
-        listFavorites: async () => [],
-      getInteractions: async () => ({ liked: false, favorited: false }),
+                toggleLike: async () => ({ liked: true, likes: 0 }),
+              getInteractions: async () => ({ liked: false, likes: 0 }),
       },
     });
   });
