@@ -1,19 +1,28 @@
 // 全局播放条（贯通全站）：底部常驻——封面缩略 + 标题 + 上一期/播放/暂停/下一期 + 进度条（可拖动）。
 // 数据来自 PlaybackContext（队列/连播/统计上报/预加载均在此层）；点标题进详情页。
+// 出现方式：DOM 全程常驻（不卸载），未激活（尚未开始播放）时 visibility:hidden +
+// translateY 平移到页面最底部之外；用户触发播放（play/toggle）后滑入底部——纯 CSS
+// transition 实现，避免 display:none 式条件渲染造成的突兀出现。
 import { Show, onCleanup, onMount } from "solid-js";
 import { A } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { colors, dimensions, typography,global, shadows } from "@dailogues/ui/theme.stylex";
+import { colors, dimensions, typography, shadows, easings } from "@dailogues/ui/theme.stylex";
 import { episodeCoverUrl } from "../lib/env";
 import { usePlayback } from "../lib/playback";
 import { Icon,Button,Slider } from "@dailogues/ui";
 
-// 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
+// 断点标签（与 theme.stylex.ts 的 DESKTOP 同值——stylex babel 插件不支持
 // 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
 const DESKTOP = "@media (width >= 1024px)";
-const TABLET = "@media (640px <= width < 1024px)";
 
 const styles = stylex.create({
+  // 未激活（尚未开始播放）：DOM 常驻不卸载，但 visibility:hidden 且沿 Y 轴平移到
+  // 页面最底部之外（translateY 100% + 底部偏移）——不可见、不占交互；用户触发播放后
+  // 叠加 barVisible，由 transform transition 从底部滑入，替代原先 Show 条件渲染的突兀出现。
+  // 底部安全区（iOS 刘海/Home Indicator）：env() 不可用时回退 0（桌面/WebView 不受影响）。
+  // 关键：不要在 calc() 里直接嵌套 env()（webkit bug 190771：safe-area env 值并非始终可用，
+  // 嵌套失效会让整个 calc() 无效 → bottom 被丢弃 → bottom:auto → fixed 元素回落到页面顶部）。
+  // 统一经 app.css 的 --dailog-safe-bottom 中转 + var() fallback 兜底。
   bar: {
     position: "fixed",
     borderColor: colors.surfaceStrong,
@@ -21,10 +30,19 @@ const styles = stylex.create({
     borderWidth: `1px 1px 1px 1px`,
     left: dimensions.spacing3,
     right: dimensions.spacing3,
-    bottom: `calc(${dimensions.spacing3}+env(safe-area-inset-bottom))`,
+    bottom: `calc(${dimensions.spacing3} + var(--dailog-safe-bottom, 0px))`,
     borderRadius: dimensions.radiusLg,
     padding: `${dimensions.spacing3} ${dimensions.spacing3}`,
     flexWrap: "wrap",
+    // 隐藏态：不可见 + 移出视口；过渡同时声明 transform（滑入/滑出）与 visibility
+    // （visible 立即可见；hidden 延迟到 400ms 滑出结束后再隐藏，保证退出动画可见）。
+    // 注意：transform 不在 [DESKTOP] 里覆盖——stylex 的 media query 会编译成双类选择器
+    // （.x.y.x.y）提高特异性，会压过激活态 barVisible 的 translateY(0)，导致激活后播放条
+    // 仍留在视口外。统一用 base 的 100%+偏移（桌面 bottom:0 时 100% 同样完全出视口）
+    visibility: "hidden",
+    transform: `translateY(calc(100% + ${dimensions.spacing3} + var(--dailog-safe-bottom, 0px)))`,
+    transition: `transform 400ms ${easings.easeOut}, visibility 0s linear 400ms`,
+    pointerEvents: "none",
     [DESKTOP]: {
       left: "0",
       right: "0",
@@ -34,6 +52,9 @@ const styles = stylex.create({
       padding: `${dimensions.spacing2} ${dimensions.spacing3}`,
       gap: dimensions.spacing8,
       flexWrap: "nowrap"
+    },
+    "@media (prefers-reduced-motion: reduce)": {
+      transition: "none"
     },
     zIndex: 50,
     display: "flex",
@@ -45,6 +66,16 @@ const styles = stylex.create({
     WebkitBackdropFilter: "blur(24px)",
     color: colors.onSurfaceWeak,
     filter: `drop-shadow(${shadows.shadowLow})`
+  },
+  // 激活态（已开始播放）：从页面底部滑入（transform 100% → 0）；visibility 立即转为可见
+  barVisible: {
+    visibility: "visible",
+    transform: "translateY(0)",
+    transition: `transform 400ms ${easings.easeOut}, visibility 0s`,
+    pointerEvents: "auto",
+    "@media (prefers-reduced-motion: reduce)": {
+      transition: "none"
+    }
   },
   cover: {
     width: dimensions.sizeLg,
@@ -182,9 +213,13 @@ export function PlayerBar() {
   });
 
   return (
-    <Show when={pb.activated() && ep()}>
-      <div {...stylex.props(styles.bar)}>
-        
+    // 播放条 DOM 常驻：未激活时叠加隐藏态（visibility:hidden + translateY 移出视口），
+    // 激活后叠加 barVisible 由底部滑入——不再用 Show 卸载导致突兀出现
+    <div
+      {...stylex.props(styles.bar, pb.activated() && ep() ? styles.barVisible : undefined)}
+    >
+      {/* 内容依赖当前节目：无节目时不渲染内部内容，但 bar 容器常驻（隐藏态） */}
+      <Show when={ep()}>
         <div {...stylex.props(styles.info)}>
           <A href={`/episode/${ep()!.slug}`}>
           <Show when={episodeCoverUrl(ep()!.id, ep()!.coverUrl)} fallback={<div {...stylex.props(styles.cover)}><Icon icon="iconoir:warning-triangle" width={16} {...stylex.props(styles.audioErrorIcon)}/></div>}>
@@ -255,8 +290,7 @@ export function PlayerBar() {
         <button {...stylex.props(styles.btn)} onClick={pb.next} aria-label="next">
           <Icon icon="iconoir:skip-next" />
         </button> */}
-        
-      </div>
-    </Show>
+        </Show>
+    </div>
   );
 }

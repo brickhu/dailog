@@ -17,9 +17,43 @@ if (!inOrb && process.env.NODE_ENV !== "production") {
   console.warn("[site] 非 orb 环境启动 dev——本地开发请用 pnpm dev:orb（OrbStack compose）");
 }
 
+// 构建守卫：CSS 产物 < 10KB 判定为空壳构建（stylex 构建期提取失败——SSR HTML 有类名、
+// CSS 只剩 app.css reset ~1.2KB，页面无组件样式）。直接中止构建，防止坏构建被部署：
+// dev 预览环境每次 push 自动部署，坏页一旦被 SW 缓存会在用户端永久卡死。
+const MIN_CSS_BYTES = 10 * 1024;
+function guardEmptyCss() {
+  return {
+    name: "guard-stylex-css",
+    apply: "build" as const,
+    writeBundle(_outputOptions: unknown, bundle: Record<string, { source?: unknown; code?: string }>) {
+      for (const [name, asset] of Object.entries(bundle)) {
+        if (!name.endsWith(".css")) continue;
+        const source = asset.source;
+        if (typeof source !== "string") continue;
+        const size = Buffer.byteLength(source, "utf8");
+        if (size < MIN_CSS_BYTES) {
+          throw new Error(
+            `[guard-stylex-css] CSS 空壳检测失败：${name} 仅 ${size}B（阈值 ${MIN_CSS_BYTES}B）。` +
+              "stylex 构建期提取未生效（app.config.ts 的 runtimeInjection 是否误开为 true？），构建中止以防坏部署。"
+          );
+        }
+      }
+    },
+  };
+}
+
 export default defineConfig({
   server: {
     preset: "cloudflare-pages",
+    // 缓存策略：动态响应（SSR HTML / /v1/* 代理）一律 no-cache——陈旧 HTML 是「坏页
+    // 卡死」的根因之一（HTML 无缓存头时浏览器/边缘缓存行为不可控）。/_build/assets/**
+    // 的 immutable 规则由 SolidStart 默认注入，此处经 defu 深合并共存；/sw.js 与
+    // manifest 的 no-cache 会由 nitro 生成进 _headers（静态文件侧生效）。
+    routeRules: {
+      "/**": { headers: { "cache-control": "no-cache" } },
+      "/sw.js": { headers: { "cache-control": "no-cache" } },
+      "/manifest.webmanifest": { headers: { "cache-control": "no-cache" } },
+    },
   },
   vite: {
     plugins: [
@@ -30,6 +64,8 @@ export default defineConfig({
         runtimeInjection: devRuntimeInjection,
         treeshakeCompensation: false,
       }),
+      // 构建守卫：生产 CSS 空壳（<10KB）直接构建失败（见上方 guardEmptyCss 注释）
+      guardEmptyCss(),
       // dev 下 unplugin 自动注入的 <link href="/_build/virtual:stylex.css"> 是坏链：
       // vinxi 的 base 前缀（/_build）使 unplugin dev 中间件（只匹配 /virtual:stylex.css）
       // 不命中，该请求落到 SSR 路由返回整页 HTML——每次加载浪费一次 SSR 渲染，且控制台

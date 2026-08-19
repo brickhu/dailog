@@ -3,6 +3,15 @@
   Merged from apps/site/src/app.css and the original main.css
 */
 
+/* iOS 安全区：env() 中转变量。iOS 部分版本（webkit bug 190771）中 safe-area env 值
+   并非始终可用——直接在 calc() 里嵌套 env() 会让整个表达式失效（bottom 被丢弃，
+   fixed 元素回落到静态位置 = 页面顶部）。这里先赋值给 CSS 变量，消费端用
+   var(--dailog-safe-bottom, 0px) 引用：env 不可用时变量无效 → fallback 0px，
+   calc() 保持有效；env 可用时取真实安全区值。 */
+:root {
+  --dailog-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /* 1. Box model and base reset */
 *, *::before, *::after {
   box-sizing: border-box;
