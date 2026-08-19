@@ -13,6 +13,7 @@ GridSpan 让一个网格项跨多列/多行，用于**瀑布流、仪表盘、�
 - **跨行**：`rows={N}` → `grid-row: span N`。行高由父 `Grid rowHeight` 决定（`grid-auto-rows`）——不设 `rowHeight` 时行高由内容撑开，跨行同样生效
 - **基础样式**：`minWidth: 0` 防止网格项溢出（图片/长内容默认 `min-width: auto`）；`display: grid` + `height: 100%` 让跨行条目填满整个单元格并拉伸子项（子项 `height: 100%` 生效）
 - 跨列/跨行走**内联样式**（调用方显式设定）；基础样式走 StyleX 类，可被 `xstyle` 覆盖
+- 跨列是**固定值**，不随断点变化：断点列数由父 `Grid` 决定，`GridSpan` 在窄屏可能「跨过头」（见「响应式跨列」）
 
 ## Props 接口
 

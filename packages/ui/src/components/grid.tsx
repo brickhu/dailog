@@ -15,6 +15,11 @@ import { type StyleXStyles } from "@stylexjs/stylex";
 import { dimensions } from "../theme.stylex";
 import { type SpacingStep } from "./dialog";
 
+// 断点常量：与 theme.stylex.const 保持同步（stylex 0.19 babel 插件不支持跨文件
+// 常量解析，同 theme.stylex.ts / skeleton.tsx 的本地定义惯例）
+const TABLET = "@media (640px <= width < 1024px)";
+const DESKTOP = "@media (width >= 1024px)";
+
 /** Grid 对齐选项（align-items / justify-items） */
 export type GridAlignment = "start" | "center" | "end" | "stretch";
 
@@ -25,13 +30,28 @@ export const GRID_MAX_COLUMNS = 12;
 export type GridColumnCount = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
 
 /**
+ * 断点列数（内置响应式）：
+ * - `base` — 手机默认列数（无媒体查询）
+ * - `tablet` — 平板（640–1024px）列数；缺省继承 base
+ * - `desktop` — 桌面（≥1024px）列数；缺省继承 tablet → base
+ * 列数均钳制到 1–12；各断点模板为固定等宽 repeat(N, 1fr)，@media 覆盖走
+ * StyleX 双类特异性，必然赢过 base 的 CSS 变量规则
+ */
+export interface GridBreakpoints {
+  base: GridColumnCount;
+  tablet?: GridColumnCount;
+  desktop?: GridColumnCount;
+}
+
+/**
  * 列配置：
  * - `GridColumnCount`（1–12）— 固定等宽列（如 columns={3}，最大 12）
- * - 对象 — 响应式列：
+ * - `{minWidth, max?, repeat?}` — 内容驱动响应式列：
  *   - `minWidth` — 每列轨道最小宽度（px）
  *   - `repeat` — 'fill'（默认）保留空轨道保持宽度一致；'fit' 折叠空轨道让条目拉伸
  *   - `max` — 封顶列数（1–12，超出钳制）。网格始终撑满父容器 100%，且实际存在的
  *     列总是填满整行——移动端塌缩成单列时拉伸到全宽（右侧无空白）
+ * - `GridBreakpoints` — 断点列数（见上）：`{base: 4, tablet: 8, desktop: 12}`
  */
 export type GridColumns =
   | GridColumnCount
@@ -39,7 +59,8 @@ export type GridColumns =
       minWidth: number;
       max?: GridColumnCount;
       repeat?: "fill" | "fit";
-    };
+    }
+  | GridBreakpoints;
 
 /** 运行时钳制到 [1, 12]：类型上保证不了动态值时也安全（含取整/兜底） */
 export function clampColumns(value: number): number {
@@ -103,6 +124,17 @@ const dynamicStyles = stylex.create({
   }),
   autoRows: (value: number) => ({
     gridAutoRows: `${value}px`,
+  }),
+});
+
+// 断点覆盖（内置响应式列数）：@media 内的 grid-template-columns 走动态样式——编译产物
+// 自带双类特异性（.x.y:not(#\#)，0,2,0），必赢 base 的 var(--x-gridTemplateColumns)（0,1,0）
+const breakpointStyles = stylex.create({
+  tabletCols: (value: string) => ({
+    [TABLET]: { gridTemplateColumns: value },
+  }),
+  desktopCols: (value: string) => ({
+    [DESKTOP]: { gridTemplateColumns: value },
   }),
 });
 
@@ -243,11 +275,27 @@ export function Grid(props: GridProps) {
   // 原生属性透传（id / data-* / aria-* / on* 等）：泛化为 Record 后展开
   const restProps = rest as Record<string, unknown>;
 
+  // 断点列数解析：desktop 缺省继承 tablet → base（向小断点继承，Chakra 风格语义）
+  const resolveBreakpoints = (): { base: number; tablet: number; desktop: number } | null => {
+    const columns = props.columns;
+    if (typeof columns !== "object" || columns == null || !("base" in columns)) {
+      return null;
+    }
+    const base = clampColumns(columns.base);
+    const tablet = clampColumns(columns.tablet ?? base);
+    const desktop = clampColumns(columns.desktop ?? tablet);
+    return { base, tablet, desktop };
+  };
+
   // 轨道模板：运行时字符串（动态样式 → CSS 变量间接层，xstyle/@media 可覆盖）
   const templateColumns = (): string => {
     const columns = props.columns;
     if (typeof columns === "object" && columns != null) {
-      // 响应式 API：columns={{minWidth, max?, repeat?}}
+      if ("base" in columns) {
+        // 断点 API：base 无媒体查询（tablet/desktop 由 breakpointStyles 覆盖）
+        return `repeat(${clampColumns(columns.base)}, 1fr)`;
+      }
+      // 内容驱动 API：columns={{minWidth, max?, repeat?}}
       const repeatMode = columns.repeat === "fit" ? "auto-fit" : "auto-fill";
 
       if (columns.max != null && columns.max > 0) {
@@ -295,11 +343,17 @@ export function Grid(props: GridProps) {
   const isAlign = (a: GridAlignment) => (props.align ?? null) === a;
   const isJustify = (a: GridAlignment) => (props.justify ?? null) === a;
 
-  const gridAttrs = () =>
-    stylex.props(
+  const gridAttrs = () => {
+    const bp = resolveBreakpoints();
+    return stylex.props(
       baseStyles.grid,
       dynamicStyles.templateColumns(templateColumns()),
       props.rowHeight != null && dynamicStyles.autoRows(props.rowHeight),
+      // 断点列数：tablet/desktop 覆盖（继承后与 base 不同才发射规则，@media 双类提权）
+      bp != null && bp.tablet !== bp.base &&
+        breakpointStyles.tabletCols(`repeat(${bp.tablet}, 1fr)`),
+      bp != null && bp.desktop !== bp.base &&
+        breakpointStyles.desktopCols(`repeat(${bp.desktop}, 1fr)`),
       // gap（11 档）
       isGap(0) && gapStyles.s0,
       isGap(0.5) && gapStyles.s0_5,
@@ -349,6 +403,7 @@ export function Grid(props: GridProps) {
       // 外部注入的 StyleX 样式放最后：与内部样式冲突时外部覆盖
       props.xstyle,
     );
+  };
 
   // 外部 class/className 不能走 rest 透传：Solid 中后 spread 的 class 会整体覆盖
   // 内部 stylex 生成的 className（内部样式类全部丢失），必须显式拼接；

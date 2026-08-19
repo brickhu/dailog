@@ -61,11 +61,11 @@ const styles = stylex.create({
     justifyContent: "center",
     alignItems: "center",
     color: colors.onSurfaceWeak,
-    ":visited" : colors.onSurfaceWeak,
+    ":visited": { color: colors.onSurfaceWeak },
   },
   audioErrorIcon: {
     color: colors.onSurface,
-    ":visited": colors.onSurface,
+    ":visited": { color: colors.onSurface },
   },
   info: {
     display: "flex",

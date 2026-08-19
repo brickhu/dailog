@@ -10,9 +10,9 @@ import { getEpisodeCached } from "../../lib/episode-cache";
 import type { EpisodeSummary } from "../../lib/db";
 import { env, episodeCoverUrl } from "../../lib/env";
 import * as stylex from "@stylexjs/stylex";
-import { layouts } from "@dailogues/ui/theme.stylex";
-import { colors, dimensions } from "@dailogues/ui/theme.stylex";
+import { layouts,colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
+import { Grid, GridSpan } from "@dailogues/ui";
 
 // 详情页（传统博客式）：dailog.fm/<episode_id> —— SSR 渲染（可索引/分享）。
 // 布局：封面（左/上，内嵌播放控件）+ 详情（右/下）；播放由全局播放条贯通，
@@ -173,59 +173,65 @@ export default function EpisodeDetailPage() {
   });
 
   return (
-    <div {...stylex.props(layouts.page,styles.detail)}>
-      {/* 兜底标题：数据未就绪/404 时 head 也有 title（Suspense 内数据到达后 cascading 替换） */}
-      <Title>dailog</Title>
-      {/* OG 标签：社交分享卡片（og:image = 封面，各平台抓取展示）。
-          ⚠️ 必须在 Suspense 内（数据就绪后）渲染——SSR 端 injectAssets 在渲染完成、shell
-          输出前执行，挂起期间注册的 fallback 会被真实数据替换；放 Suspense 外则 head
-          永远只有空值（社交爬虫读原始 HTML 拿不到标题/封面）。 */}
-      <Suspense fallback={<DetailSkeleton />}>
-      <Show
-        when={ep()}
-        fallback={<div {...stylex.props(styles.notFound)}>{t("episode.notFound")}</div>}
-      >
-        <Title>{ep()!.title || "dailog"}</Title>
-        <Meta property="og:title" content={ep()!.title || "dailog"} />
-        <Meta property="og:type" content="article" />
-        <Meta property="og:url" content={`${env.siteBaseUrl}/episode/${ep()!.slug ?? ""}`} />
-        <Meta property="og:description" content={ep()!.description?.slice(0, 200) || ""} />
-        <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
-          <Meta property="og:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
-        </Show>
-        {/* 背景装饰：小号封面图全屏铺底（fixed 视口固定）——模糊 + 上下渐变 + 20% 透明度 */}
-        <div {...stylex.props(styles.bg)} aria-hidden="true">
-          <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
-            <img
-              src={episodeCoverUrl(ep()!.id, ep()!.coverUrl, 320)!}
-              alt=""
-              {...stylex.props(styles.bgImg)}
-            />
-          </Show>
-          <div {...stylex.props(styles.bgGradient)} />
-        </div>
-        {/* 内容：containerLg 网格（移动封面 4 列 + 内容 4 列折行；平板 4+4 并列；桌面 4+8 并列） */}
-        <div {...stylex.props(layouts.containerLg, styles.content)}>
-          <div
-            {...stylex.props(styles.coverCol)}
-            onPointerEnter={() => setCoverHover(true)}
-            onPointerLeave={() => setCoverHover(false)}
-          >
-            <Cover episode={asQueue(ep()!)} />
-            <div {...stylex.props(styles.coverBtnSlot)}>
-              <PlayControls
-                episode={asQueue(ep()!)}
-                revealOnHover={!!ep()!.audioUrl} // audio 缺失：不启用 hover 划入，仅常显警告图标
-                hovered={coverHover()}
-              />
-            </div>
-          </div>
-          <div {...stylex.props(styles.detailCol)}>
-            <EpisodeDetail episode={asQueue(ep()!)} />
-          </div>
-        </div>
-      </Show>
-      </Suspense>
+    // <div {...stylex.props(layouts.page,styles.detail)}>
+    //   {/* 兜底标题：数据未就绪/404 时 head 也有 title（Suspense 内数据到达后 cascading 替换） */}
+    //   <Title>dailog</Title>
+    //   {/* OG 标签：社交分享卡片（og:image = 封面，各平台抓取展示）。
+    //       ⚠️ 必须在 Suspense 内（数据就绪后）渲染——SSR 端 injectAssets 在渲染完成、shell
+    //       输出前执行，挂起期间注册的 fallback 会被真实数据替换；放 Suspense 外则 head
+    //       永远只有空值（社交爬虫读原始 HTML 拿不到标题/封面）。 */}
+    //   <Suspense fallback={<DetailSkeleton />}>
+    //   <Show
+    //     when={ep()}
+    //     fallback={<div {...stylex.props(styles.notFound)}>{t("episode.notFound")}</div>}
+    //   >
+    //     <Title>{ep()!.title || "dailog"}</Title>
+    //     <Meta property="og:title" content={ep()!.title || "dailog"} />
+    //     <Meta property="og:type" content="article" />
+    //     <Meta property="og:url" content={`${env.siteBaseUrl}/episode/${ep()!.slug ?? ""}`} />
+    //     <Meta property="og:description" content={ep()!.description?.slice(0, 200) || ""} />
+    //     <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
+    //       <Meta property="og:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
+    //     </Show>
+    //     {/* 背景装饰：小号封面图全屏铺底（fixed 视口固定）——模糊 + 上下渐变 + 20% 透明度 */}
+    //     <div {...stylex.props(styles.bg)} aria-hidden="true">
+    //       <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
+    //         <img
+    //           src={episodeCoverUrl(ep()!.id, ep()!.coverUrl, 320)!}
+    //           alt=""
+    //           {...stylex.props(styles.bgImg)}
+    //         />
+    //       </Show>
+    //       <div {...stylex.props(styles.bgGradient)} />
+    //     </div>
+    //     {/* 内容：containerLg 网格（移动封面 4 列 + 内容 4 列折行；平板 4+4 并列；桌面 4+8 并列） */}
+    //     <div {...stylex.props(layouts.containerLg, styles.content)}>
+    //       <div
+    //         {...stylex.props(styles.coverCol)}
+    //         onPointerEnter={() => setCoverHover(true)}
+    //         onPointerLeave={() => setCoverHover(false)}
+    //       >
+    //         <Cover episode={asQueue(ep()!)} />
+    //         <div {...stylex.props(styles.coverBtnSlot)}>
+    //           <PlayControls
+    //             episode={asQueue(ep()!)}
+    //             revealOnHover={!!ep()!.audioUrl} // audio 缺失：不启用 hover 划入，仅常显警告图标
+    //             hovered={coverHover()}
+    //           />
+    //         </div>
+    //       </div>
+    //       <div {...stylex.props(styles.detailCol)}>
+    //         <EpisodeDetail episode={asQueue(ep()!)} />
+    //       </div>
+    //     </div>
+    //   </Show>
+    //   </Suspense>
+    // </div>
+    <div {...stylex.props(layouts.page)}>
+      dddd
+      {/* <Grid columns={{base: 4, tablet: 8, desktop: 12}} gap={2}>
+        <GridSpan columns={4}>dddd</GridSpan>
+      </Grid> */}
     </div>
   );
 }
