@@ -41,6 +41,8 @@ export {
   type GridColumns,
   type GridColumnCount,
   type GridAlignment,
+  type GridBreakpoints,
+  type GridBreakpointValue,
 } from "./components/grid";
 export { GridSpan, type GridSpanProps } from "./components/grid-span";
 export { Center, type CenterProps, type CenterAxis } from "./components/center";

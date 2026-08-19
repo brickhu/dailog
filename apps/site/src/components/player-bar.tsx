@@ -21,7 +21,7 @@ const styles = stylex.create({
     borderWidth: `1px 1px 1px 1px`,
     left: dimensions.spacing3,
     right: dimensions.spacing3,
-    bottom: dimensions.spacing3,
+    bottom: `calc(${dimensions.spacing3}+env(safe-area-inset-bottom))`,
     borderRadius: dimensions.radiusLg,
     padding: `${dimensions.spacing3} ${dimensions.spacing3}`,
     flexWrap: "wrap",
