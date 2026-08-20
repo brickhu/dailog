@@ -239,7 +239,11 @@ export default function EpisodeDetailPage() {
   const { t } = useI18n();
   const params = useParams<{ slug: string }>();
   // const [coverHover, setCoverHover] = createSignal(false);
-  const data = createAsync(() => getEpisodeCached(params.slug));
+  // deferStream:true → SSR 端该资源注册为 blocking promise：shell（含 head）等数据解析
+  // 后才输出，Suspense 内重渲染的 Title/Meta（og:title / og:image / og:description）已注册进
+  // head —— 社交爬虫读 SSR HTML 即拿到节目标题与封面。stream 模式默认不等待（fallback 先
+  // flush、head 只含兜底 <title>Dailog</title>），分享卡片会缺失标题和封面。
+  const data = createAsync(() => getEpisodeCached(params.slug), { deferStream: true });
   const ep = () => data();
   const navigate = useNavigate();
 
@@ -427,6 +431,14 @@ export default function EpisodeDetailPage() {
           <Meta property="og:description" content={ep()!.description?.slice(0, 200) || ""} />
           <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
             <Meta property="og:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
+          </Show>
+          {/* X/Twitter 卡片：summary_large_image 让封面大图展示（无 twitter 标签时 X 回退 og:*,
+              但大图卡片需要显式声明） */}
+          <Meta name="twitter:card" content="summary_large_image" />
+          <Meta name="twitter:title" content={ep()!.title || "dailog"} />
+          <Meta name="twitter:description" content={ep()!.description?.slice(0, 200) || ""} />
+          <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
+            <Meta name="twitter:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
           </Show>
 
           {/* <Container>
