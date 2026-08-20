@@ -140,6 +140,7 @@ const styles = stylex.create({
     minWidth : dimensions.size2xl,
     width : "90%",
     boxShadow: shadows.shadowMed,
+    borderRadius : dimensions.radiusMd
   },
   // detail:{
   //   order:3

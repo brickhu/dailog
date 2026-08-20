@@ -258,12 +258,15 @@ export function PlayerBar() {
             size="lg"
           />
 
+          {/* 缓冲/加载中（切换节目加载、播放中网络卡顿）→ isLoading：spinner 覆盖图标 + 自动禁用；
+              加载结束恢复播放/暂停图标。audioError 时仍显式禁用（警告态不可点） */}
           <Button
             {...stylex.props(styles.btn)}
             onClick={pb.toggle}
             aria-label={pb.playing() ? "pause" : "play"}
             icon={pb.playing() ? <Icon icon="iconoir:pause-solid" /> : <Icon icon="iconoir:play-solid" />}
-            isDisabled={pb.buffering() || pb.audioError()}
+            isLoading={pb.buffering()}
+            isDisabled={pb.audioError()}
             isIconOnly
             round="full"
             size="lg"
