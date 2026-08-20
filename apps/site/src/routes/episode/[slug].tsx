@@ -470,7 +470,7 @@ export default function EpisodeDetailPage() {
               <div {...stylex.props(typography.caption, styles.caption)}>
                 {hostName()}{pubDate() ? ` · ${pubDate()}` : ""}{stats.latest ? ` · ${t("episode.plays", { count: stats.latest.plays })} · ${t("episode.completions", { count: stats.latest.completions })}` : ""}
               </div>
-              <div {...stylex.props(typography.headingSm,styles.title)}>{ep()?.title}</div>
+              <div {...stylex.props(typography.headingMd,styles.title)}>{ep()?.title}</div>
             </div>
             <div {...stylex.props(styles.coverOutter)}>
               <Cover episode={asQueue(ep()!)} xstyle={styles.cover}/>
