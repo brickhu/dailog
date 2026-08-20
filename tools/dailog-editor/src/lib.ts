@@ -301,6 +301,35 @@ export async function api(config: EditorConfig, path: string, opts: ApiOptions =
   return res.json().catch(() => null);
 }
 
+/** 尽力而为的 API 请求：失败（未登录/token 环境不符/网络/非 2xx）返回 null，不退出进程——
+ *  用于封面文字等非关键增强：拿不到称呼就无文字，不影响主流程（与 api() 的区别仅是不退出） */
+export async function tryApi(config: EditorConfig, path: string, opts: ApiOptions = {}): Promise<unknown | null> {
+  const session = readSession();
+  if (!session?.token || session.apiBase !== config.apiBase) return null;
+  const headers: Record<string, string> = { Authorization: `Bearer ${session.token}` };
+  let body: BodyInit | undefined;
+  if (opts.formData) {
+    const { body: formBody, contentType } = await serializeFormData(opts.formData);
+    headers["content-type"] = contentType;
+    body = formBody;
+  } else if (opts.body !== undefined) {
+    headers["content-type"] = "application/json";
+    body = JSON.stringify(opts.body);
+  }
+  try {
+    const res = await apiFetch(`${config.apiBase}${path}`, {
+      method: opts.method ?? "GET",
+      headers,
+      body,
+    });
+    if (!res.ok) return null;
+    if (opts.expectJson === false) return res;
+    return res.json().catch(() => null);
+  } catch {
+    return null;
+  }
+}
+
 /** 草稿目录（按 submissionId 隔离中间产物）；不存在则创建 */
 export function draftDir(submissionId: string): string {
   const dir = join(draftsDir, submissionId);

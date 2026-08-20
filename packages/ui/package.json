@@ -5,8 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./theme.stylex": "./src/theme.stylex.ts",
-    "./theme.stylex.const": "./src/theme.stylex.const.ts"
+    "./theme.stylex": "./src/theme.stylex.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

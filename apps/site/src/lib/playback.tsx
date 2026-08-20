@@ -3,8 +3,9 @@
 //  - 单例 Audio 元素管理：切节目自动播放（解锁后）、进度节流、完播判定 + 统计上报
 //  - 统计上报（play/completion）从单集页迁入——全局播放器统一埋点，sessionStorage 去重
 //  - 自动播放策略：setQueue 只加载不播放（等用户点击封面解锁）；用户交互后 next/play 自动连播
-import { createContext, createEffect, createSignal, onCleanup, useContext, type ParentProps } from "solid-js";
-import { env } from "./env";
+import { createContext, createEffect, createResource, createSignal, onCleanup, useContext, type ParentProps } from "solid-js";
+import { useI18n } from "@dailogues/i18n";
+import { apiBaseForFetch, env } from "./env";
 
 /** 队列节目（来自 /v1/public/episodes/recommended） */
 export interface QueueEpisode {
@@ -58,6 +59,9 @@ export interface PlaybackContextValue {
   setQueue: (eps: QueueEpisode[]) => void;
   /** 用户是否主动选择过节目（play/toggle 触发）——播放条只在激活后显示 */
   activated: () => boolean;
+  /** 全局推荐队列数据源（provider 统一按语言拉取、全局灌入）——首页推荐滚屏共用，不再各自 fetch */
+  recommended: () => QueueEpisode[] | null;
+  recommendedLoading: () => boolean;
 }
 
 const PlaybackContext = createContext<PlaybackContextValue>();
@@ -90,12 +94,16 @@ function reportStat(id: string, type: "play" | "completion") {
 export function PlaybackProvider(props: ParentProps) {
   const [queue, setQueueSignal] = createSignal<QueueEpisode[]>([]);
   const [index, setIndex] = createSignal(0);
+  // 当前节目 = 音频元素实际加载的那期（loadEpisode 设置 src 时原子更新）——单一事实来源。
+  // 不用 queue()[index()]：队列会被 focusEpisode/推荐灌队列修改，任何一次竞争脱节就会
+  // "播放条显示旧节目、音频在播新节目"（卡片/播放条/按钮全部联动不一致）
+  const [currentEp, setCurrentEp] = createSignal<QueueEpisode | null>(null);
   const [playing, setPlaying] = createSignal(false);
   const [audioError, setAudioError] = createSignal(false);
   // 缓冲/加载中（audio waiting 事件驱动；切歌/就绪/出错时清除）
   const [buffering, setBuffering] = createSignal(false);
-  // 点击卡片 play 后预加载失败的目标节目 id（音频不存在/加载失败）——该卡片显示警告；
-  // 与 audioError 分开：audioError 是当前播放节目的错误，preloadError 是"想播但没加载起来"的
+  // 预加载失败目标 id（音频不存在/加载失败）——预加载探针已移除（play 直接切歌），
+  // 此信号保留仅为上下文 API 兼容；音频错误统一走 audioError（当前节目加载失败即错误）
   const [preloadError, setPreloadError] = createSignal<string | null>(null);
   const [progress, setProgress] = createSignal(0);
   const [duration, setDuration] = createSignal(0);
@@ -130,7 +138,7 @@ export function PlaybackProvider(props: ParentProps) {
     typeof document !== "undefined" ? new Audio() : null,
   );
 
-  const current = () => queue()[index()] ?? null;
+  const current = () => currentEp();
 
   /**
    * 加载队列第 i 期：切 src；autoplay=true 时尝试播放（用户已解锁场景：play/next/prev）；
@@ -144,6 +152,7 @@ export function PlaybackProvider(props: ParentProps) {
     const a = audio();
     if (!a || !ep) return;
     setIndex(i);
+    setCurrentEp(ep); // 当前节目 = 实际加载进音频的这一期（与 a.src 原子一致）
     setProgress(0);
     setDuration(0);
     setAudioError(false); // 切节目：重置音源错误标记
@@ -168,71 +177,55 @@ export function PlaybackProvider(props: ParentProps) {
     }
   };
 
-  // ---- 预加载后切换（点击节目卡 play）----
-  // 点击卡片 → 用独立 Audio 元素预加载目标节目（不打断当前播放）；canplay（数据足够
-  // 开始播放）后才切换主播放器。场景：
-  //   1. 播放条播放中：原节目继续播，新节目 ready 后才切歌（无卡顿断音）
-  //   2. 播放条未出现：加载期间播放条不展开，ready 后展开播放
-  // 预加载失败（404/解码）→ preloadError(目标 id) → 该卡片显示警告，当前播放不受影响
-  let probe: HTMLAudioElement | null = null;
-  let probeGuard = 0; // 预加载换代标记：旧预加载的异步回调（canplay/error）失效
-  const abortPreload = () => {
-    probeGuard++;
-    if (probe) {
-      probe.removeAttribute("src");
-      probe.load(); // 释放资源
-      probe = null;
-    }
-    setPreloadError(null);
-  };
-  onCleanup(() => abortPreload());
+  // ---- 全局队列初始化（统一于此，页面不再各自拉 recommended）----
+  // 推荐队列：provider 按语言拉取一次（SSR 服务端 fetch 序列化进 HTML，客户端 hydration 复用；
+  // 语言切换自动重拉）。无论用户从哪个页面进入（含详情页深链），队列都统一初始化为推荐列表；
+  // 未激活才灌入（不打断正在进行的播放）；只加载首期不播放（等用户点击封面解锁）。
+  const { locale } = useI18n();
+  // T 由 fetcher 返回类型推断（QueueEpisode[] | null），S（source key）由 () => locale() 推断
+  const [recommendedList] = createResource(
+    () => locale(),
+    async (): Promise<QueueEpisode[] | null> => {
+      const lang = locale() === "en" ? "en" : "zh";
+      const r = await fetch(`${apiBaseForFetch}/v1/public/episodes/recommended?lang=${lang}&limit=20`);
+      const eps: unknown = r.ok ? await r.json() : null;
+      return Array.isArray(eps) && eps.length > 0 ? (eps as QueueEpisode[]) : null;
+    },
+  );
+  createEffect(() => {
+    const eps = recommendedList();
+    if (eps && !activated()) replaceQueue(eps);
+  });
 
+  /** 替换队列：定位首项 + 加载首期（不播不报，封面展示播放按钮等用户点击） */
+  const replaceQueue = (eps: QueueEpisode[]) => {
+    setQueueSignal(eps);
+    setIndex(0);
+    if (eps.length > 0) loadEpisode(0);
+  };
+
+  // ---- 播放（点击封面/卡片/详情页按钮）----
+  // 简化为直接切换：目标就是当前节目 → 直接 play()；否则 loadEpisode 切 src 播放。
+  // 不设预加载探针——探针把真正切歌拖到异步 canplay（R2 2-6s），期间"播放条/卡片还显示
+  // 旧节目、音频还在播旧的"，用户以为点了没反应/点错节目（标题链接露馅指向旧节目）。
+  // loadEpisode 原子更新 currentEp + a.src → 播放条/卡片/按钮永远与实际音频一致。
+  // 切歌成本：正在播的旧节目立即停止、新节目加载完成后出声（可接受，换确定性）
   const play = (ep: QueueEpisode) => {
     const a = audio();
-    const i = queue().findIndex((q) => q.id === ep.id);
+    let i = queue().findIndex((q) => q.id === ep.id);
+    setActivated(true); // 用户明确点击 → 激活播放条
     // 目标就是当前节目：已加载，直接播放（play 上报统一在 "playing" 事件，不在此重复——
     // 修复详情页封面播放当前集时不上报的漏记；sessionStorage 去重保证每 session 每期一次）
     if (i >= 0 && i === index()) {
-      setActivated(true);
-      abortPreload();
       void a?.play().catch(() => setPlaying(false));
       return;
     }
-    // 预加载期间不 setActivated：播放条未出现时保持隐藏（"加载完成展开播放器"）；
-    // 播放中场景 activated 已是 true，播放条继续显示原节目。ready 后（finish）再激活
-    // 目标不在队列：先入队（finish 后 loadEpisode 定位；signal 同步更新，无需 rAF）
+    // 目标不在队列：先入队（signal 同步更新，随后即可定位）
     if (i < 0) {
       setQueueSignal((q) => [...q, ep]);
+      i = queue().length - 1;
     }
-    // 取消上一次未完成的预加载
-    abortPreload();
-    const guard = probeGuard;
-    const probeEl = new Audio();
-    probeEl.preload = "auto";
-    probeEl.src = episodeAudioUrl(ep.id);
-    probe = probeEl;
-    const finish = () => {
-      if (guard !== probeGuard) return; // 已被更新的预加载取代
-      abortPreload();
-      setActivated(true); // 加载完成 → 激活播放条（场景 2：此时才展开）
-      // 队列可能已被 setQueue 替换（预加载期间 activated 未置 true，理论上首页 setQueue
-      // 只在 list 变化时触发、不会发生；此处重新定位兜底）
-      const idx = queue().findIndex((q) => q.id === ep.id);
-      if (idx >= 0) {
-        loadEpisode(idx, { autoplay: true });
-      } else {
-        const n = queue().length;
-        setQueueSignal((q) => [...q, ep]);
-        requestAnimationFrame(() => loadEpisode(n, { autoplay: true }));
-      }
-    };
-    const fail = () => {
-      if (guard !== probeGuard) return;
-      abortPreload();
-      setPreloadError(ep.id);
-    };
-    probeEl.addEventListener("canplay", finish);
-    probeEl.addEventListener("error", fail);
+    loadEpisode(i, { autoplay: true });
   };
 
   const toggle = () => {
@@ -307,6 +300,9 @@ export function PlaybackProvider(props: ParentProps) {
     // 暂停续播/连播切集不叠加）——覆盖详情页封面、首页卡片、播放条 toggle、next/prev 全部入口
     const onPlaying = () => {
       setPlaying(true);
+      // 真正出声 = 不可能还在缓冲：清 buffering（事件顺序异常 waiting→playing
+      // 时，canplay 不必然紧跟——不清会让"在播但按钮一直 loading"卡住）
+      setBuffering(false);
       const ep = current();
       if (ep) reportStat(ep.id, "play");
     };
@@ -362,12 +358,10 @@ export function PlaybackProvider(props: ParentProps) {
     next,
     prev,
     seek,
-    setQueue: (eps) => {
-      setQueueSignal(eps);
-      setIndex(0);
-      if (eps.length > 0) loadEpisode(0); // 加载首期（不播不报；封面展示播放按钮等用户点击）
-    },
+    setQueue: replaceQueue,
     activated,
+    recommended: () => recommendedList() ?? null,
+    recommendedLoading: () => recommendedList.loading,
   };
 
   return <PlaybackContext.Provider value={value}>{props.children}</PlaybackContext.Provider>;

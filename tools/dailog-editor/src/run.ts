@@ -31,8 +31,8 @@
 //                                              逐段合成语音（host 采样克隆 / guest 品牌声线资源文件）
 //   pnpm editor merge <submissionId> [--language zh|en] [--intro f.mp3] [--outro f.mp3]
 //                                               ffmpeg 拼接（intro/outro 按语言匹配，fallback 英文）→ final.mp3
-//   pnpm editor cover <submissionId> "<关键词>" [--out cover.jpg]
-//                                               Pexels 搜索封面下载到草稿目录
+//   pnpm editor cover <submissionId> [--texture ...] [--colors "#hex,#hex"] [--guest <platform>] [--image-url <URL>]
+//                                               本地模板封面（居中「主持人称呼 × 嘉宾称呼」，不满意贴图 URL）
 //   pnpm editor publish <submissionId> --title "..." [--audio final.mp3] [--cover c.jpg]
 //                                               [--description ...] [--tags a,b] [--language zh] [--guest claude]
 //   pnpm editor reject <submissionId> --reason "..."

@@ -110,7 +110,7 @@ triggers:
   ↓ ④ 按「脚本生成规范」生成脚本 → script.json（存草稿目录）
   ↓ ⑥ pnpm editor tts <id> --script script.json --language <lang>  （逐段合成）
   ↓ ⑦ pnpm editor merge <id> --language <lang>                      （合成 final.mp3，intro/outro 按语言匹配）
-  ↓ ⑧ pnpm editor cover <id> "<关键词>"                                （Pexels 封面）
+  ↓ ⑧ pnpm editor cover <id> [--guest <platform>]                      （本地模板封面，居中「主持人 × 嘉宾」称呼）
   ↓ ⑨ 与编辑确认 → pnpm editor publish <id> --title "…" …             （一次性上传发布）
   ↓    或 pnpm editor reject <id> --reason "…"                         （拒审）
   ↓ ⑩ 汇报：期号/节目链接 或 拒审原因
@@ -341,17 +341,22 @@ description（2-3 句简介）、tags（3-5 个话题标签）、coverKeywords�
 ### ⑦ 封面（本地方案——默认模板渲染，不满意贴图 URL）
 
 ```
-pnpm editor cover <id> [--texture squares|crosses|hexagons|woven|diagonal|zigzag] [--colors "#hex,#hex"] [--image-url <URL>]
+pnpm editor cover <id> [--texture squares|crosses|hexagons|woven|diagonal|zigzag] [--colors "#hex,#hex"] [--guest <platform>] [--image-url <URL>]
 ```
 
-- **默认：从 riccardoscalco.it/textures 页面指令预置库随机选 1 条完整执行**（无 Pexels 依赖；
-  纯图形无文字无圆角——标题由节目页/RSS 元数据承载）：
+- **默认：从 riccardoscalco.it/textures 页面指令预置库随机选 1 条完整执行**（无 Pexels 依赖）：
   - 31 条页面指令全部收录（lines 13 / circles 10 / paths 8）：纹理 + 密度（heavier/lighter/size）+
     线宽（thicker/thinner/strokeWidth）+ 颜色（darkorange/firebrick）按指令一起随机
   - 无指令指定颜色时：先定底色（深色池随机）→ 纹理色选**色相差 ≥120°**（鲜明对比）
   - 布局：纹理中间 80%（四周 10% 留白），单块尺寸按容器整除（边缘吻合）
   - 渲染：渐变底色 + pattern 纹理 + 噪点 → resvg → 1400×1400 标准 JPEG
   - 固定复现：`--texture <名> --colors "<底色>,<纹理色>"`（日志会给出当前指令与组合）
+- **居中称呼（无外部图片时叠加）**：图片中心显示**主持人称呼 × 嘉宾称呼**（如 `Fei × Deepseek`）：
+  - 主持人称呼 = 投稿 detail 的 callName（无则画像 displayName）；嘉宾称呼 = `--guest <platform>`
+    对应 guests 表 name（无配置 → 平台展示名兜底；未传 --guest → 按投稿 URL 推断平台）
+  - **文本区宽度不超过底纹区域**：超宽自动缩小字号（起始 120px，下限 32px）
+  - **文字颜色按底色明暗**：底色偏黑 → 白字 60% 透明度；底色偏白 → 黑字 60% 透明度
+  - 外部图片（--image-url）不叠加文字
 - **编辑不满意** → 贴图片 URL：`pnpm editor cover <id> --image-url <URL>`（下载 → ffmpeg 裁 1400×1400）
 - **生成后立即把封面图展示给编辑**（Read 图片直接呈现——确认环节也要再次展示）
 - 发布时不传封面 → 播放页自适应（无封面）

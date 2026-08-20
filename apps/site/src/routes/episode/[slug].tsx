@@ -1,20 +1,21 @@
-import { Show, Suspense, createEffect, createSignal, onMount } from "solid-js";
-import { createAsync, useParams } from "@solidjs/router";
+import { Show, Suspense, createEffect, createResource, createSignal, onCleanup } from "solid-js";
+import { NoHydration } from "solid-js/web";
+import { createAsync, useNavigate, useParams } from "@solidjs/router";
 import { Meta, Title } from "@solidjs/meta";
 import { Cover } from "../../components/cover";
-import { PlayControls } from "../../components/episode-card";
+import { PlayButton } from "../../components/play-button";
+import { ShareDialog } from "../../components/share-buttons";
+import { AddToPlaylistDialog } from "../../components/add-to-playlist";
 import { DetailSkeleton } from "../../components/page-skeletons";
-import { EpisodeDetail } from "../../components/episode-detail";
 import { usePlayback, type QueueEpisode } from "../../lib/playback";
 import { getEpisodeCached } from "../../lib/episode-cache";
 import type { EpisodeSummary } from "../../lib/db";
-import { env, episodeCoverUrl } from "../../lib/env";
+import { apiBaseForFetch, env, episodeCoverUrl } from "../../lib/env";
 import * as stylex from "@stylexjs/stylex";
-import { layouts,colors, dimensions,constants } from "@dailogues/ui/theme.stylex";
+import { layouts, typography, shadows, dimensions, colors } from "@dailogues/ui/theme.stylex";
+import { Button, Icon } from "@dailogues/ui";
 // import { DESKTOP } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
-import { GridSpan } from "@dailogues/ui";
-import { GridContainerLg } from "../../components/containers";
 
 // 详情页（传统博客式）：dailog.fm/<episode_id> —— SSR 渲染（可索引/分享）。
 // 布局：封面（左/上，内嵌播放控件）+ 详情（右/下）；播放由全局播放条贯通，
@@ -22,17 +23,127 @@ import { GridContainerLg } from "../../components/containers";
 // 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
 // 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
 
-// const DESKTOP = "@media (width >= 1024px)";
-// const TABLET = "@media (640px <= width < 1024px)";
+const TABLET = "@media (width>=640px)";
 
 const styles = stylex.create({
-  // page: {
-  //   minHeight: "100vh",
-  //   backgroundColor: colors.background,
-  //   color: colors.foreground,
-  //   fontFamily: "system-ui, -apple-system, sans-serif",
-  //   paddingBottom: "72px", // 播放条高度预留
+  // 响应式列数（Grid 单值 columns={4}，断点覆盖走 xstyle + @media）
+  page: {
+    minHeight: "100vh",
+    paddingBlock: dimensions.spacing4,
+    gap: dimensions.spacing8,
+    [TABLET]: {
+      paddingBlock: dimensions.spacing12,
+    }
+  },
+  grid: {
+    display: "grid",
+    gridTemplateColumns : "repeat(4, 1fr)",
+    gap: dimensions.spacing4, 
+    maxWidth: dimensions.tablet, 
+    minWidth: dimensions.mobile,
+    padding: dimensions.spacing4,
+    width: "100%",
+    [TABLET]: {
+      gridTemplateColumns : "repeat(6, 1fr)",
+    },
+  },
+  head: {
+    // backgroundColor : "blue"
+    // display: "grid",
+    // gridTemplateColumns : "repeat(4, 1fr)",
+    // gap: dimensions.spacing4, 
+    // maxWidth: dimensions.tablet, 
+    // minWidth: dimensions.mobile,
+    // padding: dimensions.spacing4,
+    // width: "100%",
+    // [TABLET]: {
+    //   gridTemplateColumns : "repeat(6, 1fr)",
+    // },
+  },
+  main: {
+
+  },
+  foot : {},
+  titleOutter : {
+    gridColumn : "1 / -1",
+    order: 2,
+    [TABLET]: {
+      gridColumn : "span 4",
+      order: 1,
+    },
+    display: "flex",
+    flexDirection: "column",
+    gap: dimensions.spacing2
+  },
+  coverOutter : {
+    gridColumn : "1 / -1",
+    gridRow: "span 2",
+    display : "flex",
+    alignItems : "center",
+    justifyContent : "center",
+    order: 1,
+    aspectRatio: 4/3,
+    [TABLET]: {
+      gridColumn : "span 2",
+      justifyContent : "flex-end",
+      order: 2,
+    },
+  },
+  actionOutter : {
+    gridColumn : "1 / -1",
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: dimensions.spacing4,
+     order: 3,
+    [TABLET]: {
+      gridColumn : "span 4",
+    },
+  },
+  title : {
+     
+  },
+  caption: {
+    opacity : "50%"
+  },
+  desc: {
+    gridColumn : "1 / -1",
+  },
+  // 点赞激活态（已赞：红粉心形点亮）
+  likeActive: {
+    color: colors.danger,
+  },
+  // titleWarp: {
+  //   // textAlign: "center",
+  //   // paddingInline: dimensions.spacing4
+  //   display: "flex",
+  //   flexDirection: "column",
+  //   gap: dimensions.spacing4
   // },
+  // titleMeta: {
+  //   color: colors.neutral
+  // },
+  // titleName: {},
+
+  // coverBlock: {
+  //   aspectRatio: "1/1",
+  //   order:1,
+  //   [TABLET]: {
+  //     order: 2
+  //   },
+  //   display : "flex",
+  //   alignItems: "center",
+  //   justifyContent: "center"
+  // },
+  cover:{
+    maxWidth : `calc(${dimensions.size2xl} * 3)`,
+    minWidth : dimensions.size2xl,
+    width : "90%",
+    boxShadow: shadows.shadowMed,
+  },
+  // detail:{
+  //   order:3
+  // }
   // 背景装饰：封面图作为内容的一部分（absolute 随页面滚动自然滚走），
   // 高斯模糊 + 渐变遮罩 + 20% 透明度
   // detail:{
@@ -80,7 +191,7 @@ const styles = stylex.create({
   // // 封面列：span 4 通用（移动 4 列全宽 / 平板 8 列占 4 / 桌面 12 列占 4）
   // coverCol: {
   //   gridColumn: "span 4",
-  //   position: "relative", // 三态播放按钮（PlayControls）覆盖右下角
+  //   position: "relative", // 播放按钮（PlayButton）覆盖右下角
   //   minWidth: 0,
   // },
   // // 播放按钮槽：封面右下角（固定尺寸 + flex——与 episode-card 的 btnSlot 同构：
@@ -124,12 +235,92 @@ export const route = {
 };
 
 export default function EpisodeDetailPage() {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const params = useParams<{ slug: string }>();
-  const playback = usePlayback();
-  const [coverHover, setCoverHover] = createSignal(false);
+  // const [coverHover, setCoverHover] = createSignal(false);
   const data = createAsync(() => getEpisodeCached(params.slug));
   const ep = () => data();
+  const navigate = useNavigate();
+
+  // ─────────────────────────────────────────────────────────────
+  // 统计数据 / 互动状态：全部在页面顶层异步加载（createResource），
+  // 不拆到子组件——SSR/客户端创建顺序一致，hydration key 稳定。
+  // 公开统计（点赞数/收听/完播）：SSR 有数据即同步进 HTML，客户端复用。
+  // ─────────────────────────────────────────────────────────────
+  interface EpisodeStats { plays: number; completions: number; likes: number }
+  const [stats, { refetch: refetchStats }] = createResource(
+    () => ep()?.id ?? null,
+    async (id) => {
+      const r = await fetch(`${apiBaseForFetch}/v1/public/episodes/${id}/stats`);
+      return r.ok ? ((await r.json()) as EpisodeStats) : null;
+    },
+  );
+  // 点赞状态（登录态端点；SSR 无 cookie 必然 401 → 客户端 hydration 后加载）
+  const [interactions, { refetch: refetchInteractions }] = createResource(
+    () => (typeof window === "undefined" ? null : ep()?.id ?? null),
+    async (id) => {
+      const r = await fetch(`/v1/episodes/${id}/interactions`);
+      return r.ok ? ((await r.json()) as { liked: boolean; likes: number }) : null;
+    },
+  );
+  // liked 用 interactions.latest（不挂起）：like 切换后 refetchInteractions 期间保持旧值，
+  // 否则 read() 在 Suspense 边界内会使整页挂起闪骨架屏（与下方 stats 同因，见播放闪屏注释）
+  const liked = () => !!interactions.latest?.liked;
+
+  // 本集开始播放 → 延迟 ~600ms 重拉统计（play 上报落库后再取，数字即时刷新；
+  // reportStat 是 fire-and-forget，立即 refetch 可能抢在上报前读到旧值）
+  const { current: pbCurrent, playing } = usePlayback();
+  createEffect(() => {
+    const cur = pbCurrent();
+    if (cur?.id === ep()?.id && playing()) {
+      const timer = setTimeout(() => void refetchStats(), 600);
+      onCleanup(() => clearTimeout(timer));
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // 交互函数（点赞 / 添加到列表 / 分享）：直接绑定到下方按钮
+  // ─────────────────────────────────────────────────────────────
+  const loginUrl = () =>
+    `/login?redirect=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname : "/")}`;
+  /** 401 → 跳登录页，返回 true（调用方直接 return） */
+  const redirectIf401 = (res: Response): boolean => {
+    if (res.status === 401) {
+      navigate(loginUrl());
+      return true;
+    }
+    return false;
+  };
+
+  const [busyLike, setBusyLike] = createSignal(false);
+  const toggleLike = async () => {
+    if (busyLike() || !ep()) return;
+    setBusyLike(true);
+    try {
+      const res = await fetch(`/v1/episodes/${ep()!.id}/like`, {
+        method: liked() ? "DELETE" : "POST",
+      });
+      if (redirectIf401(res)) return;
+      if (res.ok) {
+        refetchInteractions();
+        refetchStats();
+      }
+    } finally {
+      setBusyLike(false);
+    }
+  };
+
+  // 分享弹窗（受控：按钮在下方 actionOutter，弹窗 UI 复用 ShareDialog）
+  const [shareOpen, setShareOpen] = createSignal(false);
+  // 加入播放列表弹窗（受控：按钮在下方 actionOutter，面板复用 AddToPlaylistDialog）
+  const [listOpen, setListOpen] = createSignal(false);
+
+  // 标题区元信息：主持人 · 日期 · 播放/完播统计
+  const hostName = () => ep()?.callName ?? ep()?.displayName ?? ep()?.username ?? "";
+  const pubDate = () => {
+    const p = ep()?.publishedAt;
+    return p ? new Date(p).toLocaleDateString("zh-CN") : "";
+  };
 
   // EpisodeSummary（lib/db）→ QueueEpisode（播放器）
   const asQueue = (e: EpisodeSummary): QueueEpisode => ({
@@ -149,23 +340,12 @@ export default function EpisodeDetailPage() {
     sourceUrl: e.sourceUrl,
   });
 
-  // 客户端：播放器未激活（用户没选过节目）→ 初始化队列到本页节目（播完自动连播下一期）；
-  // 已激活（正在播放中）→ 不重置队列，不打断播放（边听边逛）
-  onMount(() => {
-    const current = ep();
-    if (!current || playback.activated()) return;
-    const first = asQueue(current);
-    const lang = locale() === "en" ? "en" : "zh";
-    void fetch(`${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/episodes/recommended?lang=${lang}&limit=20`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((eps: unknown) => {
-        const rest = Array.isArray(eps)
-          ? (eps as QueueEpisode[]).filter((e) => e.id !== first.id).slice(0, 19)
-          : [];
-        playback.setQueue([first, ...rest]);
-      })
-      .catch(() => playback.setQueue([first]));
-  });
+  // 队列统一由全局播放器初始化（recommended 由 PlaybackProvider 拉取并全局灌入）。
+  // 注意：此处**不要**用 createEffect 把本页节目 focusEpisode 顶到队首——focusEpisode
+  // 会 replaceQueue → 队列变化 → provider 的 recommended effect 又换回推荐列表 → 本
+  // effect 再顶回来，形成无限循环（每次 replaceQueue 都 loadEpisode 重置当前节目，
+  // 播放条/卡片被反复刷回推荐首集）。play() 的直接切换已覆盖一切：点播放即 loadEpisode
+  // 目标节目并原子更新 currentEp，无需预先把节目放进队首。
 
   // 旧 /episode/<uuid> 链接：API 按 id 兜底命中（ep.slug ≠ URL 参数）→ 客户端跳转新路径。
   // 放组件层而非 fetcher：SSR 返回的数据客户端 hydration 直接复用（fetcher 不再执行），
@@ -218,11 +398,9 @@ export default function EpisodeDetailPage() {
     //       >
     //         <Cover episode={asQueue(ep()!)} />
     //         <div {...stylex.props(styles.coverBtnSlot)}>
-    //           <PlayControls
-    //             episode={asQueue(ep()!)}
-    //             revealOnHover={!!ep()!.audioUrl} // audio 缺失：不启用 hover 划入，仅常显警告图标
-    //             hovered={coverHover()}
-    //           />
+              // <PlayButton
+              //   episode={asQueue(ep()!)}
+              // />
     //         </div>
     //       </div>
     //       <div {...stylex.props(styles.detailCol)}>
@@ -232,14 +410,107 @@ export default function EpisodeDetailPage() {
     //   </Show>
     //   </Suspense>
     // </div>
-    <div {...stylex.props(layouts.page)}>
-      
-     <GridContainerLg>
-      <GridSpan columns="full">ffffffggg</GridSpan>
-      <GridSpan columns={4}>ffffffggg</GridSpan>
-      <GridSpan columns={4}>ffffffggg</GridSpan>
-      <GridSpan columns={4}>ffffffggg</GridSpan>
-     </GridContainerLg>
+    <div {...stylex.props(layouts.page,styles.page)}>
+      <Title>Dailog</Title>
+      {/* fallback 包 NoHydration：客户端挂起渲染骨架时跳过 hydration 匹配
+          （SSR 端资源等待后输出真实内容，从不输出骨架）——消除 Hydration Mismatch */}
+      <Suspense fallback={<NoHydration><DetailSkeleton /></NoHydration>}>
+        <Show
+          when={ep()}
+          fallback={<div>{t("episode.notFound")}</div>}
+        >
+          <Title>{ep()!.title || "dailog"}</Title>
+          <Meta property="og:title" content={ep()!.title || "dailog"} />
+          <Meta property="og:type" content="article" />
+          <Meta property="og:url" content={`${env.siteBaseUrl}/episode/${ep()!.slug ?? ""}`} />
+          <Meta property="og:description" content={ep()!.description?.slice(0, 200) || ""} />
+          <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
+            <Meta property="og:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
+          </Show>
+
+          {/* <Container>
+            <GridSpan columns={4} >
+              <Center {...stylex.props(styles.coverBlock)}>
+                <Cover episode={asQueue(ep()!)} xstyle={styles.cover}/>
+              </Center>
+            </GridSpan>
+            <GridSpan columns={{base:4, [constants.DESKTOP]:8}}>
+              <Center xstyle={styles.heading} axis="vertical">
+                <div {...stylex.props(typography.headingSm,styles.title)}>{ep()?.title}</div>
+                <div>
+                  <PlayButton episode={asQueue(ep()!)} appear="fill" isIconOnly={false} width={140} />
+                </div>
+              </Center>
+              
+            </GridSpan>
+            <GridSpan columns="full">ffffffggg</GridSpan>
+          </Container> */}
+
+          {/* <Grid maxWidth="720px" width="100%" columns={{base:4,[constants.TABLET]:6,[constants.DESKTOP]:6}}>
+            <GridSpan columns={4} >ggg</GridSpan>
+            <GridSpan columns={2} >ggg</GridSpan>
+          </Grid> */}
+
+          {/* Grid/GridSpan 组件已移除——这里直接用 CSS 写布局（见 components/containers.tsx 的 Container 写法） */}
+          <section {...stylex.props(styles.head, styles.grid)}>
+            <div {...stylex.props(styles.titleOutter)}>
+              <div {...stylex.props(typography.caption, styles.caption)}>
+                {hostName()}{pubDate() ? ` · ${pubDate()}` : ""}{stats.latest ? ` · ${t("episode.plays", { count: stats.latest.plays })} · ${t("episode.completions", { count: stats.latest.completions })}` : ""}
+              </div>
+              <div {...stylex.props(typography.headingSm,styles.title)}>{ep()?.title}</div>
+            </div>
+            <div {...stylex.props(styles.coverOutter)}>
+              <Cover episode={asQueue(ep()!)} xstyle={styles.cover}/>
+            </div>
+            <div {...stylex.props(styles.actionOutter)}>
+              {/* 播放 + 点赞 + 添加到播放列表 + 分享：交互函数与数据都在本页（见组件顶部），
+                  时长不随播放状态切换，按钮宽度稳定 */}
+              <PlayButton episode={asQueue(ep()!)} appear="fill" isIconOnly={false} width={96} label="duration" />
+              <Button
+                icon={<Icon icon={liked() ? "mdi:heart" : "mdi:heart-outline"} width={20} />}
+                appear="outline"
+                size="lg"
+                round="full"
+                label={liked() ? t("episode.liked") : t("episode.like")}
+                tooltip={liked() ? t("episode.liked") : t("episode.like")}
+                xstyle={liked() ? styles.likeActive : undefined}
+                isDisabled={busyLike()}
+                onClick={toggleLike}
+              >
+                {stats.latest?.likes ?? 0}
+              </Button>
+              <Button
+                isIconOnly
+                icon={<Icon icon="mdi:playlist-plus" width={20} />}
+                appear="outline"
+                round="full"
+                size="lg"
+                label={t("playlist.addTo")}
+                tooltip={t("playlist.addTo")}
+                onClick={() => setListOpen(true)}
+              />
+              <Button
+                isIconOnly
+                icon={<Icon icon="mdi:share-variant" width={20} />}
+                appear="outline"
+                size="lg"
+                round="full"
+                label={t("episode.share")}
+                tooltip={t("episode.share")}
+                onClick={() => setShareOpen(true)}
+              />
+            </div>
+          </section>
+          <section {...stylex.props(styles.main,styles.grid)}>
+            <div {...stylex.props(styles.desc)}>{ep()?.description}</div>
+          </section>
+
+          {/* 弹窗：分享（渠道面板）+ 加入播放列表（列表勾选/新建）——面板抽为组件，按钮在 actionOutter */}
+          <ShareDialog episode={asQueue(ep()!)} isOpen={shareOpen()} onOpenChange={setShareOpen} />
+          <AddToPlaylistDialog episodeId={ep()!.id} isOpen={listOpen()} onOpenChange={setListOpen} />
+
+        </Show>
+      </Suspense>
     </div>
   );
 }

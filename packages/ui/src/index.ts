@@ -34,17 +34,6 @@ export {
   type CarouselPadding,
 } from "./components/carousel";
 export { Card } from "./components/card";
-export {
-  Grid,
-  GRID_MAX_COLUMNS,
-  type GridProps,
-  type GridColumns,
-  type GridColumnCount,
-  type GridAlignment,
-  type GridBreakpoints,
-  type GridBreakpointValue,
-} from "./components/grid";
-export { GridSpan, type GridSpanProps } from "./components/grid-span";
 export { Center, type CenterProps, type CenterAxis } from "./components/center";
 export { Skeleton, type SkeletonProps, type SkeletonRadius } from "./components/skeleton";
 export { TextField, type TextFieldProps } from "./components/text-field";

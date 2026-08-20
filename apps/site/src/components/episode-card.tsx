@@ -1,19 +1,20 @@
 // 节目卡片（三种模式，首页网格/列表/纯封面共用）：
 // - compact 精简：只有封面图，不带交互（无按钮/无 hover 划入）
-// - grid 网格：封面（PlayControls 三态按钮，hover 划入）+ 标题 + 时间 + 时长，上下排列
-// - list 列表：小封面 + 标题/日期 横排，时长 + 三态播放按钮靠右
-// - 自包含：调用方只传 episode——播放/暂停/缓冲/错误由内部 PlayControls 接入全局播放器
-//   （usePlayback）；卡片点击进详情（useNavigate）、hover 预取详情数据（getEpisodeCached），
-//   均可用 onClick/onHover 覆盖
-// 三态播放按钮（PlayControls，导出）在此文件内——cover.tsx 只负责显示图片，
-// 按钮定位/划入由使用方决定（grid 封面右下角 / list 右侧 / 详情页封面右下角）
-import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
+// - grid 网格：封面（PlayButton 四态按钮，hover 划入）+ 标题 + 时间 + 时长，上下排列
+// - list 列表：小封面 + 标题/日期 横排，时长 + 播放按钮靠右
+// - 自包含：调用方只传 episode——播放/暂停/缓冲/错误由内部 PlayButton（独立组件
+//   play-button.tsx）接入全局播放器（usePlayback）；卡片点击进详情（useNavigate）、
+//   hover 预取详情数据（getEpisodeCached），均可用 onClick/onHover 覆盖
+// cover.tsx 只负责显示图片；按钮的显隐/定位由卡片层决定——grid 封面右下角
+// hover 划入（btnIdle/btnIdleVisible + hover 信号，见下），list 右侧常显。
+// PlayButton 自身不管理"鼠标划入才显示"逻辑
+import { createSignal, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { Button, Icon } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { Cover } from "./cover";
+import { PlayButton } from "./play-button";
 import { CARD_COVER_SIZES } from "../lib/env";
 import { getEpisodeCached } from "../lib/episode-cache";
 import { usePlayback, type QueueEpisode } from "../lib/playback";
@@ -34,9 +35,9 @@ const styles = stylex.create({
   coverSlot: {
     position: "relative",
   },
-  // 按钮槽：右下角（grid 封面 / 详情页封面用）。
+  // 按钮槽：右下角（grid 封面用）。
   // 固定 40×40 + flex：槽高不随内容类型变化（block 容器 vs inline 按钮的行盒高度不同，
-  // bottom 锚定下按钮位置会差几像素——三态切换跳动）；按钮统一对齐右下
+  // bottom 锚定下按钮位置会差几像素——四态切换跳动）；按钮统一对齐右下。
   btnSlot: {
     position: "absolute",
     right: dimensions.spacing3,
@@ -49,8 +50,9 @@ const styles = stylex.create({
     justifyContent: "flex-end",
   },
   // 待播放：默认隐藏（透明），hover 淡入；触摸设备（无 hover）常显。
-  // 不用 translateY 位移划入——三态按钮切换时位置必须恒定（位移动画中点击/切换
-  // 会让按钮从半路位置跳到最终位置，视觉跳动）
+  // 卡片层持有（PlayButton 不管理显隐）：用 opacity 而非 translateY 位移——
+  // 四态按钮切换时位置必须恒定（位移动画中点击/切换会让按钮从半路位置跳到
+  // 最终位置，视觉跳动）
   btnIdle: {
     opacity: 0,
     transitionProperty: "opacity",
@@ -91,6 +93,12 @@ const styles = stylex.create({
     flexShrink: 0,
   },
   // —— list 列表模式（横向排列）——
+  // list 封面固定 56×56：stylex 对象走 xstyle 传入（固定样式统一用 stylex.create，
+  // 不再用内联 style——与全项目 xstyle 约定一致）
+  coverList: {
+    width: "56px",
+    height: "56px",
+  },
   listRow: {
     display: "flex",
     alignItems: "center",
@@ -122,204 +130,6 @@ const styles = stylex.create({
   },
 });
 
-/** 加载超时兜底：10s 未进入播放（网络失败等）→ 回待播放态 */
-const LOADING_TIMEOUT_MS = 10_000;
-/** 加载中 spinner 最短显示时间：点击后即使音频立即就绪也保留 spinner（防闪——
- * 加载太快时反馈一闪而过，用户以为没反应） */
-const MIN_LOADING_MS = 350;
-
-/**
- * 三态播放按钮（play / loading spinner / pause）+ loading 状态机。
- * 在 episode-card 内定义（cover 只管图片）；导出供详情页封面复用。
- * - 自包含：内部接入全局播放器（usePlayback）——传 episode 即可，自动判定当前
- *   播放/缓冲/音源错误状态并接管播放/暂停，调用方无需外部接线
- * - loading 内部（点击 play → 直到 playing 变 true 或超时兜底）——与 playback.play
- *   时序天然匹配（audio.play() pending 期间 playing 为 false，就绪后才 true）
- * - 定位/划入由使用方决定：grid 封面右下角（revealOnHover + hovered 划入）、
- *   list 右侧常显、详情页封面右下角（revealOnHover）
- * - 点击 stopPropagation：只触发播放/暂停，不冒泡到卡片容器（卡片主体点击才是进详情）
- */
-export function PlayControls(props: {
-  /** 节目：内部据此判定是否当前播放/音源状态，并接入全局播放器 */
-  episode: QueueEpisode;
-  /** 待播放按钮 hover 划入（封面场景）；列表模式常显传 false */
-  revealOnHover?: boolean;
-  /** hover 状态（revealOnHover 时由外部传入：封面 hover → 划入） */
-  hovered?: boolean;
-  /** 按钮尺寸（列表模式小一号）@default "lg" */
-  size?: "sm" | "md" | "lg";
-  /** 按钮外观：缺省自动（触摸设备 ghost / 桌面 fill） */
-  appear?: "fill" | "ghost";
-  /** 音源不可用覆盖（缺省：无音源/加载失败自动判定） */
-  audioError?: boolean;
-  /** 缓冲/加载中覆盖（缺省：当前节目全局缓冲状态） */
-  buffering?: boolean;
-}) {
-  const { t } = useI18n();
-  const playback = usePlayback();
-  const [loading, setLoading] = createSignal(false);
-  // 自包含三态：是否当前播放节目（全局播放器）+ 播放/缓冲/错误；可用 props 覆盖
-  const isCurrent = () => playback.current()?.id === props.episode.id;
-  const playing = () => isCurrent() && playback.playing();
-  const buffering = () => props.buffering ?? (isCurrent() && playback.buffering());
-  // 无音源判定用 !audioUrl（schema notNull：库里是空串 '' 而非 NULL，== null 永远 false）
-  const audioError = () =>
-    props.audioError ??
-    (!props.episode.audioUrl ||
-      (isCurrent() && playback.audioError()) ||
-      playback.preloadError() === props.episode.id);
-  // 点击时刻（spinner 最短显示时间的计时起点）
-  let clickAt = 0;
-  // 触摸设备（手机/平板无 hover）→ ghost 按钮（半透明底，弱化实心色块）；
-  // SSR 端默认 fill（桌面），客户端 hydration 后按 matchMedia 修正
-  const [isTouch, setIsTouch] = createSignal(false);
-  onMount(() => {
-    setIsTouch((typeof window !== "undefined" && window.matchMedia?.("(hover: none)").matches) ?? false);
-  });
-  const appear = () => props.appear ?? (isTouch() ? "ghost" : "fill");
-  // ghost 按钮在封面上的可见性：半透明深底（Button xstyle 最后合并覆盖）
-  const ghostBg = stylex.create({ base: { backgroundColor: "rgba(0,0,0,0.3)" } });
-  const ghostStyle = () => (appear() === "ghost" ? ghostBg.base : undefined);
-
-  // 加载超时兜底：10s 未进入播放 → 回待播放
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  createEffect(() => {
-    if (loading()) {
-      timer = setTimeout(() => setLoading(false), LOADING_TIMEOUT_MS);
-    } else {
-      clearTimeout(timer);
-    }
-  });
-  onCleanup(() => clearTimeout(timer));
-
-  // 播放就绪（playing → true）时清除 loading，但保证 spinner 最短显示时间：
-  // 音频预加载/快速场景下 play() 立即就绪，直接切 pause 会让加载反馈一闪而过
-  let minTimer: ReturnType<typeof setTimeout> | undefined;
-  createEffect(() => {
-    if (playing()) {
-      clearTimeout(minTimer);
-      const elapsed = performance.now() - clickAt;
-      minTimer = setTimeout(() => setLoading(false), Math.max(0, MIN_LOADING_MS - elapsed));
-    }
-  });
-  onCleanup(() => clearTimeout(minTimer));
-
-  // 播放器确认失败（audioError）→ 立即结束本地 loading（不用等 10s 超时）：
-  // 点击播放后 404/挂起，audioError 一到就切警告图标，不残留 spinner
-  createEffect(() => {
-    if (audioError()) setLoading(false);
-  });
-
-  // 缓冲结束但从未进入播放（切到别的节目/失败）→ 本地 loading 清除：
-  // 点 A 播放后马上点 B，A 的 spinner 不应残留到 10s 超时。
-  // 短延迟让 playing 事件先到（正常缓冲就绪时 canplay→playing 几乎同时，
-  // 避免闪现 play 按钮）；确未进入播放（切歌/失败）则 120ms 后清 loading
-  let sawBuffering = false;
-  let stallTimer: ReturnType<typeof setTimeout> | undefined;
-  createEffect(() => {
-    const b = buffering();
-    if (b) {
-      sawBuffering = true;
-    } else if (sawBuffering && !playing() && loading()) {
-      sawBuffering = false;
-      stallTimer = setTimeout(() => setLoading(false), 120);
-    }
-  });
-  onCleanup(() => clearTimeout(stallTimer));
-
-  const handlePlay = () => {
-    if (loading() || buffering()) return; // 缓冲中不重复触发播放
-    clickAt = performance.now();
-    setLoading(true);
-    playback.play(props.episode);
-  };
-
-  // 按钮点击只触发播放/暂停事件，不冒泡到卡片容器（卡片主体点击才是进详情）
-  const stop = (fn?: () => void) => (e: MouseEvent) => {
-    e.stopPropagation();
-    fn?.();
-  };
-
-  const btn = (interactive: boolean) => (
-    <>
-      {/* 音源不可用（无音源/加载失败）：警告图标直接常显——不依赖 hover 划入，
-          也不渲染任何播放/暂停/spinner（disabled 按钮，不提供播放） */}
-      <Show when={audioError()}>
-        <Button
-          round="full"
-          size={props.size ?? "lg"}
-          appear={appear()}
-          variant="neutral"
-          isIconOnly
-          isDisabled
-          icon={<Icon icon="mdi:alert" width={20} />}
-          label={t("common.audioError")}
-          xstyle={ghostStyle()}
-        />
-      </Show>
-      {/* 缓冲/加载中（waiting 或点击反馈）→ spinner（isLoading 自动禁用，防误触） */}
-      <Show when={!audioError() && (buffering() || loading())}>
-        <Button
-          round="full"
-          size={props.size ?? "lg"}
-          appear={appear()}
-          variant="brand"
-          isIconOnly
-          isLoading
-          label={t("common.play")}
-          xstyle={ghostStyle()}
-        />
-      </Show>
-      {/* 播放中（且加载反馈已结束）→ pause */}
-      <Show when={!audioError() && !buffering() && playing() && !loading()}>
-        <Button
-          round="full"
-          size={props.size ?? "lg"}
-          appear={appear()}
-          variant="brand"
-          isIconOnly
-          icon={<Icon icon="mdi:pause" width={20} />}
-          label={t("common.pause")}
-          xstyle={ghostStyle()}
-          onClick={stop(() => playback.toggle())}
-        />
-      </Show>
-      <Show when={!audioError() && !buffering() && !playing() && !loading()}>
-        {interactive ? (
-          <div {...stylex.props(styles.btnIdle, props.hovered && styles.btnIdleVisible)}>
-            <Button
-              round="full"
-              size={props.size ?? "lg"}
-              appear={appear()}
-              variant="brand"
-              isIconOnly
-              icon={<Icon icon="mdi:play" width={20} />}
-              label={t("common.play")}
-              xstyle={ghostStyle()}
-              onClick={stop(handlePlay)}
-            />
-          </div>
-        ) : (
-          <Button
-            round="full"
-            size={props.size ?? "lg"}
-            appear={appear()}
-            variant="brand"
-            isIconOnly
-            icon={<Icon icon="mdi:play" width={20} />}
-            label={t("common.play")}
-            xstyle={ghostStyle()}
-            onClick={stop(handlePlay)}
-          />
-        )}
-      </Show>
-    </>
-  );
-
-  // 只有一处渲染出口（条件分支都在 btn 内）
-  return <>{btn(props.revealOnHover ?? false)}</>;
-}
-
 function fmtDuration(sec: number | null): string {
   if (!sec) return "";
   const m = Math.floor(sec / 60);
@@ -338,21 +148,26 @@ export function EpisodeCard(props: {
   onClick?: () => void;
   /** 卡片 hover 覆盖（缺省内部预取详情数据） */
   onHover?: () => void;
-  /** CSS 控制显示大小（透传） */
-  style?: JSX.CSSProperties;
-  class?: string;
+  /** StyleX 样式：外部注入覆盖（stylex.create 产物，最后合并；命名与 ui 包 xstyle 统一） */
+  xstyle?: stylex.StyleXStyles;
 }) {
   const { t, locale } = useI18n();
   const playback = usePlayback();
   const navigate = useNavigate();
   const [hover, setHover] = createSignal(false);
-  // 自包含行为：播放/暂停/缓冲/错误由内部 PlayControls（传 episode）接管；
-  // 这里只需音源判定（grid 模式据此决定是否启用 hover 划入播放按钮）
+  // 自包含行为：播放/暂停/缓冲/错误由内部 PlayButton（传 episode）接管；
+  // 卡片层只管"按钮显隐"（grid 封面 hover 划入）+ 音源判定
   const isCurrent = (id: string) => playback.current()?.id === id;
   const audioError = () =>
     !props.episode.audioUrl ||
     (isCurrent(props.episode.id) && playback.audioError()) ||
     playback.preloadError() === props.episode.id;
+  // grid 封面按钮显隐（卡片层策略）：待播放态 hover 划入；一旦本集进入
+  // 播放/缓冲/错误态按钮常显（点击后鼠标移开也能看到暂停/spinner/警告）
+  const btnReveal = () =>
+    hover() ||
+    audioError() ||
+    (isCurrent(props.episode.id) && (playback.playing() || playback.buffering()));
   // 缺省行为：点击进详情、hover 预取详情数据；调用方可传 onClick/onHover 覆盖
   const handleClick = () => {
     if (props.onClick) props.onClick();
@@ -375,12 +190,7 @@ export function EpisodeCard(props: {
   if (props.variant === "compact") {
     // 精简：只有封面图，不带交互
     return (
-      <Cover
-        episode={props.episode}
-        sizes={CARD_COVER_SIZES}
-        style={props.style}
-        class={props.class}
-      />
+      <Cover episode={props.episode} sizes={CARD_COVER_SIZES} xstyle={props.xstyle} />
     );
   }
 
@@ -388,46 +198,36 @@ export function EpisodeCard(props: {
     // 列表：封面 + 标题/日期 + （时长 + 播放按钮靠右）
     return (
       <div
-        {...stylex.props(styles.listRow)}
-        style={props.style}
-        class={props.class}
+        {...stylex.props(styles.listRow, props.xstyle)}
         onClick={handleClick}
         onPointerEnter={handleHover}
       >
-        <Cover
-          episode={props.episode}
-          sizes={CARD_COVER_SIZES}
-          style={{ width: "56px", height: "56px" }}
-        />
+        <Cover episode={props.episode} sizes={CARD_COVER_SIZES} xstyle={styles.coverList} />
         <div {...stylex.props(styles.listInfo)}>
           <p {...stylex.props(styles.title)}>{props.episode.title || t("common.unnamed")}</p>
           <p {...stylex.props(styles.meta)}>{date()}</p>
         </div>
         <div {...stylex.props(styles.listRight)}>
           <span {...stylex.props(styles.duration)}>{fmtDuration(props.episode.durationSeconds)}</span>
-          <PlayControls episode={props.episode} size="sm" />
+          <PlayButton episode={props.episode} size="sm" />
         </div>
       </div>
     );
   }
 
-  // grid 网格：封面（三态按钮 hover 划入）+ 标题 + 时间 + 时长，上下排列
+  // grid 网格：封面（播放按钮 hover 划入）+ 标题 + 时间 + 时长，上下排列
   return (
     <div
-      {...stylex.props(styles.gridCard)}
-      style={props.style}
-      class={props.class}
+      {...stylex.props(styles.gridCard, props.xstyle)}
       onClick={handleClick}
       onPointerEnter={handleHover}
     >
       <div {...stylex.props(styles.coverSlot)} onPointerEnter={coverPointerEnter} onPointerLeave={coverPointerLeave}>
         <Cover episode={props.episode} sizes={CARD_COVER_SIZES} />
         <div {...stylex.props(styles.btnSlot)}>
-          <PlayControls
-            episode={props.episode}
-            revealOnHover={!audioError()} // audio 缺失：不启用 hover 划入播放按钮，仅常显警告图标
-            hovered={hover()}
-          />
+          <div {...stylex.props(styles.btnIdle, btnReveal() && styles.btnIdleVisible)}>
+            <PlayButton episode={props.episode} />
+          </div>
         </div>
       </div>
       <p {...stylex.props(styles.title)}>{props.episode.title || t("common.unnamed")}</p>

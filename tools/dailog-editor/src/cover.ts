@@ -1,9 +1,12 @@
 // 封面生成（本地方案——随机纹理 + 随机配色；不满意贴图 URL 裁剪；无 Pexels 依赖）：
-//   pnpm editor cover <submissionId> [--texture squares|crosses|hexagons|woven|diagonal|zigzag] [--colors "#hex,#hex"] [--image-url <url>]
+//   pnpm editor cover <submissionId> [--texture squares|crosses|hexagons|woven|diagonal|zigzag] [--colors "#hex,#hex"] [--guest <platform>] [--image-url <url>]
 //   · 默认：纹理随机 + 配色随机（配色组随机；可 --texture/--colors 固定复现）
-//   · 纹理库：直线几何平铺（参照 riccardoscalco.it/textures 手法，全部直角——无圆形/圆角/文字）
-//   · 渲染：渐变底色 + SVG pattern 纹理 + 噪点 → resvg → 1400×1400 标准 JPEG
-//   · --image-url：编辑不满意时贴图片 URL → 下载 → ffmpeg 裁 1400×1400
+//   · 纹理库：直线几何平铺（参照 riccardoscalco.it/textures 手法，全部直角——无圆形/圆角）
+//   · 文字：无外部图片时，图片中心渲染「主持人称呼 × 嘉宾称呼」（如 Fei × Deepseek）：
+//     - 文本宽度不超底纹区域（超宽自动缩小字号）
+//     - 文字颜色按底色明暗定：底色偏黑 → 白字 60% 透明度；底色偏白 → 黑字 60% 透明度
+//   · 渲染：渐变底色 + SVG pattern 纹理 + 噪点 + 居中称呼 → resvg → 1400×1400 标准 JPEG
+//   · --image-url：编辑不满意时贴图片 URL → 下载 → ffmpeg 裁 1400×1400（外部图片不叠加文字）
 //   · 产物：drafts/{submissionId}/cover.jpg
 import { writeFileSync, existsSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -16,7 +19,7 @@ import colorHashModule from "color-hash";
 type ColorHashCtor = new (options?: unknown) => { hex(str: string): string };
 const ColorHash = (colorHashModule as { default?: ColorHashCtor }).default ?? (colorHashModule as ColorHashCtor);
 import type { EditorConfig } from "./lib.js";
-import { draftDir, writeProgress } from "./lib.js";
+import { draftDir, writeProgress, tryApi } from "./lib.js";
 
 const COVER_SIZE = 1400;
 
@@ -221,14 +224,39 @@ const PRESETS: Preset[] = [
   { name: "paths().d(自定义).size(20).strokeWidth(1)", texture: "zigzag", cells: 10, strokeWidth: 1, stroke: DARK_ORANGE },
 ];
 
-function parseArgs(args: string[]): { submissionId: string; texture: string | null; colors: [string, string] | null; imageUrl: string | null; strokeWidth: number } {
+/** 嘉宾平台（guests 表；--guest 取值与 tts/publish 一致） */
+const GUEST_PLATFORMS = ["claude", "chatgpt", "deepseek", "gemini", "kimi", "doubao", "tongyi", "perplexity"];
+/** 平台 → 展示名兜底（guests 表未配置称呼/拿不到时用） */
+const GUEST_PRETTY: Record<string, string> = {
+  claude: "Claude", chatgpt: "ChatGPT", deepseek: "Deepseek", gemini: "Gemini",
+  kimi: "Kimi", doubao: "Doubao", tongyi: "Tongyi", perplexity: "Perplexity",
+};
+
+/** 投稿 URL → 嘉宾平台推断（cover 未传 --guest 时按平台取名） */
+function guestPlatformFromUrl(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    const host = new URL(url).hostname;
+    if (host === "chat.deepseek.com") return "deepseek";
+    if (host === "www.doubao.com") return "doubao";
+    if (host === "chatgpt.com") return "chatgpt";
+    if (host === "claude.ai") return "claude";
+    if (host.endsWith(".gemini.google.com") || host === "gemini.google.com") return "gemini";
+    if (host === "kimi.moonshot.cn") return "kimi";
+    if (host === "tongyi.aliyun.com" || host === "qianwen.aliyun.com") return "tongyi";
+    if (host === "perplexity.ai") return "perplexity";
+  } catch { /* 非法 URL 忽略 */ }
+  return null;
+}
+
+function parseArgs(args: string[]): { submissionId: string; texture: string | null; colors: [string, string] | null; imageUrl: string | null; strokeWidth: number; guest: string | null } {
   const submissionId = args[0];
   const take = (flag: string) => {
     const idx = args.indexOf(flag);
     return idx >= 0 && args[idx + 1] ? args[idx + 1] : undefined;
   };
   if (!submissionId) {
-    console.error(`用法：pnpm editor cover <submissionId> [--texture ${TEXTURE_NAMES.join("|")}] [--colors "#hex,#hex"] [--image-url <URL>]`);
+    console.error(`用法：pnpm editor cover <submissionId> [--texture ${TEXTURE_NAMES.join("|")}] [--colors "#hex,#hex"] [--guest <platform>] [--image-url <URL>]`);
     process.exit(1);
   }
   const texture = take("--texture") ?? take("--theme") ?? null; // --theme 兼容旧参数
@@ -247,7 +275,33 @@ function parseArgs(args: string[]): { submissionId: string; texture: string | nu
       process.exit(1);
     }
   }
-  return { submissionId, texture, colors, imageUrl: take("--image-url") ?? null, strokeWidth: args.includes("--thicker") ? 4 : 2 };
+  const guest = take("--guest")?.toLowerCase() ?? null;
+  if (guest && !GUEST_PLATFORMS.includes(guest)) {
+    console.error(`[cover] 未知嘉宾平台：${guest}（可用：${GUEST_PLATFORMS.join(" / ")}）`);
+    process.exit(1);
+  }
+  return { submissionId, texture, colors, imageUrl: take("--image-url") ?? null, strokeWidth: args.includes("--thicker") ? 4 : 2, guest };
+}
+
+/** 取封面称呼：主持人 = 投稿 detail 的 callName（无则画像 displayName）；嘉宾 = --guest 平台名
+ *  （guests 表 name 优先，无配置/拿不到 → 平台展示名兜底；无 --guest → 投稿 URL 推断平台）。
+ *  全程 tryApi——拿不到称呼不阻塞封面生成（纯图形兜底）。 */
+async function resolveCoverNames(config: EditorConfig, submissionId: string, guest: string | null): Promise<{ hostName: string | null; guestName: string | null }> {
+  const d = (await tryApi(config, `/v1/editor/submissions/${submissionId}`)) as {
+    callName?: string | null;
+    personaInfo?: { displayName?: string | null } | null;
+    url?: string | null;
+  } | null;
+  const hostName = (d?.callName && d.callName.trim()) || d?.personaInfo?.displayName || null;
+
+  const platform = guest ?? guestPlatformFromUrl(d?.url ?? null);
+  let guestName: string | null = null;
+  if (platform) {
+    const list = (await tryApi(config, "/v1/editor/guests")) as Array<{ id?: string; platform?: string; name?: string }> | null;
+    const hit = Array.isArray(list) ? list.find((g) => g.id === platform || g.platform === platform) : null;
+    guestName = hit?.name ?? GUEST_PRETTY[platform] ?? platform;
+  }
+  return { hostName, guestName };
 }
 
 /** 纹理区域边长（1400 - 10%×2 边距）与每边平铺块数：
@@ -255,11 +309,86 @@ function parseArgs(args: string[]): { submissionId: string; texture: string | nu
 const PATTERN_AREA = 1120;
 const PATTERN_CELLS = 8;
 
-/** SVG 模板：底色渐变（同色相暗化）+ 对比纹理平铺 + 噪点（纯图形无文字无圆角） */
-function svgTemplate(textureName: string, base: string, textureColor: string, strokeWidth: number, cells: number): string {
+// ---------- 居中称呼文字（主持人 × 嘉宾） ----------
+/** 居中文本可用的最大宽度：底纹区域（PATTERN_AREA）两侧各留 64 边距——文本区不超底纹区域 */
+const TEXT_MAX_WIDTH = PATTERN_AREA - 64 * 2;
+const TEXT_FONT_BASE = 120;   // 起始字号
+const TEXT_FONT_MIN = 32;     // 收缩下限（极长称呼也不小于此）
+
+/** hex → 相对亮度（WCAG，0=纯黑 1=纯白）——按感知明暗定文字颜色 */
+function relativeLuminance(hex: string): number {
+  const n = parseInt(hex.slice(1), 16);
+  const chan = (shift: number) => {
+    const c = ((n >> shift) & 255) / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * chan(16) + 0.7152 * chan(8) + 0.0722 * chan(0);
+}
+
+/** 文字颜色：底色偏黑 → 白字 60% 透明度；底色偏白 → 黑字 60% 透明度 */
+function pickTextColor(base: string): { fill: string; opacity: number } {
+  return relativeLuminance(base) < 0.5
+    ? { fill: "#ffffff", opacity: 0.6 }
+    : { fill: "#000000", opacity: 0.6 };
+}
+
+/** 估算文本渲染宽度（px）——保守偏大（宁可多缩一点，不可超出底纹区域）：
+ *  全角/CJK ≈ 1.05em（CJK 字体全角字形常略超 1em）、ASCII 字母数字 ≈ 0.6em、
+ *  空格 ≈ 0.34em、其余标点/符号 ≈ 0.55em；再计入 letter-spacing 每字符间距 */
+const LETTER_SPACING = 1; // 与 svgTemplate 中 <text letter-spacing> 保持一致
+function estimateTextWidth(text: string, fontSize: number): number {
+  let w = 0;
+  for (const ch of text) {
+    const c = ch.codePointAt(0) ?? 0;
+    const fullWidth =
+      (c >= 0x2e80 && c <= 0x9fff) ||   // CJK 部首/统一表意/兼容
+      (c >= 0xac00 && c <= 0xd7af) ||   // 谚文
+      (c >= 0xf900 && c <= 0xfaff) ||   // CJK 兼容表意
+      (c >= 0xff00 && c <= 0xffef) ||   // 全角形式（含全角空格）
+      (c >= 0x3000 && c <= 0x303f);     // CJK 标点
+    if (fullWidth) w += fontSize * 1.05;
+    else if (ch === " " || ch === "\u00a0") w += fontSize * 0.34;
+    else if (/[A-Za-z0-9]/.test(ch) || ch === "×" || ch === "x" || ch === "X") w += fontSize * 0.6;
+    else w += fontSize * 0.55;
+  }
+  // 字符间距：N 个字符 N-1 个间隙
+  w += Math.max(0, [...text].length - 1) * LETTER_SPACING;
+  return w;
+}
+
+/** 字号适配：二分找 [TEXT_FONT_MIN, TEXT_FONT_BASE] 内估算宽度 ≤ 最大宽度的最大字号 */
+function fitCaptionFontSize(text: string): number {
+  let lo = TEXT_FONT_MIN, hi = TEXT_FONT_BASE;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (estimateTextWidth(text, mid) <= TEXT_MAX_WIDTH) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+}
+
+/** XML 转义（称呼可能含 <>& 等） */
+function escapeXml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/** SVG 模板：底色渐变（同色相暗化）+ 对比纹理平铺 + 噪点 + 居中称呼文字（无外部图片时）。
+ *  caption 为空 → 纯图形无文字（播放列表封面/未取到称呼时行为不变）。 */
+function svgTemplate(textureName: string, base: string, textureColor: string, strokeWidth: number, cells: number, caption: string | null = null): string {
   // 单块尺寸基于容器计算：1120 ÷ cells（整除 → 完整排列，边缘吻合）
   const size = PATTERN_AREA / cells;
   const pattern = TEXTURES[textureName](`${textureColor}99`, size, strokeWidth); // 纹理色 60% 不透明度
+  // 居中称呼：文字区不超底纹区域（超宽自动缩字号）；颜色按底色明暗（偏黑白字/偏白黑字，均 60% 透明度）
+  let textBlock = "";
+  if (caption) {
+    const fontSize = fitCaptionFontSize(caption);
+    const { fill, opacity } = pickTextColor(base);
+    textBlock = `
+  <!-- 居中称呼（主持人 × 嘉宾）：文本宽度 ≤ 底纹区域（${TEXT_MAX_WIDTH}px） -->
+  <text x="700" y="700" text-anchor="middle" dominant-baseline="central"
+    font-family="'PingFang SC','Hiragino Sans GB','Noto Sans CJK SC','Source Han Sans SC','Microsoft YaHei',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+    font-size="${fontSize}" font-weight="600" fill="${fill}" opacity="${opacity}" letter-spacing="1">${escapeXml(caption)}</text>`;
+  }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${COVER_SIZE}" height="${COVER_SIZE}" viewBox="0 0 1400 1400">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
@@ -273,7 +402,7 @@ function svgTemplate(textureName: string, base: string, textureColor: string, st
   <rect width="1400" height="1400" fill="url(#bg)"/>
   <!-- 纹理仅中间区域（四周 10% 留白）：1400 × 10% = 140 -->
   <rect x="140" y="140" width="1120" height="1120" fill="url(#pat)" opacity="0.9"/>
-  <rect width="1400" height="1400" filter="url(#noise)" opacity="0.5"/>
+  <rect width="1400" height="1400" filter="url(#noise)" opacity="0.5"/>${textBlock}
 </svg>`;
 }
 
@@ -287,24 +416,29 @@ export interface CoverRenderMeta {
   cells: number;
   /** 外部图片裁剪（--image-url）时 true */
   fromImage: boolean;
+  /** 居中称呼文字（"主持人 × 嘉宾"；无外部图片且取到称呼时有值） */
+  caption: string | null;
 }
 
 /** 生成封面 JPEG 字节（纹理 SVG+resvg 或外部图片裁剪）——不落盘，调用方决定写哪里。
  *  seed = 确定性底色哈希源（投稿 id / 播放列表 id）。
- *  供 cover（写草稿目录）与 playlist cover（直接上传）复用。 */
+ *  hostName/guestName：无外部图片时居中渲染「hostName × guestName」（缺则取有的一方）；
+ *  两者都缺 → 纯图形无文字。供 cover（写草稿目录）与 playlist cover（直接上传）复用。 */
 export async function renderCoverImage(opts: {
   seed: string;
   texture?: string | null;
   colors?: [string, string] | null;
   imageUrl?: string | null;
   strokeWidth?: number;
+  hostName?: string | null;
+  guestName?: string | null;
 }): Promise<{ bytes: Uint8Array; meta: CoverRenderMeta }> {
-  const { seed, texture, colors, imageUrl } = opts;
+  const { seed, texture, colors, imageUrl, hostName, guestName } = opts;
   let strokeWidth = opts.strokeWidth ?? 2;
   let textureName = texture ?? TEXTURE_NAMES[Math.floor(Math.random() * TEXTURE_NAMES.length)];
 
   if (imageUrl) {
-    // 编辑不满意 → 贴图片 URL：下载 → ffmpeg 裁 1400×1400（临时目录，不污染草稿）
+    // 编辑不满意 → 贴图片 URL：下载 → ffmpeg 裁 1400×1400（临时目录，不污染草稿；外部图片不叠加称呼）
     console.log(`[cover] 下载外部图片：${imageUrl}`);
     let res: Response;
     try {
@@ -329,7 +463,7 @@ export async function renderCoverImage(opts: {
     rmSync(tmp, { force: true });
     const bytes = new Uint8Array(readFileSync(out));
     rmSync(out, { force: true });
-    return { bytes, meta: { presetName: "外部图片", textureName, base: "", textureColor: "", strokeWidth, cells: 0, fromImage: true } };
+    return { bytes, meta: { presetName: "外部图片", textureName, base: "", textureColor: "", strokeWidth, cells: 0, fromImage: true, caption: null } };
   }
 
   // 默认：从页面指令预置库随机选 1 条完整执行（纹理+密度+线宽+颜色一起随机）
@@ -351,7 +485,10 @@ export async function renderCoverImage(opts: {
     textureColor = colors ? colors[1] : pickTextureColor(base);
   }
 
-  const svg = svgTemplate(textureName, base, textureColor, strokeWidth, cells);
+  // 居中称呼：仅无外部图片时叠加——有则「host × guest」，缺一方只显示有的一方，都缺 → 纯图形
+  const caption = [hostName ?? null, guestName ?? null].filter((n): n is string => !!n && n.length > 0).join(" × ") || null;
+
+  const svg = svgTemplate(textureName, base, textureColor, strokeWidth, cells, caption);
   const resvg = new Resvg(svg, { fitTo: { mode: "width", value: COVER_SIZE } });
   const png = resvg.render().asPng();
   const pngPath = join(tmpdir(), `dailog-cover-${Date.now()}-${Math.random().toString(16).slice(2)}.png`);
@@ -361,14 +498,16 @@ export async function renderCoverImage(opts: {
   rmSync(pngPath, { force: true });
   const bytes = new Uint8Array(readFileSync(jpgPath));
   rmSync(jpgPath, { force: true });
-  return { bytes, meta: { presetName, textureName, base, textureColor, strokeWidth, cells, fromImage: false } };
+  return { bytes, meta: { presetName, textureName, base, textureColor, strokeWidth, cells, fromImage: false, caption } };
 }
 
 export async function cover(config: EditorConfig, args: string[]): Promise<void> {
-  const { submissionId, texture, colors, imageUrl, strokeWidth: strokeWidthArg } = parseArgs(args);
+  const { submissionId, texture, colors, imageUrl, strokeWidth: strokeWidthArg, guest } = parseArgs(args);
   const dir = draftDir(submissionId);
   const outPath = join(dir, "cover.jpg");
-  const { bytes, meta } = await renderCoverImage({ seed: submissionId, texture, colors, imageUrl, strokeWidth: strokeWidthArg });
+  // 称呼（主持人 callName + 嘉宾称呼）→ 居中文字；取不到称呼 → 纯图形（不阻塞）
+  const { hostName, guestName } = await resolveCoverNames(config, submissionId, guest);
+  const { bytes, meta } = await renderCoverImage({ seed: submissionId, texture, colors, imageUrl, strokeWidth: strokeWidthArg, hostName, guestName });
   writeFileSync(outPath, bytes);
   writeProgress(submissionId, "covered");
   if (meta.fromImage) {
@@ -376,6 +515,7 @@ export async function cover(config: EditorConfig, args: string[]): Promise<void>
     return;
   }
   console.log(`[cover] ✅ 封面已生成（指令 ${meta.presetName} → ${meta.textureName} / 底色 ${meta.base} / 纹理色 ${meta.textureColor} / 线宽 ${meta.strokeWidth}px / ${meta.cells}×${meta.cells}）`);
+  if (meta.caption) console.log(`[cover]   居中称呼：${meta.caption}`);
   console.log(`[cover]   → ${outPath}`);
   console.log(`[cover]   固定复现：--texture ${meta.textureName} --colors "${meta.base},${meta.textureColor}"`);
   console.log(`[cover]   不满意？贴图重做：--image-url <URL>`);

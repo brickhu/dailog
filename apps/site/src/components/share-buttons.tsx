@@ -216,19 +216,32 @@ export function ShareDialog(props: {
 }
 
 /** 统一分享按钮：触发 ShareDialog（所有分享渠道在弹窗内） */
-export function ShareButton(props: { episode: QueueEpisode }) {
+export function ShareButton(props: { episode: QueueEpisode; iconOnly?: boolean }) {
   const { t } = useI18n();
   const [open, setOpen] = createSignal(false);
   return (
     <>
-      <Button
-        variant="neutral"
-        appear="outline"
-        icon={<Icon icon="mdi:share-variant" width={16} />}
-        onClick={() => setOpen(true)}
-      >
-        {t("episode.share")}
-      </Button>
+      {props.iconOnly ? (
+        <Button
+          isIconOnly
+          icon={<Icon icon="mdi:share-variant" width={20} />}
+          appear="outline"
+          size="lg"
+          round="full"
+          label={t("episode.share")}
+          tooltip={t("episode.share")}
+          onClick={() => setOpen(true)}
+        />
+      ) : (
+        <Button
+          variant="neutral"
+          appear="outline"
+          icon={<Icon icon="mdi:share-variant" width={16} />}
+          onClick={() => setOpen(true)}
+        >
+          {t("episode.share")}
+        </Button>
+      )}
       <ShareDialog episode={props.episode} isOpen={open()} onOpenChange={setOpen} />
     </>
   );

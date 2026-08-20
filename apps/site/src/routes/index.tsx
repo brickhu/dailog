@@ -1,6 +1,6 @@
-import { createEffect, createResource, Show, For, Suspense } from "solid-js";
+import { createResource, Show, For, Suspense } from "solid-js";
 import { A } from "@solidjs/router";
-import { usePlayback, type QueueEpisode } from "../lib/playback";
+import { usePlayback } from "../lib/playback";
 import { apiBaseForFetch, episodeCoverUrl, playlistCoverUrl } from "../lib/env";
 import { Faq } from "../components/faq";
 import { EpisodeCarousel } from "../components/episode-carousel";
@@ -291,19 +291,8 @@ export default function HomePage() {
   const playback = usePlayback();
 
   // 数据加载统一 createResource（内置 loading/error 状态，各自独立并行）：
-  // 推荐队列（热度分 + 语言优先，每屏 4 条 × 最多 5 屏 → limit=20）
-  // 推荐队列：SSR 时服务端 fetch（http 基址，数据序列化进 HTML），客户端 hydration 直接用
-  const [list] = createResource(async () => {
-    const lang = locale() === "en" ? "en" : "zh";
-    const r = await fetch(`${apiBaseForFetch}/v1/public/episodes/recommended?lang=${lang}&limit=20`);
-    const eps: unknown = r.ok ? await r.json() : null;
-    return Array.isArray(eps) && eps.length > 0 ? (eps as QueueEpisode[]) : null;
-  });
-  // 播放器队列：数据到达时初始化（未激活才灌入，不打断播放）
-  createEffect(() => {
-    const eps = list();
-    if (eps && !playback.activated()) playback.setQueue(eps);
-  });
+  // 推荐队列：由全局播放器（PlaybackProvider）统一拉取 + 灌入队列（本页不再各自 fetch）——
+  // 首页推荐滚屏直接读 playback.recommended()，与播放器队列同源同份数据
   // 站点头部数据（三个统计卡片）
   const [stats] = createResource(async () => {
     const r = await fetch(`${apiBaseForFetch}/v1/public/stats`);
@@ -359,7 +348,7 @@ export default function HomePage() {
       {/* 数据区（推荐滚屏 + 统计卡片）：页面级 Suspense —— 点击导航立即提交，数据加载中
           显示 spinner（后续可按需换成结构化骨架）；FAQ 静态区不受影响 */}
       <Suspense fallback={<PageSpinner />}>
-      <EpisodeCarousel episodes={list() ?? null} loading={list.loading} />
+      <EpisodeCarousel episodes={playback.recommended() ?? null} loading={playback.recommendedLoading()} />
 
       {/* 播放列表横滑区：平台策展的主题合集（封面 = 首期节目封面） */}
       <Show when={playlists() && playlists()!.length > 0}>

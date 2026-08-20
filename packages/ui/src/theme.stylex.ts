@@ -3,12 +3,14 @@ import * as stylex from "@stylexjs/stylex";
 // 设计 token（StyleX defineVars）唯一源：studio（工作台）与 site（消费端）共享。
 // 注意：defineVars 文件必须保持 .stylex.ts 后缀（StyleX 编译器约定）。
 
-// 断点常量：theme.stylex.const.ts 为唯一规范源。本地定义——stylex 0.19 babel 插件
-// 不支持跨文件常量解析（commonJS 解析不了 ESM import；crossFileParsing 在 TS 源码
-// monorepo 下多处失败），defineVars 的 key 也要求编译期静态值；改断点同步 const 文件
+// 断点常量（本文件为唯一源）：本地定义——stylex 0.19 babel 插件不支持跨文件常量
+// 解析（commonJS 解析不了 ESM import；crossFileParsing 在 TS 源码 monorepo 下多处
+// 失败），defineVars 的 key 也要求编译期静态值；业务文件的 stylex.create 需本地写
+// 同值字面量（改断点同步本文件 + grid.tsx 等），运行时 key 用下方导出的 constants
 const DARK = "@media (prefers-color-scheme: dark)";
 const DESKTOP = "@media (width >= 1024px)";
-const TABLET = "@media (640px <= width < 1024px)";
+const TABLET = "@media (width >= 640px)";
+
 
 // 颜色
 export const colors = stylex.defineVars({
@@ -147,6 +149,11 @@ export const dimensions = stylex.defineVars({
   borderWidthThin: "1px",
   borderWidthThick: "2px",
   borderWidthExtraThick: "4px",
+
+  //响应式断点
+  desktop: "1124px",
+  tablet: "820px",
+  mobile : "360px"
 })
 
 // 过渡
@@ -460,4 +467,5 @@ export const constants = {
   DARK,
   DESKTOP,
   TABLET,
-}
+} as const;
+

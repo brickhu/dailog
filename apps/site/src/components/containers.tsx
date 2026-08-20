@@ -1,25 +1,30 @@
 import { type JSX } from "solid-js";
-import { constants } from "@dailogues/ui/theme.stylex";
-import { Grid } from "@dailogues/ui";
+import * as stylex from "@stylexjs/stylex";
 
-/**
- * 页面内容容器：断点列数（手机 4 / 平板 8 / 桌面 12）+ 居中限宽 1128px + 左右留白。
- * 注意：
- * - width 必须显式 100%（父级 layouts.page 是 flex + align-items:center，auto 会 shrink-wrap 收窄到内容宽）
- * - columns 与 minColWidth 二选一：同时传时 columns 优先（minColWidth 被忽略）
- */
-export function GridContainerLg(props: { children?: JSX.Element }) {
-  return (
-    <Grid
-      columns={{ base: 4, [constants.TABLET]: 8, [constants.DESKTOP]: 12 }}
-      minRowHeight={16}
-      width="100%"
-      maxWidth={1128}
-      gap={4}
-      paddingX={4}
-    >
-      {props.children}
-    </Grid>
-  );
+// 断点常量本地定义（stylex babel 插件不支持跨文件常量解析，值同 theme.stylex.const）
+const TABLET = "@media (640px <= width < 1024px)";
+const DESKTOP = "@media (width >= 1024px)";
+
+// 页面内容容器：限宽 1128px 居中 + 左右留白 + 断点列数（手机 4 / 平板 8 / 桌面 12）——
+// 直接写 CSS（不再依赖 Grid 组件）
+const styles = stylex.create({
+  container: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, 1fr)", // 手机（移动优先默认）
+    [TABLET]: { gridTemplateColumns: "repeat(8, 1fr)" },
+    [DESKTOP]: { gridTemplateColumns: "repeat(12, 1fr)" },
+    width: "100%",
+    maxWidth: 1128, // px
+    margin: "0 auto",
+    boxSizing: "border-box",
+    paddingInline: 16, // 左右留白
+    rowGap: 16,
+    columnGap: 16,
+    gridAutoRows: "minmax(16px, auto)",
+  },
+});
+
+/** 页面内容容器：断点列数（手机 4 / 平板 8 / 桌面 12）+ 限宽 1128 居中 + 左右留白 */
+export function Container(props: { children?: JSX.Element }) {
+  return <div {...stylex.props(styles.container)}>{props.children}</div>;
 }
-

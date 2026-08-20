@@ -74,15 +74,11 @@ export async function produce(config: EditorConfig, args: string[]): Promise<voi
       await tts(config, [id, "--script", scriptPath, "--language", language, ...(guest ? ["--guest", guest] : [])]);
       // ② 合成（intro/outro 按语言自动匹配）
       await merge(config, [id, "--language", language]);
-      // ③ 封面（脚本 coverKeywords；无则跳过提示）
-      if (meta.coverKeywords) {
-        await cover(config, [id, meta.coverKeywords]);
-      } else {
-        console.log("[produce] 封面：脚本无 coverKeywords——跳过（可手动 pnpm editor cover）");
-      }
+      // ③ 封面（本地模板渲染：居中显示「主持人称呼 × 嘉宾称呼」，传 --guest 取嘉宾名）
+      await cover(config, [id, ...(guest ? ["--guest", guest] : [])]);
       const finalPath = join(draftDir(id), "final.mp3");
       results.push({ id, ok: true, finalPath, title: meta.title });
-      console.log(`[produce] ${id.slice(0, 8)}… ✅ 完成（final.mp3 + ${meta.coverKeywords ? "封面" : "无封面"}）\n`);
+      console.log(`[produce] ${id.slice(0, 8)}… ✅ 完成（final.mp3 + 封面）\n`);
     } catch (e) {
       console.log(`❌ ${(e as Error).message}`);
       results.push({ id, ok: false, title: meta.title, error: (e as Error).message });
