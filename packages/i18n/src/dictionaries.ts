@@ -55,6 +55,16 @@ export const zh = {
   "nav.episodes": "节目",
   "nav.settings": "设置",
   "nav.example": "组件示例",
+  "nav.browse": "浏览",
+
+  // ---- 移动端导航抽屉 ----
+  "mobileNav.navigation": "导航",
+  "mobileNav.openNavigation": "打开导航",
+  "mobileNav.closeNavigation": "关闭导航",
+
+  // ---- 纵向导航菜单 ----
+  "sideNavItem.expand": "展开「{label}」",
+  "sideNavItem.collapse": "收起「{label}」",
 
   // ---- 搜索 ----
   "search.title": "搜索",
@@ -595,6 +605,9 @@ export const zh = {
   "episode.completions": "{count} 次完播",
   "episode.sourceUrl": "对话原文",
   "episode.share": "分享",
+  "episode.cast": "演出阵容",
+  "episode.host": "主持人",
+  "episode.guest": "嘉宾",
   "episode.copyLink": "复制链接",
   "episode.copied": "已复制 ✓",
   "episode.shareNative": "系统分享",
@@ -761,40 +774,30 @@ export const zh = {
   "install.iosStep3": "点击右上角「添加」，dailog 图标即出现在主屏幕",
   "install.fallbackDesc": "当前浏览器暂未提供一键安装。请点击地址栏右侧或浏览器菜单中的「安装应用 / 添加到主屏幕」。",
 
-  // ---- 播放列表 ----
+  // ---- 播放列表（平台策展合集）----
   "playlists.title": "播放列表",
   "playlists.desc": "编辑精选的主题合集，一口气听完",
   "playlists.empty": "还没有播放列表",
   "playlists.episodeCount": "{count} 期节目",
   "playlist.notFound": "播放列表不存在或未公开",
   "playlist.playAll": "播放全部",
-  "playlist.episodes": "节目列表",
   "playlist.updatedAt": "更新于 {date}",
   "playlist.in": "收录于",
-  "playlist.addTo": "加入播放列表",
-  "playlist.added": "已加入",
-  "playlist.remove": "移除",
-  "playlist.done": "完成",
-  "playlist.new": "新建播放列表",
-  "playlist.newTitle": "标题",
-  "playlist.newTitlePlaceholder": "列表名称（1-80 字）",
-  "playlist.newDesc": "简介（可选）",
-  "playlist.newDescPlaceholder": "这个列表讲什么？",
-  "playlist.create": "创建",
-  "playlist.public": "公开",
-  "playlist.private": "私有",
-  "playlist.publicHint": "公开后可通过链接分享",
-  "playlist.delete": "删除列表",
-  "playlist.deleteConfirm": "确定删除「{title}」？列表中的节目不会受影响。",
-  "playlist.edit": "编辑",
-  "playlist.share": "分享",
-  "playlist.copied": "已复制 ✓",
-  "playlist.emptyEpisodes": "还没有节目——在节目页点「加入播放列表」添加",
-  "playlist.loginHint": "登录后即可创建播放列表",
   "home.playlists": "播放列表",
-  "me.playlists": "我的播放列表",
-  "me.playlistsDesc": "把喜欢的节目打包成列表，公开后可分享",
   "discover.lists": "列表",
+
+  // ---- 我的收藏 ----
+  "me.favoritesDesc": "收藏的节目都在这里，随时回听",
+  "favorite.add": "收藏",
+  "favorite.added": "已收藏",
+  "favorite.remove": "取消收藏",
+  "favorites.empty": "还没有收藏——在节目页点「收藏」即可加入",
+  "favorites.groupAll": "全部",
+  "favorites.groupTags": "按标签",
+  "favorites.groupLanguages": "按语言",
+  "favorites.groupGuests": "按嘉宾",
+  "favorites.untagged": "未分类",
+  "favorites.noGuest": "无嘉宾",
 
 } as const;
 
@@ -852,6 +855,16 @@ export const en: Dictionary = {
   "nav.episodes": "Episodes",
   "nav.settings": "Settings",
   "nav.example": "Components",
+  "nav.browse": "Browse",
+
+  // ---- Mobile nav drawer ----
+  "mobileNav.navigation": "Navigation",
+  "mobileNav.openNavigation": "Open navigation",
+  "mobileNav.closeNavigation": "Close navigation",
+
+  // ---- Vertical nav menu ----
+  "sideNavItem.expand": "Expand {label}",
+  "sideNavItem.collapse": "Collapse {label}",
 
   // ---- Search ----
   "search.title": "Search",
@@ -1389,6 +1402,9 @@ export const en: Dictionary = {
   "episode.completions": "{count} completions",
   "episode.sourceUrl": "Original conversation",
   "episode.share": "Share",
+  "episode.cast": "Cast",
+  "episode.host": "Host",
+  "episode.guest": "Guest",
   "episode.copyLink": "Copy link",
   "episode.copied": "Copied ✓",
   "episode.shareNative": "Share…",
@@ -1562,33 +1578,23 @@ export const en: Dictionary = {
   "playlists.episodeCount": "{count} episodes",
   "playlist.notFound": "Playlist not found or private",
   "playlist.playAll": "Play all",
-  "playlist.episodes": "Episodes",
   "playlist.updatedAt": "Updated {date}",
   "playlist.in": "In playlists",
-  "playlist.addTo": "Add to playlist",
-  "playlist.added": "Added",
-  "playlist.remove": "Remove",
-  "playlist.done": "Done",
-  "playlist.new": "New playlist",
-  "playlist.newTitle": "Title",
-  "playlist.newTitlePlaceholder": "Playlist name (1-80 chars)",
-  "playlist.newDesc": "Description (optional)",
-  "playlist.newDescPlaceholder": "What is this playlist about?",
-  "playlist.create": "Create",
-  "playlist.public": "Public",
-  "playlist.private": "Private",
-  "playlist.publicHint": "Public playlists can be shared by link",
-  "playlist.delete": "Delete playlist",
-  "playlist.deleteConfirm": "Delete「{title}」? Episodes in it are not affected.",
-  "playlist.edit": "Edit",
-  "playlist.share": "Share",
-  "playlist.copied": "Copied ✓",
-  "playlist.emptyEpisodes": "No episodes yet — add some with「Add to playlist」on an episode page",
-  "playlist.loginHint": "Sign in to create playlists",
   "home.playlists": "Playlists",
-  "me.playlists": "My playlists",
-  "me.playlistsDesc": "Bundle episodes into lists — share when public",
   "discover.lists": "Lists",
+
+  // ---- My favorites ----
+  "me.favoritesDesc": "Every episode you saved, ready to replay",
+  "favorite.add": "Save",
+  "favorite.added": "Saved",
+  "favorite.remove": "Remove",
+  "favorites.empty": "Nothing saved yet — tap「Save」on any episode",
+  "favorites.groupAll": "All",
+  "favorites.groupTags": "By tag",
+  "favorites.groupLanguages": "By language",
+  "favorites.groupGuests": "By guest",
+  "favorites.untagged": "Untagged",
+  "favorites.noGuest": "No guest",
 
 };
 

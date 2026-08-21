@@ -1,8 +1,8 @@
-// 播放列表路由（内容类型，0032）：
-//  公开   /v1/public/playlists*        —— 平台公开列表索引 + 详情（免鉴权，app.ts 在鉴权中间件之前挂载）
-//  我的   /v1/me/playlists*            —— 用户自建列表 CRUD + 条目管理（登录 + 归属校验，挂在认证中间件之后）
+// 播放列表路由（内容类型，0032 起）：
+//  公开   /v1/public/playlists*        —— 平台策展合集索引 + 详情（免鉴权，app.ts 在鉴权中间件之前挂载）
+//  我的   /v1/me/favorites*            —— 我的收藏：一键收藏 = 每用户唯一默认列表（kind=user + is_default）的增删查
 //  编辑   /v1/editor/playlists*        —— 平台策展列表 CRUD + 条目管理（requireRole(editor|admin)）
-// 归属校验统一 404（不泄露他人列表存在性）；节目入列表前校验公开（仅已发布公开节目可收录）。
+// 平台策展归属校验统一 404；收藏条目校验节目公开（仅已发布公开节目可收藏）。
 import { createRoute, OpenAPIHono, z, type RouteHandler } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { requireRole, type AuthEnv } from "../middleware/auth";
@@ -61,210 +61,71 @@ export function playlistPublicRoutes(repo: Repos) {
 }
 
 // ---------------------------------------------------------------------------
-// 我的（登录 + 归属校验）
+// 我的收藏（登录）：收藏 = 每用户唯一的默认列表（kind=user + is_default）的增删查。
+// 不分类 / 不重排（按加入顺序）/ 不公开分享——聚合展示（标签/语言/嘉宾）由前端对返回数据现算。
 // ---------------------------------------------------------------------------
 
-const PlaylistCreateBody = z.object({
-  title: z.string().min(1).max(80),
-  description: z.string().max(500).optional().nullable(),
-  isPublic: z.boolean().optional(),
-});
-
-export function playlistUserRoutes(repo: Repos) {
+export function myFavoritesRoutes(repo: Repos) {
   const app = new OpenAPIHono<{ Variables: { userId: string } }>();
+  const Err = z.object({ error: z.string() });
 
-  /** 归属校验：uuid 格式 + 存在 + 属于当前用户；失败返回 null */
-  async function owned(id: string, userId: string): Promise<PlaylistRow | null> {
-    if (!UUID_RE.test(id)) return null;
-    const pl = await repo.playlists.getById(id);
-    if (!pl || pl.ownerId !== userId) return null;
-    return pl;
-  }
-
-  /** 校验节目可收录：uuid 格式 + 已发布公开（未公开/不存在 → null） */
+  /** 校验节目可收藏：uuid 格式 + 已发布公开（未公开/不存在 → false） */
   async function publicEpisodeId(episodeId: string): Promise<boolean> {
     if (!UUID_RE.test(episodeId)) return false;
     return (await repo.episodes.getPublicAudioKey(episodeId)) !== null;
   }
 
-  // GET /v1/me/playlists —— 我的列表（含私有）；?contains=<episodeId> 附带收录标记
+  // GET /v1/me/favorites?contains=<episodeId> —— 我的收藏（含分组字段）；contains 附带是否已收藏
   const rList = createRoute({
     method: "get",
-    path: "/v1/me/playlists",
+    path: "/v1/me/favorites",
     request: {
       query: z.object({
-        contains: z.string().optional().openapi({ description: "可选：节目 id（uuid）——返回每列表是否已收录该节目" }),
+        contains: z.string().optional().openapi({ description: "可选：节目 id（uuid）——附带该节目是否已收藏" }),
       }),
     },
     responses: {
-      200: { content: { "application/json": { schema: z.any() } }, description: "我的播放列表" },
+      200: { content: { "application/json": { schema: z.any() } }, description: "我的收藏（episodes 数组 + 可选 contains）" },
     },
   });
   app.openapi(rList, (async (c: Context) => {
     const userId = c.get("userId") as string;
+    const episodes = await repo.playlists.listFavorites(userId);
     const raw = c.req.query("contains");
-    const contains = raw && UUID_RE.test(raw) ? raw : undefined;
-    return c.json(await repo.playlists.listByUser(userId, contains ? { containsEpisodeId: contains } : undefined));
+    const contains = raw && UUID_RE.test(raw) ? await repo.playlists.isFavorite(userId, raw) : undefined;
+    return c.json(contains === undefined ? { episodes } : { episodes, contains });
   }) as unknown as RouteHandler<typeof rList, { Variables: { userId: string } }>);
 
-  // POST /v1/me/playlists —— 创建用户列表
-  const rCreate = createRoute({
-    method: "post",
-    path: "/v1/me/playlists",
-    request: { body: { content: { "application/json": { schema: PlaylistCreateBody } } } },
-    responses: {
-      200: { content: { "application/json": { schema: z.any() } }, description: "创建成功（id + slug）" },
-      400: { content: { "application/json": { schema: Err } }, description: "参数不合法" },
-    },
-  });
-  app.openapi(rCreate, (async (c: Context) => {
-    const userId = c.get("userId") as string;
-    const body = (await c.req.json().catch(() => null)) as { title?: unknown; description?: unknown; isPublic?: unknown } | null;
-    const title = typeof body?.title === "string" ? body.title.trim() : "";
-    if (!title || title.length > 80) return c.json({ error: "invalid_input", detail: "标题 1-80 字" }, 400);
-    const description = typeof body?.description === "string" ? body.description.trim().slice(0, 500) : null;
-    const isPublic = typeof body?.isPublic === "boolean" ? body.isPublic : true;
-    const created = await repo.playlists.create({ kind: "user", ownerId: userId, title, description, isPublic });
-    return c.json(created);
-  }) as unknown as RouteHandler<typeof rCreate, { Variables: { userId: string } }>);
-
-  // GET /v1/me/playlists/:id —— 单个（含全部条目）
-  const rGet = createRoute({
-    method: "get",
-    path: "/v1/me/playlists/:id",
-    responses: {
-      200: { content: { "application/json": { schema: z.any() } }, description: "播放列表（含条目）" },
-      404: { content: { "application/json": { schema: Err } }, description: "不存在或非本人" },
-    },
-  });
-  app.openapi(rGet, (async (c: Context) => {
-    const userId = c.get("userId") as string;
-    const pl = await owned(c.req.param("id")!, userId);
-    if (!pl) return c.json({ error: "not_found" }, 404);
-    const episodes = await repo.playlists.listEpisodes(pl.id);
-    return c.json({ ...pl, episodes });
-  }) as unknown as RouteHandler<typeof rGet, { Variables: { userId: string } }>);
-
-  // PATCH /v1/me/playlists/:id —— 编辑（title/description/isPublic）
-  const rPatch = createRoute({
-    method: "patch",
-    path: "/v1/me/playlists/:id",
-    responses: {
-      200: { content: { "application/json": { schema: z.any() } }, description: "已更新" },
-      400: { content: { "application/json": { schema: Err } }, description: "参数不合法" },
-      404: { content: { "application/json": { schema: Err } }, description: "不存在或非本人" },
-    },
-  });
-  app.openapi(rPatch, (async (c: Context) => {
-    const userId = c.get("userId") as string;
-    const pl = await owned(c.req.param("id")!, userId);
-    if (!pl) return c.json({ error: "not_found" }, 404);
-    if (pl.isDefault) return c.json({ error: "default_playlist_locked", detail: "系统内置「我的收藏」不可编辑" }, 400);
-    const body = (await c.req.json().catch(() => null)) as { title?: unknown; description?: unknown; isPublic?: unknown } | null;
-    if (!body || Object.keys(body).length === 0) return c.json({ error: "invalid_input", detail: "无更新字段" }, 400);
-    const patch: { title?: string; description?: string | null; isPublic?: boolean } = {};
-    if (body.title !== undefined) {
-      if (typeof body.title !== "string" || !body.title.trim() || body.title.trim().length > 80) {
-        return c.json({ error: "invalid_input", detail: "标题 1-80 字" }, 400);
-      }
-      patch.title = body.title.trim();
-    }
-    if (body.description !== undefined) {
-      if (body.description !== null && typeof body.description !== "string") return c.json({ error: "invalid_input" }, 400);
-      patch.description = body.description === null ? null : String(body.description).slice(0, 500);
-    }
-    if (body.isPublic !== undefined) {
-      if (typeof body.isPublic !== "boolean") return c.json({ error: "invalid_input" }, 400);
-      patch.isPublic = body.isPublic;
-    }
-    await repo.playlists.update(pl.id, patch);
-    return c.json({ ok: true });
-  }) as unknown as RouteHandler<typeof rPatch, { Variables: { userId: string } }>);
-
-  // DELETE /v1/me/playlists/:id —— 删除（级联清条目）
-  const rDelete = createRoute({
-    method: "delete",
-    path: "/v1/me/playlists/:id",
-    responses: {
-      200: { content: { "application/json": { schema: z.any() } }, description: "已删除" },
-      404: { content: { "application/json": { schema: Err } }, description: "不存在或非本人" },
-    },
-  });
-  app.openapi(rDelete, (async (c: Context) => {
-    const userId = c.get("userId") as string;
-    const pl = await owned(c.req.param("id")!, userId);
-    if (!pl) return c.json({ error: "not_found" }, 404);
-    if (pl.isDefault) return c.json({ error: "default_playlist_locked", detail: "系统内置「我的收藏」不可删除" }, 400);
-    await repo.playlists.remove(pl.id);
-    return c.json({ ok: true });
-  }) as unknown as RouteHandler<typeof rDelete, { Variables: { userId: string } }>);
-
-  // POST /v1/me/playlists/:id/episodes —— 添加节目（校验公开；重复幂等）
+  // POST /v1/me/favorites/:episodeId —— 收藏（校验公开；重复幂等）
   const rAdd = createRoute({
     method: "post",
-    path: "/v1/me/playlists/:id/episodes",
-    request: { body: { content: { "application/json": { schema: z.object({ episodeId: z.string().min(1) }) } } } },
+    path: "/v1/me/favorites/:episodeId",
     responses: {
-      200: { content: { "application/json": { schema: z.any() } }, description: "已添加（added=false 表示已在列表）" },
-      400: { content: { "application/json": { schema: Err } }, description: "参数不合法 / 节目不可收录" },
-      404: { content: { "application/json": { schema: Err } }, description: "列表不存在或非本人" },
+      200: { content: { "application/json": { schema: z.any() } }, description: "已收藏（added=false 表示已在收藏）" },
+      400: { content: { "application/json": { schema: Err } }, description: "节目不可收藏" },
     },
   });
   app.openapi(rAdd, (async (c: Context) => {
-    const userId = c.get("userId") as string;
-    const pl = await owned(c.req.param("id")!, userId);
-    if (!pl) return c.json({ error: "not_found" }, 404);
-    const body = (await c.req.json().catch(() => null)) as { episodeId?: unknown } | null;
-    const episodeId = typeof body?.episodeId === "string" ? body.episodeId : "";
-    if (!episodeId) return c.json({ error: "invalid_input", detail: "缺少 episodeId" }, 400);
+    const episodeId = c.req.param("episodeId")!;
     if (!(await publicEpisodeId(episodeId))) {
-      return c.json({ error: "episode_not_public", detail: "仅已发布公开节目可收录" }, 400);
+      return c.json({ error: "episode_not_public", detail: "仅已发布公开节目可收藏" }, 400);
     }
-    const { added } = await repo.playlists.addEpisode(pl.id, episodeId);
+    const { added } = await repo.playlists.addFavorite(c.get("userId") as string, episodeId);
     return c.json({ ok: true, added });
   }) as unknown as RouteHandler<typeof rAdd, { Variables: { userId: string } }>);
 
-  // DELETE /v1/me/playlists/:id/episodes/:episodeId —— 移除节目
+  // DELETE /v1/me/favorites/:episodeId —— 取消收藏（不存在静默）
   const rRemove = createRoute({
     method: "delete",
-    path: "/v1/me/playlists/:id/episodes/:episodeId",
+    path: "/v1/me/favorites/:episodeId",
     responses: {
-      200: { content: { "application/json": { schema: z.any() } }, description: "已移除" },
-      404: { content: { "application/json": { schema: Err } }, description: "列表不存在或非本人" },
+      200: { content: { "application/json": { schema: z.any() } }, description: "已取消收藏" },
     },
   });
   app.openapi(rRemove, (async (c: Context) => {
-    const userId = c.get("userId") as string;
-    const pl = await owned(c.req.param("id")!, userId);
-    if (!pl) return c.json({ error: "not_found" }, 404);
-    await repo.playlists.removeEpisode(pl.id, c.req.param("episodeId")!);
+    await repo.playlists.removeFavorite(c.get("userId") as string, c.req.param("episodeId")!);
     return c.json({ ok: true });
   }) as unknown as RouteHandler<typeof rRemove, { Variables: { userId: string } }>);
-
-  // PUT /v1/me/playlists/:id/episodes/reorder —— 重排（有序 episodeIds）
-  const rReorder = createRoute({
-    method: "put",
-    path: "/v1/me/playlists/:id/episodes/reorder",
-    request: { body: { content: { "application/json": { schema: z.object({ episodeIds: z.array(z.string()).max(200) }) } } } },
-    responses: {
-      200: { content: { "application/json": { schema: z.any() } }, description: "已重排" },
-      400: { content: { "application/json": { schema: Err } }, description: "参数不合法" },
-      404: { content: { "application/json": { schema: Err } }, description: "列表不存在或非本人" },
-    },
-  });
-  app.openapi(rReorder, (async (c: Context) => {
-    const userId = c.get("userId") as string;
-    const pl = await owned(c.req.param("id")!, userId);
-    if (!pl) return c.json({ error: "not_found" }, 404);
-    if (pl.isDefault) return c.json({ error: "default_playlist_locked", detail: "系统内置「我的收藏」按加入时间排序，不可重排" }, 400);
-    const body = (await c.req.json().catch(() => null)) as { episodeIds?: unknown } | null;
-    const ids = Array.isArray(body?.episodeIds)
-      ? (body.episodeIds as unknown[]).filter((v): v is string => typeof v === "string")
-      : [];
-    if (ids.length === 0) return c.json({ error: "invalid_input", detail: "episodeIds 不能为空" }, 400);
-    await repo.playlists.reorder(pl.id, ids);
-    return c.json({ ok: true });
-  }) as unknown as RouteHandler<typeof rReorder, { Variables: { userId: string } }>);
 
   return app;
 }

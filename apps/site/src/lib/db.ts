@@ -23,6 +23,20 @@ export interface EpisodeSummary {
   callName: string | null;
   /** 无情绪标签的完整台本（节目页展示用） */
   transcript: string | null;
+  /** 主持人头像（仅公开详情端点返回；列表类查询不返回）——节目页 cast 卡片用 */
+  hostAvatar?: string | null;
+  /** 本期 AI 嘉宾（仅公开详情端点返回；列表类查询不返回）——节目页 cast 卡片用 */
+  guest?: GuestSummary | null;
+}
+
+/** 常驻 AI 嘉宾（guests 表）：品牌声线宿主（节目 cast 卡片 / /guest/<id> 页用） */
+export interface GuestSummary {
+  id: string;
+  platform: string;
+  name: string;
+  avatar: string | null;
+  intro: string | null;
+  url: string | null;
 }
 
 export interface ChannelSummary {

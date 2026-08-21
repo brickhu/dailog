@@ -1,7 +1,7 @@
 // 节目详情面板（首页详情态 + /<episode_id> 直链复用）：
 // 标题/主持人/日期时长/播放统计/简介/台本（折叠）/原始对话/点赞收藏
 import { For, Show, createEffect, createResource, createSignal, onCleanup } from "solid-js";
-import { A } from "@solidjs/router";
+import { A, useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
@@ -10,9 +10,26 @@ import { usePlayback, type QueueEpisode } from "../lib/playback";
 import { getPlaylistsByEpisode } from "../lib/db";
 import { InteractButtons } from "./interact-buttons";
 import { ShareButton } from "./share-buttons";
-import { AddToPlaylist } from "./add-to-playlist";
+import { fetchFavoriteStatus, setFavorite } from "../lib/favorites";
 
 const styles = stylex.create({
+  favBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: dimensions.spacing2,
+    padding: `${dimensions.spacing1} ${dimensions.spacing3}`,
+    borderRadius: dimensions.radiusSm,
+    backgroundColor: "transparent",
+    color: colors.neutral,
+    border: "1px solid",
+    borderColor: colors.ink,
+    cursor: "pointer",
+    fontSize: dimensions.fontSizeSm,
+  },
+  favActive: {
+    color: colors.brand,
+    borderColor: colors.brand,
+  },
   root: {
     display: "flex",
     flexDirection: "column",
@@ -125,6 +142,28 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
     () => ep().id,
     (id) => getPlaylistsByEpisode(id).catch(() => []),
   );
+  // 收藏（共享函数；登录态端点 SSR 401 → 客户端 hydration 后加载）——与详情页同模式
+  const navigate = useNavigate();
+  const [fav, { refetch: refetchFav }] = createResource(
+    () => (typeof window === "undefined" ? null : ep().id),
+    (id) => fetchFavoriteStatus(id),
+  );
+  const favorited = () => !!fav.latest?.contains;
+  const [busyFav, setBusyFav] = createSignal(false);
+  const toggleFavorite = async () => {
+    if (busyFav()) return;
+    setBusyFav(true);
+    try {
+      const res = await setFavorite(ep().id, favorited());
+      if (res.status === 401) {
+        navigate(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+        return;
+      }
+      if (res.ok) refetchFav();
+    } finally {
+      setBusyFav(false);
+    }
+  };
 
   return (
     <div {...stylex.props(styles.root)}>
@@ -145,7 +184,9 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
       </Show>
       <InteractButtons episodeId={ep().id} counts={stats()} />
       <div style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
-        <AddToPlaylist episodeId={ep().id} />
+        <button type="button" {...stylex.props(styles.favBtn, favorited() && styles.favActive)} disabled={busyFav()} onClick={toggleFavorite}>
+          {favorited() ? t("favorite.added") : t("favorite.add")}
+        </button>
         <ShareButton episode={ep()} />
       </div>
       {/* 收录于：公开播放列表反查 */}

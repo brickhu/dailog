@@ -240,7 +240,8 @@ export const likes = pgTable(
 
 /** 播放列表（内容类型）：把不同节目打包成有序列表。
  *  kind=platform：平台策展（编辑/管理员创建，is_picked 精选标记，首页/发现页列表区露出）；
- *  kind=user：用户自建（ownerId=用户，is_public 公开可分享，节目页反查「收录于」）。
+ *  kind=user：仅每用户唯一的默认收藏清单（is_default=true + ownerId=用户，强制私有）——
+ *  收藏 = 以 owner_id 标识的清单（Spotify「Liked Songs」式），不分类/不重排/不公开分享。
  *  封面 MVP 自动取首期节目封面（coverUrl 字段预留自定义，不新增 R2 路径）。 */
 export const playlists = pgTable("playlists", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -260,7 +261,7 @@ export const playlists = pgTable("playlists", {
   /** 平台精选标记（首页/发现页列表区优先露出） */
   isPicked: boolean("is_picked").notNull().default(false),
   /** 系统内置默认列表（Spotify「Liked Songs」式，0033 引入 / 0035 恢复）：每个用户一个「我的收藏」，
-   *  强制私有、不可编辑/删除/重排；节目经「加入播放列表」加入；独立收藏按钮与统计已移除（0034） */
+   *  强制私有、不可编辑/删除/重排；收藏按钮（/v1/me/favorites*）直接读写该列表 */
   isDefault: boolean("is_default").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

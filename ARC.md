@@ -73,13 +73,13 @@ published + 期号 max+1）→ 投稿人收到通知（站内 + 邮件）。内�
 | `GET/POST /v1/me/voice-sample`、`GET /v1/me/voice-sample/audio` | ✓ | 声音采样上传/回读/试听（R2） |
 | `GET/PATCH /v1/me/profile`、`PATCH /v1/me/persona` | ✓ | 账号档案 + 主持人默认人设 |
 | `GET /v1/me/notifications*` | ✓ | 站内通知（拒审/上线） |
-| `POST/DELETE /v1/episodes/:id/like`、`GET /v1/episodes/:id/interactions` | ✓ | 消费端互动（简化版 0034）：仅点赞 toggle（返回最新计数）+ interactions 合并返回点赞状态与计数；收藏已移除（由「加入播放列表」+ 默认列表覆盖） |
+| `POST/DELETE /v1/episodes/:id/like`、`GET /v1/episodes/:id/interactions` | ✓ | 消费端互动（简化版 0034）：仅点赞 toggle（返回最新计数）+ interactions 合并返回点赞状态与计数；收藏走「我的收藏」端点（一键收藏 = 默认列表） |
 | `GET /v1/public/episodes/:id/audio\|cover` | — | 公开播放（仅 published + is_public；音频 ETag 缓存） |
 | `GET /v1/public/episodes/:id/stats`、`POST /v1/public/episodes/:id/stats/:type` | — | 播放/完播统计（0036 恢复展示：详情页播放/完播次数 + 点赞计数；播放器上报 + 限频） |
 | `GET /v1/public/episodes/recommended` | — | 推荐队列（热度分排序 + 语言优先；首页滚屏每屏 4 条 × 最多 5 屏 / 发现页） |
 | `GET /v1/public/playlists`、`GET /v1/public/playlists/:slug` | — | **播放列表**（0032）：平台公开列表索引（`?lang=zh|en` 语言偏好优先 + 精选优先，不足自然回退；附节目数与首期封面）+ 详情（仅公开节目，position 排序） |
-| `POST/GET/PATCH/DELETE /v1/me/playlists`、`/v1/me/playlists/:id` | ✓ | **我的播放列表**：创建（kind=user）/ 列表（含私有，?contains= 附带收录标记）/ 编辑 / 删除（归属校验 404） |
-| `POST/DELETE /v1/me/playlists/:id/episodes`、`PUT .../episodes/reorder` | ✓ | **我的列表条目**：加节目（校验公开、重复幂等）/ 移除 / 重排（有序 episodeIds） |
+| `GET /v1/me/favorites`（?contains=） | ✓ | **我的收藏**：默认列表（kind=user + is_default）全部节目，position 倒序（新加入在前），含分组字段（tags/guestName/language）；?contains=<episodeId> 附带是否已收藏 |
+| `POST/DELETE /v1/me/favorites/:episodeId` | ✓ | 收藏 / 取消收藏（校验节目公开；重复幂等 added=false）——用户侧无自建列表（已移除），收藏 = 每用户唯一清单 |
 | `POST/GET/PATCH/DELETE /v1/editor/playlists`、`/v1/editor/playlists/:id` | editor | **平台策展列表**（kind=platform，isPicked 精选标记）+ 条目管理（同 /me 形态，requireRole 守卫） |
 | `POST /v1/editor/playlists/:id/cover`、`GET /v1/public/playlists/:id/cover` | editor / — | **列表封面**：multipart 上传（sharp 归一 1400² JPEG → R2 `covers/playlists/{id}.jpg`）/ 公开读取（缓存 86400s） |
 | `GET /v1/public/stats`、`/hosts`、`/guests`、`/guests/:id` | — | 站点头部数据 / 热门主播 / 嘉宾列表 / 嘉宾详情（含参与节目） |
@@ -104,9 +104,9 @@ published + 期号 max+1）→ 投稿人收到通知（站内 + 邮件）。内�
 | `voice_samples` | `user_id`, `language`, `audio_url`(R2), `transcript`, `duration`, `status` | 投稿人声音采样（一人多语种各一条；主持人克隆音色参考） |
 | `profiles` | `id`(=auth.users), `display_name`, `bio`, `persona`(JSONB) | 主持人档案（账号级属性在 user 表：`name`=@slug、`role`(user/editor/admin)、`image`） |
 | `notifications` | `user_id`, `type`(rejected/published), `title`, `body`, `link` | 站内通知（拒审/上线） |
-| `favorites` / `likes` | `user_id`, `episode_id` | 消费端互动 |
-| `playlists` | `slug`(唯一), `kind`(platform/user), `owner_id`, `title`, `description`, `cover_url`, `is_public`, `is_picked`, `is_default`, `language` | **播放列表**（0032；0033/0035）：平台策展（编辑创建，精选标记）/ 用户自建（公开可分享）+ **每个用户一个 is_default「我的收藏」默认列表**（Spotify 式，强制私有、不可编辑/删除）；封面 = 编辑自定义上传（无则自动取首期节目封面） |
-| ~~`favorites`~~ / `episode_stats` | — | 收藏表已移除（0033，并入默认播放列表）；`episode_stats` 播放/完播统计保留（0036 恢复）；`likes` 保留 |
+| `likes` | `user_id`, `episode_id` | 消费端点赞（收藏已并入默认播放列表，无独立表） |
+| `playlists` | `slug`(唯一), `kind`(platform/user), `owner_id`, `title`, `description`, `cover_url`, `is_public`, `is_picked`, `is_default`, `language` | **播放列表**（0032；0033/0035；0037 收窄）：kind=platform 平台策展合集（编辑创建，精选标记，公开索引）；kind=user 仅**每用户唯一 is_default「我的收藏」默认列表**（Spotify 式，强制私有、不可编辑/删除/重排）——用户自建列表已移除，收藏 = 一键写入该列表；封面 = 编辑自定义上传（无则自动取首期节目封面） |
+| ~~`favorites`~~ / `episode_stats` | — | 收藏表已移除（0033，并入默认播放列表）；`episode_stats` 播放/完播统计保留（0036 恢复）；`likes` 保留。收藏 = 每用户唯一 `is_default` 列表（0037 起无自建列表，收藏按钮直写默认列表） |
 | `playlist_episodes` | `playlist_id`+ `episode_id`(唯一), `position` | **列表条目**（有序集合）：删列表/删节目级联清理；索引 (playlist_id, position) 顺序读 + (episode_id) 反查「收录于」 |
 | auth 表（`user`/`session`/`account`/`verification`） | better-auth 官方字段 | 认证 |
 
@@ -161,7 +161,7 @@ covers/{submissionId}.jpg                  ← 封面（可选；无封面播放
   错误码映射（invalid_url / url_unreachable / pending_limit / existing）
 - RSS：itunes 元数据 + 封面 + 节目列表（audio_size 直读 episodes，Apple enclosure 要求）
 - 直连 Railway Postgres 读公开数据（只读查询 + 服务端只暴露公开字段）
-- 站内 v1 代理（`/v1/*` → API）：submissions / me/* / notifications / favorites / episodes 互动（favorite·like·interactions）/ auth
+- 站内 v1 代理（`/v1/*` → API）：submissions / me/* / notifications / favorites（收藏）/ episodes 互动（like·interactions）/ auth
 
 ## 6. 计费与成本（v1 无收款）
 

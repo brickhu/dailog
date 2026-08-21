@@ -14,7 +14,7 @@ import { favoritesRoutes, type FavoritesRepo } from "./routes/favorites";
 import { editorRoutes, type EditorDeps } from "./routes/editor";
 import { devicePublicRoutes, deviceApproveRoutes, createDeviceStore, type DeviceStore } from "./routes/device";
 import { ttsRoutes, type TtsDeps } from "./routes/tts";
-import { playlistPublicRoutes, playlistUserRoutes, playlistEditorRoutes } from "./routes/playlists";
+import { playlistPublicRoutes, myFavoritesRoutes, playlistEditorRoutes } from "./routes/playlists";
 import type { Repos } from "./repo";
 
 export type { AuthLike };
@@ -393,8 +393,8 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
   app.route("/", profileRoutes({ repo: deps.repo }));
   app.route("/", notificationsRoutes(deps.repo));
   app.route("/", meEpisodesRoutes(deps.repo));
-  // 我的播放列表（登录 + 归属校验）
-  app.route("/", playlistUserRoutes(deps.repo));
+  // 我的收藏（登录）：收藏 = 每用户唯一默认列表的增删查
+  app.route("/", myFavoritesRoutes(deps.repo));
   app.route("/", voiceRoutes(deps.voice));
   app.route("/", favoritesRoutes(deps.favorites));
   // 设备授权确认（cookie 会话 + editor/admin 角色）——挂在认证中间件之后

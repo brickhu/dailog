@@ -1,8 +1,8 @@
-// 播放列表端点测试：公开（列表索引/详情）+ 我的（CRUD/条目/归属校验）+ 编辑端（平台策展 CRUD/角色守卫）。
-// fake repo 注入（helpers/fake-playlists），覆盖：创建校验 / 归属 404 / 节目公开校验 / 去重幂等 / 排序 / 角色 403。
+// 播放列表端点测试：公开（列表索引/详情）+ 我的收藏（增删查/公开校验/幂等）+ 编辑端（平台策展 CRUD/角色守卫）。
+// fake repo 注入（helpers/fake-playlists），覆盖：收藏列表字段 / contains 透传 / 节目公开校验 / 去重幂等 / 角色 403。
 import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import { playlistPublicRoutes, playlistUserRoutes, playlistEditorRoutes } from "../src/routes/playlists";
+import { playlistPublicRoutes, myFavoritesRoutes, playlistEditorRoutes } from "../src/routes/playlists";
 import type { AuthEnv } from "../src/middleware/auth";
 import type { PlaylistRow, Repos } from "../src/repo";
 import { fakePlaylistsRepo } from "./helpers/fake-playlists";
@@ -76,11 +76,11 @@ function fakeRepo(overrides: Partial<Repos["playlists"]> = {}, episodesOverrides
   };
 }
 
-/** 挂载带登录态（userId=user-1）的 /v1/me/playlists */
-function userApp(repo: Repos) {
+/** 挂载带登录态（userId=user-1）的 /v1/me/favorites */
+function favoritesApp(repo: Repos) {
   const app = new Hono<{ Variables: { userId: string } }>();
   app.use("*", async (c, next) => { c.set("userId", "user-1"); await next(); });
-  app.route("/", playlistUserRoutes(repo));
+  app.route("/", myFavoritesRoutes(repo));
   return app;
 }
 
@@ -156,151 +156,79 @@ describe("公开播放列表端点", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 我的（/v1/me/playlists）
+// 我的收藏（/v1/me/favorites）——收藏 = 每用户唯一默认列表的增删查
 // ---------------------------------------------------------------------------
 
-describe("我的播放列表端点", () => {
-  it("POST /v1/me/playlists → 创建用户列表（kind=user + owner）", async () => {
-    const create = vi.fn(async () => ({ id: "pl-new", slug: "abcd1234" }));
-    const app = userApp(fakeRepo({ create }));
-    const res = await app.request("/v1/me/playlists", json({ title: "我的收藏合集", description: "值得反复听", isPublic: false }));
+describe("我的收藏端点", () => {
+  const FAV_ROW = {
+    position: 2, episodeId: EPISODE_ID, slug: "ep-1", title: "第 1 期", coverUrl: null,
+    durationSeconds: 300, publishedAt: new Date(), language: "zh", audioUrl: "episodes/u/1.mp3",
+    username: "fei", displayName: "Fei", callName: "小北", guestName: "ChatGPT", tags: ["科技", "访谈"],
+  };
+
+  it("GET /v1/me/favorites → 我的收藏（含分组字段）", async () => {
+    const listFavorites = vi.fn(async () => [FAV_ROW]);
+    const app = favoritesApp(fakeRepo({ listFavorites }));
+    const res = await app.request("/v1/me/favorites");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ id: "pl-new", slug: "abcd1234" });
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ kind: "user", ownerId: "user-1", title: "我的收藏合集", isPublic: false }));
+    expect(listFavorites).toHaveBeenCalledWith("user-1");
+    expect((await res.json()) as { episodes: unknown[] }).toMatchObject({
+      episodes: [{ title: "第 1 期", guestName: "ChatGPT", tags: ["科技", "访谈"], position: 2 }],
+    });
   });
 
-  it("POST /v1/me/playlists 空标题 → 400", async () => {
-    const app = userApp(fakeRepo());
-    const res = await app.request("/v1/me/playlists", json({ title: "   " }));
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: string }).toMatchObject({ error: "invalid_input" });
-  });
-
-  it("GET /v1/me/playlists → 我的列表（含私有）", async () => {
-    const listByUser = vi.fn(async () => [{ ...OWNED_PL, episodeCount: 2, contains: false }]);
-    const app = userApp(fakeRepo({ listByUser }));
-    const res = await app.request("/v1/me/playlists");
+  it("GET /v1/me/favorites?contains=<episodeId> → 附带是否已收藏", async () => {
+    const listFavorites = vi.fn(async () => []);
+    const isFavorite = vi.fn(async () => true);
+    const app = favoritesApp(fakeRepo({ listFavorites, isFavorite }));
+    const res = await app.request(`/v1/me/favorites?contains=${EPISODE_ID}`);
     expect(res.status).toBe(200);
-    expect(listByUser).toHaveBeenCalledWith("user-1", undefined);
+    expect(isFavorite).toHaveBeenCalledWith("user-1", EPISODE_ID);
+    expect((await res.json()) as { episodes: unknown[]; contains: boolean }).toEqual({ episodes: [], contains: true });
   });
 
-  it("GET /v1/me/playlists?contains=<episodeId> → 透传收录标记参数", async () => {
-    const listByUser = vi.fn(async () => [{ ...OWNED_PL, episodeCount: 1, contains: true }]);
-    const app = userApp(fakeRepo({ listByUser }));
-    const res = await app.request(`/v1/me/playlists?contains=${EPISODE_ID}`);
+  it("GET /v1/me/favorites?contains=非法值 → 忽略（不返回 contains）", async () => {
+    const isFavorite = vi.fn(async () => true);
+    const app = favoritesApp(fakeRepo({ isFavorite }));
+    const res = await app.request("/v1/me/favorites?contains=not-a-uuid");
     expect(res.status).toBe(200);
-    expect(listByUser).toHaveBeenCalledWith("user-1", { containsEpisodeId: EPISODE_ID });
+    expect(isFavorite).not.toHaveBeenCalled();
+    expect((await res.json()) as { contains?: boolean }).toEqual({ episodes: [] });
   });
 
-  it("GET /v1/me/playlists?contains=非法值 → 忽略参数", async () => {
-    const listByUser = vi.fn(async () => []);
-    const app = userApp(fakeRepo({ listByUser }));
-    const res = await app.request("/v1/me/playlists?contains=not-a-uuid");
-    expect(res.status).toBe(200);
-    expect(listByUser).toHaveBeenCalledWith("user-1", undefined);
-  });
-
-  it("GET /v1/me/playlists/:id 归属人 → 200 含条目", async () => {
-    const listEpisodes = vi.fn(async () => []);
-    const app = userApp(fakeRepo({ getById: async () => OWNED_PL, listEpisodes }));
-    const res = await app.request(`/v1/me/playlists/${PLAYLIST_ID}`);
-    expect(res.status).toBe(200);
-    expect((await res.json()) as { id: string }).toMatchObject({ id: PLAYLIST_ID });
-    expect(listEpisodes).toHaveBeenCalledWith(PLAYLIST_ID);
-  });
-
-  it("GET /v1/me/playlists/:id 非本人 → 404（不泄露存在性）", async () => {
-    const app = userApp(fakeRepo({ getById: async () => ({ ...OWNED_PL, ownerId: "other-user" }) }));
-    const res = await app.request(`/v1/me/playlists/${PLAYLIST_ID}`);
-    expect(res.status).toBe(404);
-  });
-
-  it("GET /v1/me/playlists/:id 非法 uuid → 404（避免 22P02）", async () => {
-    const app = userApp(fakeRepo());
-    const res = await app.request("/v1/me/playlists/not-a-uuid");
-    expect(res.status).toBe(404);
-  });
-
-  it("PATCH /v1/me/playlists/:id → 更新元信息", async () => {
-    const update = vi.fn(async () => {});
-    const app = userApp(fakeRepo({ getById: async () => OWNED_PL, update }));
-    const res = await app.request(`/v1/me/playlists/${PLAYLIST_ID}`, { ...json({ title: "新标题", isPublic: false }), method: "PATCH" });
-    expect(res.status).toBe(200);
-    expect(update).toHaveBeenCalledWith(PLAYLIST_ID, { title: "新标题", isPublic: false });
-  });
-
-  it("DELETE /v1/me/playlists/:id → 删除（级联条目）", async () => {
-    const remove = vi.fn(async () => {});
-    const app = userApp(fakeRepo({ getById: async () => OWNED_PL, remove }));
-    const res = await app.request(`/v1/me/playlists/${PLAYLIST_ID}`, { method: "DELETE" });
-    expect(res.status).toBe(200);
-    expect(remove).toHaveBeenCalledWith(PLAYLIST_ID);
-  });
-
-  it("DELETE /v1/me/playlists/:id 非本人 → 404", async () => {
-    const app = userApp(fakeRepo({ getById: async () => ({ ...OWNED_PL, ownerId: "other-user" }) }));
-    const res = await app.request(`/v1/me/playlists/${PLAYLIST_ID}`, { method: "DELETE" });
-    expect(res.status).toBe(404);
-  });
-
-  it("默认列表（is_default）不可编辑/删除/重排 → 400", async () => {
-    const DEFAULT_PL = { ...OWNED_PL, isDefault: true };
-    const update = vi.fn(async () => {});
-    const remove = vi.fn(async () => {});
-    const reorder = vi.fn(async () => {});
-    const app = userApp(fakeRepo({ getById: async () => DEFAULT_PL, update, remove, reorder }));
-    const patch = await app.request(`/v1/me/playlists/${PLAYLIST_ID}`, { ...json({ title: "改名" }), method: "PATCH" });
-    expect(patch.status).toBe(400);
-    expect((await patch.json()) as { error: string }).toMatchObject({ error: "default_playlist_locked" });
-    const del = await app.request(`/v1/me/playlists/${PLAYLIST_ID}`, { method: "DELETE" });
-    expect(del.status).toBe(400);
-    const ro = await app.request(`/v1/me/playlists/${PLAYLIST_ID}/episodes/reorder`, { ...json({ episodeIds: [EPISODE_ID] }), method: "PUT" });
-    expect(ro.status).toBe(400);
-    expect(update).not.toHaveBeenCalled();
-    expect(remove).not.toHaveBeenCalled();
-    expect(reorder).not.toHaveBeenCalled();
-  });
-
-
-  it("POST /v1/me/playlists/:id/episodes 公开节目 → 添加（重复幂等 added=false）", async () => {
-    const addEpisode = vi.fn(async () => ({ added: false }));
-    const app = userApp(fakeRepo(
-      { getById: async () => OWNED_PL, addEpisode },
+  it("POST /v1/me/favorites/:episodeId 公开节目 → 收藏（重复幂等 added=false）", async () => {
+    const addFavorite = vi.fn(async () => ({ added: false }));
+    const app = favoritesApp(fakeRepo(
+      { addFavorite },
       { getPublicAudioKey: async () => ({ audioKey: "episodes/u/1.mp3", version: "v" }) },
     ));
-    const res = await app.request(`/v1/me/playlists/${PLAYLIST_ID}/episodes`, json({ episodeId: EPISODE_ID }));
+    const res = await app.request(`/v1/me/favorites/${EPISODE_ID}`, { method: "POST" });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, added: false });
-    expect(addEpisode).toHaveBeenCalledWith(PLAYLIST_ID, EPISODE_ID);
+    expect(addFavorite).toHaveBeenCalledWith("user-1", EPISODE_ID);
   });
 
-  it("POST /v1/me/playlists/:id/episodes 节目未公开/不存在 → 400", async () => {
-    const app = userApp(fakeRepo({ getById: async () => OWNED_PL }));
-    const res = await app.request(`/v1/me/playlists/${PLAYLIST_ID}/episodes`, json({ episodeId: EPISODE_ID }));
+  it("POST /v1/me/favorites/:episodeId 节目未公开/不存在 → 400", async () => {
+    const addFavorite = vi.fn(async () => ({ added: true }));
+    const app = favoritesApp(fakeRepo({ addFavorite }));
+    const res = await app.request(`/v1/me/favorites/${EPISODE_ID}`, { method: "POST" });
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: string }).toMatchObject({ error: "episode_not_public" });
+    expect(addFavorite).not.toHaveBeenCalled();
   });
 
-  it("POST /v1/me/playlists/:id/episodes 非本人 → 404", async () => {
-    const app = userApp(fakeRepo({ getById: async () => ({ ...OWNED_PL, ownerId: "other-user" }) }));
-    const res = await app.request(`/v1/me/playlists/${PLAYLIST_ID}/episodes`, json({ episodeId: EPISODE_ID }));
-    expect(res.status).toBe(404);
+  it("POST /v1/me/favorites/:episodeId 非法 uuid → 400", async () => {
+    const app = favoritesApp(fakeRepo());
+    const res = await app.request("/v1/me/favorites/not-a-uuid", { method: "POST" });
+    expect(res.status).toBe(400);
   });
 
-  it("DELETE /v1/me/playlists/:id/episodes/:episodeId → 移除", async () => {
-    const removeEpisode = vi.fn(async () => {});
-    const app = userApp(fakeRepo({ getById: async () => OWNED_PL, removeEpisode }));
-    const res = await app.request(`/v1/me/playlists/${PLAYLIST_ID}/episodes/${EPISODE_ID}`, { method: "DELETE" });
+  it("DELETE /v1/me/favorites/:episodeId → 取消收藏", async () => {
+    const removeFavorite = vi.fn(async () => {});
+    const app = favoritesApp(fakeRepo({ removeFavorite }));
+    const res = await app.request(`/v1/me/favorites/${EPISODE_ID}`, { method: "DELETE" });
     expect(res.status).toBe(200);
-    expect(removeEpisode).toHaveBeenCalledWith(PLAYLIST_ID, EPISODE_ID);
-  });
-
-  it("PUT /v1/me/playlists/:id/episodes/reorder → 重排", async () => {
-    const reorder = vi.fn(async () => {});
-    const app = userApp(fakeRepo({ getById: async () => OWNED_PL, reorder }));
-    const res = await app.request(`/v1/me/playlists/${PLAYLIST_ID}/episodes/reorder`, { ...json({ episodeIds: [EPISODE_ID] }), method: "PUT" });
-    expect(res.status).toBe(200);
-    expect(reorder).toHaveBeenCalledWith(PLAYLIST_ID, [EPISODE_ID]);
+    expect(removeFavorite).toHaveBeenCalledWith("user-1", EPISODE_ID);
   });
 });
 

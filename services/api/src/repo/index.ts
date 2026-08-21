@@ -146,7 +146,8 @@ export interface EpisodesRepo {
    *  version = 发布时间（ETag 用） */
   getPublicAudioKey(episodeId: string): Promise<{ audioKey: string; version: string } | null>;
   /** 公开详情（按 slug 或 id 查，仅已发布且公开）：详情页 SSR head OG 用——
-   *  sourceUrl = 原始对话链接（回退投稿 url），含主持人名/称呼/台本 */
+   *  sourceUrl = 原始对话链接（回退投稿 url），含主持人名/称呼/台本；
+   *  含本期嘉宾（guests 表，无嘉宾 → null）与主持人头像——详情页 cast 卡片用 */
   getPublicEpisode(idOrSlug: string): Promise<{
     id: string;
     slug: string;
@@ -161,7 +162,18 @@ export interface EpisodesRepo {
     transcript: string | null;
     username: string;
     displayName: string;
+    /** 主持人头像（authUsers.image；cast 卡片用） */
+    hostAvatar: string | null;
     callName: string | null;
+    /** 本期 AI 嘉宾（无 → null；cast 卡片用） */
+    guest: {
+      id: string;
+      platform: string;
+      name: string;
+      avatar: string | null;
+      intro: string | null;
+      url: string | null;
+    } | null;
   } | null>;
   /** 播放/完播计数 +1（upsert；公开播放器上报）——0036 恢复 */
   recordStat(episodeId: string, type: "play" | "completion"): Promise<void>;
@@ -293,7 +305,9 @@ export interface EpisodesRepo {
 // ---------------------------------------------------------------------------
 // 播放列表（内容类型）：把不同节目打包成有序列表。
 //  kind=platform（平台策展，编辑/管理员创建，isPicked 精选，公开索引露出）
-//  kind=user（用户自建，ownerId=用户，isPublic 公开可分享——节目页反查「收录于」）
+//  kind=user 仅保留每用户唯一的默认收藏清单（is_default=true + ownerId=用户，强制私有）——
+//  收藏 = 以 owner_id 标识的清单（Spotify「Liked Songs」式）：不分类/不重排/不公开分享，
+//  聚合展示（按标签/语言/嘉宾分组）由前端现算，存储层零分类。
 //  封面 MVP 自动取首期公开节目封面（coverUrl 预留自定义）。
 // ---------------------------------------------------------------------------
 
@@ -329,6 +343,26 @@ export interface PlaylistEpisodeRow {
   callName: string | null;
 }
 
+/** 我的收藏条目（默认列表 + 分组字段：tags/language/guestName 供前端自动聚合） */
+export interface FavoriteEpisodeRow {
+  position: number;
+  episodeId: string;
+  slug: string;
+  title: string | null;
+  coverUrl: string | null;
+  durationSeconds: number | null;
+  publishedAt: Date | null;
+  language: string;
+  audioUrl: string;
+  username: string;
+  displayName: string;
+  callName: string | null;
+  /** 嘉宾名（guests.name；无嘉宾 → null）——「按嘉宾」分组 */
+  guestName: string | null;
+  /** 标签（episodes.tags；无 → null）——「按标签」分组 */
+  tags: string[] | null;
+}
+
 export interface PlaylistsRepo {
   /** 创建列表（slug 随机 hex，与节目 slug 同风格） */
   create(row: {
@@ -351,9 +385,14 @@ export interface PlaylistsRepo {
   getPublicBySlug(slug: string): Promise<(PlaylistRow & { episodes: PlaylistEpisodeRow[] }) | null>;
   /** 单查（路由层归属/存在校验用；不校验公开性） */
   getById(id: string): Promise<PlaylistRow | null>;
-  /** 我的列表（含私有；附带条目数）——/me/playlists。
-   *  containsEpisodeId 给定时附带 contains 布尔（该节目是否已在此列表——节目页「加入播放列表」勾选态） */
-  listByUser(userId: string, opts?: { containsEpisodeId?: string }): Promise<Array<PlaylistRow & { episodeCount: number; contains: boolean }>>;
+  /** 我的收藏（默认列表全部节目，position 倒序=新加入在前；含分组字段）——/v1/me/favorites */
+  listFavorites(userId: string): Promise<FavoriteEpisodeRow[]>;
+  /** 是否已收藏（默认列表包含该节目；节目须已发布公开） */
+  isFavorite(userId: string, episodeId: string): Promise<boolean>;
+  /** 收藏：自动建默认列表后加入（已存在 → added=false 幂等） */
+  addFavorite(userId: string, episodeId: string): Promise<{ added: boolean }>;
+  /** 取消收藏（不存在静默） */
+  removeFavorite(userId: string, episodeId: string): Promise<void>;
   /** 更新元信息（title/description/isPublic/isPicked/language/coverUrl）——归属校验由路由层做 */
   update(id: string, row: { title?: string; description?: string | null; isPublic?: boolean; isPicked?: boolean; language?: string; coverUrl?: string | null }): Promise<void>;
   /** 公开读列表封面（公开播放列表的 cover_url；不存在/未公开 → null）——公开封面端点用 */
@@ -929,26 +968,39 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           sourceUrl: sql<string>`COALESCE(${schema.episodes.rawConversationUrl}, ${schema.submissions.url})`,
           username: schema.authUsers.name,
           displayName: schema.profiles.displayName,
+          hostAvatar: schema.authUsers.image,
           callName: schema.submissions.callName,
+          // 本期嘉宾（LEFT JOIN：无嘉宾 → 行内各列全 null，下方归一为 guest: null）
+          guest: {
+            id: schema.guests.id,
+            platform: schema.guests.platform,
+            name: schema.guests.name,
+            avatar: schema.guests.avatar,
+            intro: schema.guests.intro,
+            url: schema.guests.url,
+          },
         };
         const base = () => db.select(fields)
           .from(schema.episodes)
           .innerJoin(schema.submissions, eq(schema.submissions.id, schema.episodes.submissionId))
           .innerJoin(schema.profiles, eq(schema.profiles.id, schema.episodes.userId))
-          .innerJoin(schema.authUsers, eq(schema.authUsers.id, schema.profiles.id));
+          .innerJoin(schema.authUsers, eq(schema.authUsers.id, schema.profiles.id))
+          .leftJoin(schema.guests, eq(schema.guests.id, schema.episodes.guestId));
+        const norm = <T extends { guest: { id: string | null } | null }>(row: T): T =>
+          row.guest?.id ? row : { ...row, guest: null };
         const bySlug = await base().where(and(
           eq(schema.episodes.status, "published"),
           eq(schema.episodes.isPublic, true),
           eq(schema.episodes.slug, idOrSlug),
         )).limit(1);
-        if (bySlug.length) return bySlug[0];
+        if (bySlug.length) return norm(bySlug[0]);
         if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug)) return null;
         const byId = await base().where(and(
           eq(schema.episodes.status, "published"),
           eq(schema.episodes.isPublic, true),
           eq(schema.episodes.id, idOrSlug),
         )).limit(1);
-        return byId[0] ?? null;
+        return byId[0] ? norm(byId[0]) : null;
       },
       /** 播放/完播计数 +1（upsert 行；仅已发布公开节目——调用方先校验存在）——0036 恢复 */
       async recordStat(episodeId, type: "play" | "completion") {
@@ -1512,36 +1564,56 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .limit(1);
         return rows[0] ?? null;
       },
-      async listByUser(userId, opts = {}) {
+      /** 我的收藏（默认列表全部节目；position 倒序 = 新加入在前；含分组字段） */
+      async listFavorites(userId) {
+        const { id } = await this.getOrCreateDefault(userId);
         return db.select({
-          id: schema.playlists.id,
-          slug: schema.playlists.slug,
-          kind: schema.playlists.kind,
-          ownerId: schema.playlists.ownerId,
-          title: schema.playlists.title,
-          description: schema.playlists.description,
-          coverUrl: schema.playlists.coverUrl,
-          language: schema.playlists.language,
-          isPublic: schema.playlists.isPublic,
-          isPicked: schema.playlists.isPicked,
-          isDefault: schema.playlists.isDefault,
-          createdAt: schema.playlists.createdAt,
-          updatedAt: schema.playlists.updatedAt,
-          episodeCount: sql<number>`(
-            SELECT count(*)::int FROM ${schema.playlistEpisodes} pe
-            WHERE pe.playlist_id = ${schema.playlists}."id"
-          )`,
-          contains: opts.containsEpisodeId
-            ? sql<boolean>`EXISTS (
-                SELECT 1 FROM ${schema.playlistEpisodes} pe
-                WHERE pe.playlist_id = ${schema.playlists}."id"
-                  AND pe.episode_id = ${opts.containsEpisodeId}
-              )`
-            : sql<boolean>`false`,
+          position: schema.playlistEpisodes.position,
+          episodeId: schema.episodes.id,
+          slug: schema.episodes.slug,
+          title: schema.episodes.title,
+          coverUrl: schema.episodes.coverUrl,
+          durationSeconds: schema.episodes.durationSeconds,
+          publishedAt: schema.episodes.publishedAt,
+          language: schema.episodes.language,
+          audioUrl: schema.episodes.audioUrl,
+          username: schema.authUsers.name,
+          displayName: schema.profiles.displayName,
+          callName: schema.submissions.callName,
+          guestName: schema.guests.name,
+          tags: schema.episodes.tags,
         })
-          .from(schema.playlists)
-          .where(eq(schema.playlists.ownerId, userId))
-          .orderBy(desc(schema.playlists.updatedAt));
+          .from(schema.playlistEpisodes)
+          .innerJoin(schema.episodes, eq(schema.episodes.id, schema.playlistEpisodes.episodeId))
+          .innerJoin(schema.submissions, eq(schema.submissions.id, schema.episodes.submissionId))
+          .innerJoin(schema.profiles, eq(schema.profiles.id, schema.episodes.userId))
+          .innerJoin(schema.authUsers, eq(schema.authUsers.id, schema.profiles.id))
+          .leftJoin(schema.guests, eq(schema.guests.id, schema.episodes.guestId))
+          .where(eq(schema.playlistEpisodes.playlistId, id))
+          .orderBy(desc(schema.playlistEpisodes.position));
+      },
+      /** 是否已收藏（默认列表包含该节目） */
+      async isFavorite(userId, episodeId) {
+        const { id } = await this.getOrCreateDefault(userId);
+        const rows = await db
+          .select({ id: schema.playlistEpisodes.id })
+          .from(schema.playlistEpisodes)
+          .where(and(
+            eq(schema.playlistEpisodes.playlistId, id),
+            eq(schema.playlistEpisodes.episodeId, episodeId),
+          ))
+          .limit(1);
+        return rows.length > 0;
+      },
+      /** 收藏：自动建默认列表后加入（已存在 → added=false 幂等） */
+      async addFavorite(userId, episodeId) {
+        const { id } = await this.getOrCreateDefault(userId);
+        return this.addEpisode(id, episodeId);
+      },
+      /** 取消收藏（不存在静默） */
+      async removeFavorite(userId, episodeId) {
+        const { id } = await this.getOrCreateDefault(userId);
+        await this.removeEpisode(id, episodeId);
       },
       async update(id, row) {
         await db.update(schema.playlists)

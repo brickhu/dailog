@@ -1,8 +1,11 @@
-import { Show, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js";
+import { Show, createMemo, createSignal, createUniqueId, onCleanup, onMount, type JSX } from "solid-js";
+import { Dynamic } from "solid-js/web";
 import { A, useLocation, useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions, durations, easings, fontfamilies, layouts,global,typography } from "@dailogues/ui/theme.stylex";
-import { Button, Icon, Logo } from "@dailogues/ui";
+import { Avatar, Button, Icon, Logo } from "@dailogues/ui";
+import { MobileNav } from "./mobile-nav";
+import { SideNav, SideNavItem, SideNavSection } from "./side-nav";
 import { useI18n } from "@dailogues/i18n";
 import { LangSwitch } from "./lang-switch";
 import { UserMenu, type NavUser } from "./user-menu";
@@ -97,29 +100,8 @@ const styles = stylex.create({
       display: "none",
     },
   },
-  drawer: {
-    display: "flex", // 移动优先：<640 显示浮层
-    flexDirection: "column",
-    gap: dimensions.spacing1,
-    padding: `${dimensions.spacing3} ${dimensions.spacing6} ${dimensions.spacing5}`,
-    backgroundColor: colors.surface,
-    [TABLET]: {
-      display: "none",
-    },
-    [DESKTOP]: {
-      display: "none",
-    },
-  },
-  drawerItem: {
-    padding: `${dimensions.spacing3} 0`,
-    color: colors.foreground,
-    fontSize: dimensions.fontSizeMd,
-    textDecoration: "none",
-    display: "flex",
-    alignItems: "center",
-    gap: dimensions.spacing3,
-    ":last-child": { borderBottom: "none" },
-  },
+  // 移动端导航 drawer（复刻 Astryx MobileNav）样式已下沉到 @dailogues/ui 的
+  // MobileNav 组件（packages/ui/src/components/mobile-nav.tsx），此处不再有浮层样式
   navLink: {
     textDecoration: "none",
   },
@@ -157,6 +139,28 @@ const styles = stylex.create({
     textAlign: "center",
     borderRadius: "7px",
     padding: "0 3px",
+  },
+  // drawer 内通知条目的未读角标（静态定位，区别于头部铃铛的绝对定位 badge）
+  drawerBadge: {
+    backgroundColor: colors.brandStrong,
+    color: "#fff",
+    fontSize: "10px",
+    lineHeight: "14px",
+    minWidth: "14px",
+    textAlign: "center",
+    borderRadius: "7px",
+    padding: "0 3px",
+  },
+  // SideNav 在 drawer 内铺满宽度（组件默认 260px 桌面侧栏宽度）
+  sideNavFill: { width: "100%" },
+  // 登出条目：危险色文本
+  drawerDangerItem: { color: colors.danger },
+  // drawer 底部语言切换行：右对齐
+  drawerLangRow: {
+    display: "flex",
+    justifyContent: "flex-end",
+    paddingInline: dimensions.spacing1,
+    paddingBlock: dimensions.spacing1,
   },
   logo: {
     height: dimensions.sizeMd,
@@ -213,9 +217,19 @@ const styles = stylex.create({
   },
 });
 
+// 路由激活判定（与 @solidjs/router 的 <A> 同语义）：忽略大小写/尾部斜杠；end=true 仅
+// 精确匹配（首页 "/" 必须 end——否则前缀匹配下任意路径都以 "/" 开头而常亮）。
+// 桌面行内链接（LinkItem）与 drawer 内条目（DrawerLink）共用。
+function useIsRouteActive(href: string, end?: boolean) {
+  const location = useLocation();
+  return createMemo(() => {
+    const path = href.split(/[?#]/, 1)[0].toLowerCase().replace(/\/$/, "");
+    const loc = decodeURI(location.pathname.toLowerCase().replace(/\/$/, ""));
+    return end ? path === loc : loc.startsWith(path + "/") || loc === path;
+  });
+}
+
 // 路由感知导航链接：命中当前路由时高亮（navLinkActive）并劫持点击（不可跳转）。
-// 匹配语义与 @solidjs/router 的 <A> 同款：忽略大小写/尾部斜杠；end=true 仅精确匹配
-// （首页 "/" 必须 end——否则前缀匹配下任意路径都以 "/" 开头而常亮）。
 // 劫持原理：router 在 document 上的 click 监听先检查 evt.defaultPrevented，命中即放弃
 // 导航；Solid 的委托事件处理器先于该监听执行（router 内部先调 delegateEvents），
 // 因此这里 preventDefault 即可可靠拦下（含键盘 Enter 触发的 click）。
@@ -226,12 +240,7 @@ const LinkItem = (props: {
   /** 精确匹配（end）：仅当前路径完全等于 href 时高亮/劫持 */
   end?: boolean;
 }) => {
-  const location = useLocation();
-  const isActive = createMemo(() => {
-    const path = props.href.split(/[?#]/, 1)[0].toLowerCase().replace(/\/$/, "");
-    const loc = decodeURI(location.pathname.toLowerCase().replace(/\/$/, ""));
-    return props.end ? path === loc : loc.startsWith(path + "/") || loc === path;
-  });
+  const isActive = useIsRouteActive(props.href, props.end);
   return (
     <A
       href={props.href}
@@ -248,6 +257,91 @@ const LinkItem = (props: {
   );
 };
 
+// drawer 内导航条目：SideNavItem 包装（经 as 传路由 A 实现 SPA 导航；激活态高亮 +
+// 劫持当前页点击）。desktop 行内导航与 drawer 条目共用 useIsRouteActive，高亮语义一致
+const DrawerLink = (props: {
+  href: string;
+  label: string;
+  icon?: JSX.Element;
+  endContent?: JSX.Element;
+  /** 精确匹配（end） */
+  end?: boolean;
+  /** 条目尺寸（子条目用 md，一级用 lg）@default "lg" */
+  size?: "sm" | "md" | "lg";
+}) => {
+  const isActive = useIsRouteActive(props.href, props.end);
+  return (
+    <SideNavItem
+      as={A}
+      href={props.href}
+      label={props.label}
+      icon={props.icon}
+      endContent={props.endContent}
+      size={props.size ?? "lg"}
+      isSelected={isActive()}
+      onClick={(e) => {
+        if (isActive()) e.preventDefault();
+      }}
+    />
+  );
+};
+
+// drawer 账号区（未登录）：登录入口。
+// 与 DrawerAccountSection 一起经 <Dynamic component={...}> 按登录态切换（替代
+// Show 的惰性 children——hydration 后 children 函数首次求值嵌套 JSX 时存在模板
+// 提升问题；Dynamic 按组件引用渲染，无此问题）
+const DrawerLoginItem = () => {
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  return (
+    <SideNavItem
+      label={t("nav.login")}
+      icon={<Icon icon="iconoir:user" width={18} height={18} />}
+      size="lg"
+      onClick={() => navigate("/login")}
+    />
+  );
+};
+
+// drawer 账号区（登录后）：投稿 / 通知 / 账号分组（二级纵向菜单，可折叠嵌套子项）。
+// user 类型允许 null（Dynamic 的 component 分支运行时才保证非空）
+const DrawerAccountSection = (props: { user: NavUser | null; unread: number }) => {
+  const { t } = useI18n();
+  return (
+    <>
+      <SideNavItem
+        label={t("nav.submit")}
+        icon={<Icon icon="iconoir:upload" width={18} height={18} />}
+        size="lg"
+        onClick={openImportDialog}
+      />
+      <DrawerLink
+        href="/me/notifications"
+        label={t("me.notifications")}
+        icon={<Icon icon="iconoir:bell" width={18} height={18} />}
+        endContent={
+          props.unread > 0 ? (
+            <span {...stylex.props(styles.drawerBadge)}>{props.unread > 99 ? "99+" : props.unread}</span>
+          ) : undefined
+        }
+      />
+      {/* 二级：账号分组——头像为图标，点击展开/收起子条目（折叠切换不收起 drawer） */}
+      <SideNavItem
+        label={props.user!.name || t("common.unnamed")}
+        icon={<Avatar image={props.user!.image} name={props.user!.name} email={props.user!.email} size={20} />}
+        size="lg"
+      >
+        <DrawerLink href="/me" label={t("nav.profile")} size="md" />
+        <DrawerLink href="/me/episodes" label={t("me.episodes")} size="md" />
+        <DrawerLink href="/me/submits" label={t("nav.submissions")} size="md" />
+        <DrawerLink href="/me/favorites" label={t("nav.favorites")} size="md" />
+        <DrawerLink href="/account" label={t("nav.settings")} size="md" />
+        <SideNavItem label={t("nav.logout")} size="md" xstyle={styles.drawerDangerItem} onClick={() => confirmSignOut()} />
+      </SideNavItem>
+    </>
+  );
+};
+
 /** 消费端导航：brand + home/discover + [投稿] + 通知 + 头像菜单 + 语言切换。
  *  会话经 site 代理（/v1/auth/get-session）在 client 判定（cookie 同站自动携带）；
  *  SSR 首帧无 cookie 渲染"登录"，hydration 后更新为头像菜单。 */
@@ -255,6 +349,9 @@ export function SiteNav() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = createSignal(false);
+  // drawer dialog 的 id：汉堡按钮 aria-controls 与 MobileNav 的 dialog id 关联
+  //（MobileNav 把 id 透传给原生 <dialog>；无 AppShell 上下文，受控使用 isOpen/onOpenChange）
+  const navDialogId = createUniqueId();
   // 滚动状态：滚动容器是父级 shellRoot（header 吸顶在其内），scrollTop > 0 时背景
   // 由透明过渡到实色。onMount 先同步一次初值——首帧样式变化发生在浏览器绘制前，
   // 不会触发过渡动画（避免深链接/滚动恢复时闪一下透明）
@@ -385,32 +482,68 @@ export function SiteNav() {
       <nav {...stylex.props(styles.nav)}>
         {navContent()}
       </nav>
-      {/* 移动端：汉堡按钮（右侧导航折叠进浮层） */}
+      {/* 移动端：汉堡按钮（右侧导航折叠进 drawer；aria-controls 指向 MobileNav dialog） */}
       <button
         {...stylex.props(styles.hamburger)}
         onClick={() => setMenuOpen((v) => !v)}
-        aria-label="menu"
+        aria-label={t("mobileNav.openNavigation")}
         aria-expanded={menuOpen()}
+        aria-controls={navDialogId}
       >
         <Icon icon="iconoir:menu" width={24}/>
       </button>
     </header>
-    {/* 移动端浮层：汉堡展开的导航面板（跟随 header 文档流）。
-        关闭策略：点空白（drawer 自身）或导航链接（a）→ 收起；点二级菜单按钮
-        （语言切换/头像）不收起——否则菜单刚弹出就被冒泡的 drawer onClick 关闭 */}
-    <Show when={menuOpen()}>
+    {/* 移动端导航 drawer（复刻 Astryx MobileNav + SideNav 家族）：汉堡触发的滑出抽屉，
+        内容为两级纵向菜单——SideNavSection 一级分组 + SideNavItem 二级条目（账号分组为
+        可折叠嵌套子项）。关闭策略：遮罩点击 / Escape / 头部关闭按钮 → onOpenChange(false)；
+        点 drawer 内导航链接（a）→ 收起；二级菜单按钮（语言）与折叠切换（账号分组）
+        （data-menu-trigger / data-sidenav-toggle）不收起 */}
+    <MobileNav
+      id={navDialogId}
+      isOpen={menuOpen()}
+      onOpenChange={setMenuOpen}
+    >
       <div
-        {...stylex.props(styles.drawer)}
         onClick={(e) => {
-          const t = e.target as HTMLElement;
-          // 二级菜单触发器（语言/头像）：不收起（菜单要弹出）；其余（链接/按钮/空白）收起
-          if (t.closest("[data-menu-trigger]")) return;
+          const target = e.target as HTMLElement;
+          // 语言切换（菜单要弹出）与账号分组折叠切换不收起；其余（链接/按钮/空白）收起
+          if (target.closest("[data-menu-trigger], [data-sidenav-toggle]")) return;
           setMenuOpen(false);
         }}
       >
-        {navContent()}
+        <SideNav xstyle={styles.sideNavFill}>
+          {/* 一级：浏览 */}
+          <SideNavSection title={t("nav.browse")}>
+            <DrawerLink href="/" end label={t("nav.home")} icon={<Icon icon="iconoir:home" width={18} height={18} />} />
+            <DrawerLink href="/discover" label={t("nav.discover")} icon={<Icon icon="iconoir:compass" width={18} height={18} />} />
+            <DrawerLink href="/hosts" label={t("nav.hosts")} icon={<Icon icon="iconoir:microphone" width={18} height={18} />} />
+            <DrawerLink href="/guests" label={t("nav.guests")} icon={<Icon icon="iconoir:user" width={18} height={18} />} />
+            {/* 组件示例页：仅本地 dev 可见（条件渲染，不走 Show 的惰性 children） */}
+            {import.meta.env.DEV ? (
+              <DrawerLink href="/example" label={t("nav.example")} icon={<Icon icon="iconoir:code" width={18} height={18} />} />
+            ) : null}
+          </SideNavSection>
+          {/* 一级：账号 */}
+          <SideNavSection title={t("nav.account")}>
+            <SideNavItem
+              label={t("search.title")}
+              icon={<Icon icon="iconoir:search" width={18} height={18} />}
+              size="lg"
+              onClick={openSearchDialog}
+            />
+            {/* 登录态内容经 Dynamic 按登录态切换组件（替代 Show 惰性 children——
+               避免 hydration 后 children 函数首次求值嵌套 JSX 的模板问题） */}
+            <Dynamic
+              component={user() ? DrawerAccountSection : DrawerLoginItem}
+              user={user()}
+              unread={unread()}
+            />
+          </SideNavSection>
+          {/* 底部：语言切换（二级菜单触发器，点击不收起 drawer） */}
+          <div {...stylex.props(styles.drawerLangRow)}>{menuTriggerWrap(<LangSwitch />)}</div>
+        </SideNav>
       </div>
-    </Show>
+    </MobileNav>
     </>
   );
 }

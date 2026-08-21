@@ -12,6 +12,7 @@ import { useI18n } from "@dailogues/i18n";
 import { PageSpinner } from "../components/page-loading";
 import { auth } from "../lib/auth-guard";
 import { openImportDialog } from "../components/import-dialog";
+import { Container } from "../components/containers";
 // use:auth 指令的作用域绑定（babel 编译转换需要；TS 不识 JSX 指令故 void 消除未使用误报）
 void auth;
 
@@ -315,9 +316,10 @@ export default function HomePage() {
 
   return (
     <div {...stylex.props(layouts.page)}>
-      {/* 首页全屏动画背景（fixed 视口铺满，z -1 位于内容之下） */}
       <HeroFlow />
-      {/* 首屏 hero：内容容器叠加在全屏背景上 */}
+      {/* <Container {...stylex.props(styles.hero)}>
+          <div>sss</div>
+      </Container> */}
       <section {...stylex.props(styles.hero)}>
         <div {...stylex.props(layouts.containerLg, styles.heroInner)}>
           <div {...stylex.props(styles.heroText)}>
@@ -345,12 +347,10 @@ export default function HomePage() {
         <A href="/discover" {...stylex.props(global.linkText,typography.bodyMd)}>{t("home.hero.browse")}</A>
       </div>
 
-      {/* 数据区（推荐滚屏 + 统计卡片）：页面级 Suspense —— 点击导航立即提交，数据加载中
-          显示 spinner（后续可按需换成结构化骨架）；FAQ 静态区不受影响 */}
       <Suspense fallback={<PageSpinner />}>
       <EpisodeCarousel episodes={playback.recommended() ?? null} loading={playback.recommendedLoading()} />
 
-      {/* 播放列表横滑区：平台策展的主题合集（封面 = 首期节目封面） */}
+
       <Show when={playlists() && playlists()!.length > 0}>
         <div {...stylex.props(layouts.fullRow, styles.listTitleRow)}>
           <div {...stylex.props(styles.listTitle)}>{t("home.playlists")}</div>
@@ -370,8 +370,6 @@ export default function HomePage() {
           </For>
         </div>
       </Show>
-
-      {/* 站点头部统计卡片：主播 / AI 嘉宾 / 访谈期数（subgrid 继承容器轨道，等宽等高灰色区块） */}
       <Show when={stats()} fallback={<StatsCardsPlaceholder />}>
         <div {...stylex.props(styles.statCards)}>
           <A href="/hosts" {...stylex.props(styles.statCard)}>
@@ -406,12 +404,9 @@ export default function HomePage() {
         </div>
       </Show>
       </Suspense>
-
-      {/* 常见问题（互斥手风琴，双语跟随语言切换） */}
       <div {...stylex.props(layouts.fullRow)}>
         <Faq />
       </div>
-      {/* 底部金句 */}
       <div {...stylex.props(layouts.fullRow,styles.quote)}>
         <p {...stylex.props(typography.displayMd,styles.quoteContent)}>{t("home.faq.quote")}</p>
         <p {...stylex.props(typography.caption)}>— {t("home.faq.quoteAuthor")}</p>

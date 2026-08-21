@@ -1,11 +1,11 @@
 import { Show, Suspense, createEffect, createResource, createSignal, onCleanup } from "solid-js";
 import { NoHydration } from "solid-js/web";
-import { createAsync, useNavigate, useParams } from "@solidjs/router";
+import { A, createAsync, useNavigate, useParams } from "@solidjs/router";
 import { Meta, Title } from "@solidjs/meta";
 import { Cover } from "../../components/cover";
 import { PlayButton } from "../../components/play-button";
 import { ShareDialog } from "../../components/share-buttons";
-import { AddToPlaylistDialog } from "../../components/add-to-playlist";
+import { fetchFavoriteStatus, setFavorite } from "../../lib/favorites";
 import { DetailSkeleton } from "../../components/page-skeletons";
 import { usePlayback, type QueueEpisode } from "../../lib/playback";
 import { getEpisodeCached } from "../../lib/episode-cache";
@@ -104,37 +104,86 @@ const styles = stylex.create({
      
   },
   caption: {
-    opacity : "50%"
+    opacity : "50%",
+
   },
   desc: {
+    gridColumn : "1 / -1",
+  },
+  cast: {
     gridColumn : "1 / -1",
   },
   // 点赞激活态（已赞：红粉心形点亮）
   likeActive: {
     color: colors.danger,
   },
-  // titleWarp: {
-  //   // textAlign: "center",
-  //   // paddingInline: dimensions.spacing4
-  //   display: "flex",
-  //   flexDirection: "column",
-  //   gap: dimensions.spacing4
-  // },
-  // titleMeta: {
-  //   color: colors.neutral
-  // },
-  // titleName: {},
+  // ── cast 演出阵容：主持人卡片 + 嘉宾卡片（嘉宾存在才渲染整块） ──
+  castSection: {
+    gridColumn: "1 / -1",
+    display: "flex",
+    flexDirection: "column",
+    gap: dimensions.spacing3,
+  },
+  castLabel: {
+    color: colors.neutral,
+  },
+  castGrid: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: dimensions.spacing4,
+  },
+  personCard: {
+    display: "flex",
+    alignItems: "center",
+    gap: dimensions.spacing4,
+    padding: `${dimensions.spacing3} ${dimensions.spacing4}`,
+    borderRadius: dimensions.radiusMd,
+    backgroundColor: colors.surface,
+    textDecoration: "none",
+    color: "inherit",
+    minWidth: 0,
+    border: "1px solid transparent",
+    ":hover": { borderColor: colors.primary },
+  },
+  personAvatar: {
+    width: "56px",
+    height: "56px",
+    borderRadius: "50%",
+    objectFit: "cover",
+    flexShrink: 0,
+  },
+  personAvatarFallback: {
+    width: "56px",
+    height: "56px",
+    borderRadius: "50%",
+    backgroundColor: colors.ink,
+    color: colors.background,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: dimensions.fontSize2xl,
+    flexShrink: 0,
+  },
+  personBody: {
+    display: "flex",
+    flexDirection: "column",
+    gap: dimensions.spacing1,
+    minWidth: 0,
+  },
+  personRole: {
+    color: colors.neutral,
+  },
+  personName: {
+    fontWeight: dimensions.fontWeightBold,
+    fontSize: dimensions.fontSizeLg,
+    lineHeight: 1.3,
+    overflowWrap: "anywhere",
+  },
+  personMeta: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+  },
 
-  // coverBlock: {
-  //   aspectRatio: "1/1",
-  //   order:1,
-  //   [TABLET]: {
-  //     order: 2
-  //   },
-  //   display : "flex",
-  //   alignItems: "center",
-  //   justifyContent: "center"
-  // },
   cover:{
     maxWidth : `calc(${dimensions.size2xl} * 3)`,
     minWidth : dimensions.size2xl,
@@ -142,87 +191,7 @@ const styles = stylex.create({
     boxShadow: shadows.shadowMed,
     borderRadius : dimensions.radiusMd
   },
-  // detail:{
-  //   order:3
-  // }
-  // 背景装饰：封面图作为内容的一部分（absolute 随页面滚动自然滚走），
-  // 高斯模糊 + 渐变遮罩 + 20% 透明度
-  // detail:{
-  //   minHeight: "100vh",
-  //   backgroundColor: colors.background,
-  //   paddingBottom: "72px",
-  //   position: "relative", // 背景层（absolute）的定位基准
-  // },
-  // bg: {
-  //   position: "absolute",
-  //   top: 0,
-  //   left: 0,
-  //   right: 0,
-  //   height: "50vh", // 只占首屏上半（跟随内容滚动，滚出视口自然消失）
-  //   overflow: "hidden",
-  //   pointerEvents: "none", // 纯装饰：不挡交互
-  //   zIndex: 0,
-  // },
-  // bgImg: {
-  //   width: "100%",
-  //   height: "50vh",
-  //   objectFit: "cover",
-  //   filter: "blur(40px)",
-  //   transform: "scale(1.15)", // 防模糊边缘露出底色
-  //   opacity: 0.2, // 整体透明度 20%
-  // },
-  // bgGradient: {
-  //   position: "absolute",
-  //   inset: 0,
-  //   // 顶部渐变遮罩：从顶到底——0% 处背景色 80% 显示（明显遮罩，图被盖住大半），
-  //   // 50% 处 0%（全透明），下半程完全露出背景图。顶部融入页面背景、向下平滑过渡。
-  //   // 20% 强度视觉几乎不可见（背景色只混入 1/5）；80% 让渐变清晰。
-  //   // 不用 linear-gradient(背景色) 模板——stylex 编译期无法解析模板内引用的跨文件 var
-  //   // backgroundColor: colors.background,
-  //   maskImage: "linear-gradient(90deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 10%)",
-  //   WebkitMaskImage: "linear-gradient(90deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 10%)",
-  // },
-  // // 内容层（containerLg 网格内）：盖在背景之上
-  // content: {
-  //   position: "relative",
-  //   zIndex: 1,
-  //   paddingTop: dimensions.spacing8,
-  //   paddingBottom: dimensions.spacing12,
-  // },
-  // // 封面列：span 4 通用（移动 4 列全宽 / 平板 8 列占 4 / 桌面 12 列占 4）
-  // coverCol: {
-  //   gridColumn: "span 4",
-  //   position: "relative", // 播放按钮（PlayButton）覆盖右下角
-  //   minWidth: 0,
-  // },
-  // // 播放按钮槽：封面右下角（固定尺寸 + flex——与 episode-card 的 btnSlot 同构：
-  // // 槽高不随内容类型变化，三态按钮位置恒定）
-  // coverBtnSlot: {
-  //   position: "absolute",
-  //   right: dimensions.spacing3,
-  //   bottom: dimensions.spacing3,
-  //   zIndex: 1,
-  //   width: dimensions.sizeLg,
-  //   height: dimensions.sizeLg,
-  //   display: "flex",
-  //   alignItems: "flex-end",
-  //   justifyContent: "flex-end",
-  // },
-  // // 内容列：移动 4 列全宽（自动折行）→ 平板 4 列（与封面并列）→ 桌面 8 列
-  // detailCol: {
-  //   gridColumn: "span 4",
-  //   minWidth: 0,
-  //   [DESKTOP]: {
-  //     gridColumn: "span 8",
-  //   },
-  // },
-  // notFound: {
-  //   maxWidth: "720px",
-  //   margin: "0 auto",
-  //   padding: dimensions.spacing12,
-  //   color: colors.neutral,
-  //   textAlign: "center",
-  // },
+
 
 });
 
@@ -315,10 +284,30 @@ export default function EpisodeDetailPage() {
     }
   };
 
+  // 收藏状态（登录态端点；SSR 无 cookie 必然 401 → 客户端 hydration 后加载）——
+  // 与点赞同模式：createResource 拉取 + toggle 绑定下方按钮，逻辑走共享函数（lib/favorites）
+  const [fav, { refetch: refetchFav }] = createResource(
+    () => (typeof window === "undefined" ? null : ep()?.id ?? null),
+    async (id) => fetchFavoriteStatus(id),
+  );
+  // favorited 用 fav.latest（不挂起）：toggle 后 refetchFav 期间保持旧值（与 liked 同因）
+  const favorited = () => !!fav.latest?.contains;
+
+  const [busyFav, setBusyFav] = createSignal(false);
+  const toggleFavorite = async () => {
+    if (busyFav() || !ep()) return;
+    setBusyFav(true);
+    try {
+      const res = await setFavorite(ep()!.id, favorited());
+      if (redirectIf401(res)) return;
+      if (res.ok) refetchFav();
+    } finally {
+      setBusyFav(false);
+    }
+  };
+
   // 分享弹窗（受控：按钮在下方 actionOutter，弹窗 UI 复用 ShareDialog）
   const [shareOpen, setShareOpen] = createSignal(false);
-  // 加入播放列表弹窗（受控：按钮在下方 actionOutter，面板复用 AddToPlaylistDialog）
-  const [listOpen, setListOpen] = createSignal(false);
 
   // 标题区元信息：主持人 · 日期 · 播放/完播统计
   const hostName = () => ep()?.callName ?? ep()?.displayName ?? ep()?.username ?? "";
@@ -363,58 +352,7 @@ export default function EpisodeDetailPage() {
   });
 
   return (
-    // <div {...stylex.props(layouts.page,styles.detail)}>
-    //   {/* 兜底标题：数据未就绪/404 时 head 也有 title（Suspense 内数据到达后 cascading 替换） */}
-    //   <Title>dailog</Title>
-    //   {/* OG 标签：社交分享卡片（og:image = 封面，各平台抓取展示）。
-    //       ⚠️ 必须在 Suspense 内（数据就绪后）渲染——SSR 端 injectAssets 在渲染完成、shell
-    //       输出前执行，挂起期间注册的 fallback 会被真实数据替换；放 Suspense 外则 head
-    //       永远只有空值（社交爬虫读原始 HTML 拿不到标题/封面）。 */}
-    //   <Suspense fallback={<DetailSkeleton />}>
-    //   <Show
-    //     when={ep()}
-    //     fallback={<div {...stylex.props(styles.notFound)}>{t("episode.notFound")}</div>}
-    //   >
-    //     <Title>{ep()!.title || "dailog"}</Title>
-    //     <Meta property="og:title" content={ep()!.title || "dailog"} />
-    //     <Meta property="og:type" content="article" />
-    //     <Meta property="og:url" content={`${env.siteBaseUrl}/episode/${ep()!.slug ?? ""}`} />
-    //     <Meta property="og:description" content={ep()!.description?.slice(0, 200) || ""} />
-    //     <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
-    //       <Meta property="og:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
-    //     </Show>
-    //     {/* 背景装饰：小号封面图全屏铺底（fixed 视口固定）——模糊 + 上下渐变 + 20% 透明度 */}
-    //     <div {...stylex.props(styles.bg)} aria-hidden="true">
-    //       <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
-    //         <img
-    //           src={episodeCoverUrl(ep()!.id, ep()!.coverUrl, 320)!}
-    //           alt=""
-    //           {...stylex.props(styles.bgImg)}
-    //         />
-    //       </Show>
-    //       <div {...stylex.props(styles.bgGradient)} />
-    //     </div>
-    //     {/* 内容：containerLg 网格（移动封面 4 列 + 内容 4 列折行；平板 4+4 并列；桌面 4+8 并列） */}
-    //     <div {...stylex.props(layouts.containerLg, styles.content)}>
-    //       <div
-    //         {...stylex.props(styles.coverCol)}
-    //         onPointerEnter={() => setCoverHover(true)}
-    //         onPointerLeave={() => setCoverHover(false)}
-    //       >
-    //         <Cover episode={asQueue(ep()!)} />
-    //         <div {...stylex.props(styles.coverBtnSlot)}>
-              // <PlayButton
-              //   episode={asQueue(ep()!)}
-              // />
-    //         </div>
-    //       </div>
-    //       <div {...stylex.props(styles.detailCol)}>
-    //         <EpisodeDetail episode={asQueue(ep()!)} />
-    //       </div>
-    //     </div>
-    //   </Show>
-    //   </Suspense>
-    // </div>
+
     <div {...stylex.props(layouts.page,styles.page)}>
       <Title>Dailog</Title>
       {/* fallback 包 NoHydration：客户端挂起渲染骨架时跳过 hydration 匹配
@@ -441,34 +379,14 @@ export default function EpisodeDetailPage() {
             <Meta name="twitter:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
           </Show>
 
-          {/* <Container>
-            <GridSpan columns={4} >
-              <Center {...stylex.props(styles.coverBlock)}>
-                <Cover episode={asQueue(ep()!)} xstyle={styles.cover}/>
-              </Center>
-            </GridSpan>
-            <GridSpan columns={{base:4, [constants.DESKTOP]:8}}>
-              <Center xstyle={styles.heading} axis="vertical">
-                <div {...stylex.props(typography.headingSm,styles.title)}>{ep()?.title}</div>
-                <div>
-                  <PlayButton episode={asQueue(ep()!)} appear="fill" isIconOnly={false} width={140} />
-                </div>
-              </Center>
-              
-            </GridSpan>
-            <GridSpan columns="full">ffffffggg</GridSpan>
-          </Container> */}
-
-          {/* <Grid maxWidth="720px" width="100%" columns={{base:4,[constants.TABLET]:6,[constants.DESKTOP]:6}}>
-            <GridSpan columns={4} >ggg</GridSpan>
-            <GridSpan columns={2} >ggg</GridSpan>
-          </Grid> */}
+     
 
           {/* Grid/GridSpan 组件已移除——这里直接用 CSS 写布局（见 components/containers.tsx 的 Container 写法） */}
           <section {...stylex.props(styles.head, styles.grid)}>
             <div {...stylex.props(styles.titleOutter)}>
               <div {...stylex.props(typography.caption, styles.caption)}>
-                {hostName()}{pubDate() ? ` · ${pubDate()}` : ""}{stats.latest ? ` · ${t("episode.plays", { count: stats.latest.plays })} · ${t("episode.completions", { count: stats.latest.completions })}` : ""}
+                <A href={"/@" + (ep()!.username ?? "")}>{"@"+ep()!.username}</A>
+                {/* {hostName()}{pubDate() ? ` · ${pubDate()}` : ""}{stats.latest ? ` · ${t("episode.plays", { count: stats.latest.plays })} · ${t("episode.completions", { count: stats.latest.completions })}` : ""} */}
               </div>
               <div {...stylex.props(typography.headingMd,styles.title)}>{ep()?.title}</div>
             </div>
@@ -476,17 +394,17 @@ export default function EpisodeDetailPage() {
               <Cover episode={asQueue(ep()!)} xstyle={styles.cover}/>
             </div>
             <div {...stylex.props(styles.actionOutter)}>
-              {/* 播放 + 点赞 + 添加到播放列表 + 分享：交互函数与数据都在本页（见组件顶部），
+              {/* 播放 + 点赞 + 收藏 + 分享：交互函数与数据都在本页（见组件顶部），
                   时长不随播放状态切换，按钮宽度稳定 */}
               <PlayButton episode={asQueue(ep()!)} appear="fill" isIconOnly={false} width={96} label="duration" />
               <Button
-                icon={<Icon icon={liked() ? "mdi:heart" : "mdi:heart-outline"} width={20} />}
-                appear="outline"
+                icon={liked() ? <Icon icon="material-symbols:thumb-up" width={20} />:<Icon icon="material-symbols:thumb-up-outline" width={20} /> }
+                appear={liked()?"fill":"outline"}
                 size="lg"
                 round="full"
                 label={liked() ? t("episode.liked") : t("episode.like")}
                 tooltip={liked() ? t("episode.liked") : t("episode.like")}
-                xstyle={liked() ? styles.likeActive : undefined}
+                // xstyle={liked() ? styles.likeActive : undefined}
                 isDisabled={busyLike()}
                 onClick={toggleLike}
               >
@@ -494,13 +412,14 @@ export default function EpisodeDetailPage() {
               </Button>
               <Button
                 isIconOnly
-                icon={<Icon icon="mdi:playlist-plus" width={20} />}
-                appear="outline"
+                icon={favorited() ? <Icon icon="mdi:bookmark" width={20} />:<Icon icon="mdi:bookmark-outline" width={20}/>}
+                appear={favorited() ? "fill":"outline"}
                 round="full"
                 size="lg"
-                label={t("playlist.addTo")}
-                tooltip={t("playlist.addTo")}
-                onClick={() => setListOpen(true)}
+                label={favorited() ? t("favorite.added") : t("favorite.add")}
+                tooltip={favorited() ? t("favorite.added") : t("favorite.add")}
+                isDisabled={busyFav()}
+                onClick={toggleFavorite}
               />
               <Button
                 isIconOnly
@@ -514,13 +433,57 @@ export default function EpisodeDetailPage() {
               />
             </div>
           </section>
+         
           <section {...stylex.props(styles.main,styles.grid)}>
             <div {...stylex.props(styles.desc)}>{ep()?.description}</div>
+            <div {...stylex.props(styles.cast)}></div>
           </section>
+
+          <section {...stylex.props(styles.main, styles.grid)}>
+            <div {...stylex.props(styles.castSection)}>{t("episode.cast")}</div>
+          </section>
+
+           {/* cast 演出阵容：主持人 + 嘉宾卡片（无嘉宾不渲染整块） */}
+          <Show when={ep()!.guest}>
+            <section {...stylex.props(styles.main, styles.grid)}>
+              <div {...stylex.props(styles.castSection)}>
+                <div {...stylex.props(typography.caption, styles.castLabel)}>{t("episode.cast")}</div>
+                <div {...stylex.props(styles.castGrid)}>
+                  {/* 主持人卡片：头像 + 称呼（callName ?? displayName）+ @主页 */}
+                  <A href={"/@" + (ep()!.username ?? "")} {...stylex.props(styles.personCard)}>
+                    <Show
+                      when={ep()!.hostAvatar}
+                      fallback={<div {...stylex.props(styles.personAvatarFallback)}>{(hostName() || "D").slice(0, 1)}</div>}
+                    >
+                      <img src={ep()!.hostAvatar!} alt="" {...stylex.props(styles.personAvatar)} />
+                    </Show>
+                    <div {...stylex.props(styles.personBody)}>
+                      <div {...stylex.props(typography.caption, styles.personRole)}>{t("episode.host")}</div>
+                      <div {...stylex.props(styles.personName)}>{hostName() || ep()!.displayName}</div>
+                      <div {...stylex.props(styles.personMeta)}>{"@" + (ep()!.username ?? "")}</div>
+                    </div>
+                  </A>
+                  {/* 嘉宾卡片：头像 + 名称 + 平台，链接嘉宾主页 */}
+                  <A href={"/guest/" + ep()!.guest!.id} {...stylex.props(styles.personCard)}>
+                    <Show
+                      when={ep()!.guest!.avatar}
+                      fallback={<div {...stylex.props(styles.personAvatarFallback)}>{ep()!.guest!.name.slice(0, 1)}</div>}
+                    >
+                      <img src={ep()!.guest!.avatar!} alt="" {...stylex.props(styles.personAvatar)} />
+                    </Show>
+                    <div {...stylex.props(styles.personBody)}>
+                      <div {...stylex.props(typography.caption, styles.personRole)}>{t("episode.guest")}</div>
+                      <div {...stylex.props(styles.personName)}>{ep()!.guest!.name}</div>
+                      <div {...stylex.props(styles.personMeta)}>{ep()!.guest!.platform}</div>
+                    </div>
+                  </A>
+                </div>
+              </div>
+            </section>
+          </Show>
 
           {/* 弹窗：分享（渠道面板）+ 加入播放列表（列表勾选/新建）——面板抽为组件，按钮在 actionOutter */}
           <ShareDialog episode={asQueue(ep()!)} isOpen={shareOpen()} onOpenChange={setShareOpen} />
-          <AddToPlaylistDialog episodeId={ep()!.id} isOpen={listOpen()} onOpenChange={setListOpen} />
 
         </Show>
       </Suspense>

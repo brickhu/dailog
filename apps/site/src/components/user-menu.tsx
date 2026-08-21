@@ -122,7 +122,7 @@ export function UserMenu(props: { user: NavUser; onSignOut: () => void }) {
           <A role="menuitem" href="/me" {...stylex.props(styles.item)}>{t("nav.profile")}</A>
           <a role="menuitem" href="/me/episodes" {...stylex.props(styles.item)}>{t("me.episodes")}</a>
           <a role="menuitem" href="/me/submits" {...stylex.props(styles.item)}>{t("nav.submissions")}</a>
-          <a role="menuitem" href="/me/playlists" {...stylex.props(styles.item)}>{t("me.playlists")}</a>
+          <a role="menuitem" href="/me/favorites" {...stylex.props(styles.item)}>{t("me.favorites")}</a>
           <a role="menuitem" href="/account" {...stylex.props(styles.item)}>{t("nav.settings")}</a>
           <button
             type="button"

@@ -55,5 +55,6 @@ export { Badge, type BadgeProps, type BadgeVariant } from "./components/badge";
 export { default as Examples } from "./examples";
 export { Icon, type IconProps } from "./components/icon";
 export { Logo, type LogoColorVars } from "./components/logo";
+export { Drawer, type DrawerProps, type DrawerSide } from "./components/drawer";
 
 export { registerDirective, getDirective } from "./directives";
