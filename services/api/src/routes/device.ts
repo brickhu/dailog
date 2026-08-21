@@ -1,11 +1,13 @@
-// 设备授权流（配对码模式，Slack 式）——编辑本地 Agent 登录：
+// 设备授权流（配对码模式，Slack 式）——编辑本地 Agent 登录，**全程在 API 域自包含，
+// 不经过 site**（site 是内容站/投稿人端，无任何配对代码）：
 //   1. POST /v1/device            （免鉴权）创建授权 → { deviceCode, userCode(配对码), verificationUrl }
-//   2. 编辑在浏览器打开 verificationUrl（site /login/device，带 deviceCode）→ 登录（已登录略过）
-//      → 页面自动 POST /v1/device/approve（cookie 会话 + editor/admin 角色）→ 服务端签发
-//      bearer token 存 grant → 页面显示【配对码】
+//   2. 编辑在浏览器打开 verificationUrl（{apiBase}/v1/device/authorize?code=…，API 域
+//      自包含 HTML 页）→ 登录（已登录略过）→ 页面自动授权 → 显示【配对码】
 //   3. 编辑把配对码复制回 Agent → 粘贴到终端 → POST /v1/device/pair（免鉴权）
 //      → 校验配对码 + 已授权 → 返回 token → 写本地 session 文件（一次性，取后作废）
 // 密码不落盘、不经 CLI；token 仅经配对码换取的本地通道下发。
+// 授权页登录用同源 /v1/auth/sign-in/email（内联表单 + location.reload），
+// 不依赖 site 登录页（site 登录页已改 SPA 内导航，与 CLI 配对无耦合）。
 //
 // 存储：内存 Map（MVP 单实例；重启即失效——登录是一次性动作，重试即可）。
 // 放 /v1/device/* 而非 /v1/auth/*（后者被 better-auth 全捕获吞掉）。

@@ -5,8 +5,9 @@ import { colors, dimensions, durations, easings, fontfamilies, layouts,global,ty
 import { Button, Icon, Logo, Drawer } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { LangSwitch } from "./lang-switch";
-import { UserMenu, type NavUser } from "./user-menu";
+import { UserMenu } from "./user-menu";
 import { confirmSignOut } from "../lib/auth-guard";
+import { useAuth } from "../lib/auth";
 import { openImportDialog } from "./import-dialog";
 import { openSearchDialog } from "./search-dialog";
 
@@ -365,38 +366,10 @@ export function Header() {
     scroller.addEventListener("scroll", onScroll, { passive: true });
     onCleanup(() => scroller.removeEventListener("scroll", onScroll));
   });
-  // 会话判定：仅 client 执行（SSR 无浏览器 cookie、相对 fetch 在 workerd 抛 Invalid URL）。
-  // 不用 createAsync——其 SSR 序列化结果（null）会被 hydration 复用，不再重新请求；
-  // onMount 保证挂载后必然重新 fetch，首帧渲染"登录"、挂载后更新为头像菜单。
-  const [user, setUser] = createSignal<NavUser | null>(null);
-  const [unread, setUnread] = createSignal(0);
-  // 未读数：登录后拉取 + 窗口聚焦时刷新（通知页标记已读后返回可见）；
-  // 未登录直接返回——否则 focus 触发会无条件请求 401（登录页控制台噪音）
-  const refreshUnread = async () => {
-    if (!user()) return;
-    try {
-      const res = await fetch("/v1/me/notifications/unread");
-      if (res.ok) setUnread((await res.json()).count ?? 0);
-    } catch { /* 静默 */ }
-  };
-  onMount(async () => {
-    // 聚合端点：一次请求替代 get-session + profile + 未读数三连
-    const res = await fetch("/v1/me/overview");
-    if (!res.ok) return;
-    const data = (await res.json()) as {
-      user?: { id?: string; name?: string | null; email?: string; image?: string | null } | null;
-      nickname?: string | null;
-      unreadCount?: number;
-    } | null;
-    const u = data?.user;
-    if (!u?.email) return;
-    // 主持人主页地址 = 账号昵称（@slug = user.name）
-    setUser({ id: u.id ?? "", name: u.name ?? null, email: u.email, image: u.image ?? null, username: data?.nickname ?? null });
-    if (typeof data?.unreadCount === "number") setUnread(data.unreadCount);
-  });
-  onMount(() => {
-    window.addEventListener("focus", refreshUnread);
-  });
+  // 会话状态统一由 AuthProvider 管理（lib/auth.tsx）：SSR 首帧 null/0，挂载后
+  // refresh() 拉取 /v1/me/overview；登录/登出经 context 响应式联动（SPA 导航不重挂载
+  // 本组件，但 user/unread 信号来自 context，状态变化自动生效——无需事件/整页刷新）。
+  const { user, unread } = useAuth();
 
   // 退出登录：走全局确认守卫（确认后才真正登出；登出逻辑在 auth-guard）
 

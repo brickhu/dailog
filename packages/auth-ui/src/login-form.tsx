@@ -114,6 +114,13 @@ export interface LoginFormProps {
   onSuccess?: (result: LoginSuccess) => void;
   /** 共享跳转："从哪里来就返回哪里去"（默认启用；白名单/回退由业务配置） */
   redirect?: LoginRedirectOptions & { enabled?: boolean };
+  /**
+   * 登录成功后的导航函数（可选）：SPA 宿主传入 router 的 navigate，避免整页刷新
+   * （整页刷新会重拉全部资源——部署切换/缓存不一致时可能拿到坏壳，iOS 复现过页面卡死）。
+   * 缺省回退 window.location.href（非 SPA 宿主如 studio 保持原行为）。
+   * 注意：跳转目标由 getLoginRedirect 返回（同源相对路径），router navigate 可安全处理。
+   */
+  navigate?: (url: string) => void;
   /** session 确认中（宿主在查 get-session、未决定是否跳转）：true 时渲染 loading 而非表单，防已登录用户看到登录页闪烁 */
   checkingSession?: boolean;
 }
@@ -166,9 +173,11 @@ export function LoginForm(props: LoginFormProps) {
         return;
       }
       props.onSuccess?.({ mode: "signin", user: body?.user ?? null, token: body?.token ?? null });
-      // 共享跳转：从哪里来就返回哪里去
+      // 共享跳转：从哪里来就返回哪里去（SPA 宿主用 router 导航，避免整页刷新踩缓存坑）
       if (props.redirect?.enabled !== false) {
-        window.location.href = getLoginRedirect(props.redirect);
+        const target = getLoginRedirect(props.redirect);
+        if (props.navigate) props.navigate(target);
+        else window.location.href = target;
       }
     } catch {
       setError(t("auth.networkError"));
@@ -209,7 +218,9 @@ export function LoginForm(props: LoginFormProps) {
         | null;
       props.onSuccess?.({ mode: "signup", user: body?.user ?? null, token: body?.token ?? null });
       if (props.redirect?.enabled !== false) {
-        window.location.href = getLoginRedirect(props.redirect);
+        const target = getLoginRedirect(props.redirect);
+        if (props.navigate) props.navigate(target);
+        else window.location.href = target;
       }
     } catch {
       setError(t("auth.networkError"));

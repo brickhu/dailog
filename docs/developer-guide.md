@@ -265,3 +265,40 @@ Solid 1.9 中 JSX 元素作为**普通 props**（icon={...}/endContent={...}）�
   移除 Banner 展示组（特性见 banner.md）；站点页面无 Banner，不受影响。
   **教训**：此类"组合触发 + 与内容无关"的 Mismatch，优先考虑调整使用方式/展示
   组合，不要陷入逐个属性二分的泥潭（测试本身可能受时序干扰给出矛盾结果）。
+## 11. CF Pages SPA fallback 顶替缺失静态资源 —— 200+text/html 当 JS 解析（页面卡死）
+
+### 现象
+iOS（尤其登录后跳回首页）页面"请求跑到一半卡住"：图标全不显示、CSS 不全、
+封面大图不加载、点击事件全失效。控制台：
+```
+TypeError: 'text/html' is not a valid JavaScript MIME type.
+The resource .../play-button-xxx.js was preloaded using link preload but not used
+```
+
+### 根因（两层叠加）
+1. **CF Pages 对缺失的 /_build/assets/*.js 返回 200 + text/html**（SPA fallback 顶替成
+   首页 HTML，且 cache-control: public, max-age=31536000, immutable —— 被缓存一年）。
+   浏览器把 HTML 当 JS 解析 → MIME 错误 → 该 chunk 加载失败 → 主 JS 不完整 →
+   hydration 不执行 → 图标（客户端注入）/CSS/交互全失效。
+2. **旧 HTML 引用已删除的旧哈希资源**：登录用 window.location.href 整页刷新（旧逻辑），
+   浏览器/边缘/SW 可能返回旧 HTML 壳 → 旧壳引用旧哈希 chunk → 新部署已清理 → 404 →
+   SPA fallback 200+HTML → 上面全链。iOS Safari 对 preload + MIME 校验更严格，必现。
+
+### 修复（2026-08 提交）
+- **CF Pages dashboard**：项目 dailog-site → Settings → Builds & deployments →
+  **Not found handling 改为 404-page**（默认 single-page-application 就是顶替源）。
+  这是仓库外设置，**必须手动改**，否则缺失资源仍返回 200+HTML。
+- **SW 层**（apps/site/public/sw.js，VERSION v3）：
+  - 构建产物/壳资源写缓存前校验 Content-Type，text/html 一律不缓存（isCacheableAsset）；
+  - 命中缓存时校验条目类型，坏条目（text/html 被缓存）删除后回源（dropBadCacheEntry）；
+  - VERSION 升 v3 → activate 清理 v2 旧缓存，已中毒用户自愈。
+- **登录/登出改 SPA 内导航**（不整页刷新）：LoginForm 增加 navigate prop（缺省回退
+  window.location.href 兼容非 SPA 宿主）；login.tsx 注入 router navigate。
+- **Auth context**（apps/site/src/lib/auth.tsx）：AuthProvider 统一管理 user/unread/status，
+  登录/登出后 refresh() 响应式联动 Header——全局组件不随路由重挂载，无需事件/整页刷新。
+
+### 勿回退
+- 登录/登出恢复 window.location.href 整页刷新 → 重新暴露旧壳+旧哈希组合。
+- sw.js 的 isCacheableAsset 校验删除 → SPA fallback HTML 重新被当 JS 缓存，永久卡死。
+- AuthProvider 改回 onMount 自管理 + 事件 → 回到事件耦合且 SPA 导航后不刷新的旧问题。
+

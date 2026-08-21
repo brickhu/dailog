@@ -56,6 +56,12 @@
 > `VITE_SITE_BASE_URL`（站点自身，**登录代理以它作为 Origin 转发给 API**）。
 > ⚠️ **站点实际域名必须加入 API 的 `APP_ORIGINS`**（auth-proxy 转发时以 `SITE_BASE_URL` 为 Origin，
 > better-auth CSRF 白名单校验）——preview 分支用 Pages 默认域名时也要加。
+>
+> ⚠️ **Not found handling 必须设为 `404-page`**（项目 Settings → Builds & deployments →
+> Not found handling）。默认 single-page-application 会对缺失的 /_build/assets/*.js 返回
+> 200+text/html（SPA fallback 顶替首页 HTML，且 immutable 缓存一年）——浏览器把 HTML 当 JS
+> 解析报 MIME 错误，hydration 不执行 → 页面卡死（iOS 登录跳回首页复现，见 developer-guide §11）。
+> 改 404-page 后缺失资源返回真 404，不再顶替。
 
 ## 3. DNS（candelbot.app 托管处）
 

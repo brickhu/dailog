@@ -5,7 +5,7 @@ import { createSignal, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { Button, Dialog } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
-import { isLoggedIn } from "../lib/auth-guard";
+import { confirmLoggedIn } from "../lib/auth-guard";
 import { checkUrlAndStore, isSubmittedUrl } from "../lib/url-check";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
@@ -128,7 +128,7 @@ async function tryOpenFromClipboard(): Promise<void> {
   // /submit 路由（导入第二步）不检测剪贴板——URL 已由弹框检测并预填
   if (typeof window !== "undefined" && window.location.pathname.startsWith("/submit")) return;
   // 剪贴板自动弹框仅登录用户生效（未登录走 use:auth 登录引导，不自动打扰）
-  if (!(await isLoggedIn())) return;
+  if (!(await confirmLoggedIn())) return;
   try {
     const text = await navigator.clipboard.readText();
     const url = text.trim();

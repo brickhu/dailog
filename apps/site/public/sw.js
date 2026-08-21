@@ -13,13 +13,40 @@
  *  - 首页壳（"/"）写入缓存前校验 HTML 完整性（须含 <!DOCTYPE html> 与 id="app" 挂载点），
  *    坏壳不写缓存；install 预缓存同样校验。
  *  - VERSION 升到 v2：activate 自动清理旧 dailog-static-v1 缓存，已中毒用户下次访问自愈。
+ *
+ * SPA fallback 顶替（2026-08）：CF Pages 对不存在的 /_build/assets/*.js 返回 200 + text/html
+ * （SPA fallback 返回首页 HTML，而不是 404）。浏览器把 HTML 当 JS 解析 → MIME 错误 → 主 JS
+ * chunk 加载失败 → hydration 不执行 → 图标/CSS/交互全失效（iOS 登录跳回首页复现）。且旧逻辑
+ * response.ok 即缓存，会把这份 HTML 当 JS 缓存进 SW → 永久卡死。因此：
+ *  - 构建产物/壳静态资源写缓存前校验 Content-Type：text/html 一律不缓存（SPA fallback 特征）
+ *  - 命中缓存时也校验缓存条目类型，坏的 text/html 条目删除并回源
+ *  - VERSION 升到 v3：activate 清理 v2 缓存（v2 可能已含被顶替的坏条目）
  */
-const VERSION = "v2";
+const VERSION = "v3";
 const STATIC_CACHE = "dailog-static-" + VERSION;
 
 /** 壳完整性校验：残缺/坏构建的 HTML 不写入缓存（否则离线壳被污染成坏页） */
 function isValidShell(text) {
   return text.includes("<!DOCTYPE html>") && text.includes('id="app"');
+}
+
+/** 响应是否可缓存的构建产物：非 HTML 才缓存（SPA fallback 会把缺失的 .js/.css 顶替成
+ *  200 + text/html，这种响应绝不能进缓存——否则被当 JS/CSS 缓存，页面永久卡死） */
+function isCacheableAsset(response) {
+  if (!response.ok) return false;
+  const type = (response.headers.get("content-type") || "").toLowerCase();
+  // 只缓存真实资源：JS/CSS/JSON/图片/字体等；text/html 一律排除
+  return !type.includes("text/html");
+}
+
+/** 缓存条目是否坏条目（SPA fallback 顶替的 HTML 被误缓存）：是则删除并返回 false */
+async function dropBadCacheEntry(cache, request) {
+  const cached = await cache.match(request);
+  if (!cached) return false;
+  if (isCacheableAsset(cached)) return false;
+  // 命中坏条目（text/html 被缓存）：删除，让回源重新拿真实资源
+  await cache.delete(request);
+  return true;
 }
 
 const PRECACHE_URLS = [
@@ -113,18 +140,19 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 构建产物：缓存优先 + 后台更新（哈希文件不可变，可直接回缓存）
+  // 构建产物：缓存优先 + 后台更新（哈希文件不可变，可直接回缓存）。
+  // 先剔除坏条目（SPA fallback 顶替的 text/html 被误缓存时）——否则命中即永久返回坏页；
+  // 网络响应仅当非 HTML 时才写缓存。
   if (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/_build/assets/")) {
     event.respondWith(
-      caches.match(request).then((cached) => {
+      caches.open(STATIC_CACHE).then(async (cache) => {
+        await dropBadCacheEntry(cache, request);
+        const cached = await cache.match(request);
         const network = fetch(request)
           .then((response) => {
-            if (response.ok) {
+            if (isCacheableAsset(response)) {
               const copy = response.clone();
-              caches
-                .open(STATIC_CACHE)
-                .then((cache) => cache.put(request, copy))
-                .catch(() => {});
+              cache.put(request, copy).catch(() => {});
             }
             return response;
           })
@@ -135,22 +163,21 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 壳静态资源：stale-while-revalidate
+  // 壳静态资源：stale-while-revalidate（同样剔除/拒绝 SPA fallback 顶替的 text/html）
   if (
     url.pathname === "/manifest.webmanifest" ||
     url.pathname === "/favicon.svg" ||
     url.pathname.startsWith("/icons/")
   ) {
     event.respondWith(
-      caches.match(request).then((cached) => {
+      caches.open(STATIC_CACHE).then(async (cache) => {
+        await dropBadCacheEntry(cache, request);
+        const cached = await cache.match(request);
         const network = fetch(request)
           .then((response) => {
-            if (response.ok) {
+            if (isCacheableAsset(response)) {
               const copy = response.clone();
-              caches
-                .open(STATIC_CACHE)
-                .then((cache) => cache.put(request, copy))
-                .catch(() => {});
+              cache.put(request, copy).catch(() => {});
             }
             return response;
           })

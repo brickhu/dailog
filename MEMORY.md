@@ -16,5 +16,6 @@
 - [2026-08-18] api 的 `column reference "id" is ambiguous`(Postgres 42702)是开发中间态的历史错误(05:57 集中出现后未重现)——当前 repo/index.ts 全部 JOIN 查询均带表前缀,无隐患;submissions 公开端点已补 uuid 校验(非 uuid → 404)
 - [2026-08-20] studio 工程已废弃，不再维护/使用；开发与维护以 dailog 主工程为准
 - [2026-08-20] 新开发组件的所有外部样式传递统一用 xstyle prop（stylex.create 产物，内部 stylex.props(内部, props.xstyle) 单次合并，外部在后冲突属性胜出）；勿把 {...stylex.props(x)} spread 进自定义组件（类名只拼接不合并、覆盖不可靠），spread 仅用于原生元素/<A>
+- [2026-08-21] CF Pages SPA fallback 会把缺失的 /_build/assets/*.js 顶替成 200+text/html（immutable 缓存一年）——浏览器当 JS 解析报 MIME 错误 → hydration 中断 → 图标/CSS/交互全失效（iOS 登录跳回首页复现）。修复：①CF dashboard Not found handling 改 404-page（仓库外必改）；②sw.js VERSION v3 + 缓存前校验 Content-Type（text/html 不缓存 + 命中坏条目删除回源）；③登录/登出改 SPA 内导航（LoginForm navigate prop）+ AuthProvider context（lib/auth.tsx，useAuth 响应式联动 Header）——禁止整页刷新登录跳转。详见 developer-guide §11
 - [2026-08-21] 【红线】绝对禁止 kill 端口/进程（lsof+kill、pkill 等）——orb compose 的 site 容器映射 host 3000:80，kill 3000 端口会直接杀掉 orb site 服务并连累全家桶（曾致 site/pg 退出、api 重启循环）；需要重启 SSR 用 `docker compose restart dailog`，恢复全家桶用 `docker compose up -d`；验证尽量只读，host 上不得再起占用 3000 的 dev server（与 orb 端口冲突）
 

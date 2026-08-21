@@ -2,43 +2,38 @@
 // - 需要登录的按钮/链接挂 use:auth —— 点击时检查登录态：
 //   已登录 → 直接放行，执行元素自身绑定的事件（onClick 等）；
 //   未登录 → 拦截点击，弹出统一引导 Dialog（登录 or 注册，跳 /login 并带回跳）
-// - 登录态检测走 /v1/me（同源代理，401 = 未登录），结果会话内缓存
-//   （登录/登出后调用 resetAuthCache 重置）
+// - 登录态检测走 /v1/me（同源代理，401 = 未登录）；权威状态在 AuthProvider
+//   （lib/auth.ts）——组件用 useAuth()，use:auth 指令事件回调用 getAuthSnapshot()。
 import { createSignal } from "solid-js";
 import { useI18n } from "@dailogues/i18n";
 import { useLocation, useNavigate } from "@solidjs/router";
 import { Button, Dialog, registerDirective } from "@dailogues/ui";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
+import { getAuthSnapshot, useAuth } from "./auth";
 
 export interface AuthGuardOptions {
   /** 登录/注册成功后回跳路径（默认当前路径） */
   redirect?: string;
 }
 
-// —— 登录态（会话内缓存）——
-let loggedIn: boolean | null = null;
-
-/** 当前是否已登录（未检查过则请求 /v1/me；401/网络异常 = 未登录） */
-let checking: Promise<boolean> | null = null;
-export function isLoggedIn(): Promise<boolean> {
-  if (loggedIn != null) return Promise.resolve(loggedIn);
-  checking ??= (async () => {
-    try {
-      const r = await fetch("/v1/me");
-      // 200 且响应为 JSON 才算已登录（代理缺失时 SPA fallback 会返回 200 + HTML）
-      loggedIn = r.status === 200 && (r.headers.get("content-type") ?? "").includes("application/json");
-    } catch {
-      loggedIn = false;
-    }
-    return loggedIn;
-  })();
-  return checking;
+/** 当前是否已登录（同步读 AuthProvider 快照；loading 视为未确认——由调用方异步兜底） */
+export function isLoggedIn(): boolean {
+  return getAuthSnapshot().status === "authenticated";
 }
 
-/** 登录/登出后重置登录态缓存 */
-export function resetAuthCache(): void {
-  loggedIn = null;
+/** 异步确认登录态（快照未确认时发 /v1/me 兜底；SPA fallback 响应为 200+HTML，
+ *  必须校验 content-type 才算已登录——否则代理缺失时误判为已登录） */
+export async function confirmLoggedIn(): Promise<boolean> {
+  const snap = getAuthSnapshot();
+  if (snap.status === "authenticated") return true;
+  if (snap.status === "unauthenticated") return false;
+  try {
+    const r = await fetch("/v1/me");
+    return r.status === 200 && (r.headers.get("content-type") ?? "").includes("application/json");
+  } catch {
+    return false;
+  }
 }
 
 // —— 全局登出确认（AppShell 挂载单例；confirmSignOut 打开，确认才执行登出）——
@@ -52,11 +47,14 @@ export function confirmSignOut(): void {
 /** 全局登出确认弹层 */
 export function SignOutConfirmDialog() {
   const { t } = useI18n();
+  const navigate = useNavigate();
+  const { signOut } = useAuth();
   const doSignOut = async () => {
     setSignOutOpen(false);
-    await fetch("/v1/auth/sign-out", { method: "POST" }).catch(() => {});
-    resetAuthCache();
-    window.location.reload();
+    await signOut();
+    // SPA 导航回首页（不整页刷新——避免重拉全部资源时撞上部署切换/缓存坏壳；
+    // 用户态由 AuthProvider 清空，Header 等消费方自动响应）
+    navigate("/");
   };
   return (
     <Dialog isOpen={signOutOpen()} onOpenChange={setSignOutOpen} width={380} purpose="form">
@@ -140,16 +138,32 @@ export function AuthGuardDialog() {
 // 挂载后点击拦截：capture 阶段先于元素自身 onClick（冒泡）执行；
 // 已登录 → 放行（执行绑定事件）；未登录 → preventDefault/stopPropagation + 弹引导层
 export function auth(el: HTMLElement, accessor: () => unknown) {
-  // 已登录（缓存）→ 放行；否则同步拦截（preventDefault/stopPropagation 必须在 await 前，
-  // 否则 async 挂起期间事件继续冒泡，元素自身 onClick 会先执行——曾导致未登录直接跳转）
-  // 首次点击时登录态未知：先拦截，异步确认后已登录则手动重放点击（放行语义）
+  // 同步拦截：preventDefault/stopPropagation 必须在 await 前，否则 async 挂起期间事件
+  // 继续冒泡，元素自身 onClick 会先执行（曾导致未登录直接跳转）。
+  // 登录态读 AuthProvider 快照（权威状态）；loading（未确认）时也先拦截，异步兜底判断：
+  // 已登录 → 手动重放点击（放行语义）；未登录 → 弹引导层。
   let replaying = false;
   const handler = (e: Event) => {
     if (replaying) return; // 重放点击：跳过拦截
-    if (loggedIn === true) return; // 缓存已登录：放行
+    if (getAuthSnapshot().status === "authenticated") return; // 已登录：放行
     e.preventDefault();
     e.stopPropagation();
-    void isLoggedIn().then((ok) => {
+    // 快照未确认（loading）→ 请求 /v1/me 兜底（SPA fallback 时响应为 200+HTML，
+    // 必须校验 content-type 才算已登录）
+    const snap = getAuthSnapshot();
+    if (snap.status === "unauthenticated") {
+      const opts = accessor() as AuthGuardOptions | true | undefined;
+      openAuthDialog(typeof opts === "object" ? opts?.redirect : undefined);
+      return;
+    }
+    void (async () => {
+      let ok = false;
+      try {
+        const r = await fetch("/v1/me");
+        ok = r.status === 200 && (r.headers.get("content-type") ?? "").includes("application/json");
+      } catch {
+        ok = false;
+      }
       if (ok) {
         replaying = true;
         el.click();
@@ -158,7 +172,7 @@ export function auth(el: HTMLElement, accessor: () => unknown) {
         const opts = accessor() as AuthGuardOptions | true | undefined;
         openAuthDialog(typeof opts === "object" ? opts?.redirect : undefined);
       }
-    });
+    })();
   };
   el.addEventListener("click", handler, true);
   return () => el.removeEventListener("click", handler, true);

@@ -10,6 +10,7 @@ import { PageSpinner } from "./components/page-loading";
 import { PlaybackProvider } from "./lib/playback";
 import { PlayerBar } from "./components/player-bar";
 import { AuthGuardDialog, SignOutConfirmDialog } from "./lib/auth-guard";
+import { AuthProvider } from "./lib/auth";
 import { ImportDialog } from "./components/import-dialog";
 import { SearchDialog } from "./components/search-dialog";
 import { Header } from "./components/header";
@@ -40,6 +41,7 @@ function AppShell(props: { children: JSX.Element }) {
     if (shellRef) shellRef.scrollTop = 0;
   });
   return (
+    <AuthProvider>
     <div ref={shellRef} {...stylex.props(layouts.shellRoot)}>
       {/* 全局导航单实例（路由切换不重挂载——避免会话/头像重复加载跳动） */}
       <Header />
@@ -53,6 +55,7 @@ function AppShell(props: { children: JSX.Element }) {
       {/* 全局内容搜索（Cmd/Ctrl+K / "/" / 导航栏搜索按钮打开） */}
       <SearchDialog />
     </div>
+    </AuthProvider>
   );
 }
 
