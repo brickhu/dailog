@@ -16,5 +16,5 @@
 - [2026-08-18] api 的 `column reference "id" is ambiguous`(Postgres 42702)是开发中间态的历史错误(05:57 集中出现后未重现)——当前 repo/index.ts 全部 JOIN 查询均带表前缀,无隐患;submissions 公开端点已补 uuid 校验(非 uuid → 404)
 - [2026-08-20] studio 工程已废弃，不再维护/使用；开发与维护以 dailog 主工程为准
 - [2026-08-20] 新开发组件的所有外部样式传递统一用 xstyle prop（stylex.create 产物，内部 stylex.props(内部, props.xstyle) 单次合并，外部在后冲突属性胜出）；勿把 {...stylex.props(x)} spread 进自定义组件（类名只拼接不合并、覆盖不可靠），spread 仅用于原生元素/<A>
-- [2026-08-21] 调试只重启 SSR（site 的 vinxi dev/build）——不要停数据库/API 等后端服务（orb 全家桶的 postgres/api 保持运行，调整前端代码无需动它们）
+- [2026-08-21] 调试只重启 SSR（site 的 vinxi dev/build）——不要停任何服务（数据库/API/甚至自己临时起的 dev server 都不要 kill）；需要重启时用 nohup/setsid 拉起（脱离 bash 任务生命周期），验证尽量只读
 
