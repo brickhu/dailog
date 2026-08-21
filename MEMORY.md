@@ -24,4 +24,5 @@
 - [2026-08-21] api dev 容器（tsx watch）崩溃重启后旧子进程可能残留占 8787（响应旧代码）——touch 触发 supervisor 重启无效时用 `docker restart api`（dev-supervisor 注释认可的恢复手段）
 - [2026-08-21] 排查部署先确认环境：生产 = candelbot.app / api.candelbot.app；dailog.fm / api.dailog.fm 是另一套旧环境（数据空、公开端点 401）——别拿错环境验证
 - [2026-08-21] 协作坑：编辑器开着旧缓冲保存会整体覆盖磁盘上 agent 已改的新文件（曾致 [slug].tsx 改动全丢）——agent 改完文件要提醒用户重新加载/关闭旧缓冲
+- [2026-08-21] StyleX 编译红线（site dev 容器整体 503 的根因）：①stylex.create 禁跨文件导入常量（DESKTOP/TABLET 须本地写同值字面量，theme.stylex.ts 注释有约定）；②stylex.props 条件禁引用 local/splitProps 与组件内 const；③条件必须写成直接引用 props 的裸调用表达式 `isSize("sm") && style`，禁 `fn() === x` 二元式/`!!x`——会被编译期静态求值炸 Unsupported expression。新组件照 button.tsx 的 isSize/isVariant 约定写
 
