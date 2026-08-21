@@ -7,6 +7,7 @@ import postgres from "postgres";
 export interface EpisodeSummary {
   id: string;
   slug: string;
+  number: number | null;
   title: string | null;
   description: string | null;
   durationSeconds: number | null;
@@ -14,6 +15,7 @@ export interface EpisodeSummary {
   coverUrl: string | null;
   language: string | null;
   audioUrl: string | null;
+  tags: string[] | null;
   /** 对话原文地址（投稿时用户提交的分享链接） */
   sourceUrl: string | null;
   // 频道信息
@@ -91,6 +93,8 @@ export async function listLatestEpisodes(limit = 20, lang?: "zh" | "en"): Promis
              e.duration_seconds AS "durationSeconds",
              e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
              e.language, e.audio_url AS "audioUrl",
+             e.number,
+             e.tags,
              u.name AS username, p.display_name AS "displayName"
       FROM episodes e
       JOIN profiles p ON p.id = e.user_id
@@ -147,6 +151,8 @@ export async function getEpisode(slug: string): Promise<EpisodeSummary | null> {
              e.duration_seconds AS "durationSeconds",
              e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
              e.language, e.audio_url AS "audioUrl",
+             e.number,
+             e.tags,
              -- 对话原文链接：优先节目字段，缺省回退投稿链接（存量节目未写 raw_conversation_url 时仍可显示）
              COALESCE(e.raw_conversation_url, s.url) AS "sourceUrl",
              e.transcript,
@@ -189,6 +195,8 @@ export async function getChannel(username: string): Promise<{ channel: ChannelSu
              e.duration_seconds AS "durationSeconds",
              e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
              e.language, e.audio_url AS "audioUrl",
+             e.number,
+             e.tags,
              u.name AS username, p.display_name AS "displayName"
       FROM episodes e
       JOIN profiles p ON p.id = e.user_id
@@ -292,6 +300,8 @@ export async function getPlaylist(slug: string): Promise<PlaylistDetail | null> 
              e.duration_seconds AS "durationSeconds",
              e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
              e.language, e.audio_url AS "audioUrl",
+             e.number,
+             e.tags,
              u.name AS username, p.display_name AS "displayName",
              s.call_name AS "callName", pe.position
       FROM playlist_episodes pe
@@ -343,6 +353,8 @@ export async function getGuest(id: string): Promise<GuestDetail | null> {
              e.duration_seconds AS "durationSeconds",
              e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
              e.language, e.audio_url AS "audioUrl",
+             e.number,
+             e.tags,
              u.name AS username, p.display_name AS "displayName"
       FROM episodes e
       JOIN profiles p ON p.id = e.user_id

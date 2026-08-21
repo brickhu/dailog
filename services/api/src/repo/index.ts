@@ -151,6 +151,7 @@ export interface EpisodesRepo {
   getPublicEpisode(idOrSlug: string): Promise<{
     id: string;
     slug: string;
+    number: number | null;
     title: string | null;
     description: string | null;
     durationSeconds: number | null;
@@ -158,6 +159,7 @@ export interface EpisodesRepo {
     coverUrl: string | null;
     language: string;
     audioUrl: string | null;
+    tags: string[] | null;
     sourceUrl: string | null;
     transcript: string | null;
     username: string;
@@ -957,6 +959,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         const fields = {
           id: schema.episodes.id,
           slug: schema.episodes.slug,
+          number: schema.episodes.number,
           title: schema.episodes.title,
           description: schema.episodes.description,
           durationSeconds: schema.episodes.durationSeconds,
@@ -964,6 +967,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           coverUrl: schema.episodes.coverUrl,
           language: schema.episodes.language,
           audioUrl: schema.episodes.audioUrl,
+          tags: schema.episodes.tags,
           transcript: schema.episodes.transcript,
           sourceUrl: sql<string>`COALESCE(${schema.episodes.rawConversationUrl}, ${schema.submissions.url})`,
           username: schema.authUsers.name,

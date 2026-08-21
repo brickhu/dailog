@@ -1,4 +1,4 @@
-import { Show, Suspense, createEffect, createResource, createSignal, onCleanup } from "solid-js";
+import { For, Show, Suspense, createEffect, createResource, createSignal, onCleanup } from "solid-js";
 import { NoHydration } from "solid-js/web";
 import { A, createAsync, useNavigate, useParams } from "@solidjs/router";
 import { Meta, Title } from "@solidjs/meta";
@@ -109,6 +109,19 @@ const styles = stylex.create({
   },
   desc: {
     gridColumn : "1 / -1",
+  },
+  tags: {
+    gridColumn: "1 / -1",
+    display: "flex",
+    flexWrap: "wrap",
+    gap: dimensions.spacing2,
+  },
+  tag: {
+    padding: "${dimensions.spacing1} ${dimensions.spacing3}",
+    borderRadius: dimensions.radiusFull,
+    backgroundColor: colors.surfaceStrong,
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
   },
   cast: {
     gridColumn : "1 / -1",
@@ -385,7 +398,10 @@ export default function EpisodeDetailPage() {
           <section {...stylex.props(styles.head, styles.grid)}>
             <div {...stylex.props(styles.titleOutter)}>
               <div {...stylex.props(typography.caption, styles.caption)}>
-                <A href={"/@" + (ep()!.username ?? "")}>{"@"+ep()!.username}</A>
+                <Show when={ep()!.number}>
+                  <span>{t("episode.number", { n: ep()!.number! })} · </span>
+                </Show>
+                <A href={"/@" + (ep()!.username ?? "")}>{"@"+ep()!.username} </A>
                 {/* {hostName()}{pubDate() ? ` · ${pubDate()}` : ""}{stats.latest ? ` · ${t("episode.plays", { count: stats.latest.plays })} · ${t("episode.completions", { count: stats.latest.completions })}` : ""} */}
               </div>
               <div {...stylex.props(typography.headingMd,styles.title)}>{ep()?.title}</div>
@@ -436,6 +452,11 @@ export default function EpisodeDetailPage() {
          
           <section {...stylex.props(styles.main,styles.grid)}>
             <div {...stylex.props(styles.desc)}>{ep()?.description}</div>
+            <Show when={ep()!.tags?.length}>
+              <div {...stylex.props(styles.tags)}>
+                <For each={ep()!.tags!}>{(tag) => <span {...stylex.props(styles.tag)}>#{tag}</span>}</For>
+              </div>
+            </Show>
             <div {...stylex.props(styles.cast)}></div>
           </section>
 
