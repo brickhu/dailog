@@ -117,7 +117,7 @@ const styles = stylex.create({
     gap: dimensions.spacing2,
   },
   tag: {
-    padding: "${dimensions.spacing1} ${dimensions.spacing3}",
+    padding: `${dimensions.spacing1} ${dimensions.spacing3}`,
     borderRadius: dimensions.radiusFull,
     backgroundColor: colors.surfaceStrong,
     color: colors.neutral,
