@@ -259,13 +259,16 @@ export function PlayerBar() {
           />
 
           {/* 缓冲/加载中（切换节目加载、播放中网络卡顿）→ isLoading：spinner 覆盖图标 + 自动禁用；
-              加载结束恢复播放/暂停图标。audioError 时仍显式禁用（警告态不可点） */}
+              加载结束恢复播放/暂停图标。audioError 时仍显式禁用（警告态不可点）。
+              优先级与 PlayButton 对齐：playing 优先于 buffering——切歌加载时（playing=false）
+              两处都转 spinner；播放中网络卡顿（playing=true 且 buffering=true）两处都显示暂停，
+              保证卡片播放按钮与播放条永远同态（否则加载期按钮显示暂停、播放条还在转 spinner） */}
           <Button
             {...stylex.props(styles.btn)}
             onClick={pb.toggle}
             aria-label={pb.playing() ? "pause" : "play"}
             icon={pb.playing() ? <Icon icon="iconoir:pause-solid" /> : <Icon icon="iconoir:play-solid" />}
-            isLoading={pb.buffering()}
+            isLoading={pb.buffering() && !pb.playing()}
             isDisabled={pb.audioError()}
             isIconOnly
             round="full"

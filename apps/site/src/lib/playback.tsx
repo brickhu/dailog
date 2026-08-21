@@ -157,6 +157,9 @@ export function PlaybackProvider(props: ParentProps) {
     setDuration(0);
     setAudioError(false); // 切节目：重置音源错误标记
     setBuffering(false); // 切节目：重置缓冲标记（waiting 事件会按需重新置 true）
+    setPlaying(false); // 切节目：重置播放标记——旧节目在播时 playing 残留 true，
+    // 会让播放按钮（playing 优先）显示暂停、而播放条（buffering 优先）还在转 spinner，
+    // 两处状态不一致。切歌后 playing 只能由新音频真实的 "playing" 事件重新置 true
     setPreloadError(null); // 切节目：重置预加载失败标记（旧卡片警告失效）
     a.src = episodeAudioUrl(ep.id);
     a.load();
