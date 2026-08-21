@@ -14,8 +14,8 @@ import { apiBaseForFetch, env, episodeCoverUrl } from "../../lib/env";
 import * as stylex from "@stylexjs/stylex";
 import { layouts, typography, shadows, dimensions, colors } from "@dailogues/ui/theme.stylex";
 import { Button, Icon } from "@dailogues/ui";
-// import { DESKTOP } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
+import { auth } from "../../lib/auth-guard";
 
 // 详情页（传统博客式）：dailog.fm/<episode_id> —— SSR 渲染（可索引/分享）。
 // 布局：封面（左/上，内嵌播放控件）+ 详情（右/下）；播放由全局播放条贯通，
@@ -23,7 +23,7 @@ import { useI18n } from "@dailogues/i18n";
 // 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
 // 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
 
-const TABLET = "@media (min-width: 640px) and (max-width: 1024px)";
+const TABLETANDDESKTOP = "@media (min-width: 640px)"
 
 const styles = stylex.create({
   // 响应式列数（Grid 单值 columns={4}，断点覆盖走 xstyle + @media）
@@ -31,7 +31,7 @@ const styles = stylex.create({
     minHeight: "100vh",
     paddingBlock: dimensions.spacing4,
     gap: dimensions.spacing8,
-    [TABLET]: {
+    [TABLETANDDESKTOP]: {
       paddingBlock: dimensions.spacing12,
     }
   },
@@ -43,7 +43,7 @@ const styles = stylex.create({
     minWidth: dimensions.mobile,
     padding: dimensions.spacing4,
     width: "100%",
-    [TABLET]: {
+    [TABLETANDDESKTOP]: {
       gridTemplateColumns : "repeat(6, 1fr)",
     },
   },
@@ -67,7 +67,7 @@ const styles = stylex.create({
   titleOutter : {
     gridColumn : "1 / -1",
     order: 2,
-    [TABLET]: {
+    [TABLETANDDESKTOP]: {
       gridColumn : "span 4",
       order: 1,
     },
@@ -83,7 +83,7 @@ const styles = stylex.create({
     justifyContent : "center",
     order: 1,
     aspectRatio: 4/3,
-    [TABLET]: {
+    [TABLETANDDESKTOP]: {
       gridColumn : "span 2",
       justifyContent : "flex-end",
       order: 2,
@@ -96,7 +96,7 @@ const styles = stylex.create({
     flexWrap: "wrap",
     gap: dimensions.spacing4,
      order: 3,
-    [TABLET]: {
+    [TABLETANDDESKTOP]: {
       gridColumn : "span 4",
     },
   },
@@ -418,6 +418,7 @@ export default function EpisodeDetailPage() {
                 appear={liked()?"fill":"outline"}
                 size="lg"
                 round="full"
+                use:auth={true}
                 label={liked() ? t("episode.liked") : t("episode.like")}
                 tooltip={liked() ? t("episode.liked") : t("episode.like")}
                 // xstyle={liked() ? styles.likeActive : undefined}
@@ -432,6 +433,7 @@ export default function EpisodeDetailPage() {
                 appear={favorited() ? "fill":"outline"}
                 round="full"
                 size="lg"
+                use:auth={true}
                 label={favorited() ? t("favorite.added") : t("favorite.add")}
                 tooltip={favorited() ? t("favorite.added") : t("favorite.add")}
                 isDisabled={busyFav()}

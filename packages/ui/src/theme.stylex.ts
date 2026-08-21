@@ -10,6 +10,7 @@ import * as stylex from "@stylexjs/stylex";
 const DARK = "@media (prefers-color-scheme: dark)";
 const DESKTOP = "@media (min-width: 1025px)";
 const TABLET = "@media (min-width: 640px) and (max-width: 1024px)";
+const TABLETANDDESKTOP = "@media (min-width: 640px)"
 
 
 // 颜色
@@ -45,20 +46,20 @@ export const colors = stylex.defineVars({
   onNeutralStrong: {default: "#ffffff", [DARK]: "#161b22"},
   
   // 表面区域色
-  surface: {default: "#dddddd", [DARK]: "#23272d"},
-  onSurface: {default: "#161b22", [DARK]: "#d7dada"},
-  surfaceWeak: {default: "#f1f1f1", [DARK]: "#24272b"},
-  onSurfaceWeak: {default: "#161b22", [DARK]: "#e6e9ef"},
-  surfaceStrong: {default: "#c2c6c8", [DARK]: "#393e45"},
-  onSurfaceStrong: {default: "#161b22", [DARK]: "#e6e9ef"},
+  surface: {default: "#dddddd", [DARK]: "#3b3e3c"},
+  onSurface: {default: "#161b22", [DARK]: "#d9e4dd"},
+  surfaceWeak: {default: "#f1f1f1", [DARK]: "#1d1e1d"},
+  onSurfaceWeak: {default: "#161b22", [DARK]: "#d9e4dd"},
+  surfaceStrong: {default: "#c2c6c8", [DARK]: "#555956"},
+  onSurfaceStrong: {default: "#161b22", [DARK]: "#d9e4dd"},
   
   // 突显区域色
-  popover: {default: "#161b22", [DARK]: "#161b22"},
-  onPopover: {default: "#e6e9ef", [DARK]: "#e6e9ef"},
-  popoverWeak: {default: "#1f2630", [DARK]: "#1f2630"},
-  onPopoverWeak: {default: "#e6e9ef", [DARK]: "#e6e9ef"},
-  popoverStrong: {default: "#0f1319", [DARK]: "#0f1319"},
-  onPopoverStrong: {default: "#e6e9ef", [DARK]: "#e6e9ef"},
+  popover: {default: "#b4c9c6", [DARK]: "#3e4645"},
+  onPopover: {default: "#3e4645", [DARK]: "#b4c9c6"},
+  popoverWeak: {default: "#d2e8e5", [DARK]: "#232827"},
+  onPopoverWeak: {default: "#3e4645", [DARK]: "#b4c9c6"},
+  popoverStrong: {default: "#8f9f9d", [DARK]: "#606b6a"},
+  onPopoverStrong: {default: "#3e4645", [DARK]: "#b4c9c6"},
   // 背景色
   background: {default: "#f9f9f9", [DARK]: "#0e1116"},
   // 前景色
@@ -150,8 +151,8 @@ export const dimensions = stylex.defineVars({
   borderWidthThick: "2px",
   borderWidthExtraThick: "4px",
 
-  //响应式断点
-  desktop: "1124px",
+  //最大页面尺寸
+  desktop: "1128px",
   tablet: "820px",
   mobile : "360px"
 })
@@ -461,11 +462,12 @@ export const global = stylex.create({
 })
 
 // 断点标签命名导出（全站统一引用；<640 无需声明——默认样式即移动端，移动优先）
-export { DARK, DESKTOP, TABLET };
+export { DARK, DESKTOP, TABLET,TABLETANDDESKTOP };
 
 export const constants = {
   DARK,
   DESKTOP,
   TABLET,
+  TABLETANDDESKTOP
 } as const;
 

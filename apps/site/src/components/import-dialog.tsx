@@ -3,7 +3,7 @@
 // 打开方式：openImportDialog()（如首页 CTA；未登录场景由 use:auth 守卫先拦截）
 import { createSignal, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
-import { Button, Dialog } from "@dailogues/ui";
+import { Button, Dialog, TextInput } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { confirmLoggedIn } from "../lib/auth-guard";
 import { checkUrlAndStore, isSubmittedUrl } from "../lib/url-check";
@@ -172,28 +172,6 @@ const styles = stylex.create({
     margin: 0,
     lineHeight: 1.6,
   },
-  input: {
-    width: "100%",
-    boxSizing: "border-box",
-    padding: `${dimensions.spacing3} ${dimensions.spacing4}`,
-    borderRadius: dimensions.radiusMd,
-    border: `1px solid ${colors.neutralWeak}`,
-    fontSize: dimensions.fontSizeMd,
-    backgroundColor: colors.background,
-    color: colors.foreground,
-    outline: "none",
-    ":focus": {
-      borderColor: colors.brand,
-    },
-  },
-  inputError: {
-    borderColor: colors.danger,
-  },
-  fieldError: {
-    color: colors.danger,
-    fontSize: dimensions.fontSizeSm,
-    margin: `${dimensions.spacing1} 0 0`,
-  },
   actions: {
     display: "flex",
     gap: dimensions.spacing3,
@@ -309,20 +287,17 @@ export function ImportDialog() {
             >
               <p {...stylex.props(styles.title)}>{t("submit.import")}</p>
               <p {...stylex.props(styles.desc)}>{t("submit.step1Desc")}</p>
-              <div>
-                <input
-                  type="url"
-                  value={url()}
-                  disabled={state() === "checking"}
-                  placeholder={t("submit.urlPlaceholder")}
-                  onInput={(e) => setUrl((e.target as HTMLInputElement).value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && canSubmit() && state() === "input") void handleConfirm(); }}
-                  {...stylex.props(styles.input, urlInvalid() && styles.inputError)}
-                />
-                <Show when={urlInvalid()}>
-                  <p {...stylex.props(styles.fieldError)}>{t("submit.urlUnsupported")}</p>
-                </Show>
-              </div>
+              <TextInput
+                label={t("submit.urlLabel")}
+                type="url"
+                value={url()}
+                onChange={setUrl}
+                placeholder={t("submit.urlPlaceholder")}
+                isDisabled={state() === "checking"}
+                hasClear
+                status={urlInvalid() ? { type: "error", message: t("submit.urlUnsupported") } : undefined}
+                onEnter={() => { if (canSubmit() && state() === "input") void handleConfirm(); }}
+              />
               <p {...stylex.props(styles.desc)}>{t("submit.urlHint")}</p>
               <div {...stylex.props(styles.actions)}>
                 <Button variant="neutral" appear="ghost" onClick={close}>

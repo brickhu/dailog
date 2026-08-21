@@ -47,7 +47,7 @@ const styles = stylex.create({
     boxSizing: "border-box",
     borderRadius: dimensions.radiusMd,
     fontFamily: fontfamilies.body,
-    fontSize: dimensions.fontSizeSm,
+    fontSize: dimensions.fontSizeMd,
     fontWeight: dimensions.fontWeightMedium,
     whiteSpace: "nowrap",
     cursor: "pointer",
@@ -153,10 +153,10 @@ const styles = stylex.create({
 // 尺寸：固定高度（size token 档位）+ 随尺寸的内边距/字号
 const sizeStyles = stylex.create({
   sm: { height: dimensions.sizeSm, fontSize: dimensions.fontSizeXs, paddingInline: dimensions.spacing3 },
-  md: { height: dimensions.sizeMd, paddingInline: dimensions.spacing3 },
-  lg: { height: dimensions.sizeLg, paddingInline: dimensions.spacing4 },
-  xl: { height: dimensions.sizeXl, paddingInline: dimensions.spacing5, fontSize: dimensions.fontSizeMd },
-  xxl: { height: dimensions.size2xl, paddingInline: dimensions.spacing6, fontSize: dimensions.fontSizeMd },
+  md: { height: dimensions.sizeMd, fontSize: dimensions.fontSizeMd, paddingInline: dimensions.spacing3 },
+  lg: { height: dimensions.sizeLg, fontSize: dimensions.fontSizeMd, paddingInline: dimensions.spacing4 },
+  xl: { height: dimensions.sizeXl, paddingInline: dimensions.spacing5, fontSize: dimensions.fontSizeLg },
+  xxl: { height: dimensions.size2xl, paddingInline: dimensions.spacing6, fontSize: dimensions.fontSizeLg },
 });
 
 // 图标尺寸随按钮尺寸（sm~md=16 / lg~xl=20 / xxl=24）；fontSize 让 emoji/文本图标正确缩放
@@ -284,7 +284,7 @@ const variants = stylex.create({
     borderStyle: "solid",
     borderColor: colors.primary,
     ":hover:not(:disabled):not([aria-disabled])": {
-      "@media (hover: hover)": { backgroundColor: colors.primaryWeak, color: colors.onPrimaryWeak },
+      "@media (hover: hover)": { backgroundColor: colors.primary, color: colors.onPrimaryWeak },
     },
   },
   primaryGhost: {

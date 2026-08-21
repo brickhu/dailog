@@ -105,10 +105,13 @@ const styles = stylex.create({
     margin: "auto",
     boxSizing: "border-box",
     // StyleX 0.19 property-specificity 模式不支持 border shorthand（静默丢弃），用 longhand
-    borderStyle: "none",
+    borderStyle: "solid",
+    borderWidth: dimensions.borderWidthThin,
+    borderColor: colors.popoverStrong,
     borderRadius: dimensions.radiusXl,
-    backgroundColor: colors.surface,
-    color: colors.onSurface,
+    backgroundColor: `color-mix(in srgb, ${colors.popover} 80%, transparent)`,
+    backdropFilter : "blur(40px)",
+    color: colors.onPopover,
     boxShadow: shadows.shadowHigh,
     animationName: dialogEnter,
     animationDuration: durations.durationMediumMin,
@@ -119,7 +122,7 @@ const styles = stylex.create({
     },
     "::backdrop": {
       backgroundColor: OVERLAY,
-      backdropFilter: "blur(2px)",
+      backdropFilter: "blur(10px)",
     },
   },
   // 打开时显式 display（不依赖 :where([open]) 选择器——零特异性，会被作者样式覆盖）。

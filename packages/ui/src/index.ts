@@ -38,6 +38,16 @@ export { Center, type CenterProps, type CenterAxis } from "./components/center";
 export { Skeleton, type SkeletonProps, type SkeletonRadius } from "./components/skeleton";
 export { TextField, type TextFieldProps } from "./components/text-field";
 export {
+  TextInput,
+  type TextInputProps,
+  type TextInputType,
+  type TextInputSize,
+  type TextInputStatus,
+  type TextInputStatusType,
+  type TextInputStatusVariant,
+  type TextInputColorVars,
+} from "./components/text-input";
+export {
   Slider,
   type SliderProps,
   type SliderBaseProps,

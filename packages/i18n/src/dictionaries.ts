@@ -35,6 +35,7 @@ export const zh = {
   // ---- 表单字段 ----
   "field.required": "必填",
   "field.optional": "选填",
+  "field.clear": "清除{label}",
 
   // ---- 导航 ----
   "nav.account": "账号",
@@ -471,6 +472,7 @@ export const zh = {
   "submit.title": "投稿",
   "submit.step1": "① 分享你的 AI 对话",
   "submit.step1Desc": "粘贴你与 AI 对话的分享链接（Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包），我们会自动读取内容。",
+  "submit.urlLabel": "分享链接",
   "submit.urlPlaceholder": "粘贴分享链接（claude.ai/share/…）",
   "submit.import": "导入对话",
   "submit.importing": "导入中…",
@@ -836,6 +838,7 @@ export const en: Dictionary = {
   // ---- Form fields ----
   "field.required": "Required",
   "field.optional": "Optional",
+  "field.clear": "Clear {label}",
 
   // ---- 导航 ----
   "nav.account": "Account",
@@ -1269,6 +1272,7 @@ export const en: Dictionary = {
   "submit.title": "Submit",
   "submit.step1": "① Share your AI conversation",
   "submit.step1Desc": "Paste a share link of your conversation with AI (Claude / ChatGPT / DeepSeek / Gemini / Kimi / Doubao); we'll read it automatically.",
+  "submit.urlLabel": "Share link",
   "submit.urlPlaceholder": "Paste share link (claude.ai/share/…)",
   "submit.import": "Import conversation",
   "submit.importing": "Importing…",

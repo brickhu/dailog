@@ -11,6 +11,7 @@ import { Button, Dialog, registerDirective } from "@dailogues/ui";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { getAuthSnapshot, useAuth } from "./auth";
+import { Icon } from "@dailogues/ui";
 
 export interface AuthGuardOptions {
   /** 登录/注册成功后回跳路径（默认当前路径） */
@@ -93,6 +94,9 @@ const styles = stylex.create({
     fontSize: dimensions.fontSizeXl,
     fontWeight: dimensions.fontWeightBold,
     margin: 0,
+    display:"flex",
+    alignItems: "center",
+    gap : dimensions.spacing2
   },
   desc: {
     color: colors.neutral,
@@ -121,11 +125,11 @@ export function AuthGuardDialog() {
   return (
     <Dialog isOpen={authDialogOpen()} onOpenChange={setAuthDialogOpen} width={400} purpose="form">
       <div {...stylex.props(styles.wrap)}>
-        <p {...stylex.props(styles.title)}>{t("auth.guardTitle")}</p>
+        <p {...stylex.props(styles.title)}><Icon icon="iconoir:lock"/>{t("auth.guardTitle")}</p>
         <p {...stylex.props(styles.desc)}>{t("auth.guardDesc")}</p>
         <div {...stylex.props(styles.actions)}>
           <Button onClick={goLogin}>{t("auth.guardAction")}</Button>
-          <Button onClick={() => setAuthDialogOpen(false)}>
+          <Button appear="ghost" onClick={() => setAuthDialogOpen(false)}>
             {t("auth.guardCancel")}
           </Button>
         </div>
