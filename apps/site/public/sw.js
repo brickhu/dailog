@@ -22,7 +22,7 @@
  *  - 命中缓存时也校验缓存条目类型，坏的 text/html 条目删除并回源
  *  - VERSION 升到 v3：activate 清理 v2 缓存（v2 可能已含被顶替的坏条目）
  */
-const VERSION = "v3";
+const VERSION = "v4";
 const STATIC_CACHE = "dailog-static-" + VERSION;
 
 /** 壳完整性校验：残缺/坏构建的 HTML 不写入缓存（否则离线壳被污染成坏页） */
@@ -149,12 +149,21 @@ self.addEventListener("fetch", (event) => {
         await dropBadCacheEntry(cache, request);
         const cached = await cache.match(request);
         const network = fetch(request)
-          .then((response) => {
+          .then(async (response) => {
             if (isCacheableAsset(response)) {
               const copy = response.clone();
               cache.put(request, copy).catch(() => {});
+              return response;
             }
-            return response;
+            // SPA fallback 顶替的 text/html：浏览器 HTTP 缓存（immutable 1 年）可能已被污染，
+            // 绕过缓存重试一次拿真实资源；仍坏则回缓存好条目或 404——绝不把 HTML 当 JS 返回
+            const retry = await fetch(request, { cache: "reload" });
+            if (isCacheableAsset(retry)) {
+              const copy = retry.clone();
+              cache.put(request, copy).catch(() => {});
+              return retry;
+            }
+            return cached || new Response(null, { status: 404, statusText: "Not Found" });
           })
           .catch(() => cached);
         return cached || network;
@@ -174,12 +183,21 @@ self.addEventListener("fetch", (event) => {
         await dropBadCacheEntry(cache, request);
         const cached = await cache.match(request);
         const network = fetch(request)
-          .then((response) => {
+          .then(async (response) => {
             if (isCacheableAsset(response)) {
               const copy = response.clone();
               cache.put(request, copy).catch(() => {});
+              return response;
             }
-            return response;
+            // SPA fallback 顶替的 text/html：浏览器 HTTP 缓存（immutable 1 年）可能已被污染，
+            // 绕过缓存重试一次拿真实资源；仍坏则回缓存好条目或 404——绝不把 HTML 当 JS 返回
+            const retry = await fetch(request, { cache: "reload" });
+            if (isCacheableAsset(retry)) {
+              const copy = retry.clone();
+              cache.put(request, copy).catch(() => {});
+              return retry;
+            }
+            return cached || new Response(null, { status: 404, statusText: "Not Found" });
           })
           .catch(() => cached);
         return cached || network;
