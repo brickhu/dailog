@@ -12,7 +12,7 @@ import { PlayerBar } from "./components/player-bar";
 import { AuthGuardDialog, SignOutConfirmDialog } from "./lib/auth-guard";
 import { ImportDialog } from "./components/import-dialog";
 import { SearchDialog } from "./components/search-dialog";
-import { SiteNav } from "./components/site-nav";
+import { Header } from "./components/header";
 import { Footer } from "./components/footer";
 import { initInstallStore } from "./lib/install-store";
 import "./app.css";
@@ -42,7 +42,7 @@ function AppShell(props: { children: JSX.Element }) {
   return (
     <div ref={shellRef} {...stylex.props(layouts.shellRoot)}>
       {/* 全局导航单实例（路由切换不重挂载——避免会话/头像重复加载跳动） */}
-      <SiteNav />
+      <Header />
       <RouterOutlet>{props.children}</RouterOutlet>
       <Footer />
       <PlayerBar />

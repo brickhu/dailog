@@ -1,11 +1,8 @@
 import { Show, createMemo, createSignal, createUniqueId, onCleanup, onMount, type JSX } from "solid-js";
-import { Dynamic } from "solid-js/web";
 import { A, useLocation, useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions, durations, easings, fontfamilies, layouts,global,typography } from "@dailogues/ui/theme.stylex";
-import { Avatar, Button, Icon, Logo } from "@dailogues/ui";
-import { MobileNav } from "./mobile-nav";
-import { SideNav, SideNavItem, SideNavSection } from "./side-nav";
+import { Button, Icon, Logo, Drawer } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { LangSwitch } from "./lang-switch";
 import { UserMenu, type NavUser } from "./user-menu";
@@ -100,8 +97,8 @@ const styles = stylex.create({
       display: "none",
     },
   },
-  // 移动端导航 drawer（复刻 Astryx MobileNav）样式已下沉到 @dailogues/ui 的
-  // MobileNav 组件（packages/ui/src/components/mobile-nav.tsx），此处不再有浮层样式
+  // 移动端导航 drawer 样式已下沉到 @dailogues/ui 的通用 Drawer 组件
+  //（packages/ui/src/components/drawer.tsx，复刻 Astryx MobileNav 的抽屉机制），此处不再有浮层样式
   navLink: {
     textDecoration: "none",
   },
@@ -151,10 +148,73 @@ const styles = stylex.create({
     borderRadius: "7px",
     padding: "0 3px",
   },
-  // SideNav 在 drawer 内铺满宽度（组件默认 260px 桌面侧栏宽度）
-  sideNavFill: { width: "100%" },
-  // 登出条目：危险色文本
-  drawerDangerItem: { color: colors.danger },
+  // drawer 内容列表（简单纵向导航，无 SideNav 分组）
+  drawerList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: dimensions.spacing1,
+    padding: dimensions.spacing2,
+  },
+  drawerDivider: {
+    height: "1px",
+    backgroundColor: "color-mix(in srgb, currentColor 10%, transparent)",
+    marginBlock: dimensions.spacing1,
+  },
+  drawerLink: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: dimensions.spacing2,
+    textDecoration: "none",
+    color: colors.foreground,
+    fontSize: dimensions.fontSizeMd,
+    fontWeight: dimensions.fontWeightNormal,
+    padding: `${dimensions.spacing3} ${dimensions.spacing2}`,
+    borderRadius: dimensions.radiusMd,
+    ":hover": {
+      backgroundColor: "color-mix(in srgb, currentColor 8%, transparent)",
+    },
+  },
+  // 当前路由高亮：品牌绿 + 加粗；hover 保持高亮（覆盖 linkText hover 变色）
+  drawerLinkActive: {
+    color: colors.brandStrong,
+    fontWeight: dimensions.fontWeightMedium,
+    cursor: "default",
+    ":hover": { color: colors.brandStrong },
+  },
+  drawerLinkLabel: {
+    flex: 1,
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  drawerLinkEnd: {
+    flexShrink: 0,
+    display: "inline-flex",
+    alignItems: "center",
+  },
+  // drawer 内动作按钮（搜索/登录/投稿/登出）
+  drawerAction: {
+    display: "flex",
+    alignItems: "center",
+    width: "100%",
+    background: "none",
+    borderStyle: "none",
+    cursor: "pointer",
+    textAlign: "left",
+    fontFamily: "inherit",
+    color: colors.foreground,
+    fontSize: dimensions.fontSizeMd,
+    fontWeight: dimensions.fontWeightNormal,
+    padding: `${dimensions.spacing3} ${dimensions.spacing2}`,
+    borderRadius: dimensions.radiusMd,
+    ":hover": {
+      backgroundColor: "color-mix(in srgb, currentColor 8%, transparent)",
+    },
+  },
+  // 登出动作：危险色文本
+  drawerActionDanger: { color: colors.danger },
   // drawer 底部语言切换行：右对齐
   drawerLangRow: {
     display: "flex",
@@ -219,7 +279,7 @@ const styles = stylex.create({
 
 // 路由激活判定（与 @solidjs/router 的 <A> 同语义）：忽略大小写/尾部斜杠；end=true 仅
 // 精确匹配（首页 "/" 必须 end——否则前缀匹配下任意路径都以 "/" 开头而常亮）。
-// 桌面行内链接（LinkItem）与 drawer 内条目（DrawerLink）共用。
+// 桌面行内链接（LinkItem）与 drawer 内链接（DrawerNavLink）共用。
 function useIsRouteActive(href: string, end?: boolean) {
   const location = useLocation();
   return createMemo(() => {
@@ -257,100 +317,40 @@ const LinkItem = (props: {
   );
 };
 
-// drawer 内导航条目：SideNavItem 包装（经 as 传路由 A 实现 SPA 导航；激活态高亮 +
-// 劫持当前页点击）。desktop 行内导航与 drawer 条目共用 useIsRouteActive，高亮语义一致
-const DrawerLink = (props: {
+// drawer 内导航链接：A（SPA 导航）+ 当前路由高亮 + 劫持当前页点击，块状样式。
+// desktop 行内链接与 drawer 链接共用 useIsRouteActive，高亮语义一致
+const DrawerNavLink = (props: {
   href: string;
   label: string;
-  icon?: JSX.Element;
-  endContent?: JSX.Element;
   /** 精确匹配（end） */
   end?: boolean;
-  /** 条目尺寸（子条目用 md，一级用 lg）@default "lg" */
-  size?: "sm" | "md" | "lg";
+  /** 尾部内容（未读角标等） */
+  endContent?: JSX.Element;
 }) => {
   const isActive = useIsRouteActive(props.href, props.end);
   return (
-    <SideNavItem
-      as={A}
+    <A
       href={props.href}
-      label={props.label}
-      icon={props.icon}
-      endContent={props.endContent}
-      size={props.size ?? "lg"}
-      isSelected={isActive()}
+      end={props.end}
       onClick={(e) => {
         if (isActive()) e.preventDefault();
       }}
-    />
+      {...stylex.props(styles.drawerLink, isActive() && styles.drawerLinkActive)}
+    >
+      <span {...stylex.props(styles.drawerLinkLabel)}>{props.label}</span>
+      {props.endContent != null && (
+        <span {...stylex.props(styles.drawerLinkEnd)}>{props.endContent}</span>
+      )}
+    </A>
   );
 };
 
-// drawer 账号区（未登录）：登录入口。
-// 与 DrawerAccountSection 一起经 <Dynamic component={...}> 按登录态切换（替代
-// Show 的惰性 children——hydration 后 children 函数首次求值嵌套 JSX 时存在模板
-// 提升问题；Dynamic 按组件引用渲染，无此问题）
-const DrawerLoginItem = () => {
-  const { t } = useI18n();
-  const navigate = useNavigate();
-  return (
-    <SideNavItem
-      label={t("nav.login")}
-      icon={<Icon icon="iconoir:user" width={18} height={18} />}
-      size="lg"
-      onClick={() => navigate("/login")}
-    />
-  );
-};
-
-// drawer 账号区（登录后）：投稿 / 通知 / 账号分组（二级纵向菜单，可折叠嵌套子项）。
-// user 类型允许 null（Dynamic 的 component 分支运行时才保证非空）
-const DrawerAccountSection = (props: { user: NavUser | null; unread: number }) => {
-  const { t } = useI18n();
-  return (
-    <>
-      <SideNavItem
-        label={t("nav.submit")}
-        icon={<Icon icon="iconoir:upload" width={18} height={18} />}
-        size="lg"
-        onClick={openImportDialog}
-      />
-      <DrawerLink
-        href="/me/notifications"
-        label={t("me.notifications")}
-        icon={<Icon icon="iconoir:bell" width={18} height={18} />}
-        endContent={
-          props.unread > 0 ? (
-            <span {...stylex.props(styles.drawerBadge)}>{props.unread > 99 ? "99+" : props.unread}</span>
-          ) : undefined
-        }
-      />
-      {/* 二级：账号分组——头像为图标，点击展开/收起子条目（折叠切换不收起 drawer） */}
-      <SideNavItem
-        label={props.user!.name || t("common.unnamed")}
-        icon={<Avatar image={props.user!.image} name={props.user!.name} email={props.user!.email} size={20} />}
-        size="lg"
-      >
-        <DrawerLink href="/me" label={t("nav.profile")} size="md" />
-        <DrawerLink href="/me/episodes" label={t("me.episodes")} size="md" />
-        <DrawerLink href="/me/submits" label={t("nav.submissions")} size="md" />
-        <DrawerLink href="/me/favorites" label={t("nav.favorites")} size="md" />
-        <DrawerLink href="/account" label={t("nav.settings")} size="md" />
-        <SideNavItem label={t("nav.logout")} size="md" xstyle={styles.drawerDangerItem} onClick={() => confirmSignOut()} />
-      </SideNavItem>
-    </>
-  );
-};
-
-/** 消费端导航：brand + home/discover + [投稿] + 通知 + 头像菜单 + 语言切换。
- *  会话经 site 代理（/v1/auth/get-session）在 client 判定（cookie 同站自动携带）；
- *  SSR 首帧无 cookie 渲染"登录"，hydration 后更新为头像菜单。 */
-export function SiteNav() {
+export function Header() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = createSignal(false);
-  // drawer dialog 的 id：汉堡按钮 aria-controls 与 MobileNav 的 dialog id 关联
-  //（MobileNav 把 id 透传给原生 <dialog>；无 AppShell 上下文，受控使用 isOpen/onOpenChange）
+  // drawer dialog 的 id：汉堡按钮 aria-controls 与 Drawer 的 dialog id 关联
+  //（Drawer 把 id 透传给原生 <dialog>；无 AppShell 上下文，受控使用 isOpen/onOpenChange）
   const navDialogId = createUniqueId();
   // 滚动状态：滚动容器是父级 shellRoot（header 吸顶在其内），scrollTop > 0 时背景
   // 由透明过渡到实色。onMount 先同步一次初值——首帧样式变化发生在浏览器绘制前，
@@ -482,7 +482,7 @@ export function SiteNav() {
       <nav {...stylex.props(styles.nav)}>
         {navContent()}
       </nav>
-      {/* 移动端：汉堡按钮（右侧导航折叠进 drawer；aria-controls 指向 MobileNav dialog） */}
+      {/* 移动端：汉堡按钮（右侧导航折叠进 drawer；aria-controls 指向 Drawer dialog） */}
       <button
         {...stylex.props(styles.hamburger)}
         onClick={() => setMenuOpen((v) => !v)}
@@ -493,57 +493,93 @@ export function SiteNav() {
         <Icon icon="iconoir:menu" width={24}/>
       </button>
     </header>
-    {/* 移动端导航 drawer（复刻 Astryx MobileNav + SideNav 家族）：汉堡触发的滑出抽屉，
-        内容为两级纵向菜单——SideNavSection 一级分组 + SideNavItem 二级条目（账号分组为
-        可折叠嵌套子项）。关闭策略：遮罩点击 / Escape / 头部关闭按钮 → onOpenChange(false)；
-        点 drawer 内导航链接（a）→ 收起；二级菜单按钮（语言）与折叠切换（账号分组）
-        （data-menu-trigger / data-sidenav-toggle）不收起 */}
-    <MobileNav
+    {/* 站点移动导航抽屉：基于通用 Drawer（@dailogues/ui），配置站点导航标题/宽度。
+        内容为简单纵向导航列表（导航链接 + 搜索/登录/投稿/通知/账号入口）。
+        关闭策略：遮罩点击 / Escape / 头部关闭按钮 → onOpenChange(false)；
+        点 drawer 内导航链接（a）→ 收起；语言切换（data-menu-trigger）不收起 */}
+    <Drawer
       id={navDialogId}
       isOpen={menuOpen()}
       onOpenChange={setMenuOpen}
+      header={t("mobileNav.navigation")}
+      width={320}
     >
       <div
         onClick={(e) => {
           const target = e.target as HTMLElement;
-          // 语言切换（菜单要弹出）与账号分组折叠切换不收起；其余（链接/按钮/空白）收起
-          if (target.closest("[data-menu-trigger], [data-sidenav-toggle]")) return;
+          // 语言切换（菜单要弹出）不收起；其余（链接/按钮/空白）收起
+          if (target.closest("[data-menu-trigger]")) return;
           setMenuOpen(false);
         }}
       >
-        <SideNav xstyle={styles.sideNavFill}>
-          {/* 一级：浏览 */}
-          <SideNavSection title={t("nav.browse")}>
-            <DrawerLink href="/" end label={t("nav.home")} icon={<Icon icon="iconoir:home" width={18} height={18} />} />
-            <DrawerLink href="/discover" label={t("nav.discover")} icon={<Icon icon="iconoir:compass" width={18} height={18} />} />
-            <DrawerLink href="/hosts" label={t("nav.hosts")} icon={<Icon icon="iconoir:microphone" width={18} height={18} />} />
-            <DrawerLink href="/guests" label={t("nav.guests")} icon={<Icon icon="iconoir:user" width={18} height={18} />} />
-            {/* 组件示例页：仅本地 dev 可见（条件渲染，不走 Show 的惰性 children） */}
-            {import.meta.env.DEV ? (
-              <DrawerLink href="/example" label={t("nav.example")} icon={<Icon icon="iconoir:code" width={18} height={18} />} />
-            ) : null}
-          </SideNavSection>
-          {/* 一级：账号 */}
-          <SideNavSection title={t("nav.account")}>
-            <SideNavItem
-              label={t("search.title")}
-              icon={<Icon icon="iconoir:search" width={18} height={18} />}
-              size="lg"
-              onClick={openSearchDialog}
-            />
-            {/* 登录态内容经 Dynamic 按登录态切换组件（替代 Show 惰性 children——
-               避免 hydration 后 children 函数首次求值嵌套 JSX 的模板问题） */}
-            <Dynamic
-              component={user() ? DrawerAccountSection : DrawerLoginItem}
-              user={user()}
-              unread={unread()}
-            />
-          </SideNavSection>
-          {/* 底部：语言切换（二级菜单触发器，点击不收起 drawer） */}
-          <div {...stylex.props(styles.drawerLangRow)}>{menuTriggerWrap(<LangSwitch />)}</div>
-        </SideNav>
+        <div {...stylex.props(styles.drawerList)}>
+          <DrawerNavLink href="/" end label={t("nav.home")} />
+          <DrawerNavLink href="/discover" label={t("nav.discover")} />
+          <DrawerNavLink href="/hosts" label={t("nav.hosts")} />
+          <DrawerNavLink href="/guests" label={t("nav.guests")} />
+          {/* 组件示例页：仅本地 dev 可见 */}
+          {import.meta.env.DEV ? (
+            <DrawerNavLink href="/example" label={t("nav.example")} />
+          ) : null}
+          <div {...stylex.props(styles.drawerDivider)} />
+          <button
+            type="button"
+            {...stylex.props(styles.drawerAction)}
+            onClick={openSearchDialog}
+          >
+            {t("search.title")}
+          </button>
+          <Show
+            when={user()}
+            fallback={
+              <button
+                type="button"
+                {...stylex.props(styles.drawerAction)}
+                onClick={() => navigate("/login")}
+              >
+                {t("nav.login")}
+              </button>
+            }
+          >
+            {(
+              <>
+                <button
+                  type="button"
+                  {...stylex.props(styles.drawerAction)}
+                  onClick={openImportDialog}
+                >
+                  {t("nav.submit")}
+                </button>
+                <DrawerNavLink
+                  href="/me/notifications"
+                  label={t("me.notifications")}
+                  endContent={
+                    unread() > 0 ? (
+                      <span {...stylex.props(styles.drawerBadge)}>{unread() > 99 ? "99+" : unread()}</span>
+                    ) : undefined
+                  }
+                />
+                <div {...stylex.props(styles.drawerDivider)} />
+                <DrawerNavLink href="/me" label={t("nav.profile")} />
+                <DrawerNavLink href="/me/episodes" label={t("me.episodes")} />
+                <DrawerNavLink href="/me/submits" label={t("nav.submissions")} />
+                <DrawerNavLink href="/me/favorites" label={t("nav.favorites")} />
+                <DrawerNavLink href="/account" label={t("nav.settings")} />
+                <button
+                  type="button"
+                  {...stylex.props(styles.drawerAction, styles.drawerActionDanger)}
+                  onClick={() => confirmSignOut()}
+                >
+                  {t("nav.logout")}
+                </button>
+              </>
+            )}
+          </Show>
+        </div>
+        {/* 底部：语言切换（二级菜单触发器，点击不收起 drawer） */}
+        <div {...stylex.props(styles.drawerLangRow)}>{menuTriggerWrap(<LangSwitch />)}</div>
       </div>
-    </MobileNav>
+    </Drawer>
     </>
   );
 }
