@@ -13,7 +13,7 @@ import { Icon,Button,Slider } from "@dailogues/ui";
 
 // 断点标签（与 theme.stylex.ts 的 DESKTOP 同值——stylex babel 插件不支持
 // 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
-const DESKTOP = "@media (width >= 1024px)";
+const DESKTOP = "@media (min-width: 1025px)";
 
 const styles = stylex.create({
   // 未激活（尚未开始播放）：DOM 常驻不卸载，但 visibility:hidden 且沿 Y 轴平移到

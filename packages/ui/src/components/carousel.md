@@ -80,8 +80,8 @@ const refObj = { current: null as CarouselHandle | null };
 
 // 响应式定宽：视口窄时 2 张/屏，宽时 4 张/屏——百分比相对滚动容器实际宽度解析，
 // 恰好贴边（gap={3}=12px：2 张扣 1 个间距 → -6px；4 张扣 3 个间距 → -9px）
-const DESKTOP = "@media (width >= 1024px)";
-const TABLET = "@media (640px <= width < 1024px)";
+const DESKTOP = "@media (min-width: 1025px)";
+const TABLET = "@media (min-width: 640px) and (max-width: 1024px)";
 const styles = stylex.create({
   item: {
     width: "calc(50% - 6px)",

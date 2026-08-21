@@ -8,8 +8,8 @@ import * as stylex from "@stylexjs/stylex";
 // 失败），defineVars 的 key 也要求编译期静态值；业务文件的 stylex.create 需本地写
 // 同值字面量（改断点同步本文件 + grid.tsx 等），运行时 key 用下方导出的 constants
 const DARK = "@media (prefers-color-scheme: dark)";
-const DESKTOP = "@media (width >= 1024px)";
-const TABLET = "@media (width >= 640px)";
+const DESKTOP = "@media (min-width: 1025px)";
+const TABLET = "@media (min-width: 640px) and (max-width: 1024px)";
 
 
 // 颜色

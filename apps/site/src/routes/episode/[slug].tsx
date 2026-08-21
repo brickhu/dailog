@@ -23,7 +23,7 @@ import { useI18n } from "@dailogues/i18n";
 // 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
 // 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
 
-const TABLET = "@media (width>=640px)";
+const TABLET = "@media (min-width: 640px) and (max-width: 1024px)";
 
 const styles = stylex.create({
   // 响应式列数（Grid 单值 columns={4}，断点覆盖走 xstyle + @media）

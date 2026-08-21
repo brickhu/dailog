@@ -226,7 +226,7 @@ const TERMS: Record<Locale, TermsDoc> = {
 
 // 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
 // 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
-const DESKTOP = "@media (width >= 1024px)";
+const DESKTOP = "@media (min-width: 1025px)";
 
 const styles = stylex.create({
   page: {
