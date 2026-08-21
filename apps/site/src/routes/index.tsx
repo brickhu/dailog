@@ -12,7 +12,7 @@ import { useI18n } from "@dailogues/i18n";
 import { PageSpinner } from "../components/page-loading";
 import { auth } from "../lib/auth-guard";
 import { openImportDialog } from "../components/import-dialog";
-import { Container } from "../components/containers";
+import { Container } from "../components/container";
 // use:auth 指令的作用域绑定（babel 编译转换需要；TS 不识 JSX 指令故 void 消除未使用误报）
 void auth;
 
