@@ -109,7 +109,7 @@ const styles = stylex.create({
     borderWidth: dimensions.borderWidthThin,
     borderColor: colors.popoverStrong,
     borderRadius: dimensions.radiusXl,
-    backgroundColor: `color-mix(in srgb, ${colors.popover} 80%, transparent)`,
+    backgroundColor: `color-mix(in srgb, ${colors.popover} 95%, transparent)`,
     backdropFilter : "blur(40px)",
     color: colors.onPopover,
     boxShadow: shadows.shadowHigh,

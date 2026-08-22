@@ -4,6 +4,7 @@ import { type StyleXStyles } from "@stylexjs/stylex";
 import { colors, dimensions, durations, fontfamilies, shadows } from "../theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { Spinner } from "./spinner";
+import { Tooltip } from "./tooltip";
 import { getDirective } from "../directives";
 import { useButtonGroup } from "./button-group";
 
@@ -26,10 +27,6 @@ const spinnerReveal = stylex.keyframes({
 const contentHide = stylex.keyframes({
   from: { color: "inherit" },
   to: { color: "transparent" },
-});
-const tooltipIn = stylex.keyframes({
-  from: { opacity: 0, transform: "translateX(-50%) translateY(2px)" },
-  to: { opacity: 1, transform: "translateX(-50%) translateY(0)" },
 });
 
 const styles = stylex.create({
@@ -126,35 +123,23 @@ const styles = stylex.create({
     clipPath: "inset(50%)",
     whiteSpace: "nowrap",
   },
-  // 自绘 tooltip：hover/focus 时显示于按钮上方（随按钮滚动，定位无需 JS）
-  tooltip: {
-    position: "absolute",
-    bottom: "calc(100% + 8px)",
-    left: "50%",
-    transform: "translateX(-50%)",
-    backgroundColor: colors.popover,
-    color: colors.onPopover,
-    fontSize: dimensions.fontSizeXs,
-    fontWeight: dimensions.fontWeightNormal,
-    padding: `${dimensions.spacing1} ${dimensions.spacing2}`,
-    borderRadius: dimensions.radiusSm,
-    whiteSpace: "nowrap",
-    pointerEvents: "none",
-    animationName: tooltipIn,
-    animationDuration: durations.durationFast,
-    animationFillMode: "backwards",
-    animationDelay: {
-      default: "80ms",
-      "@media (prefers-reduced-motion: reduce)": "0s",
-    },
-  },
 });
 
-// 尺寸：固定高度（size token 档位）+ 随尺寸的内边距/字号
+// 尺寸：高度 = 档位高度 + 档位附加（sm=+0/md=+spacing1(4px)/lg=+spacing2(8px)）→ 24/36/48px；
+// 左右间距（横向 padding，单侧）= 整体高度 × 0.5 → 12/18/24px（height+paddingInline 等效行高撑起）；
+// xl/xxl 沿用原有档位
 const sizeStyles = stylex.create({
   sm: { height: dimensions.sizeSm, fontSize: dimensions.fontSizeXs, paddingInline: dimensions.spacing3 },
-  md: { height: dimensions.sizeMd, fontSize: dimensions.fontSizeMd, paddingInline: dimensions.spacing3 },
-  lg: { height: dimensions.sizeLg, fontSize: dimensions.fontSizeMd, paddingInline: dimensions.spacing4 },
+  md: {
+    height: "calc(" + dimensions.sizeMd + " + " + dimensions.spacing1 + ")",
+    fontSize: dimensions.fontSizeMd,
+    paddingInline: "calc((" + dimensions.sizeMd + " + " + dimensions.spacing1 + ") * 0.5)",
+  },
+  lg: {
+    height: "calc(" + dimensions.sizeLg + " + " + dimensions.spacing2 + ")",
+    fontSize: dimensions.fontSizeMd,
+    paddingInline: "calc((" + dimensions.sizeLg + " + " + dimensions.spacing2 + ") * 0.5)",
+  },
   xl: { height: dimensions.sizeXl, paddingInline: dimensions.spacing5, fontSize: dimensions.fontSizeLg },
   xxl: { height: dimensions.size2xl, paddingInline: dimensions.spacing6, fontSize: dimensions.fontSizeLg },
 });
@@ -790,12 +775,8 @@ export function Button(props: ButtonProps) {
       <span {...stylex.props(styles.visuallyHidden)} role="status" aria-live="polite">
         {loading() ? t("common.loading") : ""}
       </span>
-      {/* 悬浮提示（hover/focus 触发，随按钮定位在正上方） */}
-      <Show when={tooltipVisible() && local.tooltip != null}>
-        <span id={tooltipId} role="tooltip" {...stylex.props(styles.tooltip)}>
-          {local.tooltip}
-        </span>
-      </Show>
+      {/* 悬浮提示（统一 Tooltip：hover/focus 触发，底色=锚点 currentColor，见 tooltip.tsx） */}
+      <Tooltip isOpen={tooltipVisible() && local.tooltip != null} label={local.tooltip} id={tooltipId} />
     </>
   );
 

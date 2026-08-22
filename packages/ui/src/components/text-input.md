@@ -20,13 +20,12 @@ import { TextInput } from "@dailogues/ui";
 | `--ti-border` | `colors.surfaceStrong` | 输入容器边框、清除/图标按钮 hover 底与描边 |
 | `--ti-text` | `colors.onSurface` | 输入文本、标签、聚焦边框与光环 |
 | `--ti-muted` | `--ti-text` 60%（派生） | 描述、选填标记 |
+| `--ti-focus-bg` | `--ti-bg` 与 `--ti-text` 的 94/6 混色（派生） | focus-within 时的容器底色 |
 | `--ti-error` | `colors.danger` | error 状态（边框/图标/消息框整套） |
 | `--ti-warning` | `colors.warning` | warning 状态 |
 | `--ti-success` | `colors.success` | success 状态 |
-| `--ti-tooltip-bg` | `colors.popover` | tooltip 底色 |
-| `--ti-tooltip-text` | `colors.onPopover` | tooltip 字色 |
 
-占位符（`--ti-text` 55%）与状态消息框底色（状态色 12% 淡染）由主变量派生，覆盖 `--ti-text` / 状态色会自动跟随。暗色模式无需额外处理：默认值 token 自带 `prefers-color-scheme: dark` 双态。
+占位符（`--ti-text` 55%）、聚焦底色（`--ti-focus-bg`）与状态消息框底色（状态色 12% 淡染）由主变量派生，覆盖 `--ti-text` / `--ti-bg` / 状态色会自动跟随。暗色模式无需额外处理：默认值 token 自带 `prefers-color-scheme: dark` 双态。
 
 ### 颜色覆盖（三种方式，任选其一）
 
@@ -80,8 +79,8 @@ const brand = stylex.create({ input: { "--ti-bg": "#fff", "--ti-error": "#e00" }
 
 | Prop | 类型 | 默认 | 说明 |
 |---|---|---|---|
-| `size` | `"sm" | "md" | "lg"` | `"md"` | 高度档位（24/32/40px，对应 `sizeSm/Md/Lg`） |
-| `isDisabled` | `boolean` | `false` | 禁用（opacity 0.55 + not-allowed） |
+| `size` | `"sm" | "md" | "lg"` | `"md"` | 尺寸档位（与 Button 对齐：24/32/40px 高，对应 `sizeSm/Md/Lg`） |
+| `isDisabled` | `boolean` | `false` | 禁用（整体 opacity 0.55 + not-allowed；边框/文字再单独减淡至 ~60%，占位符 ~40%） |
 | `isReadOnly` | `boolean` | `false` | 只读：不置灰、仍在 tab 序、随表单提交，但不可编辑 |
 | `disabledMessage` | `string` | — | 禁用原因：与 `isDisabled` 同设时改用 `aria-disabled` + `readOnly`，悬停/聚焦在输入框上方显示说明 tooltip（键盘可达） |
 | `isLoading` | `boolean` | `false` | 显式加载态（spinner + `aria-busy`） |
@@ -107,11 +106,13 @@ const brand = stylex.create({ input: { "--ti-bg": "#fff", "--ti-error": "#e00" }
 
 ## 尺寸
 
-| size | 高度 | 字号 |
-|---|---|---|
-| `sm` | 24px（`sizeSm`） | 12px（`fontSizeXs`） |
-| `md` | 32px（`sizeMd`） | 14px（`fontSizeSm`）→ 桌面 16px（`fontSizeMd`） |
-| `lg` | 40px（`sizeLg`） | 16px（`fontSizeMd`） |
+| size | 高度 | 字号 | 左右内边距 |
+|---|---|---|---|
+| `sm` | 24px（`sizeSm`） | 12px（`fontSizeXs`） | 6px（高度 × 0.25） |
+| `md` | 36px（`sizeMd` + `spacing1`） | 16px（`fontSizeMd`） | 9px（高度 × 0.25） |
+| `lg` | 48px（`sizeLg` + `spacing2`） | 16px（`fontSizeMd`） | 12px（高度 × 0.25） |
+
+> 高度档位与 [Button](button.md) **完全对齐**（档位高度 + 档位附加 / 字号 / 圆角 `radiusMd` 同款）；左右内边距 = 整体高度 × 0.25（比按钮的 0.5 更紧凑）。聚焦（focus-within）时容器底色切换为 `--ti-focus-bg`。
 
 ## 校验状态
 
@@ -204,5 +205,5 @@ const pageStyles = stylex.create({ wide: { maxWidth: "480px" } });
 1. **StyleX 0.19 不支持 `border` shorthand**（`property-specificity` 模式静默丢弃、不报错）。外部 `xstyle` 中写边框请用 `borderWidth` + `borderStyle` + `borderColor` 三个 longhand。
 2. **受控组件**：`value` 变化依赖父级更新（与 Astryx 一致）；`hasClear` 点击后若父级未同步清空值，✕ 不会消失。
 3. **图标网络加载**：`startIcon` / 状态图标 / 清除 ✕ 经 `Icon` 按需从 iconify API 拉取（模块级缓存）；离线时显示占位空白。可用 `addIcon` 注册本地图标避免网络依赖。
-4. **tooltip 定位**：自绘 tooltip 绝对定位于锚点（信息图标 / 状态按钮 / 输入容器）正上方，若祖先容器 `overflow: hidden` 且贴边，气泡可能被裁剪。
+4. **tooltip 定位**：tooltip 使用统一组件 `Tooltip`（tooltip.tsx），绝对定位于锚点（信息图标 / 状态按钮 / 输入容器）正上方，若祖先容器 `overflow: hidden` 且贴边，气泡可能被裁剪。
 5. **statusVariant="tooltip"** 时状态图标为可聚焦按钮，已接入 `aria-describedby`，但无消息时不显示 tooltip。

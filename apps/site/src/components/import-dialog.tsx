@@ -290,6 +290,7 @@ export function ImportDialog() {
               <TextInput
                 label={t("submit.urlLabel")}
                 type="url"
+                size="lg"
                 value={url()}
                 onChange={setUrl}
                 placeholder={t("submit.urlPlaceholder")}

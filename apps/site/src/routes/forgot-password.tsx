@@ -5,7 +5,7 @@ import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
-import { Button, TextField } from "@dailogues/ui";
+import { Button, TextInput } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 
 // 找回密码（dailog.fm/forgot-password）：
@@ -133,13 +133,13 @@ export default function ForgotPasswordPage() {
               {t("forgot.resetDesc", { email: email() })}
             </div>
             <div {...stylex.props(styles.field)}>
-              <TextField label={t("forgot.otp")} value={otp()} onInput={setOtp} placeholder={t("forgot.otp")} maxLength={6} />
+              <TextInput label={t("forgot.otp")} value={otp()} onChange={setOtp} placeholder={t("forgot.otp")} maxLength={6} />
             </div>
             <div {...stylex.props(styles.field)}>
-              <TextField label="新密码" type="password" value={newPw()} onInput={setNewPw} placeholder={t("forgot.newPassword")} />
+              <TextInput label="新密码" type="password" value={newPw()} onChange={setNewPw} placeholder={t("forgot.newPassword")} />
             </div>
             <div {...stylex.props(styles.field)}>
-              <TextField label="确认新密码" type="password" value={confirmPw()} onInput={setConfirmPw} placeholder={t("forgot.confirmPassword")} />
+              <TextInput label="确认新密码" type="password" value={confirmPw()} onChange={setConfirmPw} placeholder={t("forgot.confirmPassword")} />
             </div>
             <Button block onClick={resetPassword} disabled={busy()}>{busy() ? t("forgot.resetting") : t("forgot.reset")}</Button>
             <Show when={msg()}>
@@ -151,7 +151,7 @@ export default function ForgotPasswordPage() {
           <div {...stylex.props(styles.title)}>{t("forgot.title")}</div>
           <div {...stylex.props(styles.desc)}>{t("forgot.desc")}</div>
           <div {...stylex.props(styles.field)}>
-            <TextField label={t("forgot.email")} type="email" value={email()} onInput={setEmail} placeholder={t("forgot.email")} />
+            <TextInput label={t("forgot.email")} type="email" value={email()} onChange={setEmail} placeholder={t("forgot.email")} />
           </div>
           <Button block onClick={sendCode} disabled={busy()}>{busy() ? t("forgot.sending") : t("forgot.send")}</Button>
           <Show when={msg()}>

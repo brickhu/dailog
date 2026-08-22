@@ -11,6 +11,7 @@ import {
 import { type StyleXStyles } from "@stylexjs/stylex";
 import { colors, dimensions, durations, easings, fontfamilies } from "../theme.stylex";
 import { useI18n } from "@dailogues/i18n";
+import { Tooltip } from "./tooltip";
 
 /**
  * Slider（复刻 Astryx Slider：https://astryx.atmeta.com/components/Slider，
@@ -213,15 +214,6 @@ function travelFraction(offset: number, size: number): number {
 // 样式
 // ---------------------------------------------------------------------------
 
-const bubbleIn = stylex.keyframes({
-  from: { opacity: 0, transform: "translateX(-50%) translateY(2px)" },
-  to: { opacity: 1, transform: "translateX(-50%) translateY(0)" },
-});
-const bubbleInVertical = stylex.keyframes({
-  from: { opacity: 0, transform: "translateY(-50%) translateX(-2px)" },
-  to: { opacity: 1, transform: "translateY(-50%) translateX(0)" },
-});
-
 const styles = stylex.create({
   // 注意：字段容器默认不加外边距（Slider 常内联使用，如播放条）；需要间距时
   // 通过 xstyle 的 margin* 自行添加
@@ -270,21 +262,10 @@ const styles = stylex.create({
       outlineOffset: "2px",
     },
   },
-  infoBubble: {
-    position: "absolute",
-    top: "calc(100% + 6px)",
-    left: 0,
-    zIndex: 10,
+  // 信息气泡附加样式（统一 Tooltip placement="bottom" + 本样式：限宽/换行/阴影）
+  infoBubbleExtras: {
     maxWidth: 240,
-    backgroundColor: colors.popover,
-    color: colors.onPopover,
-    fontFamily: fontfamilies.body,
-    fontSize: dimensions.fontSizeXs,
-    fontWeight: dimensions.fontWeightNormal,
-    padding: `${dimensions.spacing1} ${dimensions.spacing2}`,
-    borderRadius: dimensions.radiusSm,
     boxShadow: "0 4px 12px rgba(0, 0, 0, 0.35)",
-    pointerEvents: "none",
     whiteSpace: "normal",
   },
   description: {
@@ -328,8 +309,12 @@ const styles = stylex.create({
     cursor: "pointer",
   },
   trackContainerDisabled: {
-    opacity: 0.5,
     cursor: "not-allowed",
+  },
+  // 禁用态淡化层：只包裹轨道/填充/刻度/thumb 等视觉元素（绝对定位，static 零尺寸不影响布局），
+  // 禁用原因 tooltip 留在层外——opacity 不再把气泡一起淡化（统一 Tooltip）
+  trackOpacity: {
+    opacity: 0.5,
   },
   // 主题色变量（默认 primary / surfaceWeak）：经根容器 --slider-accent、
   // --slider-track 下发，消费方用 xstyle 覆盖即可定制进度条/轨道颜色
@@ -409,38 +394,6 @@ const styles = stylex.create({
   focusVisible: {
     outline: { default: null, ":focus-visible": "2px solid var(--slider-accent)" },
     outlineOffset: { default: "0", ":focus-visible": "2px" },
-  },
-  // 自绘值气泡（同 button.tsx tooltip 做法）：随 thumb 定位，无需 JS 计算
-  bubble: {
-    position: "absolute",
-    bottom: "calc(100% + 6px)",
-    left: "50%",
-    transform: "translateX(-50%)",
-    backgroundColor: colors.popover,
-    color: colors.onPopover,
-    fontFamily: fontfamilies.body,
-    fontSize: dimensions.fontSizeXs,
-    fontWeight: dimensions.fontWeightNormal,
-    padding: `${dimensions.spacing1} ${dimensions.spacing2}`,
-    borderRadius: dimensions.radiusSm,
-    whiteSpace: "nowrap",
-    pointerEvents: "none",
-    zIndex: 2,
-    animationName: bubbleIn,
-    animationDuration: durations.durationFast,
-    animationFillMode: "backwards",
-    animationDelay: {
-      default: "0ms",
-      "@media (prefers-reduced-motion: reduce)": "0s",
-    },
-  },
-  bubbleVertical: {
-    bottom: "auto",
-    top: "50%",
-    left: "auto",
-    insetInlineEnd: "calc(100% + 8px)",
-    transform: "translateY(-50%)",
-    animationName: bubbleInVertical,
   },
   textValue: {
     flexShrink: 0,
@@ -820,17 +773,11 @@ export function Slider(props: SliderProps) {
         )}
         style={positionStyle}
       >
-        <Show when={useValueTooltip() && bubbleVisible()}>
-          <span
-            role="tooltip"
-            {...stylex.props(
-              styles.bubble,
-              isVertical() && styles.bubbleVertical,
-            )}
-          >
-            {displayValue(val)}
-          </span>
-        </Show>
+        <Tooltip
+          isOpen={useValueTooltip() && bubbleVisible()}
+          label={displayValue(val)}
+          placement={isVertical() ? "end" : "top"}
+        />
       </div>
     );
   };
@@ -911,11 +858,12 @@ export function Slider(props: SliderProps) {
                 <path d="M8 4.75v.01" stroke-linecap="round" />
               </svg>
             </span>
-            <Show when={labelTooltipOpen()}>
-              <span role="tooltip" {...stylex.props(styles.infoBubble)}>
-                {local.labelTooltip}
-              </span>
-            </Show>
+            <Tooltip
+              isOpen={labelTooltipOpen()}
+              label={local.labelTooltip}
+              placement="bottom"
+              xstyle={styles.infoBubbleExtras}
+            />
           </Show>
         </div>
       </Show>
@@ -967,6 +915,7 @@ export function Slider(props: SliderProps) {
             isDisabled() && styles.trackContainerDisabled,
           )}
         >
+          <div {...stylex.props(isDisabled() && styles.trackOpacity)}>
           {/* 背景轨道 */}
           <div
             aria-hidden="true"
@@ -1037,20 +986,15 @@ export function Slider(props: SliderProps) {
 
           {/* thumbs */}
           <For each={values()}>{(_, i) => renderThumb(i())}</For>
+          </div>
 
-          {/* 禁用原因 tooltip（hover/focus 轨道容器触发） */}
-          <Show when={showsDisabledMessage() && disabledMsgOpen()}>
-            <span
-              id={disabledMsgId}
-              role="tooltip"
-              {...stylex.props(
-                styles.bubble,
-                isVertical() && styles.bubbleVertical,
-              )}
-            >
-              {local.disabledMessage}
-            </span>
-          </Show>
+          {/* 禁用原因 tooltip（hover/focus 轨道容器触发，统一 Tooltip；在淡化层外保持实心） */}
+          <Tooltip
+            isOpen={showsDisabledMessage() && disabledMsgOpen()}
+            label={local.disabledMessage}
+            id={disabledMsgId}
+            placement={isVertical() ? "end" : "top"}
+          />
         </div>
 
         {/* 行尾文本值 */}

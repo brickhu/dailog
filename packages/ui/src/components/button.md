@@ -81,10 +81,12 @@ const pageStyles = stylex.create({
 | size | 高度 | 字号 | 左右内边距 |
 |---|---|---|---|
 | `sm` | 24px（`sizeSm`） | 12px（`fontSizeXs`） | 12px（`spacing3`） |
-| `md` | 32px（`sizeMd`） | 14px（`fontSizeSm`） | 12px |
-| `lg` | 40px（`sizeLg`） | 14px | 16px（`spacing4`） |
+| `md` | 36px（`sizeMd` + `spacing1`） | 14px（`fontSizeSm`） | 18px（高度 × 0.5） |
+| `lg` | 48px（`sizeLg` + `spacing2`） | 14px | 24px（高度 × 0.5） |
 | `xl` | 48px（`sizeXl`） | 16px（`fontSizeMd`） | 20px（`spacing5`） |
 | `xxl` | 56px（`size2xl`） | 16px | 24px（`spacing6`） |
+
+> 高度 = 档位高度 + 档位附加（sm=+0 / md=+`spacing1`(4px) / lg=+`spacing2`(8px)）；左右内边距（单侧）= 整体高度 × 0.5。
 
 > `xxl` 依赖 `theme.stylex` 中 `dimensions.size2xl`（56px）——若主题缺少该 token 需补充。
 

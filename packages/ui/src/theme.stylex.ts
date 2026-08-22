@@ -30,11 +30,11 @@ export const colors = stylex.defineVars({
   secondaryStrong: {default: "#101a33", [DARK]: "#7289b0"},
   onSecondaryStrong: {default: "#ffffff", [DARK]: "#1a2944"},
   // 品牌专属色
-  brand: {default: "#01C82C", [DARK]: "#01C82C"},
+  brand: {default: "#22cd6f", [DARK]: "#22cd6f"},
   onBrand: {default: "#211e0c", [DARK]: "#211e0c"},
-  brandWeak: {default: "#46F26B", [DARK]: "#03771c"},
+  brandWeak: {default: "#44d786", [DARK]: "#1caa5c"},
   onBrandWeak: {default: "#211e0c", [DARK]: "#211e0c"},
-  brandStrong: {default: "#03A526", [DARK]: "#46F26B"},
+  brandStrong: {default: "#1caa5c", [DARK]: "#44d786"},
   onBrandStrong: {default: "#211e0c", [DARK]: "#211e0c"},
 
   // 自然色
@@ -46,24 +46,24 @@ export const colors = stylex.defineVars({
   onNeutralStrong: {default: "#ffffff", [DARK]: "#161b22"},
   
   // 表面区域色
-  surface: {default: "#dddddd", [DARK]: "#3b3e3c"},
+  surface: {default: "#e4e8e5", [DARK]: "#3b3e3c"},
   onSurface: {default: "#161b22", [DARK]: "#d9e4dd"},
-  surfaceWeak: {default: "#f1f1f1", [DARK]: "#1d1e1d"},
+  surfaceWeak: {default: "#e9eaea", [DARK]: "#1d1e1d"},
   onSurfaceWeak: {default: "#161b22", [DARK]: "#d9e4dd"},
   surfaceStrong: {default: "#c2c6c8", [DARK]: "#555956"},
   onSurfaceStrong: {default: "#161b22", [DARK]: "#d9e4dd"},
   
   // 突显区域色
-  popover: {default: "#b4c9c6", [DARK]: "#3e4645"},
-  onPopover: {default: "#3e4645", [DARK]: "#b4c9c6"},
-  popoverWeak: {default: "#d2e8e5", [DARK]: "#232827"},
+  popover: {default: "#e6e9e9", [DARK]: "#3e4645"},
+  onPopover: {default: "#383c3b", [DARK]: "#b4c9c6"},
+  popoverWeak: {default: "#f0f2f2", [DARK]: "#232827"},
   onPopoverWeak: {default: "#3e4645", [DARK]: "#b4c9c6"},
-  popoverStrong: {default: "#8f9f9d", [DARK]: "#606b6a"},
+  popoverStrong: {default: "#a7aaa9", [DARK]: "#606b6a"},
   onPopoverStrong: {default: "#3e4645", [DARK]: "#b4c9c6"},
   // 背景色
   background: {default: "#f9f9f9", [DARK]: "#0e1116"},
   // 前景色
-  foreground: {default: "#2b2f35", [DARK]: "#b8bdc5"},
+  foreground: {default: "#222727", [DARK]: "#b8bdc5"},
   // 危险色
   danger: {default: "#f0506e", [DARK]: "#f0506e"},
   onDanger: {default: "#ffdee6", [DARK]: "#ffdee6"},

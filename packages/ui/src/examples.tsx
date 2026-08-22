@@ -1,6 +1,8 @@
+import { createSignal } from "solid-js";
 import { Button } from "./components/button";
 import { ButtonGroup } from "./components/button-group";
 import { Badge } from "./components/badge";
+import { TextInput } from "./components/text-input";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "./theme.stylex";
 import { Icon, addIcon } from './components/icon';
@@ -14,6 +16,16 @@ addIcon("demo:heart", {
 addIcon("demo:raw", '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/></svg>');
 
 export default function Examples() {
+  // TextInput 演示用受控状态
+  const [smVal, setSmVal] = createSignal("");
+  const [mdVal, setMdVal] = createSignal("");
+  const [lgVal, setLgVal] = createSignal("");
+  const [nameVal, setNameVal] = createSignal("");
+  const [pwdVal, setPwdVal] = createSignal("");
+  const [urlVal, setUrlVal] = createSignal("");
+  const [brandVal, setBrandVal] = createSignal("");
+  const [searchVal, setSearchVal] = createSignal("");
+
   return (
     <div {...stylex.props(layouts.containerFull)}>
 
@@ -110,6 +122,53 @@ export default function Examples() {
             <Icon icon="demo:heart" width={24} style={{ color: "red" }} />
             <Icon icon="demo:heart" width={32} style={{ color: "green" }} />
             <Icon icon="demo:raw" width={24} />
+          </div>
+        </div>
+        {/* 文本输入框 TextInput（复刻 Astryx TextInput，特性见 text-input.md） */}
+        <div style={{ padding: "16px 0" }}>
+          <h2>文本输入框 TextInput</h2>
+          {/* 输入框 + 按钮同行：同尺寸 md（32px 高 / 16px 字 / radiusMd），底部对齐 */}
+          <div style={{ display: "flex", "align-items": "flex-end", gap: "12px", "flex-wrap": "wrap", padding: "12px 0" }}>
+            <TextInput
+              label="搜索（与右侧按钮同尺寸 md）"
+              placeholder="输入关键词"
+              width={300}
+              value={searchVal()}
+              onChange={setSearchVal}
+            />
+            <Button label="搜索" />
+            <Button label="搜索" variant="brand" />
+          </div>
+          {/* 三种尺寸 */}
+          <div style={{ display: "flex", "align-items": "flex-end", gap: "16px", "flex-wrap": "wrap", padding: "12px 0" }}>
+            <TextInput label="小号 sm" size="sm" placeholder="24px 高 · 与 Button sm 一致" value={smVal()} onChange={setSmVal} />
+            <TextInput label="中号 md（默认）" size="md" placeholder="32px 高 · 与 Button md 一致" value={mdVal()} onChange={setMdVal} />
+            <TextInput label="大号 lg" size="lg" placeholder="40px 高 · 与 Button lg 一致" value={lgVal()} onChange={setLgVal} />
+          </div>
+          {/* 常用形态 */}
+          <div style={{ display: "flex", "align-items": "flex-start", gap: "16px", "flex-wrap": "wrap", padding: "12px 0" }}>
+            <TextInput label="姓名" value={nameVal()} onChange={setNameVal} placeholder="请输入姓名" isRequired />
+            <TextInput label="密码" type="password" value={pwdVal()} onChange={setPwdVal} placeholder="••••••••" hasClear />
+            <TextInput
+              label="官网"
+              type="url"
+              value={urlVal()}
+              onChange={setUrlVal}
+              placeholder="https://example.com"
+              status={urlVal().length > 0 && !urlVal().startsWith("http") ? { type: "error", message: "需以 http(s):// 开头" } : undefined}
+            />
+            <TextInput label="禁用（含原因 tooltip）" value="只读示例" isDisabled disabledMessage="需要编辑角色才能修改" />
+          </div>
+          {/* 颜色变量定制 */}
+          <div style={{ display: "flex", "align-items": "flex-start", gap: "16px", "flex-wrap": "wrap", padding: "12px 0" }}>
+            <TextInput
+              label="colorVars 定制"
+              value={brandVal()}
+              onChange={setBrandVal}
+              placeholder="蓝底蓝边 + 蓝色聚焦"
+              colorVars={{ "--ti-bg": "#f0f7ff", "--ti-border": "#3b82f6", "--ti-text": "#1e40af", "--ti-focus-bg": "#e0edff" }}
+            />
+            <TextInput label="默认配色（对照）" value={""} onChange={() => {}} placeholder="默认 surface 配色" />
           </div>
         </div>
     </div>

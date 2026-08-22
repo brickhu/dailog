@@ -4,7 +4,7 @@ import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
-import { Button, TextField, Spinner } from "@dailogues/ui";
+import { Button, TextInput, Spinner } from "@dailogues/ui";
 import Recorder from "../components/recorder";
 import { useI18n } from "@dailogues/i18n";
 
@@ -233,13 +233,13 @@ function HostProfileBlock(props: { profile: ProfileData }) {
       </div>
       <div {...stylex.props(styles.rowValue)}>{t("account.hostProfileDesc")}</div>
       <div {...stylex.props(styles.field)}>
-        <TextField label={t("account.displayName")} value={displayName()} onInput={(v) => setDisplayName(v)} maxLength={30} />
-        <TextField label={t("account.bio")} value={bio()} onInput={(v) => setBio(v)} maxLength={200} />
-        <TextField label={t("account.gender")} value={gender()} onInput={(v) => setGender(v)} maxLength={10} />
-        <TextField label={t("account.profession")} value={profession()} onInput={(v) => setProfession(v)} maxLength={30} />
-        <TextField label={t("account.age")} value={age()} onInput={(v) => setAge(v)} maxLength={10} />
-        <TextField label={t("account.nationality")} value={nationality()} onInput={(v) => setNationality(v)} maxLength={20} />
-        <TextField label={t("account.socialLinks")} value={socialLinks()} onInput={(v) => setSocialLinks(v)} />
+        <TextInput label={t("account.displayName")} value={displayName()} onChange={(v) => setDisplayName(v)} maxLength={30} />
+        <TextInput label={t("account.bio")} value={bio()} onChange={(v) => setBio(v)} maxLength={200} />
+        <TextInput label={t("account.gender")} value={gender()} onChange={(v) => setGender(v)} maxLength={10} />
+        <TextInput label={t("account.profession")} value={profession()} onChange={(v) => setProfession(v)} maxLength={30} />
+        <TextInput label={t("account.age")} value={age()} onChange={(v) => setAge(v)} maxLength={10} />
+        <TextInput label={t("account.nationality")} value={nationality()} onChange={(v) => setNationality(v)} maxLength={20} />
+        <TextInput label={t("account.socialLinks")} value={socialLinks()} onChange={(v) => setSocialLinks(v)} />
       </div>
       <Button onClick={save}>{t("account.saveHostProfile")}</Button>
       <Show when={msg()}>
@@ -362,7 +362,7 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
           <span {...stylex.props(styles.rowLabel)}>{t("account.nickname")}</span>
         </div>
         <div {...stylex.props(styles.field)}>
-          <TextField label={t("account.nickname")} value={nickname()} onInput={(v) => setNickname(v)} placeholder={t("account.nicknamePlaceholder")} maxLength={30} />
+          <TextInput label={t("account.nickname")} value={nickname()} onChange={(v) => setNickname(v)} placeholder={t("account.nicknamePlaceholder")} maxLength={30} />
         </div>
         <Button onClick={saveName}>{t("account.saveNickname")}</Button>
         <Show when={nameMsg()}>
@@ -397,13 +397,13 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
       <div {...stylex.props(styles.card)}>
         <div {...stylex.props(styles.rowLabel)}>{t("account.changePassword")}</div>
         <div {...stylex.props(styles.field)}>
-          <TextField label={t("account.currentPassword")} type="password" value={curPw()} onInput={setCurPw} placeholder={t("account.currentPassword")} />
+          <TextInput label={t("account.currentPassword")} type="password" value={curPw()} onChange={setCurPw} placeholder={t("account.currentPassword")} />
         </div>
         <div {...stylex.props(styles.field)}>
-          <TextField label={t("account.newPassword")} type="password" value={newPw()} onInput={setNewPw} placeholder={t("account.newPassword")} />
+          <TextInput label={t("account.newPassword")} type="password" value={newPw()} onChange={setNewPw} placeholder={t("account.newPassword")} />
         </div>
         <div {...stylex.props(styles.field)}>
-          <TextField label={t("account.confirmPassword")} type="password" value={confirmPw()} onInput={setConfirmPw} placeholder={t("account.confirmPassword")} />
+          <TextInput label={t("account.confirmPassword")} type="password" value={confirmPw()} onChange={setConfirmPw} placeholder={t("account.confirmPassword")} />
         </div>
         <Button onClick={changePassword} disabled={pwBusy()}>{pwBusy() ? t("account.submitting") : t("account.updatePassword")}</Button>
         <Show when={pwMsg()}>

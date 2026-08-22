@@ -36,7 +36,6 @@ export {
 export { Card } from "./components/card";
 export { Center, type CenterProps, type CenterAxis } from "./components/center";
 export { Skeleton, type SkeletonProps, type SkeletonRadius } from "./components/skeleton";
-export { TextField, type TextFieldProps } from "./components/text-field";
 export {
   TextInput,
   type TextInputProps,
@@ -60,6 +59,7 @@ export {
   type SliderMark,
 } from "./components/slider";
 export { Spinner } from "./components/spinner";
+export { Tooltip, tooltipStyles, type TooltipProps, type TooltipPlacement } from "./components/tooltip";
 export { Avatar, type AvatarProps } from "./components/avatar";
 export { Badge, type BadgeProps, type BadgeVariant } from "./components/badge";
 export { default as Examples } from "./examples";

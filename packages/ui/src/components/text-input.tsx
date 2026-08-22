@@ -5,6 +5,7 @@ import { colors, dimensions, durations, fontfamilies } from "../theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { Icon } from "./icon";
 import { Spinner } from "./spinner";
+import { Tooltip } from "./tooltip";
 
 /**
  * TextInput（复刻 Astryx TextInput：https://astryx.atmeta.com/components/TextInput，
@@ -20,10 +21,6 @@ import { Spinner } from "./spinner";
  * - 组件始终渲染 label（isLabelHidden 时视觉隐藏），aria-labelledby/aria-describedby 完整接线
  */
 
-// 断点标签（与 theme.stylex.ts 的 DESKTOP 同值——stylex babel 插件不支持跨文件常量解析，
-// 业务文件的 stylex.create 需本地写同值字面量；运行时 key 用 theme.stylex 的 constants）
-const DESKTOP = "@media (min-width: 1025px)";
-
 // 组件颜色变量：内部样式全部引用 var(--ti-*)（在组件根元素声明默认值，见 styles.root），
 // 外部通过 colorVars prop / 祖先 CSS 变量覆盖即可整体换色，无需改组件源码
 const TI = {
@@ -31,17 +28,11 @@ const TI = {
   border: "var(--ti-border)",
   text: "var(--ti-text)",
   muted: "var(--ti-muted)",
+  focusBg: "var(--ti-focus-bg)",
   error: "var(--ti-error)",
   warning: "var(--ti-warning)",
   success: "var(--ti-success)",
-  tooltipBg: "var(--ti-tooltip-bg)",
-  tooltipText: "var(--ti-tooltip-text)",
 };
-
-const tooltipIn = stylex.keyframes({
-  from: { opacity: 0, transform: "translateX(-50%) translateY(2px)" },
-  to: { opacity: 1, transform: "translateX(-50%) translateY(0)" },
-});
 
 const styles = stylex.create({
   // —— 字段根：声明组件颜色变量默认值（取自 theme.stylex tokens）——
@@ -52,11 +43,11 @@ const styles = stylex.create({
     "--ti-text": colors.onSurface,
     // muted/占位符/焦点光环等由 --ti-text 派生（覆盖 --ti-text 自动跟随）
     "--ti-muted": "color-mix(in srgb, var(--ti-text) 60%, transparent)",
+    // 聚焦底色：--ti-bg 与 --ti-text 的 94/6 混色（覆盖 --ti-bg/--ti-text 自动跟随）
+    "--ti-focus-bg": "color-mix(in srgb, var(--ti-bg) 94%, var(--ti-text) 6%)",
     "--ti-error": colors.danger,
     "--ti-warning": colors.warning,
     "--ti-success": colors.success,
-    "--ti-tooltip-bg": colors.popover,
-    "--ti-tooltip-text": colors.onPopover,
   },
   // —— 字段根：label 行 + 描述 + 输入容器 + 状态消息 ——
   labelRow: {
@@ -110,17 +101,29 @@ const styles = stylex.create({
     color: TI.text,
     lineHeight: "1.5",
     cursor: "text",
-    transitionProperty: "border-color, box-shadow",
+    transitionProperty: "background-color, border-color, box-shadow",
     transitionDuration: {
       default: durations.durationFast,
       "@media (prefers-reduced-motion: reduce)": "0s",
     },
     ":focus-within": {
+      backgroundColor: TI.focusBg,
       borderColor: TI.text,
       boxShadow: "0 0 0 2px color-mix(in srgb, " + TI.text + " 18%, transparent)",
     },
   },
-  wrapperDisabled: { cursor: "not-allowed", opacity: 0.55 },
+  // 锚点容器：包住输入容器 + 禁用原因 tooltip——tooltip 放在 opacity 容器之外，
+  // 避免容器禁用态 opacity 把 tooltip 一起淡化（见 wrapperDisabled）
+  wrapperAnchor: {
+    position: "relative",
+  },
+  wrapperDisabled: {
+    cursor: "not-allowed",
+    // 整体透明度 0.55 之外，边框与文字再单独减淡（color-mix 透明化），禁用观感更弱
+    opacity: 0.55,
+    borderColor: "color-mix(in srgb, " + TI.border + " 60%, transparent)",
+    color: "color-mix(in srgb, " + TI.text + " 60%, transparent)",
+  },
   startIconSlot: {
     display: "inline-flex",
     alignItems: "center",
@@ -131,7 +134,8 @@ const styles = stylex.create({
     display: "block",
     flex: 1,
     minWidth: 0,
-    width: "100%",
+    // 不设 width：flex:1 + minWidth:0 已撑满剩余空间；设 width:100% 会与 flex-basis:0
+    // 产生亚像素差（左右各约 1px 挤压，聚焦 outline 可见）
     padding: 0,
     borderWidth: 0,
     borderStyle: "none",
@@ -145,7 +149,13 @@ const styles = stylex.create({
       color: "color-mix(in srgb, " + TI.text + " 55%, transparent)",
     },
   },
-  inputDisabled: { cursor: "not-allowed" },
+  inputDisabled: {
+    cursor: "not-allowed",
+    // 占位符同步减淡（40% × 容器 0.55），避免比减淡后的输入文字更醒目
+    "::placeholder": {
+      color: "color-mix(in srgb, " + TI.text + " 40%, transparent)",
+    },
+  },
   clearButton: {
     position: "relative", // tooltip 锚点（标签信息图标 / 状态 tooltip 变体）
     display: "inline-flex",
@@ -187,39 +197,28 @@ const styles = stylex.create({
     lineHeight: "1.5",
   },
   messageDetached: { marginTop: dimensions.spacing2 },
-  // —— 自绘 tooltip（禁用原因 / 标签信息 / status tooltip 变体）——
-  tooltip: {
-    position: "absolute",
-    bottom: "calc(100% + 6px)",
-    left: "50%",
-    transform: "translateX(-50%)",
-    backgroundColor: TI.tooltipBg,
-    color: TI.tooltipText,
-    fontSize: dimensions.fontSizeXs,
-    padding: dimensions.spacing1 + " " + dimensions.spacing2,
-    borderRadius: dimensions.radiusSm,
-    whiteSpace: "nowrap",
-    pointerEvents: "none",
-    zIndex: 10,
-    animationName: tooltipIn,
-    animationDuration: durations.durationFast,
-    animationFillMode: "backwards",
-    animationDelay: {
-      default: "80ms",
-      "@media (prefers-reduced-motion: reduce)": "0s",
-    },
-  },
 });
 
-// 尺寸：固定高度（size token 档位）+ 随尺寸字号（输入框继承 wrapper 的 fontSize）
+// 高度档位与 Button 完全对齐（button.tsx sizeStyles 同款）：
+// 高度 = 档位高度 + 档位附加（sm=+0/md=+spacing1(4px)/lg=+spacing2(8px)）→ 24/36/48px；
+// 左右间距（横向 padding，单侧）= 整体高度 × 0.25（输入框比按钮 0.5 更紧凑）→ 6/9/12px；
+// sm=24px/12px/6px、md=36px/16px/9px、lg=48px/16px/12px（输入框继承 wrapper 的 fontSize）
 const sizeStyles = stylex.create({
-  sm: { height: dimensions.sizeSm, fontSize: dimensions.fontSizeXs },
-  md: {
-    height: dimensions.sizeMd,
-    fontSize: dimensions.fontSizeSm,
-    [DESKTOP]: { fontSize: dimensions.fontSizeMd },
+  sm: {
+    height: dimensions.sizeSm,
+    fontSize: dimensions.fontSizeXs,
+    paddingInline: "calc(" + dimensions.sizeSm + " * 0.25)",
   },
-  lg: { height: dimensions.sizeLg, fontSize: dimensions.fontSizeMd },
+  md: {
+    height: "calc(" + dimensions.sizeMd + " + " + dimensions.spacing1 + ")",
+    fontSize: dimensions.fontSizeMd,
+    paddingInline: "calc((" + dimensions.sizeMd + " + " + dimensions.spacing1 + ") * 0.25)",
+  },
+  lg: {
+    height: "calc(" + dimensions.sizeLg + " + " + dimensions.spacing2 + ")",
+    fontSize: dimensions.fontSizeMd,
+    paddingInline: "calc((" + dimensions.sizeLg + " + " + dimensions.spacing2 + ") * 0.25)",
+  },
 });
 
 // 校验状态：边框色（含 focus-within）+ 图标色 + 消息框底色，全部读取 --ti-error/warning/success
@@ -297,16 +296,14 @@ export type TextInputColorVars = {
   "--ti-text"?: string;
   /** 次要文本色（描述/选填标记） @default --ti-text 60% */
   "--ti-muted"?: string;
+  /** 聚焦底色（focus-within 容器底色） @default --ti-bg 与 --ti-text 的 94/6 混色 */
+  "--ti-focus-bg"?: string;
   /** error 状态色（边框/图标/消息框） @default colors.danger */
   "--ti-error"?: string;
   /** warning 状态色 @default colors.warning */
   "--ti-warning"?: string;
   /** success 状态色 @default colors.success */
   "--ti-success"?: string;
-  /** tooltip 底色 @default colors.popover */
-  "--ti-tooltip-bg"?: string;
-  /** tooltip 字色 @default colors.onPopover */
-  "--ti-tooltip-text"?: string;
 };
 
 export interface TextInputProps
@@ -564,11 +561,7 @@ export function TextInput(props: TextInputProps) {
       )}
     >
       <Icon icon={STATUS_INFO_ICON} width={16} height={16} />
-      <Show when={statusTipVisible() && statusMessage() != null}>
-        <span id={statusTipId} role="tooltip" {...stylex.props(styles.tooltip)}>
-          {statusMessage()}
-        </span>
-      </Show>
+      <Tooltip isOpen={statusTipVisible() && statusMessage() != null} label={statusMessage() ?? undefined} id={statusTipId} />
     </button>
   );
 
@@ -603,11 +596,7 @@ export function TextInput(props: TextInputProps) {
               {...stylex.props(styles.clearButton)}
             >
               <Icon icon={STATUS_INFO_ICON} width={14} height={14} />
-              <Show when={labelTipVisible()}>
-                <span id={labelTipId} role="tooltip" {...stylex.props(styles.tooltip)}>
-                  {local.labelTooltip}
-                </span>
-              </Show>
+              <Tooltip isOpen={labelTipVisible()} label={local.labelTooltip} id={labelTipId} />
             </button>
           </Show>
         </div>
@@ -619,6 +608,7 @@ export function TextInput(props: TextInputProps) {
         </p>
       </Show>
 
+      <div {...stylex.props(styles.wrapperAnchor)}>
       <div
         onClick={handleWrapperClick}
         onFocusIn={showDisabledTip}
@@ -671,11 +661,9 @@ export function TextInput(props: TextInputProps) {
             {statusTooltipNode()}
           </Show>
         </Show>
-        <Show when={showsDisabledMessage() && disabledTipVisible()}>
-          <div id={disabledTipId} role="tooltip" {...stylex.props(styles.tooltip)}>
-            {local.disabledMessage}
-          </div>
-        </Show>
+      </div>
+      {/* 禁用原因 tooltip 放 opacity 容器外：禁用态容器 opacity 不影响气泡（统一 Tooltip） */}
+      <Tooltip isOpen={showsDisabledMessage() && disabledTipVisible()} label={local.disabledMessage} id={disabledTipId} />
       </div>
 
       <Show when={statusMessageShown()}>

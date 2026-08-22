@@ -1,6 +1,6 @@
 import { createSignal, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import { Button, Card, TextField } from "@dailogues/ui";
+import { Button, Card, TextInput } from "@dailogues/ui";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { getLoginRedirect, type LoginRedirectOptions } from "./login-redirect";
 import { getLoginErrorMessage } from "./error-messages";
@@ -245,11 +245,11 @@ export function LoginForm(props: LoginFormProps) {
                 <div {...stylex.props(styles.noticeText)}>
                   {t("auth.otpSent", { email: email().trim() })}
                 </div>
-                <TextField
+                <TextInput
                   label={t("auth.otp")}
                   type="text"
                   value={otp()}
-                  onInput={setOtp}
+                  onChange={setOtp}
                   placeholder={t("auth.otpPlaceholder")}
                   autocomplete="one-time-code"
                 />
@@ -271,19 +271,19 @@ export function LoginForm(props: LoginFormProps) {
             }
           >
             <form onSubmit={submit}>
-              <TextField
+              <TextInput
                 label={t("auth.email")}
                 type="email"
                 value={email()}
-                onInput={setEmail}
+                onChange={setEmail}
                 placeholder="you@example.com"
                 autocomplete="email"
               />
-                  <TextField
+                  <TextInput
                     label={t("auth.password")}
                     type="password"
                     value={password()}
-                    onInput={setPassword}
+                    onChange={setPassword}
                     placeholder={t("auth.passwordMin")}
                     autocomplete="new-password"
                   />
