@@ -242,9 +242,12 @@ async function serializeFormData(form: FormData): Promise<{ body: Uint8Array<Arr
   return { body, contentType: `multipart/form-data; boundary=${boundary}` };
 }
 
-/** HTTP 请求（本地 .orb.local 自签证书信任处理——还原线上 https 路径；线上生产证书正常校验）：
- *  OrbStack 自签证书不被 Node 默认信任，CLI 连 https://*.orb.local 需忽略校验；
- *  非 .orb.local 域名（dev/prod 生产证书）走原生 fetch 完整校验。 */
+/** HTTP 请求（本地基址已统一为 http://localhost:8787——纯 HTTP 无需 TLS 处理；
+ *  历史 .orb.local https 自签证书保留忽略校验逻辑（OrbStack 证书不被 Node 默认信任）；
+ *  dev/prod 生产证书正常校验）。
+ *  统一走自定义 undici Agent：整集合成（/v1/editor/tts）服务端一次调用可能超过 undici
+ *  默认 300s headersTimeout——放宽到 15 分钟，避免长合成被客户端超时打断。 */
+let apiAgent: Dispatcher | undefined;
 let orbAgent: Dispatcher | undefined;
 export async function apiFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
   let url: string;
@@ -254,11 +257,11 @@ export async function apiFetch(input: string | URL | Request, init?: RequestInit
     return fetch(input, init);
   }
   let effectiveInit = init;
-  if (url.includes(".orb.local")) {
-    if (!orbAgent) orbAgent = new Agent({ connect: { rejectUnauthorized: false } });
-    return undiciFetch(input as never, { ...effectiveInit, dispatcher: orbAgent } as never) as unknown as Promise<Response>;
-  }
-  return fetch(input, effectiveInit);
+  const LONG_TIMEOUT = 900000; // 15 min：整集合成等长请求
+  if (!apiAgent) apiAgent = new Agent({ connect: { timeout: 60000 }, headersTimeout: LONG_TIMEOUT, bodyTimeout: LONG_TIMEOUT });
+  if (!orbAgent) orbAgent = new Agent({ connect: { timeout: 60000, rejectUnauthorized: false }, headersTimeout: LONG_TIMEOUT, bodyTimeout: LONG_TIMEOUT });
+  const dispatcher = url.includes(".orb.local") ? orbAgent : apiAgent;
+  return undiciFetch(input as never, { ...effectiveInit, dispatcher } as never) as unknown as Promise<Response>;
 }
 
 export interface ApiOptions {

@@ -13,7 +13,7 @@ import type { EpisodeSummary } from "../../lib/db";
 import { apiBaseForFetch, env, episodeCoverUrl } from "../../lib/env";
 import * as stylex from "@stylexjs/stylex";
 import { layouts, typography, shadows, dimensions, colors } from "@dailogues/ui/theme.stylex";
-import { Button, Icon } from "@dailogues/ui";
+import { Button, ClickableCard, Icon } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { auth } from "../../lib/auth-guard";
 
@@ -122,6 +122,11 @@ const styles = stylex.create({
     backgroundColor: colors.surfaceStrong,
     color: colors.neutral,
     fontSize: dimensions.fontSizeSm,
+    // 链接胶囊（详情页 tags → /tag/<tag> 标签检索页）：去下划线 + hover 反馈
+    textDecoration: "none",
+    ":hover": {
+      opacity: 0.75,
+    },
   },
   cast: {
     gridColumn : "1 / -1",
@@ -145,18 +150,14 @@ const styles = stylex.create({
     flexWrap: "wrap",
     gap: dimensions.spacing4,
   },
+  // 布局交给 xstyle，视觉（surface 底 + 圆角 + hover 反馈）由 ClickableCard 提供
   personCard: {
     display: "flex",
     alignItems: "center",
     gap: dimensions.spacing4,
-    padding: `${dimensions.spacing3} ${dimensions.spacing4}`,
-    borderRadius: dimensions.radiusMd,
-    backgroundColor: colors.surface,
     textDecoration: "none",
     color: "inherit",
     minWidth: 0,
-    border: "1px solid transparent",
-    ":hover": { borderColor: colors.primary },
   },
   personAvatar: {
     width: "56px",
@@ -456,7 +457,14 @@ export default function EpisodeDetailPage() {
             <div {...stylex.props(styles.desc)}>{ep()?.description}</div>
             <Show when={ep()!.tags?.length}>
               <div {...stylex.props(styles.tags)}>
-                <For each={ep()!.tags!}>{(tag) => <span {...stylex.props(styles.tag)}>#{tag}</span>}</For>
+                <For each={ep()!.tags!}>
+                  {(tag) => (
+                    // 标签胶囊 → 标签检索页 /tag/<tag>（中文标签 percent-encoded；A 保留链接语义）
+                    <A href={`/tag/${encodeURIComponent(tag)}`} {...stylex.props(styles.tag)}>
+                      #{tag}
+                    </A>
+                  )}
+                </For>
               </div>
             </Show>
             <div {...stylex.props(styles.cast)}></div>
@@ -472,8 +480,19 @@ export default function EpisodeDetailPage() {
               <div {...stylex.props(styles.castSection)}>
                 <div {...stylex.props(typography.caption, styles.castLabel)}>{t("episode.cast")}</div>
                 <div {...stylex.props(styles.castGrid)}>
-                  {/* 主持人卡片：头像 + 称呼（callName ?? displayName）+ @主页 */}
-                  <A href={"/@" + (ep()!.username ?? "")} {...stylex.props(styles.personCard)}>
+                  {/* 主持人卡片：头像 + 称呼（callName ?? displayName）+ @主页。
+                      ClickableCard：href 保留 link 语义（Enter/中键/Cmd+点击），
+                      onClick preventDefault 接管为 SPA 路由导航 */}
+                  <ClickableCard
+                    label={`${t("episode.host")} ${hostName() || ep()!.displayName}`}
+                    href={"/@" + (ep()!.username ?? "")}
+                    padding={3}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      navigate("/@" + (ep()!.username ?? ""));
+                    }}
+                    xstyle={styles.personCard}
+                  >
                     <Show
                       when={ep()!.hostAvatar}
                       fallback={<div {...stylex.props(styles.personAvatarFallback)}>{(hostName() || "D").slice(0, 1)}</div>}
@@ -485,9 +504,18 @@ export default function EpisodeDetailPage() {
                       <div {...stylex.props(styles.personName)}>{hostName() || ep()!.displayName}</div>
                       <div {...stylex.props(styles.personMeta)}>{"@" + (ep()!.username ?? "")}</div>
                     </div>
-                  </A>
-                  {/* 嘉宾卡片：头像 + 名称 + 平台，链接嘉宾主页 */}
-                  <A href={"/guest/" + ep()!.guest!.id} {...stylex.props(styles.personCard)}>
+                  </ClickableCard>
+                  {/* 嘉宾卡片：头像 + 名称 + 平台，链接嘉宾主页（同上，ClickableCard + SPA 接管） */}
+                  <ClickableCard
+                    label={`${t("episode.guest")} ${ep()!.guest!.name}`}
+                    href={"/guest/" + ep()!.guest!.id}
+                    padding={3}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      navigate("/guest/" + ep()!.guest!.id);
+                    }}
+                    xstyle={styles.personCard}
+                  >
                     <Show
                       when={ep()!.guest!.avatar}
                       fallback={<div {...stylex.props(styles.personAvatarFallback)}>{ep()!.guest!.name.slice(0, 1)}</div>}
@@ -499,7 +527,7 @@ export default function EpisodeDetailPage() {
                       <div {...stylex.props(styles.personName)}>{ep()!.guest!.name}</div>
                       <div {...stylex.props(styles.personMeta)}>{ep()!.guest!.platform}</div>
                     </div>
-                  </A>
+                  </ClickableCard>
                 </div>
               </div>
             </section>

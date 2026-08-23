@@ -1,0 +1,34 @@
+{
+  "id": "tc-003",
+  "name": "任务执行型（写代码）——应拒 G5",
+  "dialogue": [
+    {
+      "role": "user",
+      "content": "帮我写一个 Python 脚本，批量重命名文件夹里的图片文件。"
+    },
+    {
+      "role": "assistant",
+      "content": "可以，下面是脚本：import os ...（完整实现）"
+    },
+    {
+      "role": "user",
+      "content": "再加一个功能：按拍摄日期分组到子文件夹。"
+    },
+    {
+      "role": "assistant",
+      "content": "已加入：用 EXIF 读取拍摄日期，按日期创建子目录并移动文件。"
+    },
+    {
+      "role": "user",
+      "content": "改成用时间戳排序，文件名格式 YYYYMMDD_序号。"
+    },
+    {
+      "role": "assistant",
+      "content": "已修改：文件名格式改为 YYYYMMDD_序号，按修改时间排序。"
+    }
+  ],
+  "expected": {
+    "verdict": "reject",
+    "code": "G5"
+  }
+}

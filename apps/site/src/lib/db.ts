@@ -10,6 +10,10 @@ export interface EpisodeSummary {
   number: number | null;
   title: string | null;
   description: string | null;
+  /** Step B summary：列表/分享短简介（有则优先展示） */
+  summary: string | null;
+  /** Step B references：对话名词术语条目（播放页「本期提到的名词」） */
+  references: EpisodeReference[] | null;
   durationSeconds: number | null;
   publishedAt: Date | null;
   coverUrl: string | null;
@@ -29,6 +33,14 @@ export interface EpisodeSummary {
   hostAvatar?: string | null;
   /** 本期 AI 嘉宾（仅公开详情端点返回；列表类查询不返回）——节目页 cast 卡片用 */
   guest?: GuestSummary | null;
+}
+
+/** 对话名词术语条目（Step B 配套产物 references；播放页「本期提到的名词」） */
+export interface EpisodeReference {
+  term: string;
+  type: string;
+  explanation: string;
+  links: string[];
 }
 
 /** 常驻 AI 嘉宾（guests 表）：品牌声线宿主（节目 cast 卡片 / /guest/<id> 页用） */
@@ -101,6 +113,27 @@ export async function listLatestEpisodes(limit = 20, lang?: "zh" | "en"): Promis
       JOIN "user" u ON u.id = p.id
       WHERE e.status = 'published' AND e.is_public = true
       ${lang ? db`ORDER BY (e.language = ${lang}) DESC, e.published_at DESC` : db`ORDER BY e.published_at DESC`}
+      LIMIT ${limit}
+    ` as unknown as Promise<EpisodeSummary[]>);
+}
+
+/** 标签检索（/tag/<tag> 标签检索页）：含该标签的全部公开节目，按发布时间倒序。
+ *  标签为编辑在发布时固化的 text[] 列，@> 数组包含匹配（大小写敏感，与存储一致）。 */
+export async function listEpisodesByTag(tag: string, limit = 50): Promise<EpisodeSummary[]> {
+    return withDb((db) => db`
+      SELECT e.id, e.slug, e.title, e.description,
+             e.duration_seconds AS "durationSeconds",
+             e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
+             e.language, e.audio_url AS "audioUrl",
+             e.number,
+             e.tags,
+             u.name AS username, p.display_name AS "displayName"
+      FROM episodes e
+      JOIN profiles p ON p.id = e.user_id
+      JOIN "user" u ON u.id = p.id
+      WHERE e.status = 'published' AND e.is_public = true
+        AND e.tags @> ARRAY[${tag}]
+      ORDER BY e.published_at DESC
       LIMIT ${limit}
     ` as unknown as Promise<EpisodeSummary[]>);
 }

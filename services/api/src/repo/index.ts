@@ -124,6 +124,10 @@ export interface EpisodeCreateRow {
   guestId?: string | null;
   title: string | null;
   description?: string | null;
+  /** 列表/分享短简介（Step B summary） */
+  summary?: string | null;
+  /** 对话名词术语条目（Step B references） */
+  references?: schema.EpisodeReference[] | null;
   coverUrl?: string | null;
   /** R2 storage key（编辑上传的成品音频） */
   audioUrl: string;
@@ -915,6 +919,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             slug: randomSlug(),
             title: row.title,
             description: row.description ?? null,
+            summary: row.summary ?? null,
+            references: row.references ?? [],
             coverUrl: row.coverUrl ?? null,
             audioUrl: row.audioUrl,
             audioSize: row.audioSize ?? null,
@@ -962,6 +968,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           number: schema.episodes.number,
           title: schema.episodes.title,
           description: schema.episodes.description,
+          summary: schema.episodes.summary,
+          references: schema.episodes.references,
           durationSeconds: schema.episodes.durationSeconds,
           publishedAt: schema.episodes.publishedAt,
           coverUrl: schema.episodes.coverUrl,

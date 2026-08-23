@@ -12,6 +12,8 @@ export interface SendEmailInput {
 /** 发送邮件；RESEND_API_KEY 未配置时静默跳过（本地 dev 无 key 不阻塞流程，调用方按需提示） */
 export async function sendEmail(env: Env, input: SendEmailInput): Promise<void> {
   if (!env.RESEND_API_KEY) return;
+  // 超时兜底：受限网络下 api.resend.com 可能不可达——无超时会让发布等邮件响应
+  // （publish 等在 sendEmail 之后返回）被无限挂起。10s 超时后抛错由调用方 .catch 吞掉。
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -24,6 +26,7 @@ export async function sendEmail(env: Env, input: SendEmailInput): Promise<void> 
       subject: input.subject,
       html: input.html,
     }),
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");

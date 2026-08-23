@@ -3,9 +3,9 @@
   "environments": [
     {
       "name": "local",
-      "label": "本地开发（OrbStack，站点 dailog.orb.local）",
-      "apiBase": "https://api.dailog.orb.local",
-      "siteUrl": "https://dailog.orb.local"
+      "label": "本地开发（API localhost:8787 / 站点 localhost:3000）",
+      "apiBase": "http://localhost:8787",
+      "siteUrl": "http://localhost:3000"
     },
     {
       "name": "dev",

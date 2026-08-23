@@ -1,0 +1,33 @@
+{
+  "id": "tc-001",
+  "name": "转变弧线型（新知·向内）——应通过",
+  "dialogue": [
+    {
+      "role": "user",
+      "content": "我最近总有个模糊的想法，觉得现在的招聘方式有问题，但一直说不清到底哪里不对。"
+    },
+    {
+      "role": "assistant",
+      "content": "那我们把它拆开看：你觉得问题出在筛选标准、面试流程，还是信息获取上？"
+    },
+    {
+      "role": "user",
+      "content": "应该是筛选标准——只看过往经验，不看潜力。"
+    },
+    {
+      "role": "assistant",
+      "content": "对。这背后其实是信息不对称：过往经验是容易验证的静态信号，潜力是难以验证的动态信号。你的想法可以结构化成一个三层问题：标准错位 → 流程放大 → 信息缺失。"
+    },
+    {
+      "role": "user",
+      "content": "原来如此，我想表达的其实就是信息不对称这件事——我终于能说清我的想法了。"
+    }
+  ],
+  "expected": {
+    "verdict": "pass",
+    "dimension": "新知",
+    "new_knowledge_direction": "向内",
+    "moment_present": true,
+    "spine_complete": true
+  }
+}

@@ -24,6 +24,10 @@ export interface EditorDeps {
 interface PublishMeta {
   title?: string;
   description?: string;
+  /** Step B 配套产物：列表/分享短简介 */
+  summary?: string;
+  /** Step B 配套产物：对话名词术语条目（播放页「本期提到的名词」） */
+  references?: { term: string; type?: string; explanation?: string; links?: string[] }[];
   tags?: string[];
   language?: string;
   guestId?: string;
@@ -165,6 +169,22 @@ export function editorRoutes(deps: EditorDeps) {
       : null;
     // 无情绪标签的完整台本（节目页展示用；可选）
     const transcript = typeof meta.transcript === "string" && meta.transcript.trim() ? meta.transcript.trim().slice(0, 50000) : null;
+    // Step B 配套产物：summary（列表/分享短简介）与 references（名词术语条目）
+    const summary = typeof meta.summary === "string" && meta.summary.trim() ? meta.summary.trim().slice(0, 500) : null;
+    const references = Array.isArray(meta.references)
+      ? meta.references
+          .filter((r): r is { term: string; type?: unknown; explanation?: unknown; links?: unknown } =>
+            typeof r === "object" && r !== null && typeof (r as { term?: unknown }).term === "string" && (r as { term: string }).term.trim().length > 0)
+          .map((r) => ({
+            term: r.term.trim().slice(0, 100),
+            type: typeof r.type === "string" && r.type.trim() ? r.type.trim().slice(0, 50) : "",
+            explanation: typeof r.explanation === "string" && r.explanation.trim() ? r.explanation.trim().slice(0, 500) : "",
+            links: Array.isArray(r.links)
+              ? r.links.filter((l): l is string => typeof l === "string" && l.trim().length > 0).map((l) => l.trim().slice(0, 500)).slice(0, 5)
+              : [],
+          }))
+          .slice(0, 8)
+      : null;
 
     // 音频落 R2（R2 目录规划：episodes/{userId}/{submissionId}.{ext}——ext 按上传格式 mp3/m4a，
     // 决定 Content-Type 与 RSS enclosure type）
@@ -204,6 +224,8 @@ export function editorRoutes(deps: EditorDeps) {
       guestId,
       title,
       description,
+      summary,
+      references,
       coverUrl,
       audioUrl: audioKey,
       audioSize: audioFile.size,

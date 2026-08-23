@@ -283,7 +283,7 @@ export const zh = {
   "home.guests": "常驻 AI 嘉宾",
   "home.guestIntro": "{platform} · {intro}",
   "home.hero.tagline": "听见人类和AI的思想交锋",
-"home.hero.what": "dailog 是一档将「AI聊天记录」模拟为真人采访AI的播客，单期5-10分钟呈现对话原文的精华内容：思想交锋、新知、情感与经验。",
+"home.hero.what": "dailog 是一档将「AI聊天记录」模拟为真人采访AI的播客，单期5-10分钟呈现对话原文中的学与思：新知，经验，思辨及启发",
   "home.hero.submit": "立即投稿",
   "home.hero.ctaHint": "提交「AI聊天记录」，录制声音采样，秒变主播。",
   "home.hero.browse": "浏览节目",
@@ -293,7 +293,7 @@ export const zh = {
   // ---- 首页常见问题 ----
   "home.faq.title": "常见问题",
   "home.faq.q1": "dailog 是什么？",
-  "home.faq.a1": "dailog 是一档将「AI 聊天记录」模拟为真人采访 AI 的访谈式播客：单期 5-10 分钟，呈现原始对话里的精华——交锋、新知、情感与经验。",
+  "home.faq.a1": "dailog 是一档将「AI 聊天记录」模拟为真人采访 AI 的访谈式播客：单期 5-10 分钟，呈现原始对话里的学与思——新知、经验、思辨与启发。",
   "home.faq.q2": "这些节目是真人录音吗？",
   "home.faq.a2": "不是。节目基于你与 AI 的真实聊天记录，经编辑与合成模拟出采访对话——AI 受访、人类提问，是「模拟真人采访 AI」，而非真实录制的访谈。",
   "home.faq.q3": "怎么投稿，我能成为主播吗？",
@@ -607,6 +607,7 @@ export const zh = {
   "episode.plays": "{count} 次播放",
   "episode.completions": "{count} 次完播",
   "episode.sourceUrl": "对话原文",
+  "episode.references": "本期提到的名词",
   "episode.share": "分享",
   "episode.cast": "演出阵容",
   "episode.host": "主持人",
@@ -615,6 +616,11 @@ export const zh = {
   "episode.copied": "已复制 ✓",
   "episode.shareNative": "系统分享",
   "episode.wechatHint": "微信内长按识别二维码，或保存图片发朋友圈",
+
+  // ---- 标签检索页（/tag/<tag>） ----
+  "tag.title": "标签「{tag}」",
+  "tag.count": "{count} 期节目",
+  "tag.empty": "该标签下暂无节目",
 
   // ---- 声音采样 ----
   "voice.currentSample": "当前采样",
@@ -1086,7 +1092,7 @@ export const en: Dictionary = {
   "home.guests": "Resident AI guests",
   "home.guestIntro": "{platform} · {intro}",
   "home.hero.tagline": "Hear the clash between humans and AI",
-"home.hero.what": "dailog turns your AI chat records into simulated human-AI interviews — 5–10 mins of the intellectual essence of raw conversations: clashes, insights, feelings & experience.",
+"home.hero.what": "dailog is a podcast that turns your AI chat records into simulated human-AI interviews — 5–10 minutes presenting the learning & thinking from raw conversations: new knowledge, experience, reasoning, and inspiration.",
   "home.hero.submit": "Submit your chat",
   "home.hero.ctaHint": "Submit AI chats, record your voice, become a host",
   "home.hero.browse": "Browse episodes",
@@ -1096,7 +1102,7 @@ export const en: Dictionary = {
   // ---- Home FAQ ----
   "home.faq.title": "FAQ",
   "home.faq.q1": "What is dailog?",
-  "home.faq.a1": "dailog is an interview-style podcast that turns your AI chat records into simulated human-AI interviews: 5–10 minutes of the essence of raw conversations — clashes, insights, feelings & experience.",
+  "home.faq.a1": "dailog is an interview-style podcast that turns your AI chat records into simulated human-AI interviews: 5–10 minutes of the learning & thinking from raw conversations — new knowledge, experience, reasoning & inspiration.",
   "home.faq.q2": "Are these episodes real recordings?",
   "home.faq.a2": "No. Episodes are built from your real conversations with AI, edited and produced into simulated interviews — the AI is the interviewee, a human asks the questions. It's \"simulated human interviewing AI\", not a real recorded interview.",
   "home.faq.q3": "How do I submit? Can I become a host?",
@@ -1407,6 +1413,7 @@ export const en: Dictionary = {
   "episode.plays": "{count} plays",
   "episode.completions": "{count} completions",
   "episode.sourceUrl": "Original conversation",
+  "episode.references": "Terms in this episode",
   "episode.share": "Share",
   "episode.cast": "Cast",
   "episode.host": "Host",
@@ -1415,6 +1422,11 @@ export const en: Dictionary = {
   "episode.copied": "Copied ✓",
   "episode.shareNative": "Share…",
   "episode.wechatHint": "Long-press to scan in WeChat, or save the image and post to Moments",
+
+  // ---- Tag search page (/tag/<tag>) ----
+  "tag.title": "Tag: {tag}",
+  "tag.count": "{count} episodes",
+  "tag.empty": "No episodes with this tag yet",
 
   // ---- 声音采样 ----
   "voice.currentSample": "Current sample",

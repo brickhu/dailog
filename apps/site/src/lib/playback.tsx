@@ -45,6 +45,8 @@ export interface PlaybackContextValue {
   /** 当前进度（秒）与总时长（秒）——封面进度条用 */
   progress: () => number;
   duration: () => number;
+  /** 已缓冲进度（秒）：audio buffered 中覆盖当前位置那段的最大 end——播放条缓冲层用 */
+  buffered: () => number;
   /** 播放指定节目（加入队列定位到它；自动播放 + 上报 play） */
   play: (ep: QueueEpisode) => void;
   toggle: () => void;
@@ -107,6 +109,7 @@ export function PlaybackProvider(props: ParentProps) {
   const [preloadError, setPreloadError] = createSignal<string | null>(null);
   const [progress, setProgress] = createSignal(0);
   const [duration, setDuration] = createSignal(0);
+  const [buffered, setBuffered] = createSignal(0);
   // 用户主动选择（play/toggle）→ 激活播放条；setQueue 自动加载不激活
   const [activated, setActivated] = createSignal(false);
   // 临时暂停前是否在播（resume 只在原本在播时续播）
@@ -155,6 +158,7 @@ export function PlaybackProvider(props: ParentProps) {
     setCurrentEp(ep); // 当前节目 = 实际加载进音频的这一期（与 a.src 原子一致）
     setProgress(0);
     setDuration(0);
+    setBuffered(0); // 切节目：重置缓冲进度（progress 事件会按需重新写入）
     setAudioError(false); // 切节目：重置音源错误标记
     setBuffering(false); // 切节目：重置缓冲标记（waiting 事件会按需重新置 true）
     setPlaying(false); // 切节目：重置播放标记——旧节目在播时 playing 残留 true，
@@ -283,15 +287,48 @@ export function PlaybackProvider(props: ParentProps) {
   createEffect(() => {
     const a = audio();
     if (!a) return;
+    // 缓冲进度（秒）：取 buffered 中覆盖当前位置那段的最大 end；seek 后 currentTime
+    // 可能暂时落在段外（缓冲未跟上），回退取所有段的最大 end。clamp 到 duration 防越界显示。
+    const refreshBuffered = () => {
+      try {
+        const ranges = a.buffered;
+        if (!ranges || ranges.length === 0) {
+          setBuffered(0);
+          return;
+        }
+        const t = a.currentTime;
+        let end = 0;
+        for (let i = 0; i < ranges.length; i++) {
+          const s = ranges.start(i);
+          const e = ranges.end(i);
+          if (s <= t && t <= e) {
+            end = e;
+            break;
+          }
+        }
+        if (end === 0) {
+          for (let i = 0; i < ranges.length; i++) {
+            end = Math.max(end, ranges.end(i));
+          }
+        }
+        setBuffered(Math.min(end, a.duration || end));
+      } catch {
+        setBuffered(0);
+      }
+    };
     const onTime = () => {
       setProgress(a.currentTime);
       setDuration(a.duration || 0);
+      // 缓冲范围随播放/下载推进（timeupdate 频率高于 progress 事件，保证拖动后尽快刷新）
+      refreshBuffered();
       // 完播判定（进度 ≥95%，ended 之外的保险；统计上报 session 去重）
       if (a.duration > 0 && a.currentTime / a.duration >= COMPLETE_RATIO) {
         const ep = current();
         if (ep) reportStat(ep.id, "completion");
       }
     };
+    // 下载推进时 buffered 范围变化（progress 事件周期性触发）
+    const onProgress = () => refreshBuffered();
     const onEnded = () => {
       const ep = current();
       if (ep) reportStat(ep.id, "completion");
@@ -326,6 +363,7 @@ export function PlaybackProvider(props: ParentProps) {
       setBuffering(false);
     };
     a.addEventListener("timeupdate", onTime);
+    a.addEventListener("progress", onProgress);
     a.addEventListener("ended", onEnded);
     a.addEventListener("playing", onPlaying);
     a.addEventListener("pause", onPause);
@@ -335,6 +373,7 @@ export function PlaybackProvider(props: ParentProps) {
     a.addEventListener("error", onError);
     onCleanup(() => {
       a.removeEventListener("timeupdate", onTime);
+      a.removeEventListener("progress", onProgress);
       a.removeEventListener("ended", onEnded);
       a.removeEventListener("playing", onPlaying);
       a.removeEventListener("pause", onPause);
@@ -354,6 +393,7 @@ export function PlaybackProvider(props: ParentProps) {
     preloadError,
     progress,
     duration,
+    buffered,
     play,
     toggle,
     pause,

@@ -74,8 +74,11 @@ const styles = stylex.create({
 function NotificationsList() {
   const { t } = useI18n();
   const [marked, setMarked] = createSignal(false);
+  // tick 被 fetch 读取：markAllRead 后 +1 触发列表重新拉取（避免整页 reload 打断全局播放器）
+  const [tick, setTick] = createSignal(0);
   const notifications = createAsync<NotificationRow[] | null>(async () => {
     if (typeof window === "undefined") return null;
+    tick();
     const res = await fetch("/v1/me/notifications");
     if (!res.ok) return [];
     return (await res.json()) as NotificationRow[];
@@ -84,8 +87,8 @@ function NotificationsList() {
   const markAllRead = async () => {
     await fetch("/v1/me/notifications/read-all", { method: "POST" }).catch(() => {});
     setMarked(true);
-    // 刷新列表（已读状态）
-    window.location.reload();
+    // 刷新列表（已读状态），不整页 reload —— 保持播放器持续播放
+    setTick((n) => n + 1);
   };
 
   const typeLabel = (type: string) => t(`notif.type.${type}` as never);

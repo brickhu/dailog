@@ -1,0 +1,34 @@
+{
+  "id": "tc-004",
+  "name": "被动科普问答（问题平行跳跃）——应拒 no_moment",
+  "dialogue": [
+    {
+      "role": "user",
+      "content": "给我讲讲量子力学。"
+    },
+    {
+      "role": "assistant",
+      "content": "量子力学是描述微观世界的物理理论：粒子具有波粒二象性、不确定性原理、叠加态……（长篇科普）"
+    },
+    {
+      "role": "user",
+      "content": "再讲讲相对论。"
+    },
+    {
+      "role": "assistant",
+      "content": "相对论分为狭义和广义两部分：光速不变、时空弯曲、引力是几何效应……（长篇科普）"
+    },
+    {
+      "role": "user",
+      "content": "那黑洞呢？"
+    },
+    {
+      "role": "assistant",
+      "content": "黑洞是引力坍缩形成的天体，有事件视界、奇点、霍金辐射……（长篇科普）"
+    }
+  ],
+  "expected": {
+    "verdict": "reject",
+    "code": "no_moment"
+  }
+}

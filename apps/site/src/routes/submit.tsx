@@ -9,13 +9,14 @@ import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../components/auth-gate";
 import { isShareUrl } from "../components/import-dialog";
 import { getUrlCheck, markSubmitted, probeReachable } from "../lib/url-check";
+import { env } from "../lib/env";
 import { openImportDialog } from "../components/import-dialog";
 import Recorder from "../components/recorder";
 
 // 投稿流程（本质版，2026-08-13）：
 //   input   输入态：分享链接（前端基本 http/https 校验）→ [继续]
 //   confirm 确认投稿态：人设（可选）+ 声音采样（必填）→ [确认投稿]
-//   done    提交成功 → 等待审核（/me/submits 查看状态）
+//   done    提交成功 → 等待审核（跳转投稿详情 /submission/<id>）
 // 服务端只做 URL 合法性 + 触达性检查，不做内容采集；制作由编辑本地 Agent 完成。
 // 端点在 site 站内代理（/v1/*），会话经 cookie；未登录跳统一登录页
 
@@ -188,6 +189,8 @@ export default function SubmitPage() {
   const [voiceSampleId, setVoiceSampleId] = createSignal<string | null>(null); // 已有采样 id（投稿记录用）
   const [voiceBlob, setVoiceBlob] = createSignal<Blob | null>(null);
   const [submitting, setSubmitting] = createSignal(false);
+  // 提交成功响应里的投稿 id（done 态“投稿详情”按钮跳 /submission/<id> 用）
+  const [submissionId, setSubmissionId] = createSignal<string | null>(null);
 
   // 响应 ?id=/?url= 变化（原生路由导航到相同路径不同 query 时也会触发——
   // 弹框确认投稿后 navigate('/submit?id=…') 无需整页刷新）：
@@ -304,6 +307,7 @@ export default function SubmitPage() {
         return;
       }
       markSubmitted(url().trim()); // 已提交：剪贴板自动弹窗不再弹该 URL
+      if (typeof data?.submissionId === "string") setSubmissionId(data.submissionId);
       setStep("done");
     } catch {
       setError(t("submit.error.submitFailed", { error: "network" }));
@@ -437,7 +441,7 @@ export default function SubmitPage() {
             <p {...stylex.props(styles.success)}>{t("submit.success")}</p>
             <p {...stylex.props(styles.stepDesc)}>{t("submit.successDesc")}</p>
             <div {...stylex.props(styles.actions)}>
-              <A href="/me/submits"><Button>{t("submit.viewSubmissions")}</Button></A>
+              <A href={submissionId() ? `${env.siteBaseUrl}/submission/${submissionId()}` : "/me/submits"}><Button>{t("submit.viewSubmissions")}</Button></A>
               <A href="/"><Button appear="ghost">{t("submit.backHome")}</Button></A>
             </div>
           </div>

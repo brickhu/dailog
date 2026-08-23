@@ -34,6 +34,20 @@ export {
   type CarouselPadding,
 } from "./components/carousel";
 export { Card } from "./components/card";
+export {
+  ClickableCard,
+  type ClickableCardProps,
+  type ClickableCardVariant,
+  type ClickableCardPadding,
+  type ClickableCardElevation,
+  type SizeValue,
+} from "./components/clickable-card";
+export {
+  useClickableContainer,
+  DEFAULT_INTERACTIVE_SELECTOR,
+  type UseClickableContainerOptions,
+  type UseClickableContainerResult,
+} from "./components/use-clickable-container";
 export { Center, type CenterProps, type CenterAxis } from "./components/center";
 export { Skeleton, type SkeletonProps, type SkeletonRadius } from "./components/skeleton";
 export {

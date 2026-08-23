@@ -1,0 +1,37 @@
+{
+  "id": "tc-002",
+  "name": "递进链型（新知·向外）——应通过",
+  "dialogue": [
+    {
+      "role": "user",
+      "content": "为什么手机电池用久了越来越不耐用？"
+    },
+    {
+      "role": "assistant",
+      "content": "锂电池的容量衰减主要来自充放电循环中的化学损耗：锂离子被不可逆地消耗，电极结构逐渐退化。温度越高，衰减越快。"
+    },
+    {
+      "role": "user",
+      "content": "那快充会加速老化吗？"
+    },
+    {
+      "role": "assistant",
+      "content": "会。快充本身不是问题，问题是快充带来的热量。高温是锂电池最大的敌人，30℃ 以上每升高 10℃，老化速度大约翻倍。"
+    },
+    {
+      "role": "user",
+      "content": "所以控制温度是关键？那日常怎么保护电池？"
+    },
+    {
+      "role": "assistant",
+      "content": "是的。日常做到三点：电量保持在 20%–80% 区间、避免边充边玩、避开暴晒和高温环境。这能显著延长电池寿命。"
+    }
+  ],
+  "expected": {
+    "verdict": "pass",
+    "dimension": "新知",
+    "new_knowledge_direction": "向外",
+    "moment_present": true,
+    "spine_complete": true
+  }
+}

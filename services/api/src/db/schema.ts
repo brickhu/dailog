@@ -180,6 +180,14 @@ export const guestVoiceSamples = pgTable("guest_voice_samples", {
 
 /** 成品节目：编辑本地制作完成后一次性上传入库，即已发布（published + isPublic）。
  *  音频在 R2（audioUrl），封面可选（coverUrl）；期号发布时 max+1 分配——"dailog 第 N 期"。 */
+/** 对话名词术语条目（Step B 配套产物 references；播放页「本期提到的名词」） */
+export interface EpisodeReference {
+  term: string;
+  type: string;
+  explanation: string;
+  links: string[];
+}
+
 export const episodes = pgTable("episodes", {
   id: uuid("id").defaultRandom().primaryKey(),
   /** 来源投稿（submission 删除则节目级联删除） */
@@ -193,6 +201,10 @@ export const episodes = pgTable("episodes", {
   slug: text("slug").notNull().unique(),
   title: text("title"),
   description: text("description"),
+  /** 列表/分享用短简介（Step B 配套产物 summary） */
+  summary: text("summary"),
+  /** 对话名词术语条目（Step B 配套产物 references；播放页「本期提到的名词」） */
+  references: jsonb("references").$type<EpisodeReference[]>().notNull().default([]),
   coverUrl: text("cover_url"),
   /** 成品音频（R2 storage key）与字节数（RSS enclosure length——Apple 要求） */
   audioUrl: text("audio_url").notNull(),

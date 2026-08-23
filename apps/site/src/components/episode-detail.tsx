@@ -56,6 +56,33 @@ const styles = stylex.create({
     margin: 0,
     whiteSpace: "pre-wrap",
   },
+  summary: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeMd,
+    margin: 0,
+    lineHeight: 1.6,
+  },
+  refsSection: {
+    display: "flex",
+    flexDirection: "column",
+    gap: dimensions.spacing2,
+  },
+  refsLabel: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
+    fontWeight: dimensions.fontWeightBold,
+    margin: 0,
+  },
+  refItem: {
+    fontSize: dimensions.fontSizeSm,
+    color: colors.foreground,
+    lineHeight: 1.6,
+  },
+  refLink: {
+    color: colors.brand,
+    textDecoration: "none",
+    overflowWrap: "anywhere",
+  },
   source: {
     color: colors.neutral,
     fontSize: dimensions.fontSizeSm,
@@ -168,6 +195,9 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
   return (
     <div {...stylex.props(styles.root)}>
       <h1 {...stylex.props(styles.title)}>{ep().title || t("common.unnamed")}</h1>
+      <Show when={ep().summary}>
+        <p {...stylex.props(styles.summary)}>{ep().summary}</p>
+      </Show>
       <p {...stylex.props(styles.meta)}>
         {(() => {
           const pub = ep().publishedAt;
@@ -205,6 +235,28 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
       </Show>
       <Show when={ep().description} fallback={<p {...stylex.props(styles.noDesc)}>{t("episode.noDescription")}</p>}>
         <p {...stylex.props(styles.desc)}>{ep().description}</p>
+      </Show>
+      <Show when={ep().references && ep().references.length > 0}>
+        <div {...stylex.props(styles.refsSection)}>
+          <p {...stylex.props(styles.refsLabel)}>{t("episode.references")}</p>
+          <For each={ep().references}>
+            {(r) => (
+              <div {...stylex.props(styles.refItem)}>
+                <strong>{r.term}</strong>
+                {r.type ? `（${r.type}）` : ""}：{r.explanation}
+                {r.links && r.links.length > 0 ? (
+                  <span>{" "}
+                    <For each={r.links}>
+                      {(l) => (
+                        <a href={l} target="_blank" rel="noopener noreferrer" {...stylex.props(styles.refLink)}>{l}</a>
+                      )}
+                    </For>
+                  </span>
+                ) : null}
+              </div>
+            )}
+          </For>
+        </div>
       </Show>
       <Show when={ep().sourceUrl}>
         <a href={ep().sourceUrl!} target="_blank" rel="noopener noreferrer" {...stylex.props(styles.source)}>

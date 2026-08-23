@@ -1,0 +1,27 @@
+# dailog 选题筛选校准集（golden test cases）
+
+提示词驱动的管线最大的风险是**改动无回归保护**——改 selection.md 后可能静默改变
+此前已定性的投稿判定。本校准集用于固化基线。
+
+## 用例
+
+| id | 场景 | 预期 |
+|---|---|---|
+| tc-001 | 转变弧线型（新知·向内）：模糊想法被结构化 | pass / 新知 / 向内 |
+| tc-002 | 递进链型（新知·向外）：问题层层深入 | pass / 新知 / 向外 |
+| tc-003 | 任务执行型（写代码）：交付物获得 | reject / G5 |
+| tc-004 | 被动科普问答（问题平行跳跃、无递进无确认） | reject / no_moment |
+
+## 运行方法（每次改 selection.md 后必做）
+
+1. 把 `prompts/selection.md` **原样**作为 LLM 系统提示词；
+2. 逐条用各用例的 `dialogue` 作为用户消息运行；
+3. 对比输出与 `expected`（verdict / code / dimension / new_knowledge_direction；
+   moment_present = moment.quote 非空；spine_complete = spine_required 非空）；
+4. 任一用例不匹配 → 说明改动引入回归，修完再合并。
+
+## 说明
+
+- tc-001/002 对应的真实投稿（人脸识别 56f1084c / 足球 40308c38）曾用于人工校准，
+  本用例是其代表形态的固化；草稿目录被清理后以本用例为准。
+- 新增维度或闸门时，先补用例再改提示词。

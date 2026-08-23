@@ -1,5 +1,6 @@
 // 一次性上传发布（编辑本地制作成品 → dailog）：
-//   multipart：audio（必填）+ cover（可选）+ meta JSON（title/description/tags/language/guestId/durationSeconds）
+//   multipart：audio（必填）+ cover（可选）+ meta JSON（title/description/summary/references/tags/language/guestId/durationSeconds）
+//   --summary 短简介（Step B 配套产物）；--references-file <json> 名词术语条目数组（Step B references 落盘）
 // 成功后 episode 直接 published + 投稿人收到通知（「dailog 第 N 期」）
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -18,6 +19,10 @@ interface PublishArgs {
   cover?: string;
   title?: string;
   description?: string;
+  /** Step B summary：列表/分享短简介 */
+  summary?: string;
+  /** Step B references：名词术语条目 JSON 文件路径 */
+  referencesFile?: string;
   tags?: string[];
   language: string;
   guestId?: string;
@@ -26,7 +31,7 @@ interface PublishArgs {
 function parseArgs(args: string[]): PublishArgs {
   const submissionId = args[0];
   if (!submissionId) {
-    console.error("用法：pnpm editor publish <submissionId> --title \"...\" [--audio final.mp3] [--cover c.jpg] [--description ...] [--tags a,b] [--language zh] [--guest claude]");
+    console.error("用法：pnpm editor publish <submissionId> --title \"...\" [--audio final.mp3] [--cover c.jpg] [--description ...] [--summary ...] [--references-file <json>] [--tags a,b] [--language zh] [--guest claude]");
     process.exit(1);
   }
   const take = (flag: string) => {
@@ -47,6 +52,8 @@ function parseArgs(args: string[]): PublishArgs {
     cover: take("--cover"),
     title: take("--title"),
     description: take("--description"),
+    summary: take("--summary"),
+    referencesFile: take("--references-file"),
     tags: take("--tags")?.split(",").map((t) => t.trim()).filter(Boolean),
     language: take("--language") ?? "zh",
     guestId: take("--guest"),
@@ -57,6 +64,16 @@ export async function publish(config: EditorConfig, args: string[]): Promise<voi
   const p = parseArgs(args);
   if (!p.title) {
     console.error("[publish] --title 必填（节目标题）");
+    process.exit(1);
+  }
+
+  // 防重试误发布（2026-08-22 事故）：publish 是同步端点，服务端在 createPublished 后才等
+  // sendEmail——受限网络下邮件不可达会让响应延迟到客户端超时被杀；无响应时重试会在服务端
+  // 再建一期（episode 行每次新建，非幂等）。上传前先查投稿状态，非 submitted 直接拒绝。
+  const detail = (await api(config, `/v1/editor/submissions/${p.submissionId}`).catch(() => null)) as
+    { status?: string } | null;
+  if (!detail || detail.status !== "submitted") {
+    console.error(`[publish] 投稿状态为 ${detail?.status ?? "?"}（非 submitted）——若已 published 说明发布已成功，勿重试；请用 pnpm editor detail <id> 确认`);
     process.exit(1);
   }
 
@@ -71,6 +88,16 @@ export async function publish(config: EditorConfig, args: string[]): Promise<voi
   }
   const meta: Record<string, unknown> = { title: p.title, language: p.language };
   if (p.description) meta.description = p.description;
+  if (p.summary) meta.summary = p.summary;
+  if (p.referencesFile) {
+    try {
+      const refs = JSON.parse(readFileSync(p.referencesFile, "utf8"));
+      if (Array.isArray(refs)) meta.references = refs;
+      else console.warn(`[publish] ⚠️ references-file 内容不是数组，忽略（${p.referencesFile}）`);
+    } catch {
+      console.warn(`[publish] ⚠️ references-file 读取/解析失败，忽略（${p.referencesFile}）`);
+    }
+  }
   if (p.tags?.length) meta.tags = p.tags;
   if (p.guestId) meta.guestId = p.guestId;
   // durationSeconds：ffprobe 成品音频（merge 产物）——页面「N 分钟」展示
