@@ -13,7 +13,8 @@ import type { EpisodeSummary } from "../../lib/db";
 import { apiBaseForFetch, env, episodeCoverUrl } from "../../lib/env";
 import * as stylex from "@stylexjs/stylex";
 import { layouts, typography, shadows, dimensions, colors } from "@dailogues/ui/theme.stylex";
-import { Button, ClickableCard, Icon } from "@dailogues/ui";
+import { Button, Icon } from "@dailogues/ui";
+import { ClickableCard } from "../../components/clickable-card";
 import { useI18n } from "@dailogues/i18n";
 import { auth } from "../../lib/auth-guard";
 
@@ -481,16 +482,12 @@ export default function EpisodeDetailPage() {
                 <div {...stylex.props(typography.caption, styles.castLabel)}>{t("episode.cast")}</div>
                 <div {...stylex.props(styles.castGrid)}>
                   {/* 主持人卡片：头像 + 称呼（callName ?? displayName）+ @主页。
-                      ClickableCard：href 保留 link 语义（Enter/中键/Cmd+点击），
-                      onClick preventDefault 接管为 SPA 路由导航 */}
+                      ClickableCard 内部渲染 <A>，左键点击由 router SPA 接管
+                      （Enter/中键/Cmd+点击原生处理） */}
                   <ClickableCard
                     label={`${t("episode.host")} ${hostName() || ep()!.displayName}`}
                     href={"/@" + (ep()!.username ?? "")}
                     padding={3}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      navigate("/@" + (ep()!.username ?? ""));
-                    }}
                     xstyle={styles.personCard}
                   >
                     <Show
@@ -505,15 +502,11 @@ export default function EpisodeDetailPage() {
                       <div {...stylex.props(styles.personMeta)}>{"@" + (ep()!.username ?? "")}</div>
                     </div>
                   </ClickableCard>
-                  {/* 嘉宾卡片：头像 + 名称 + 平台，链接嘉宾主页（同上，ClickableCard + SPA 接管） */}
+                  {/* 嘉宾卡片：头像 + 名称 + 平台，链接嘉宾主页（同上，<A> SPA） */}
                   <ClickableCard
                     label={`${t("episode.guest")} ${ep()!.guest!.name}`}
                     href={"/guest/" + ep()!.guest!.id}
                     padding={3}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      navigate("/guest/" + ep()!.guest!.id);
-                    }}
                     xstyle={styles.personCard}
                   >
                     <Show

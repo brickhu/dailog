@@ -38,6 +38,15 @@ export async function overview(config: EditorConfig, _args: string[]): Promise<v
     /* 未配对时计数为 0，由调用方引导登录 */
   }
 
+  // ④ 下线申请（服务端 pending 队列）
+  let removalPending = 0;
+  try {
+    const rows = (await api(config, "/v1/editor/episodes/removal-requests")) as QueueRow[];
+    removalPending = rows.length;
+  } catch {
+    /* 未配对时计数为 0 */
+  }
+
   // ② 脚本待生成语音 / ③ 语音待发布（本地草稿状态）
   let scriptPending = 0;
   let voicePending = 0;
@@ -60,6 +69,7 @@ export async function overview(config: EditorConfig, _args: string[]): Promise<v
   console.log(`1. ${pending} 条待审批；`);
   console.log(`2. ${scriptPending} 条脚本待生成语音；`);
   console.log(`3. ${voicePending} 条语音待发布；`);
+  console.log(`4. ${removalPending} 条下线申请；`);
   console.log("");
   console.log("请问你接下来想处理什么？");
 }

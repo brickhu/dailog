@@ -6,6 +6,7 @@
  *   elements"：容器整体可点，嵌套 button/link 等自行处理事件
  * - 有 href → link 语义（Enter 激活、中键/Cmd/Ctrl+点击新标签页打开）
  * - 仅 onClick → button 语义（Enter + Space 激活）
+ * - 占位 href（"" / "#"）不触发整页跳转（location.assign("#") 会整页刷新，占位卡点击应无动作）
  * - isDisabled → aria-disabled + tabIndex=-1 + 不响应任何激活
  * - options 全部走 getter：Solid props 变化时事件处理器读到最新值
  */
@@ -92,12 +93,22 @@ export function useClickableContainer(
     if (win) win.opener = null;
   };
 
+  /** 占位 href（空串 / "#"）不触发整页跳转：location.assign("#") 会整页刷新，
+   *  示例/占位场景（仅演示变体、仅 onClick 侧效）点击不应刷新页面 */
+  const isPlaceholderHref = (url: string) => url === "" || url === "#";
+
   /** 左键无修饰点击：先调用方 onClick（可 preventDefault 接管），否则按 target 导航 */
   const navigate = (e: MouseEvent) => {
     onClick()?.(e);
+    // 调用方已 preventDefault 接管（如 SPA 路由导航）则不再导航；
+    // 否则在此 preventDefault（此前 prevent 会导致下面的 defaultPrevented 恒为 true，
+    // 纯 href 点击永远不跳转）再执行导航
     if (e.defaultPrevented) return;
-    if (target() === "_self") window.location.assign(href()!);
-    else openInNewTab(href()!);
+    const url = href()!;
+    if (isPlaceholderHref(url)) return;
+    e.preventDefault();
+    if (target() === "_self") window.location.assign(url);
+    else openInNewTab(url);
   };
 
   const activate = (source?: MouseEvent | KeyboardEvent) => {
@@ -118,13 +129,15 @@ export function useClickableContainer(
           openInNewTab(url);
           return;
         }
-        source.preventDefault();
+        // 左键无修饰：preventDefault 移入 navigate（在 onClick 之后），
+        // 否则 navigate 读到的 defaultPrevented 恒为 true，href 点击永不跳转
         navigate(source);
       } else {
         // 键盘激活（Enter / Space）：合成语义等同左键点击
         const fake = new MouseEvent("click", { bubbles: true, cancelable: true });
         onClick()?.(fake);
         if (fake.defaultPrevented) return;
+        if (isPlaceholderHref(url)) return;
         if (target() === "_self") window.location.assign(url);
         else openInNewTab(url);
       }

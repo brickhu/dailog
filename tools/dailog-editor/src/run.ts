@@ -36,6 +36,8 @@
 //   pnpm editor publish <submissionId> --title "..." [--audio final.mp3] [--cover c.jpg]
 //                                               [--description ...] [--tags a,b] [--language zh] [--guest claude]
 //   pnpm editor reject <submissionId> --reason "..."
+//   pnpm editor removal [list|approve <id>|reject <id>] [--status pending|approved|rejected]
+//                                               节目下线申请队列（用户申请 → 编辑审批）
 //   pnpm editor playlist <list|create|episodes|add|remove|reorder|pick|unpick|public|private|delete|cover> [args]
 //                                               平台播放列表管理（策展/加节目/重排/封面）
 import { loadConfig } from "./lib.js";
@@ -182,6 +184,11 @@ async function main() {
       await reject(config, args);
       break;
     }
+    case "removal": {
+      const { removal } = await import("./removal.js");
+      await removal(config, args);
+      break;
+    }
     case "playlist": {
       const { playlist } = await import("./playlist.js");
       await playlist(config, args);
@@ -189,7 +196,7 @@ async function main() {
     }
     default:
       console.error(`未知命令: ${cmd}\n\n` +
-        "用法：pnpm editor <login|auth-status|overview|list|batch|batch-reject|batch-scripts|produce|detail|fetch|rule-test|console-script|paste|guests|guest-voice|guest-set|progress|script-preview|tts|merge|cover|publish|reject|playlist> [args]");
+        "用法：pnpm editor <login|auth-status|overview|list|batch|batch-reject|batch-scripts|produce|detail|fetch|rule-test|console-script|paste|guests|guest-voice|guest-set|progress|script-preview|tts|merge|cover|publish|reject|removal|playlist> [args]");
       process.exit(1);
   }
 }

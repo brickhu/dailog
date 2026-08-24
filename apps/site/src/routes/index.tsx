@@ -6,13 +6,16 @@ import { Faq } from "../components/faq";
 import { EpisodeCarousel } from "../components/episode-carousel";
 import { HeroFlow } from "../components/hero-flow";
 import { Button, Icon, Skeleton } from "@dailogues/ui";
+import { ClickableCard } from "../components/clickable-card";
 import * as stylex from "@stylexjs/stylex";
 import { layouts, typography,global,colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { PageSpinner } from "../components/page-loading";
 import { auth } from "../lib/auth-guard";
 import { openImportDialog } from "../components/import-dialog";
-import { Container } from "../components/container";
+import { Block, Container } from "../layouts/container"
+import { Centered } from "../layouts/centered";
+import { Page } from "../layouts/page";
 // use:auth 指令的作用域绑定（babel 编译转换需要；TS 不识 JSX 指令故 void 消除未使用误报）
 void auth;
 
@@ -28,19 +31,23 @@ const DESKTOP = "@media (min-width: 1025px)";
 const TABLET = "@media (min-width: 640px) and (max-width: 1024px)";
 
 const styles = stylex.create({
+  page: {
+    gap : dimensions.spacing12
+  },
 
   hero: {
     position: "relative", // 动画背景（HeroFlow）绝对定位铺底
     display: "flex",
     flexDirection: "column",
     width: "100%",
+    minHeight: "40vh",
     // 高度由内部 containerLg 内容撑开（无固定高度）
-    paddingBlock :dimensions.spacing10,
+    paddingBlock :dimensions.spacing6,
     [TABLET] : {
-      paddingBlock :dimensions.spacing11,
+      paddingBlock :dimensions.spacing7,
     },
     [DESKTOP] : {
-      paddingBlock :dimensions.spacing12,
+      paddingBlock :dimensions.spacing8,
     }
   },
   heroInner: {
@@ -51,6 +58,7 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
     gap: dimensions.spacing3,
+    
     gridColumn: "1 / -1", // 手机 <640 占满
     // 互斥 range 断点（stylex media 输出顺序不稳定，重叠断点会错乱）
     [TABLET]: {
@@ -62,9 +70,11 @@ const styles = stylex.create({
     },
   tagline: {
     margin: 0,
+    textWrap: "balance"
   },
   what: {
     color: colors.foreground,
+    textWrap: "pretty",
     margin: 0,
   },
   ctaHint: {
@@ -78,19 +88,6 @@ const styles = stylex.create({
     alignItems: "flex-start",
     flexWrap: "wrap",
     paddingTop: dimensions.spacing3,
-  },
-  cta: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: dimensions.spacing2,
-    width: "fit-content",
-    padding: `${dimensions.spacing3} ${dimensions.spacing6}`,
-    borderRadius: dimensions.radiusMd,
-    backgroundColor: colors.brand,
-    color: colors.onBrand,
-    fontWeight: dimensions.fontWeightMedium,
-    textDecoration: "none",
-    fontSize: dimensions.fontSizeMd,
   },
 
   listTitleRow: {
@@ -202,44 +199,44 @@ const styles = stylex.create({
     fontSize: dimensions.fontSizeSm,
     margin: 0,
   },
-  playlistRail: {
-    gridColumn: "1 / -1",
-    display: "flex",
-    gap: dimensions.spacing3,
-    overflowX: "auto",
-    paddingBottom: dimensions.spacing8,
-    scrollbarWidth: "none",
-  },
-  playlistCard: {
-    flexShrink: 0,
-    width: "168px",
-    display: "flex",
-    flexDirection: "column",
-    gap: dimensions.spacing1,
-    padding: dimensions.spacing3,
-    borderRadius: dimensions.radiusMd,
-    backgroundColor: colors.surface,
-    textDecoration: "none",
-    color: "inherit",
-    ":hover": { borderColor: colors.primary },
-  },
-  playlistCover: {
-    width: "100%",
-    aspectRatio: "1",
-    borderRadius: dimensions.radiusSm,
-    objectFit: "cover",
-  },
-  playlistCoverFallback: {
-    width: "100%",
-    aspectRatio: "1",
-    borderRadius: dimensions.radiusSm,
-    backgroundColor: colors.ink,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "28px",
-    color: colors.foreground,
-  },
+  // playlistRail: {
+  //   gridColumn: "1 / -1",
+  //   display: "flex",
+  //   gap: dimensions.spacing3,
+  //   overflowX: "auto",
+  //   paddingBottom: dimensions.spacing8,
+  //   scrollbarWidth: "none",
+  // },
+  // playlistCard: {
+  //   flexShrink: 0,
+  //   width: "168px",
+  //   display: "flex",
+  //   flexDirection: "column",
+  //   gap: dimensions.spacing1,
+  //   padding: dimensions.spacing3,
+  //   borderRadius: dimensions.radiusMd,
+  //   backgroundColor: colors.surface,
+  //   textDecoration: "none",
+  //   color: "inherit",
+  //   ":hover": { borderColor: colors.primary },
+  // },
+  // playlistCover: {
+  //   width: "100%",
+  //   aspectRatio: "1",
+  //   borderRadius: dimensions.radiusSm,
+  //   objectFit: "cover",
+  // },
+  // playlistCoverFallback: {
+  //   width: "100%",
+  //   aspectRatio: "1",
+  //   borderRadius: dimensions.radiusSm,
+  //   backgroundColor: colors.ink,
+  //   display: "flex",
+  //   alignItems: "center",
+  //   justifyContent: "center",
+  //   fontSize: "28px",
+  //   color: colors.foreground,
+  // },
   playlistTitle: {
     fontSize: dimensions.fontSizeMd,
     fontWeight: dimensions.fontWeightMedium,
@@ -271,21 +268,21 @@ const styles = stylex.create({
 });
 
 // 统计卡片加载/空数据占位：三张与真实卡片同构的骨架块（subgrid 轨道不变，避免布局跳动）
-function StatsCardsPlaceholder() {
-  return (
-    <div {...stylex.props(styles.statCards)} aria-busy="true">
-      <div {...stylex.props(styles.statCard)}>
-        <Skeleton width={140} height={18} radius={1} />
-      </div>
-      <div {...stylex.props(styles.statCard)}>
-        <Skeleton width={140} height={18} radius={1} />
-      </div>
-      <div {...stylex.props(styles.statCard)}>
-        <Skeleton width={140} height={18} radius={1} />
-      </div>
-    </div>
-  );
-}
+// function StatsCardsPlaceholder() {
+//   return (
+//     <div {...stylex.props(styles.statCards)} aria-busy="true">
+//       <div {...stylex.props(styles.statCard)}>
+//         <Skeleton width={140} height={18} radius={1} />
+//       </div>
+//       <div {...stylex.props(styles.statCard)}>
+//         <Skeleton width={140} height={18} radius={1} />
+//       </div>
+//       <div {...stylex.props(styles.statCard)}>
+//         <Skeleton width={140} height={18} radius={1} />
+//       </div>
+//     </div>
+//   );
+// }
 
 export default function HomePage() {
   const { t, locale } = useI18n();
@@ -315,14 +312,11 @@ export default function HomePage() {
   });
 
   return (
-    <div {...stylex.props(layouts.page)}>
+    <Page xstyle={styles.page}>
       <HeroFlow />
-      {/* <Container {...stylex.props(styles.hero)}>
-          <div>sss</div>
-      </Container> */}
       <section {...stylex.props(styles.hero)}>
-        <div {...stylex.props(layouts.containerLg, styles.heroInner)}>
-          <div {...stylex.props(styles.heroText)}>
+         <Container xstyle={styles.heroInner}>
+          <Block xstyle={styles.heroText}>
             <h1 {...stylex.props(typography.displayMd, styles.tagline)}>{t("home.hero.tagline")}</h1>
             <p {...stylex.props(typography.bodyXl, styles.what)}>{t("home.hero.what")}</p>
             <div {...stylex.props(styles.ctaRow)}>
@@ -334,84 +328,62 @@ export default function HomePage() {
               >
                 {t("home.hero.submit")}
               </Button>
-              {/* <A href="/submit" {...stylex.props(styles.cta)}><Icon icon="mdi:send" width={16} />{t("home.hero.submit")}</A> */}
               <p {...stylex.props(typography.caption,styles.ctaHint)}>{t("home.hero.ctaHint")}</p>
             </div>
-          </div>
-        </div>
-      </section>
+          </Block>
 
-      <div {...stylex.props(layouts.containerLg)}>
-      <div {...stylex.props(layouts.fullRow, styles.listTitleRow)}>
+        </Container>
+        
+      </section>
+     
+      
+    <Container>
+      <Block xstyle={styles.listTitleRow}>
         <div {...stylex.props(styles.listTitle)}>{t("home.recommended")}</div>
         <A href="/discover" {...stylex.props(global.linkText,typography.bodyMd)}>{t("home.hero.browse")}</A>
-      </div>
-
+      </Block>
       <Suspense fallback={<PageSpinner />}>
-      <EpisodeCarousel episodes={playback.recommended() ?? null} loading={playback.recommendedLoading()} />
-
-
-      <Show when={playlists() && playlists()!.length > 0}>
-        <div {...stylex.props(layouts.fullRow, styles.listTitleRow)}>
-          <div {...stylex.props(styles.listTitle)}>{t("home.playlists")}</div>
-          <A href="/playlists" {...stylex.props(global.linkText, typography.bodyMd)}>{t("home.hero.browse")}</A>
-        </div>
-        <div {...stylex.props(layouts.fullRow, styles.playlistRail)}>
-          <For each={playlists()}>
-            {(pl) => (
-              <A href={`/playlist/${pl.slug}`} {...stylex.props(styles.playlistCard)}>
-                <Show when={playlistCoverUrl(pl.id, pl.coverUrl, 320) ?? episodeCoverUrl(pl.firstEpisodeId ?? "", pl.firstCover, 320)} fallback={<div {...stylex.props(styles.playlistCoverFallback)}>🎧</div>}>
-                  {(cover) => <img src={cover()} alt={pl.title} {...stylex.props(styles.playlistCover)} />}
-                </Show>
-                <div {...stylex.props(styles.playlistTitle)}>{pl.title}</div>
-                <div {...stylex.props(styles.playlistMeta)}>{t("playlists.episodeCount", { count: pl.episodeCount })}</div>
-              </A>
-            )}
-          </For>
-        </div>
-      </Show>
-      <Show when={stats()} fallback={<StatsCardsPlaceholder />}>
-        <div {...stylex.props(styles.statCards)}>
-          <A href="/hosts" {...stylex.props(styles.statCard)}>
-            <div {...stylex.props(styles.statTitle)}>{t("home.statHosts", { count: stats()!.hostCount, plural: stats()!.hostCount === 1 ? "" : "s" })}</div>
-            <Show when={stats()!.topHostAvatar} fallback={<div {...stylex.props(styles.statLogoFallback)}>{stats()!.topHost?.slice(0, 1) || "?"}</div>}>
-              <img src={stats()!.topHostAvatar!} alt="" {...stylex.props(styles.statLogo)} />
-            </Show>
-            <div {...stylex.props(styles.statText)}>{stats()!.topHost || ""}</div>
-          </A>
-          <A href="/guests" {...stylex.props(styles.statCard)}>
-            <div {...stylex.props(styles.statTitle)}>{t("home.statGuests", { count: stats()!.guestCount, plural2: stats()!.guestCount === 1 ? "" : "s" })}</div>
-            <div {...stylex.props(styles.statLogos)}>
-              <For each={guestLogos() ?? []}>
-                {(g) => (
-                  <Show when={g.avatar} fallback={<div {...stylex.props(styles.statLogoFallbackSmall)}>{g.name.slice(0, 1)}</div>}>
-                    <img src={g.avatar!} alt={g.name} {...stylex.props(styles.statLogoSmall)} />
-                  </Show>
-                )}
-              </For>
-            </div>
-            <div {...stylex.props(styles.statText)}>{t("home.statGuestsSub")}</div>
-          </A>
-          <A href="/discover" {...stylex.props(styles.statCard)}>
-            <div {...stylex.props(styles.statTitle)}>{t("home.statEpisodes", { count: stats()!.episodeCount, plural3: stats()!.episodeCount === 1 ? "" : "s" })}</div>
-            <div {...stylex.props(styles.statTags)}>
-              <For each={stats()!.topTags}>
-                {(tag) => <span {...stylex.props(styles.statTag)}>{tag}</span>}
-              </For>
-            </div>
-            <div {...stylex.props(styles.statText)}>{t("home.statEpisodesSub")}</div>
-          </A>
-        </div>
-      </Show>
+        <EpisodeCarousel episodes={playback.recommended() ?? null} loading={playback.recommendedLoading()} />
       </Suspense>
-      <div {...stylex.props(layouts.fullRow)}>
-        <Faq />
-      </div>
-      <div {...stylex.props(layouts.fullRow,styles.quote)}>
-        <p {...stylex.props(typography.displayMd,styles.quoteContent)}>{t("home.faq.quote")}</p>
-        <p {...stylex.props(typography.caption)}>— {t("home.faq.quoteAuthor")}</p>
-      </div>
-      </div>
-      </div>
+    </Container>
+
+    <Container>
+      <Show when={!stats.loading} fallback="loading...">
+      <Block cols={4} >
+        <ClickableCard label="hosts" href="/hosts">
+          <div {...stylex.props(styles.statTitle)}>
+            {t("home.statHosts", { count: stats()!.hostCount, plural: stats()!.hostCount === 1 ? "" : "s" })}
+          </div>
+        </ClickableCard>
+      </Block>
+      <Block cols={4}>
+        <ClickableCard label="guests" href="/guests">
+          <div {...stylex.props(styles.statTitle)}>{t("home.statGuests", { count: stats()!.guestCount, plural2: stats()!.guestCount === 1 ? "" : "s" })}</div>
+        </ClickableCard>
+      </Block>
+      <Block cols={4}>
+        <ClickableCard label="episodes" href="/discover">
+          <div {...stylex.props(styles.statTitle)}>{t("home.statEpisodes", { count: stats()!.episodeCount, plural3: stats()!.episodeCount === 1 ? "" : "s" })}</div>
+        </ClickableCard>
+      </Block>
+      </Show>
+    </Container>
+
+    <Container>
+      <Block>
+        <Faq/>
+      </Block>
+    </Container>
+
+    <Container>
+      <Block xstyle={styles.quote}>
+          <p {...stylex.props(typography.displayMd,styles.quoteContent)}>{t("home.faq.quote")}</p>
+          <p {...stylex.props(typography.caption)}>— {t("home.faq.quoteAuthor")}</p>
+      </Block>
+    </Container>
+
+
+  
+      </Page>
   );
 }

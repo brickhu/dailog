@@ -303,8 +303,8 @@ export const notifications = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
-    /** 通知类型：rejected（未收录）/ published（节目上线） */
-    type: text("type", { enum: ["rejected", "published"] }).notNull(),
+    /** 通知类型：rejected（未收录）/ published（节目上线）/ unpublished（下线申请通过）/ unpublish_rejected（下线申请未通过） */
+    type: text("type", { enum: ["rejected", "published", "unpublished", "unpublish_rejected"] }).notNull(),
     title: text("title").notNull(),
     body: text("body"),
     /** 关联链接（节目页/投稿状态页） */
@@ -313,4 +313,25 @@ export const notifications = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("notifications_user_created_idx").on(t.userId, t.createdAt)],
+);
+
+/** 节目下线申请（用户「申请下线」→ 编辑审批）：平台保留内容策展权，用户不能自助下架。
+ *  审批通过 → episodes.isPublic=false + 通知投稿人；拒绝 → 通知投稿人。 */
+export const episodeRemovalRequests = pgTable(
+  "episode_removal_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** 目标节目（删节目级联删申请） */
+    episodeId: uuid("episode_id").notNull().references(() => episodes.id, { onDelete: "cascade" }),
+    /** 申请人（= 节目归属投稿人；删账号级联删申请） */
+    userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
+    /** 申请理由（选填，≤500 字符——编辑审批参考） */
+    reason: text("reason"),
+    status: text("status", { enum: ["pending", "approved", "rejected"] }).notNull().default("pending"),
+    handledAt: timestamp("handled_at", { withTimezone: true }),
+    /** 处理编辑（editor/admin 账号 id） */
+    handledBy: text("handled_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("episode_removal_requests_episode_idx").on(t.episodeId), index("episode_removal_requests_status_idx").on(t.status, t.createdAt)],
 );

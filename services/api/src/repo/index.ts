@@ -224,8 +224,8 @@ export interface EpisodesRepo {
     createdAt: Date;
     publishedAt: Date | null;
   } | null>;
-  /** 已发布节目编辑：tags / 精选标记 / 元数据 */
-  updatePublished(id: string, row: { tags?: string[] | null; isPicked?: boolean; title?: string | null; description?: string | null; coverUrl?: string | null }): Promise<void>;
+  /** 已发布节目编辑：tags / 精选标记 / 元数据 / 公开状态（编辑端下架/恢复——内容策展权在平台） */
+  updatePublished(id: string, row: { tags?: string[] | null; isPicked?: boolean; title?: string | null; description?: string | null; coverUrl?: string | null; isPublic?: boolean }): Promise<void>;
   /** 已发布节目清单（编辑端）：按期号倒序 */
   listPublished(): Promise<Array<{
     id: string;
@@ -266,19 +266,28 @@ export interface EpisodesRepo {
   getRole?(userId: string): Promise<"user" | "editor" | "admin" | null>;
   /** 管理员同步（部署自动预留）：把 ADMIN_EMAILS 列出的邮箱提升为 admin；返回更新数 */
   syncAdminRoles(emails: string[]): Promise<number>;
-  /** 用户自己的节目（/me/episodes）：按 user_id 全量（含已下架 isPublic=false），发布时间倒序 */
+  /** 用户自己的节目（/me/episodes）：按 user_id 全量（含已下架 isPublic=false），发布时间倒序；
+   *  附封面与最近一次下线申请状态（前端展示申请进度） */
   listByUser(userId: string): Promise<Array<{
     id: string;
     slug: string;
     title: string | null;
+    coverUrl: string | null;
     number: number | null;
     durationSeconds: number | null;
     publishedAt: Date | null;
     isPublic: boolean;
     isPicked: boolean;
+    removalRequest: { status: "pending" | "approved" | "rejected" } | null;
   }>>;
-  /** 切换节目公开状态（仅归属人可操作）：UPDATE 行数（0 = 不存在或非本人） */
-  setPublic(id: string, userId: string, isPublic: boolean): Promise<number>;
+  /** 申请下线前置校验：节目归属 + 当前公开状态（不存在 → null） */
+  getRemovalTarget(episodeId: string): Promise<{ userId: string; isPublic: boolean } | null>;
+  /** 提交下线申请（用户侧）：该节目已有 pending 申请 → null（不重复提交） */
+  createRemovalRequest(episodeId: string, userId: string, reason: string | null): Promise<{ id: string } | null>;
+  /** 下线申请队列（编辑端）：按状态列出，附节目与投稿人信息，提交时间倒序 */
+  listRemovalRequests(status: "pending" | "approved" | "rejected"): Promise<RemovalRequestRow[]>;
+  /** 审批下线申请（编辑端）：置状态 + handledBy/At；返回目标节目 + 申请人（通知用）；不存在/已处理 → null */
+  resolveRemovalRequest(id: string, action: "approved" | "rejected", handledBy: string): Promise<{ episodeId: string; userId: string } | null>;
   // ---- 声音采样（voice 路由沿用） ----
   getVoiceSample(userId: string): Promise<VoiceSampleRow | null>;
   /** 按语种取采样（编辑本地 TTS 按脚本语言取用）；无该语种 → null（调用方用兜底） */
@@ -419,6 +428,22 @@ export interface PlaylistsRepo {
   listByEpisode(episodeId: string): Promise<Array<{ id: string; slug: string; title: string }>>;
 }
 
+/** 节目下线申请队列条目（编辑端） */
+export interface RemovalRequestRow {
+  id: string;
+  episodeId: string;
+  slug: string;
+  episodeTitle: string | null;
+  episodeNumber: number | null;
+  /** 申请人 = 节目归属投稿人 */
+  userId: string;
+  userEmail: string | null;
+  userDisplayName: string | null;
+  reason: string | null;
+  status: "pending" | "approved" | "rejected";
+  createdAt: Date;
+}
+
 export interface GuestVoiceSampleRow {
   id: string;
   guestId: string;
@@ -454,8 +479,8 @@ export interface GuestsRepo {
 }
 
 export interface NotificationsRepo {
-  /** 创建站内通知（拒审 / 上线） */
-  create(row: { userId: string; type: "rejected" | "published"; title: string; body?: string | null; link?: string | null }): Promise<void>;
+  /** 创建站内通知（拒审 / 上线 / 下线审批结果） */
+  create(row: { userId: string; type: "rejected" | "published" | "unpublished" | "unpublish_rejected"; title: string; body?: string | null; link?: string | null }): Promise<void>;
   /** 我的通知（新→旧，limit 50） */
   listByUser(userId: string): Promise<Array<{
     id: string; type: string; title: string; body: string | null; link: string | null;
@@ -1165,6 +1190,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             ...(row.title !== undefined ? { title: row.title } : {}),
             ...(row.description !== undefined ? { description: row.description } : {}),
             ...(row.coverUrl !== undefined ? { coverUrl: row.coverUrl } : {}),
+            ...(row.isPublic !== undefined ? { isPublic: row.isPublic } : {}),
           })
           .where(eq(schema.episodes.id, id));
       },
@@ -1232,11 +1258,12 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return rows[0]?.userId ?? null;
       },
       async listByUser(userId) {
-        return db
+        const rows = await db
           .select({
             id: schema.episodes.id,
             slug: schema.episodes.slug,
             title: schema.episodes.title,
+            coverUrl: schema.episodes.coverUrl,
             number: schema.episodes.number,
             durationSeconds: schema.episodes.durationSeconds,
             publishedAt: schema.episodes.publishedAt,
@@ -1246,15 +1273,79 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .from(schema.episodes)
           .where(eq(schema.episodes.userId, userId))
           .orderBy(desc(schema.episodes.publishedAt));
+        if (rows.length === 0) return rows.map((r) => ({ ...r, removalRequest: null }));
+        // 每个节目最近一次下线申请（最新一条；有 pending 即未处理）
+        const reqs = await db
+          .select({
+            episodeId: schema.episodeRemovalRequests.episodeId,
+            status: schema.episodeRemovalRequests.status,
+            createdAt: schema.episodeRemovalRequests.createdAt,
+          })
+          .from(schema.episodeRemovalRequests)
+          .where(inArray(schema.episodeRemovalRequests.episodeId, rows.map((r) => r.id)))
+          .orderBy(desc(schema.episodeRemovalRequests.createdAt));
+        const latest = new Map<string, { status: "pending" | "approved" | "rejected" }>();
+        for (const req of reqs) {
+          if (!latest.has(req.episodeId)) latest.set(req.episodeId, { status: req.status });
+        }
+        return rows.map((r) => ({ ...r, removalRequest: latest.get(r.id) ?? null }));
       },
-      async setPublic(id, userId, isPublic) {
-        // postgres.js 驱动 update 不带 .returning() 返回空数组——必须 returning 才能判断行数
+      async getRemovalTarget(episodeId) {
         const rows = await db
-          .update(schema.episodes)
-          .set({ isPublic })
-          .where(and(eq(schema.episodes.id, id), eq(schema.episodes.userId, userId)))
-          .returning({ id: schema.episodes.id });
-        return rows.length;
+          .select({ userId: schema.episodes.userId, isPublic: schema.episodes.isPublic })
+          .from(schema.episodes)
+          .where(eq(schema.episodes.id, episodeId))
+          .limit(1);
+        return rows[0] ?? null;
+      },
+      async createRemovalRequest(episodeId, userId, reason) {
+        const pending = await db
+          .select({ id: schema.episodeRemovalRequests.id })
+          .from(schema.episodeRemovalRequests)
+          .where(and(
+            eq(schema.episodeRemovalRequests.episodeId, episodeId),
+            eq(schema.episodeRemovalRequests.userId, userId),
+            eq(schema.episodeRemovalRequests.status, "pending"),
+          ))
+          .limit(1);
+        if (pending.length > 0) return null;
+        const rows = await db
+          .insert(schema.episodeRemovalRequests)
+          .values({ episodeId, userId, reason: reason ?? null })
+          .returning({ id: schema.episodeRemovalRequests.id });
+        return rows[0] ?? null;
+      },
+      async listRemovalRequests(status) {
+        return db
+          .select({
+            id: schema.episodeRemovalRequests.id,
+            episodeId: schema.episodeRemovalRequests.episodeId,
+            slug: schema.episodes.slug,
+            episodeTitle: schema.episodes.title,
+            episodeNumber: schema.episodes.number,
+            userId: schema.episodeRemovalRequests.userId,
+            userEmail: schema.authUsers.email,
+            userDisplayName: schema.profiles.displayName,
+            reason: schema.episodeRemovalRequests.reason,
+            status: schema.episodeRemovalRequests.status,
+            createdAt: schema.episodeRemovalRequests.createdAt,
+          })
+          .from(schema.episodeRemovalRequests)
+          .innerJoin(schema.episodes, eq(schema.episodes.id, schema.episodeRemovalRequests.episodeId))
+          .innerJoin(schema.authUsers, eq(schema.authUsers.id, schema.episodeRemovalRequests.userId))
+          .leftJoin(schema.profiles, eq(schema.profiles.id, schema.episodeRemovalRequests.userId))
+          .where(eq(schema.episodeRemovalRequests.status, status))
+          .orderBy(desc(schema.episodeRemovalRequests.createdAt))
+          .limit(100);
+      },
+      async resolveRemovalRequest(id, action, handledBy) {
+        const rows = await db
+          .update(schema.episodeRemovalRequests)
+          .set({ status: action, handledAt: new Date(), handledBy })
+          .where(and(eq(schema.episodeRemovalRequests.id, id), eq(schema.episodeRemovalRequests.status, "pending")))
+          .returning({ episodeId: schema.episodeRemovalRequests.episodeId, userId: schema.episodeRemovalRequests.userId });
+        if (rows.length === 0) return null;
+        return rows[0];
       },
       async getRole(userId) {
         const rows = await db

@@ -173,7 +173,7 @@ export function editorRoutes(deps: EditorDeps) {
     const summary = typeof meta.summary === "string" && meta.summary.trim() ? meta.summary.trim().slice(0, 500) : null;
     const references = Array.isArray(meta.references)
       ? meta.references
-          .filter((r): r is { term: string; type?: unknown; explanation?: unknown; links?: unknown } =>
+          .filter((r): r is { term: string; type?: string; explanation?: string; links?: string[] } =>
             typeof r === "object" && r !== null && typeof (r as { term?: unknown }).term === "string" && (r as { term: string }).term.trim().length > 0)
           .map((r) => ({
             term: r.term.trim().slice(0, 100),
@@ -273,7 +273,7 @@ export function editorRoutes(deps: EditorDeps) {
     return c.json(list);
   }) as unknown as RouteHandler<typeof r5, AuthEnv>);
 
-  /** 已发布节目编辑：tags / 精选 / 标题 / 简介 / 封面 */
+  /** 已发布节目编辑：tags / 精选 / 标题 / 简介 / 封面 / 公开状态（isPublic=false = 编辑下架；true = 恢复） */
   const r6 = createRoute({
     method: "put",
     path: "/v1/editor/episodes/:id",
@@ -286,18 +286,81 @@ export function editorRoutes(deps: EditorDeps) {
     const ep = await deps.repo.episodes.getById(c.req.param("id")!);
     if (!ep) return c.json({ error: "not_found" }, 404);
     const body = (await c.req.json().catch(() => null)) as {
-      tags?: unknown; isPicked?: unknown; title?: unknown; description?: unknown; coverUrl?: unknown;
+      tags?: unknown; isPicked?: unknown; title?: unknown; description?: unknown; coverUrl?: unknown; isPublic?: unknown;
     } | null;
     if (!body) return c.json({ error: "invalid_body" }, 400);
-    const patch: { tags?: string[] | null; isPicked?: boolean; title?: string | null; description?: string | null; coverUrl?: string | null } = {};
+    const patch: { tags?: string[] | null; isPicked?: boolean; title?: string | null; description?: string | null; coverUrl?: string | null; isPublic?: boolean } = {};
     if (Array.isArray(body.tags)) patch.tags = body.tags.filter((t): t is string => typeof t === "string");
     if (typeof body.isPicked === "boolean") patch.isPicked = body.isPicked;
     if (typeof body.title === "string") patch.title = body.title.slice(0, 200);
     if (typeof body.description === "string") patch.description = body.description.slice(0, 2000);
     if (typeof body.coverUrl === "string") patch.coverUrl = body.coverUrl;
+    if (typeof body.isPublic === "boolean") patch.isPublic = body.isPublic;
     await deps.repo.episodes.updatePublished(ep.id, patch);
     return c.json({ ok: true });
   }) as unknown as RouteHandler<typeof r6, AuthEnv>);
+
+  // ---- 节目下线申请（用户「申请下线」→ 编辑审批） ----
+
+  /** 下线申请队列：?status=pending|approved|rejected（缺省 pending，先到先审） */
+  const r13 = createRoute({
+    method: "get",
+    path: "/v1/editor/episodes/removal-requests",
+      responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/episodes/removal-requests" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r13, (async (c: Context) => {
+    const raw = c.req.query("status");
+    const status = raw === "approved" || raw === "rejected" ? raw : "pending";
+    return c.json(await deps.repo.episodes.listRemovalRequests(status));
+  }) as unknown as RouteHandler<typeof r13, AuthEnv>);
+
+  /** 批准下线：isPublic=false（节目从首页/RSS/公开接口消失，仅自己可见）+ 通知投稿人 */
+  const r14 = createRoute({
+    method: "post",
+    path: "/v1/editor/episodes/removal-requests/:id/approve",
+      responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/episodes/removal-requests/:id/approve" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在或已处理" },
+    },
+  });
+  app.openapi(r14, (async (c: Context) => {
+    const req = await deps.repo.episodes.resolveRemovalRequest(c.req.param("id")!, "approved", c.get("userId"));
+    if (!req) return c.json({ error: "not_found" }, 404);
+    await deps.repo.episodes.updatePublished(req.episodeId, { isPublic: false });
+    await deps.repo.notifications.create({
+      userId: req.userId,
+      type: "unpublished",
+      title: "你的节目已下架",
+      body: "你申请下线的节目已从公开列表移除，仅自己可见",
+      link: "/me/episodes",
+    }).catch(() => {});
+    return c.json({ ok: true, status: "approved" });
+  }) as unknown as RouteHandler<typeof r14, AuthEnv>);
+
+  /** 拒绝下线：申请不通过，节目保持公开 + 通知投稿人 */
+  const r15 = createRoute({
+    method: "post",
+    path: "/v1/editor/episodes/removal-requests/:id/reject",
+      responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/episodes/removal-requests/:id/reject" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在或已处理" },
+    },
+  });
+  app.openapi(r15, (async (c: Context) => {
+    const req = await deps.repo.episodes.resolveRemovalRequest(c.req.param("id")!, "rejected", c.get("userId"));
+    if (!req) return c.json({ error: "not_found" }, 404);
+    await deps.repo.notifications.create({
+      userId: req.userId,
+      type: "unpublish_rejected",
+      title: "下线申请未通过",
+      body: "你的下线申请未通过，节目保持公开；如有疑问请联系编辑",
+      link: "/me/episodes",
+    }).catch(() => {});
+    return c.json({ ok: true, status: "rejected" });
+  }) as unknown as RouteHandler<typeof r15, AuthEnv>);
 
   // ---- 嘉宾库（品牌声线宿主，编辑本地 TTS 用） ----
 

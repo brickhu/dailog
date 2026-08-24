@@ -96,10 +96,17 @@ export function voiceRoutes(deps: VoiceDeps) {
     const language = typeof form?.get("language") === "string" && /^[a-z]{2,3}$/i.test(form.get("language") as string)
       ? (form.get("language") as string).toLowerCase()
       : "zh";
+    // 录音时长（前端计时秒数；仅作展示「XX秒XX语采样」，TTS 不依赖）
+    const durationRaw = form?.get("duration");
+    let duration = 0;
+    if (typeof durationRaw === "string" && /^\d{1,4}(\.\d{1,3})?$/.test(durationRaw)) {
+      const n = Number(durationRaw);
+      if (Number.isFinite(n) && n >= 0 && n <= 3600) duration = Math.round(n);
+    }
     // R2 目录规划：voices/{userId}/{language}.webm
     const key = `voices/${userId}/${language}.webm`;
     await deps.storage.put(key, bytes);
-    const saved = await deps.saveVoiceSample({ userId, language, audioUrl: key, transcript, duration: 0, status: "ready" });
+    const saved = await deps.saveVoiceSample({ userId, language, audioUrl: key, transcript, duration, status: "ready" });
     return c.json({ ok: true, sampleId: saved.id }); // sampleId：投稿时记录 voiceSampleId 用
   }) as unknown as RouteHandler<typeof r3, { Variables: { userId: string } }>);
   return app;

@@ -5,7 +5,8 @@ import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { Button, TextInput, Spinner } from "@dailogues/ui";
-import Recorder from "../components/recorder";
+import VoiceSamplePreview from "../components/voice-sample-preview";
+import VoiceSampleRecorderDialog from "../components/voice-sample-recorder-dialog";
 import { useI18n } from "@dailogues/i18n";
 
 // 账号中心（dailog.fm/account）：
@@ -85,21 +86,10 @@ const styles = stylex.create({
   field: {
     marginBottom: dimensions.spacing3,
   },
-  audio: {
-    width: "100%",
-    marginBottom: dimensions.spacing3,
-  },
-  readingScript: {
-    color: colors.neutral,
-    fontSize: dimensions.fontSizeSm,
-    lineHeight: 1.7,
-    paddingLeft: dimensions.spacing3,
-    marginBottom: dimensions.spacing3,
-  },
-  hint: {
-    color: colors.neutral,
-    fontSize: dimensions.fontSizeSm,
-    marginBottom: dimensions.spacing2,
+  actions: {
+    display: "flex",
+    gap: dimensions.spacing3,
+    alignItems: "center",
   },
   error: {
     fontSize: dimensions.fontSizeSm,
@@ -251,7 +241,7 @@ function HostProfileBlock(props: { profile: ProfileData }) {
 
 /** 账号管理：邮箱 / GitHub 绑定 / 昵称 / 修改密码 */
 function AccountBlock(props: { profile: ProfileData; loadError: string | null }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const p = () => props.profile;
   const [nickname, setNickname] = createSignal(p().nickname ?? "");
   const [nameMsg, setNameMsg] = createSignal<{ ok: boolean; text: string } | null>(null);
@@ -297,49 +287,41 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
     }
   };
 
-  // ---- 声音采样（生成节目中"你"的声音；可重录覆盖/换语言新增） ----
-  const [hasSample, setHasSample] = createSignal<boolean | null>(null);
-  const [voiceLang, setVoiceLang] = createSignal("zh");
-  const [sampleBusy, setSampleBusy] = createSignal(false);
+  // ---- 声音采样（生成节目中"你"的声音）：预览条 + 录音弹窗（新增/修改均从准备录制打开）----
+  const [sample, setSample] = createSignal<{ id: string | null; language: string; duration: number; transcript: string | null } | null>(null);
+  const [sampleLoaded, setSampleLoaded] = createSignal(false);
   const [sampleMsg, setSampleMsg] = createSignal<{ ok: boolean; text: string } | null>(null);
-  onMount(async () => {
+  const [recorderOpen, setRecorderOpen] = createSignal(false);
+  const [recorderMode, setRecorderMode] = createSignal<"add" | "edit">("add");
+
+  const fetchSample = async () => {
     try {
       const res = await fetch("/v1/me/voice-sample");
       if (res.ok) {
-        const vs = (await res.json()) as { language?: string } | null;
-        setHasSample(true);
-        if (vs?.language) setVoiceLang(vs.language);
+        const vs = (await res.json()) as { id?: string | null; language?: string; duration?: number; transcript?: string | null } | null;
+        setSample(vs ? { id: vs.id ?? null, language: vs.language ?? "zh", duration: vs.duration ?? 0, transcript: vs.transcript ?? null } : null);
       } else {
-        setHasSample(false);
+        setSample(null);
       }
     } catch {
-      setHasSample(false);
-    }
-  });
-  // 朗读文案：插值主持人昵称（profile 人设称呼，无则账号昵称兜底）；语言跟随界面语言
-  const sampleScript = () =>
-    t("submit.readingScript", { name: p().displayName?.trim() || p().nickname?.trim() || t("submit.hostFallback") });
-  const uploadSample = async (blob: Blob) => {
-    setSampleBusy(true);
-    setSampleMsg(null);
-    try {
-      const form = new FormData();
-      form.append("file", blob, "voice.webm");
-      form.append("transcript", sampleScript());
-      form.append("language", locale() === "en" ? "en" : "zh");
-      const res = await fetch("/v1/me/voice-sample", { method: "POST", body: form });
-      if (!res.ok) {
-        setSampleMsg({ ok: false, text: t("account.voiceSampleFailed") });
-        return;
-      }
-      setHasSample(true);
-      setVoiceLang(locale() === "en" ? "en" : "zh");
-      setSampleMsg({ ok: true, text: t("account.voiceSampleDone") });
-    } catch {
-      setSampleMsg({ ok: false, text: t("account.voiceSampleFailed") });
+      setSample(null);
     } finally {
-      setSampleBusy(false);
+      setSampleLoaded(true);
     }
+  };
+  onMount(() => void fetchSample());
+
+  const openRecorder = (mode: "add" | "edit") => {
+    setSampleMsg(null);
+    setRecorderMode(mode);
+    setRecorderOpen(true);
+  };
+
+  /** 弹窗确认保存成功：刷新采样数据（时长/语种/音频立即更新） */
+  const onSampleSaved = async () => {
+    await fetchSample();
+    setSampleMsg({ ok: true, text: t("account.voiceSampleDone") });
+    setRecorderOpen(false);
   };
 
   return (
@@ -373,8 +355,8 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
       <div {...stylex.props(styles.card)}>
         <div {...stylex.props(styles.row)}>
           <span {...stylex.props(styles.rowLabel)}>{t("account.voiceSample")}</span>
-          <Show when={hasSample() !== null} fallback={<Spinner />}>
-            <Show when={hasSample()} fallback={<span {...stylex.props(styles.rowValue)}>{t("account.voiceSampleNone")}</span>}>
+          <Show when={sampleLoaded()} fallback={<Spinner />}>
+            <Show when={sample()} fallback={<span {...stylex.props(styles.rowValue)}>{t("account.voiceSampleNone")}</span>}>
               <span {...stylex.props(styles.badge)}>{t("account.voiceSampleRecorded")}</span>
             </Show>
           </Show>
@@ -382,13 +364,30 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
         <div {...stylex.props(styles.field)}>
           <div {...stylex.props(styles.rowValue)}>{t("account.voiceSampleDesc")}</div>
         </div>
-        <Show when={hasSample()}>
-          <span {...stylex.props(styles.hint)}>{t("submit.voiceLang", { lang: t(`lang.${voiceLang()}` as never) })}</span>
-          <audio controls src="/v1/me/voice-sample/audio" {...stylex.props(styles.audio)} />
+        <Show
+          when={sample()}
+          fallback={
+            <div {...stylex.props(styles.actions)}>
+              <Button onClick={() => openRecorder("add")}>{t("recorder.addAction")}</Button>
+            </div>
+          }
+        >
+          <VoiceSamplePreview
+            duration={sample()!.duration}
+            language={sample()!.language}
+            audioUrl="/v1/me/voice-sample/audio"
+            onReRecord={() => openRecorder("edit")}
+          />
         </Show>
-        <div {...stylex.props(styles.hint)}>{t("submit.voiceHint")}</div>
-        <div {...stylex.props(styles.readingScript)}>{sampleScript()}</div>
-        <Recorder minSeconds={8} maxSeconds={30} onReady={uploadSample} busy={sampleBusy()} />
+        <VoiceSampleRecorderDialog
+          open={recorderOpen()}
+          mode={recorderMode()}
+          defaultLanguage={sample()?.language}
+          hostName={p().displayName?.trim() || p().nickname?.trim() || undefined}
+          onClose={() => setRecorderOpen(false)}
+          onCancel={() => setRecorderOpen(false)}
+          onSaved={onSampleSaved}
+        />
         <Show when={sampleMsg()}>
           <div {...stylex.props(sampleMsg()!.ok ? styles.success : styles.error)}>{sampleMsg()!.text}</div>
         </Show>

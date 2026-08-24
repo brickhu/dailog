@@ -59,6 +59,7 @@ triggers:
    1. N 条待审批；            ← 服务端 submitted 队列
    2. N 条脚本待生成语音；     ← 草稿有 script.json 未合成
    3. N 条语音待发布；         ← 草稿有 final.mp3 未发布
+   4. N 条下线申请；           ← 用户「申请下线」→ 编辑审批（removal 队列）
    请问你接下来想处理什么？
 ③ 根据用户答复进入对应流程（批量处理 / 审核单个 / 制作 / 发布…）
 ```
@@ -126,6 +127,7 @@ triggers:
 pnpm editor list                  # 待审队列（先到先审；⚠️无采样 = 无法克隆主持人音色）
 pnpm editor detail <submissionId> # URL/投稿人/主持人称呼(callName)/节目建议/采样 transcript/已上线节目
                                   # （采样在服务端 R2，无需下载本地；callName 2026-08-13 已修）
+pnpm editor removal               # 节目下线申请队列（用户申请 → 编辑审批；approve 下架+通知，reject 拒绝+通知）
 ```
 
 ### ③ 采集 + 内容解码（`pnpm editor fetch <id>`）

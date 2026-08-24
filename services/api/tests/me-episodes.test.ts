@@ -9,7 +9,7 @@ import * as schema from "../src/db/schema";
 import { createFavoritesRepo } from "../src/routes/favorites";
 
 // /me/episodes 全链路（真实本地 PG + 真实 repo）：
-// 列表（仅本人、含已下架）→ 下架/上架 → 越权/不存在 → 参数校验
+// 列表（仅本人、含已下架、带申请状态）→ 申请下线（新建/重复/已下架/越权）→ 未登录
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
@@ -41,20 +41,13 @@ describe.skipIf(!hasDb)("me/episodes (我的节目, real local PG)", () => {
     };
     const auth = createAuth({ db: dbClient.db, secret: "test-secret", env: testEnv });
     const repo = createRepo(dbClient.db);
+    const storageStub = { put: async () => {}, get: async () => ({ data: new Uint8Array(), total: 0 }), delete: async () => {} };
     app = createApp({
       env: testEnv,
       auth,
       repo,
-      voice: {
-        saveVoiceSample: async () => ({ id: "" }),
-        storage: { put: async () => {}, get: async () => ({ data: new Uint8Array(), total: 0 }), delete: async () => {} },
-      },
-      editor: {
-        repo,
-        env: testEnv,
-        storage: { put: async () => {}, get: async () => ({ data: new Uint8Array(), total: 0 }), delete: async () => {} },
-        siteBaseUrl: null,
-      },
+      voice: { saveVoiceSample: async () => ({ id: "" }), storage: storageStub },
+      editor: { repo, env: testEnv, storage: storageStub, siteBaseUrl: null },
       tts: {
         repo,
         storage: { get: async () => ({ data: new Uint8Array(), total: 0 }), put: async () => {}, delete: async () => {} },
@@ -68,7 +61,7 @@ describe.skipIf(!hasDb)("me/episodes (我的节目, real local PG)", () => {
     const res = await app.request("/v1/auth/sign-up/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: `meep-${randomUUID().slice(0, 8)}@test.local`, password: "password123", name: "MeEp" }),
+      body: JSON.stringify({ email: "meep-" + randomUUID().slice(0, 8) + "@test.local", password: "password123", name: "MeEp" }),
     });
     const body = (await res.json()) as { token: string; user: { id: string } };
     token = body.token;
@@ -76,9 +69,9 @@ describe.skipIf(!hasDb)("me/episodes (我的节目, real local PG)", () => {
 
     // 另一用户（越权测试）
     const other = await dbClient.db.insert(schema.authUsers).values({
-      id: `meep-other-${randomUUID()}`,
+      id: "meep-other-" + randomUUID(),
       name: "Other",
-      email: `meep-other-${randomUUID().slice(0, 8)}@test.local`,
+      email: "meep-other-" + randomUUID().slice(0, 8) + "@test.local",
       emailVerified: true,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -88,7 +81,7 @@ describe.skipIf(!hasDb)("me/episodes (我的节目, real local PG)", () => {
     // 本人：一个公开 + 一个已下架
     const mkSub = (uid: string) => dbClient.db.insert(schema.submissions).values({
       userId: uid,
-      url: `https://example.com/share/${randomUUID()}`,
+      url: "https://example.com/share/" + randomUUID(),
       status: "published",
     }).returning({ id: schema.submissions.id });
     const s1 = await mkSub(myId);
@@ -98,9 +91,9 @@ describe.skipIf(!hasDb)("me/episodes (我的节目, real local PG)", () => {
       dbClient.db.insert(schema.episodes).values({
         submissionId: subId,
         userId: uid,
-        slug: `meep-ep-${randomUUID().slice(0, 8)}`,
+        slug: "meep-ep-" + randomUUID().slice(0, 8),
         title: "我的节目",
-        audioUrl: `episodes/${uid}/${subId}.mp3`,
+        audioUrl: "episodes/" + uid + "/" + subId + ".mp3",
         status: "published",
         isPublic,
         publishedAt: new Date(),
@@ -116,70 +109,71 @@ describe.skipIf(!hasDb)("me/episodes (我的节目, real local PG)", () => {
     }
   });
 
-  it("列表只返回本人的节目（含已下架），不含他人", async () => {
-    const res = await app.request("/v1/me/episodes", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+  const authHeaders = () => ({ Authorization: "Bearer " + token });
+  const jsonHeaders = () => ({ ...authHeaders(), "Content-Type": "application/json" });
+
+  it("列表只返回本人的节目（含已下架），带 removalRequest", async () => {
+    const res = await app.request("/v1/me/episodes", { headers: authHeaders() });
     expect(res.status).toBe(200);
-    const list = (await res.json()) as Array<{ id: string; isPublic: boolean }>;
+    const list = (await res.json()) as Array<{ id: string; isPublic: boolean; removalRequest: unknown }>;
     const ids = list.map((e) => e.id);
     expect(ids).toContain(myPublicId);
     expect(ids).toContain(myHiddenId);
     expect(ids).not.toContain(otherEpId);
     expect(list.find((e) => e.id === myHiddenId)?.isPublic).toBe(false);
+    expect(list.find((e) => e.id === myPublicId)?.removalRequest).toBeNull();
   });
 
-  it("下架自己的节目 → isPublic=false 持久化", async () => {
-    const res = await app.request(`/v1/me/episodes/${myPublicId}`, {
-      method: "PATCH",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ isPublic: false }),
+  it("申请下线（公开节目）→ 201，列表显示 pending", async () => {
+    const res = await app.request("/v1/me/episodes/" + myPublicId + "/unpublish-request", {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({ reason: "隐私原因" }),
     });
-    expect(res.status).toBe(200);
-    const rows = await dbClient.db.select({ isPublic: schema.episodes.isPublic })
-      .from(schema.episodes)
-      .where(eq(schema.episodes.id, myPublicId));
-    expect(rows[0]?.isPublic).toBe(false);
+    expect(res.status).toBe(201);
+    const listRes = await app.request("/v1/me/episodes", { headers: authHeaders() });
+    const list = (await listRes.json()) as Array<{ id: string; removalRequest: { status: string } | null }>;
+    expect(list.find((e) => e.id === myPublicId)?.removalRequest?.status).toBe("pending");
   });
 
-  it("重新上架 → isPublic=true", async () => {
-    const res = await app.request(`/v1/me/episodes/${myPublicId}`, {
-      method: "PATCH",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ isPublic: true }),
+  it("重复申请（已有 pending）→ 409 request_pending", async () => {
+    const res = await app.request("/v1/me/episodes/" + myPublicId + "/unpublish-request", {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({ reason: "再申请一次" }),
     });
-    expect(res.status).toBe(200);
-    const rows = await dbClient.db.select({ isPublic: schema.episodes.isPublic })
-      .from(schema.episodes)
-      .where(eq(schema.episodes.id, myPublicId));
-    expect(rows[0]?.isPublic).toBe(true);
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("request_pending");
   });
 
-  it("操作他人的节目 → 404（归属校验）", async () => {
-    const res = await app.request(`/v1/me/episodes/${otherEpId}`, {
-      method: "PATCH",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ isPublic: false }),
+  it("已下架节目申请下线 → 409 already_unlisted", async () => {
+    const res = await app.request("/v1/me/episodes/" + myHiddenId + "/unpublish-request", {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("already_unlisted");
+  });
+
+  it("申请他人节目 → 404", async () => {
+    const res = await app.request("/v1/me/episodes/" + otherEpId + "/unpublish-request", {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({}),
     });
     expect(res.status).toBe(404);
   });
 
-  it("不存在的节目 → 404", async () => {
-    const res = await app.request(`/v1/me/episodes/${randomUUID()}`, {
-      method: "PATCH",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ isPublic: false }),
+  it("申请不存在的节目 → 404", async () => {
+    const res = await app.request("/v1/me/episodes/" + randomUUID() + "/unpublish-request", {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({}),
     });
     expect(res.status).toBe(404);
-  });
-
-  it("非法参数（isPublic 非 boolean）→ 400", async () => {
-    const res = await app.request(`/v1/me/episodes/${myPublicId}`, {
-      method: "PATCH",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ isPublic: "yes" }),
-    });
-    expect(res.status).toBe(400);
   });
 
   it("未登录 → 401", async () => {

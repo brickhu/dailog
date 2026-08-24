@@ -62,7 +62,10 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       getStats: async () => ({ plays: 0, completions: 0, likes: 0 }),
       getPersonaSnapshot: async () => ({ displayName: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
       listByUser: async () => [],
-      setPublic: async () => 0,
+      getRemovalTarget: async () => null,
+      createRemovalRequest: async () => ({ id: "rr-1" }),
+      listRemovalRequests: async () => [],
+      resolveRemovalRequest: async () => null,
     },
     submissions: {
       create: async () => ({ id: "sub-1" }),

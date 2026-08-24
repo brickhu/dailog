@@ -6,8 +6,6 @@ import { TextInput } from "./components/text-input";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "./theme.stylex";
 import { Icon, addIcon } from './components/icon';
-import { ClickableCard } from "./components/clickable-card";
-import { useClickableContainer } from "./components/use-clickable-container";
 
 // 自定义图标注册（addIcon）：无需访问 iconify API，注册后 <Icon icon="..." /> 直接渲染
 addIcon("demo:heart", {
@@ -27,11 +25,6 @@ export default function Examples() {
   const [urlVal, setUrlVal] = createSignal("");
   const [brandVal, setBrandVal] = createSignal("");
   const [searchVal, setSearchVal] = createSignal("");
-  // ClickableCard 演示：useClickableContainer 复用（任意容器元素整卡可点）
-  const tile = useClickableContainer({
-    getHref: () => "#",
-    getLabel: () => "useClickableContainer：任意容器整卡可点",
-  });
 
   return (
     <div {...stylex.props(layouts.containerFull)}>
@@ -176,72 +169,6 @@ export default function Examples() {
               colorVars={{ "--ti-bg": "#f0f7ff", "--ti-border": "#3b82f6", "--ti-text": "#1e40af", "--ti-focus-bg": "#e0edff" }}
             />
             <TextInput label="默认配色（对照）" value={""} onChange={() => {}} placeholder="默认 surface 配色" />
-          </div>
-        </div>
-        {/* 可点击卡片 ClickableCard（复刻 Astryx ClickableCard，特性见 clickable-card.md）：
-            整卡导航/操作目标，嵌套交互元素独立工作；href → link 语义（Enter/中键/Cmd+点击），
-            仅 onClick → button 语义（Enter/Space）；label 必填作可访问名 */}
-        <div style={{ padding: "16px 0" }}>
-          <h2>可点击卡片 ClickableCard</h2>
-          {/* 导航 / 动作 / 禁用 */}
-          <div style={{ display: "flex", "align-items": "stretch", "flex-wrap": "wrap", gap: "12px", padding: "12px 0" }}>
-            <ClickableCard label="查看详情" href="#" width={240} padding={3} elevation="low">
-              <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                <strong>导航卡片（href）</strong>
-                <span style={{ opacity: 0.7, fontSize: "12px" }}>Enter 激活 · 中键/Cmd+点击新标签页</span>
-              </div>
-            </ClickableCard>
-            <ClickableCard label="执行操作" href="#" width={240} padding={3} variant="muted" onClick={() => console.log("卡片表面被点击（onClick 仅卡面触发）")}>
-              <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                <strong>动作卡片（onClick）</strong>
-                <span style={{ opacity: 0.7, fontSize: "12px" }}>role=button · Enter/Space 激活</span>
-              </div>
-            </ClickableCard>
-            <ClickableCard label="已锁定" href="#" width={240} padding={3} isDisabled>
-              <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
-                <strong>禁用（isDisabled）</strong>
-                <span style={{ opacity: 0.7, fontSize: "12px" }}>aria-disabled · 键盘不可达</span>
-              </div>
-            </ClickableCard>
-          </div>
-          {/* 背景色变体（映射项目语义色板） */}
-          <div style={{ display: "flex", "align-items": "stretch", "flex-wrap": "wrap", gap: "12px", padding: "12px 0" }}>
-            {(["default", "muted", "blue", "green", "orange", "red"] as const).map((v) => (
-              <ClickableCard label={v + " 变体"} href="#" variant={v} width={150} padding={3}>
-                <span style={{ fontSize: "13px" }}>{v}</span>
-              </ClickableCard>
-            ))}
-          </div>
-          {/* 悬浮阴影层级 */}
-          <div style={{ display: "flex", "align-items": "stretch", "flex-wrap": "wrap", gap: "12px", padding: "12px 0" }}>
-            {(["none", "low", "med", "high"] as const).map((e) => (
-              <ClickableCard label={e + " 阴影"} href="#" elevation={e} width={150} padding={3}>
-                <span style={{ fontSize: "13px" }}>{e}</span>
-              </ClickableCard>
-            ))}
-          </div>
-          {/* 嵌套交互元素独立工作 */}
-          <div style={{ display: "flex", "align-items": "stretch", "flex-wrap": "wrap", gap: "12px", padding: "12px 0" }}>
-            <ClickableCard label="嵌套交互示例" href="#" width={300} padding={3} onClick={() => console.log("卡片被点击（嵌套按钮未触发）")}>
-              <div style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
-                <strong>嵌套交互元素</strong>
-                <span style={{ opacity: 0.7, fontSize: "12px" }}>点按钮只触发按钮自己；点卡片空白处才触发卡片 onClick</span>
-                <Button label="嵌套按钮" size="sm" />
-              </div>
-            </ClickableCard>
-            {/* useClickableContainer 复用：任意容器整卡可点 */}
-            <li
-              role={tile.role()}
-              tabIndex={tile.tabIndex()}
-              aria-label={tile.ariaLabel()}
-              aria-disabled={tile.ariaDisabled()}
-              onClick={tile.handleClick}
-              onKeyDown={tile.handleKeyDown}
-              ref={tile.setRef}
-              style={{ listStyle: "none", padding: "16px", borderRadius: "8px", backgroundColor: "#e9eaea", cursor: "pointer", fontWeight: 500 }}
-            >
-              useClickableContainer：任意容器（li）整卡可点
-            </li>
           </div>
         </div>
     </div>

@@ -53,7 +53,10 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       updateChannel: async () => ({ ok: true } as const),
       syncAdminRoles: async () => 0,
       listByUser: async () => [],
-      setPublic: async () => 0,
+      getRemovalTarget: async () => null,
+      createRemovalRequest: async () => ({ id: "rr-1" }),
+      listRemovalRequests: async () => [],
+      resolveRemovalRequest: async () => null,
                   listRecommended: async () => [],
       listTopHosts: async () => [],
       getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),
@@ -307,3 +310,81 @@ describe("嘉宾与采样下载", () => {
     expect(res.status).toBe(200);
   });
 });
+describe("已发布节目编辑（含下架）", () => {
+  it("PUT 带 isPublic=false → updatePublished 收到 isPublic: false（编辑下架）", async () => {
+    const updatePublished = vi.fn(async () => {});
+    const res = await makeApp({
+      repo: fakeRepo({
+        episodes: {
+          ...fakeRepo().episodes,
+          getById: async () => ({ id: "ep-1", submissionId: "sub-1", title: "第 1 期", description: null, coverUrl: null, tags: null, status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
+          updatePublished,
+        },
+      }),
+    }).request("/v1/editor/episodes/ep-1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ isPublic: false }),
+    });
+    expect(res.status).toBe(200);
+    expect(updatePublished).toHaveBeenCalledWith("ep-1", { isPublic: false });
+  });
+});
+
+describe("节目下线申请（用户申请 → 编辑审批）", () => {
+  it("GET /v1/editor/episodes/removal-requests 缺省 pending 队列", async () => {
+    const listRemovalRequests = vi.fn(async () => []);
+    const res = await makeApp({
+      repo: fakeRepo({ episodes: { ...fakeRepo().episodes, listRemovalRequests } }),
+    }).request("/v1/editor/episodes/removal-requests");
+    expect(res.status).toBe(200);
+    expect(listRemovalRequests).toHaveBeenCalledWith("pending");
+  });
+
+  it("GET ?status=approved 过滤", async () => {
+    const listRemovalRequests = vi.fn(async () => []);
+    await makeApp({ repo: fakeRepo({ episodes: { ...fakeRepo().episodes, listRemovalRequests } }) })
+      .request("/v1/editor/episodes/removal-requests?status=approved");
+    expect(listRemovalRequests).toHaveBeenCalledWith("approved");
+  });
+
+  it("批准下线 → episode isPublic=false + 通知投稿人", async () => {
+    const resolve = vi.fn(async () => ({ episodeId: "ep-1", userId: "user-1" }));
+    const updatePublished = vi.fn(async () => {});
+    const notifyCreate = vi.fn(async () => {});
+    const res = await makeApp({
+      repo: fakeRepo({
+        episodes: { ...fakeRepo().episodes, resolveRemovalRequest: resolve, updatePublished },
+        notifications: { ...fakeRepo().notifications, create: notifyCreate },
+      }),
+    }).request("/v1/editor/episodes/removal-requests/rr-1/approve", { method: "POST" });
+    expect(res.status).toBe(200);
+    expect(resolve).toHaveBeenCalledWith("rr-1", "approved", "editor-1");
+    expect(updatePublished).toHaveBeenCalledWith("ep-1", { isPublic: false });
+    expect(notifyCreate).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-1", type: "unpublished", link: "/me/episodes" }));
+  });
+
+  it("拒绝下线 → 通知投稿人，不动 isPublic", async () => {
+    const resolve = vi.fn(async () => ({ episodeId: "ep-1", userId: "user-1" }));
+    const updatePublished = vi.fn(async () => {});
+    const notifyCreate = vi.fn(async () => {});
+    const res = await makeApp({
+      repo: fakeRepo({
+        episodes: { ...fakeRepo().episodes, resolveRemovalRequest: resolve, updatePublished },
+        notifications: { ...fakeRepo().notifications, create: notifyCreate },
+      }),
+    }).request("/v1/editor/episodes/removal-requests/rr-1/reject", { method: "POST" });
+    expect(res.status).toBe(200);
+    expect(resolve).toHaveBeenCalledWith("rr-1", "rejected", "editor-1");
+    expect(updatePublished).not.toHaveBeenCalled();
+    expect(notifyCreate).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-1", type: "unpublish_rejected", link: "/me/episodes" }));
+  });
+
+  it("申请不存在/已处理 → 404", async () => {
+    const res = await makeApp({
+      repo: fakeRepo({ episodes: { ...fakeRepo().episodes, resolveRemovalRequest: async () => null } }),
+    }).request("/v1/editor/episodes/removal-requests/rr-x/approve", { method: "POST" });
+    expect(res.status).toBe(404);
+  });
+});
+

@@ -11,7 +11,8 @@ import { isShareUrl } from "../components/import-dialog";
 import { getUrlCheck, markSubmitted, probeReachable } from "../lib/url-check";
 import { env } from "../lib/env";
 import { openImportDialog } from "../components/import-dialog";
-import Recorder from "../components/recorder";
+import VoiceSamplePreview from "../components/voice-sample-preview";
+import VoiceSampleRecorderDialog, { type SavedSample } from "../components/voice-sample-recorder-dialog";
 
 // 投稿流程（本质版，2026-08-13）：
 //   input   输入态：分享链接（前端基本 http/https 校验）→ [继续]
@@ -78,11 +79,6 @@ const styles = stylex.create({
     color: colors.neutral,
     margin: 0,
   },
-  readingScript: {
-    fontSize: dimensions.fontSizeMd,
-    paddingLeft: dimensions.spacing3,
-    margin: 0,
-  },
   cardBlock: {
     marginBottom: dimensions.spacing3,
   },
@@ -121,9 +117,6 @@ const styles = stylex.create({
     color: colors.brandStrong,
     fontSize: dimensions.fontSizeSm,
     margin: 0,
-  },
-  audio: {
-    width: "100%",
   },
   success: {
     fontSize: dimensions.fontSizeLg,
@@ -169,7 +162,7 @@ const styles = stylex.create({
 });
 
 export default function SubmitPage() {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const [params] = useSearchParams<{ id?: string; url?: string }>();
   const [step, setStep] = createSignal<Step>("confirm");
   const [url, setUrl] = createSignal("");
@@ -186,8 +179,10 @@ export default function SubmitPage() {
   const [suggestion, setSuggestion] = createSignal(""); // 节目建议（可选；仅供编辑部选题参考）
   const [hasVoiceSample, setHasVoiceSample] = createSignal(false);
   const [voiceLang, setVoiceLang] = createSignal("zh"); // 已有采样语种（展示用）
-  const [voiceSampleId, setVoiceSampleId] = createSignal<string | null>(null); // 已有采样 id（投稿记录用）
-  const [voiceBlob, setVoiceBlob] = createSignal<Blob | null>(null);
+  const [sampleDuration, setSampleDuration] = createSignal(0); // 已有采样时长（预览条「XX秒」用）
+  const [voiceSampleId, setVoiceSampleId] = createSignal<string | null>(null); // 采样 id（投稿记录用）
+  const [recorderOpen, setRecorderOpen] = createSignal(false);
+  const [recorderMode, setRecorderMode] = createSignal<"add" | "edit">("add");
   const [submitting, setSubmitting] = createSignal(false);
   // 提交成功响应里的投稿 id（done 态“投稿详情”按钮跳 /submission/<id> 用）
   const [submissionId, setSubmissionId] = createSignal<string | null>(null);
@@ -241,44 +236,36 @@ export default function SubmitPage() {
       try {
         const voiceRes = await fetch("/v1/me/voice-sample");
         if (voiceRes.ok) {
-          const vs = (await voiceRes.json()) as { id?: string | null; language?: string } | null;
+          const vs = (await voiceRes.json()) as { id?: string | null; language?: string; duration?: number } | null;
           setHasVoiceSample(true);
           if (vs?.language) setVoiceLang(vs.language);
           if (vs?.id) setVoiceSampleId(vs.id);
+          if (vs?.duration) setSampleDuration(vs.duration);
         }
       } catch { /* 静默 */ }
     })();
   });
 
-  /** 朗读文案：按界面语言插值称呼（文案语言=采样语言；脚本生成时按脚本语言改写称呼） */
-  const readingScript = () =>
-    t("submit.readingScript", { name: callName().trim() || t("submit.hostFallback") });
+  /** 是否具备声音采样——无采样时禁用提交按钮（接口同样严格校验）。
+   *  采样上传时机已前移到录音弹窗「确认保存」：此处只沿用已有/新保存的 sampleId */
+  const hasSample = () => hasVoiceSample();
 
-  /** 是否具备声音采样（已有采样或本次新录）——无采样时禁用提交按钮（接口同样严格校验） */
-  const hasSample = () => hasVoiceSample() || voiceBlob() !== null;
+  /** 录音弹窗保存成功：记录采样（语种/时长/id 用于预览条与投稿） */
+  const onSampleSaved = (s: SavedSample) => {
+    setVoiceSampleId(s.sampleId || null);
+    setVoiceLang(s.language);
+    setSampleDuration(s.duration);
+    setHasVoiceSample(true);
+    setRecorderOpen(false);
+  };
 
-  /** 确认投稿：上传声音采样（沿用/重录/换语言）+ 提交投稿（URL + 本次称呼 + 采样） */
+  /** 确认投稿：提交投稿（URL + 本次称呼 + 投稿使用的采样 id） */
   const confirmSubmit = async () => {
     setError(null);
-    // 声音采样：已有采样可直接提交（重录则覆盖上传）；两者皆无才拦截（按钮已禁用，双保险）
-    if (!voiceBlob() && !hasVoiceSample()) {
+    // 声音采样：无采样才拦截（按钮已禁用，双保险）
+    if (!hasVoiceSample()) {
       setError(t("submit.error.needVoice"));
       return;
-    }
-    // 声音采样上传（有重录才上传；已有采样直接沿用）——language 按界面语言（文案语言=采样语言）
-    let sampleId: string | null = voiceSampleId();
-    if (voiceBlob()) {
-      const form = new FormData();
-      form.append("file", voiceBlob()!, "voice.webm");
-      form.append("transcript", readingScript());
-      form.append("language", locale() === "en" ? "en" : "zh");
-      const voiceRes = await fetch("/v1/me/voice-sample", { method: "POST", body: form });
-      if (!voiceRes.ok) {
-        setError(t("submit.error.submitFailed", { error: `voice ${voiceRes.status}` }));
-        return;
-      }
-      const vs = (await voiceRes.json().catch(() => null)) as { sampleId?: string } | null;
-      sampleId = vs?.sampleId ?? null;
     }
     // 提交投稿（URL + 本次节目称呼 callNameInEpisode + 投稿使用的采样）
     setSubmitting(true);
@@ -290,7 +277,7 @@ export default function SubmitPage() {
           url: url().trim(),
           callNameInEpisode: callName().trim().slice(0, 20) || undefined,
           suggestion: suggestion().trim().slice(0, 500) || undefined,
-          voiceSampleId: sampleId || undefined,
+          voiceSampleId: voiceSampleId() || undefined,
         }),
       });
       const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
@@ -374,16 +361,23 @@ export default function SubmitPage() {
                     value={callName()}
                     onInput={(e) => setCallName(e.currentTarget.value)}
                   />
-                  <Show when={hasVoiceSample() && !voiceBlob()}>
+                  <Show when={hasVoiceSample()}>
                     <p {...stylex.props(styles.ok)}>{t("submit.voiceFilled")}</p>
-                    <p {...stylex.props(styles.hint)}>{t("submit.voiceLang", { lang: t(`lang.${voiceLang()}` as never) })}</p>
-                    <audio controls src="/v1/me/voice-sample/audio" {...stylex.props(styles.audio)} />
-                    <p {...stylex.props(styles.hint)}>{t("submit.voiceReRecord")}</p>
+                    <VoiceSamplePreview
+                      duration={sampleDuration()}
+                      language={voiceLang()}
+                      audioUrl="/v1/me/voice-sample/audio"
+                      onReRecord={() => {
+                        setRecorderMode("edit");
+                        setRecorderOpen(true);
+                      }}
+                    />
                   </Show>
-                  <Show when={!hasVoiceSample() || voiceBlob()}>
+                  <Show when={!hasVoiceSample()}>
                     <p {...stylex.props(styles.hint)}>{t("submit.voiceHint")}</p>
-                    <p {...stylex.props(styles.readingScript)}>{readingScript()}</p>
-                    <Recorder minSeconds={8} maxSeconds={30} onReady={(b) => setVoiceBlob(b)} />
+                    <Button onClick={() => { setRecorderMode("add"); setRecorderOpen(true); }}>
+                      {t("recorder.recordAction")}
+                    </Button>
                   </Show>
                 </div>
 
@@ -446,6 +440,17 @@ export default function SubmitPage() {
             </div>
           </div>
         </Show>
+
+        {/* 声音采样录制弹窗（新增/修改均从准备录制态打开；确认保存即上传） */}
+        <VoiceSampleRecorderDialog
+          open={recorderOpen()}
+          mode={recorderMode()}
+          defaultLanguage={voiceLang()}
+          hostName={callName().trim() || undefined}
+          onClose={() => setRecorderOpen(false)}
+          onCancel={() => setRecorderOpen(false)}
+          onSaved={onSampleSaved}
+        />
         </div>
       </div>
       </AuthGate>
