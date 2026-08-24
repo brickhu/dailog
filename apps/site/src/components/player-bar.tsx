@@ -38,7 +38,7 @@ const styles = stylex.create({
     // 底部 padding 预留 iOS 安全区（Home Indicator）：bar 贴底（bottom:0），安全区
     // 改由 padding-bottom 吸收——内容避开指示条，背景/毛玻璃仍铺满到屏幕底。
     // 与隐藏态 transform 同走 --dailog-safe-bottom 中转（webkit bug 190771 见上）
-    padding: `${dimensions.spacing3} ${dimensions.spacing3} calc(${dimensions.spacing3} + var(--dailog-safe-bottom, 0px)) ${dimensions.spacing3}`,
+    padding: `${dimensions.spacing3} ${dimensions.spacing3} calc(${dimensions.spacing3} + env(safe-area-inset-bottom)) ${dimensions.spacing3}`,
     flexWrap: "wrap",
     // 隐藏态：不可见 + 移出视口；过渡同时声明 transform（滑入/滑出）与 visibility
     // （visible 立即可见；hidden 延迟到 400ms 滑出结束后再隐藏，保证退出动画可见）。
