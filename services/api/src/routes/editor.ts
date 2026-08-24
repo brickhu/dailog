@@ -28,6 +28,8 @@ interface PublishMeta {
   summary?: string;
   /** Step B 配套产物：对话名词术语条目（播放页「本期提到的名词」） */
   references?: { term: string; type?: string; explanation?: string; links?: string[] }[];
+  /** Step B 配套产物：金句（详情页「本期金句」——纯文本展示） */
+  highlights?: { text?: string }[];
   tags?: string[];
   language?: string;
   guestId?: string;
@@ -185,6 +187,14 @@ export function editorRoutes(deps: EditorDeps) {
           }))
           .slice(0, 8)
       : null;
+    // Step B 配套产物：highlights（金句——纯文本，不依赖时间戳；上限 5 条）
+    const highlights = Array.isArray(meta.highlights)
+      ? meta.highlights
+          .filter((h): h is { text: string } =>
+            typeof h === "object" && h !== null && typeof (h as { text?: unknown }).text === "string" && (h as { text: string }).text.trim().length > 0)
+          .map((h) => ({ text: h.text.trim().slice(0, 200) }))
+          .slice(0, 5)
+      : null;
 
     // 音频落 R2（R2 目录规划：episodes/{userId}/{submissionId}.{ext}——ext 按上传格式 mp3/m4a，
     // 决定 Content-Type 与 RSS enclosure type）
@@ -226,6 +236,7 @@ export function editorRoutes(deps: EditorDeps) {
       description,
       summary,
       references,
+      highlights,
       coverUrl,
       audioUrl: audioKey,
       audioSize: audioFile.size,

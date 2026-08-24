@@ -128,6 +128,8 @@ export interface EpisodeCreateRow {
   summary?: string | null;
   /** 对话名词术语条目（Step B references） */
   references?: schema.EpisodeReference[] | null;
+  /** 金句（Step B highlights；详情页「本期金句」） */
+  highlights?: schema.EpisodeHighlight[] | null;
   coverUrl?: string | null;
   /** R2 storage key（编辑上传的成品音频） */
   audioUrl: string;
@@ -158,6 +160,12 @@ export interface EpisodesRepo {
     number: number | null;
     title: string | null;
     description: string | null;
+    /** Step B summary：列表/分享短简介（SQL 已 select，类型此前漏声明） */
+    summary: string | null;
+    /** Step B references：对话名词术语条目（SQL 已 select，类型此前漏声明） */
+    references: schema.EpisodeReference[];
+    /** Step B highlights：本期金句（纯文本展示） */
+    highlights: schema.EpisodeHighlight[];
     durationSeconds: number | null;
     publishedAt: Date | null;
     coverUrl: string | null;
@@ -946,6 +954,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             description: row.description ?? null,
             summary: row.summary ?? null,
             references: row.references ?? [],
+            highlights: row.highlights ?? [],
             coverUrl: row.coverUrl ?? null,
             audioUrl: row.audioUrl,
             audioSize: row.audioSize ?? null,
@@ -995,6 +1004,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           description: schema.episodes.description,
           summary: schema.episodes.summary,
           references: schema.episodes.references,
+          highlights: schema.episodes.highlights,
           durationSeconds: schema.episodes.durationSeconds,
           publishedAt: schema.episodes.publishedAt,
           coverUrl: schema.episodes.coverUrl,

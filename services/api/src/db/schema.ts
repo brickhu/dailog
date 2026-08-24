@@ -188,6 +188,11 @@ export interface EpisodeReference {
   links: string[];
 }
 
+/** 金句（Step B 配套产物 highlights；详情页「本期金句」——纯文本展示，不依赖时间戳） */
+export interface EpisodeHighlight {
+  text: string;
+}
+
 export const episodes = pgTable("episodes", {
   id: uuid("id").defaultRandom().primaryKey(),
   /** 来源投稿（submission 删除则节目级联删除） */
@@ -205,6 +210,8 @@ export const episodes = pgTable("episodes", {
   summary: text("summary"),
   /** 对话名词术语条目（Step B 配套产物 references；播放页「本期提到的名词」） */
   references: jsonb("references").$type<EpisodeReference[]>().notNull().default([]),
+  /** 金句（Step B 配套产物 highlights；详情页「本期金句」——纯文本展示，不依赖时间戳） */
+  highlights: jsonb("highlights").$type<EpisodeHighlight[]>().notNull().default([]),
   coverUrl: text("cover_url"),
   /** 成品音频（R2 storage key）与字节数（RSS enclosure length——Apple 要求） */
   audioUrl: text("audio_url").notNull(),

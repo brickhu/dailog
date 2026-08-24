@@ -12,13 +12,14 @@ import { getEpisodeCached } from "../../lib/episode-cache";
 import type { EpisodeSummary } from "../../lib/db";
 import { apiBaseForFetch, env, episodeCoverUrl } from "../../lib/env";
 import * as stylex from "@stylexjs/stylex";
-import { layouts, typography, shadows, dimensions, colors } from "@dailogues/ui/theme.stylex";
+import { layouts, typography, shadows, dimensions, colors, global } from "@dailogues/ui/theme.stylex";
 import { Button, Icon } from "@dailogues/ui";
 import { ClickableCard } from "../../components/clickable-card";
 import { useI18n } from "@dailogues/i18n";
 import { auth } from "../../lib/auth-guard";
 import { Page } from "../../layouts/page";
 import { Block, Container } from "../../layouts/container";
+
 
 // 详情页（传统博客式）：dailog.fm/<episode_id> —— SSR 渲染（可索引/分享）。
 // 布局：封面（左/上，内嵌播放控件）+ 详情（右/下）；播放由全局播放条贯通，
@@ -27,6 +28,124 @@ import { Block, Container } from "../../layouts/container";
 // 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
 
 const TABLETANDDESKTOP = "@media (min-width: 640px)"
+
+const css = stylex.create({
+  page: {
+    minHeight: "100vh",
+    paddingBlock: dimensions.spacing4,
+    gap: dimensions.spacing8,
+    [TABLETANDDESKTOP]: {
+      paddingBlock: dimensions.spacing12,
+    }
+  },
+  container: {
+
+  },
+  side: {
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "flex-start",
+    alignItems: "flex-start",
+    gap : dimensions.spacing6
+    
+  },
+  main: {
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "flex-start",
+    alignItems: "flex-start",
+    gap : dimensions.spacing6
+  },
+  cover:{
+    // maxWidth : `calc(${dimensions.size2xl} * 3)`,
+    // minWidth : dimensions.size2xl,
+    width : "100%",
+    boxShadow: shadows.shadowMed,
+    borderRadius : dimensions.radiusMd,
+    aspectRatio : "1/1",
+  },
+  titleOutter : {
+    display: "flex",
+    flexDirection : "column",
+    gap: dimensions.spacing2
+  },
+  caption: {
+    opacity : "60%",
+    display: "flex",
+    alignItems : "center",
+    gap : dimensions.spacing1,
+    fontWeight : dimensions.fontWeightSemiBold
+  },
+  creatorLink : {
+    textDecoration : "none"
+  },
+  desc: {
+    
+  },
+  actions: {
+    display : "flex",
+    alignItems : "center",
+    justifyContent : "space-between",
+    gap : dimensions.spacing2,
+    width: "100%"
+  },
+  playerActions:{},
+  otherActions: {
+    display : "flex",
+    alignItems : "center",
+    gap : dimensions.spacing2
+  },
+  highline:{
+    opacity: "0.8",
+    fontStyle: "italic",
+  },
+  highlights: {
+    marginTop: dimensions.spacing6,
+    display: "flex",
+    flexDirection: "column",
+    gap: dimensions.spacing4,
+  },
+  highlightsTitle: {
+    opacity: 0.8,
+    fontWeight: dimensions.fontWeightSemiBold,
+  },
+  highlight: {
+    margin: 0,
+    paddingLeft: dimensions.spacing4,
+    borderLeft: `2px solid ${colors.primaryWeak}`,
+    fontStyle: "italic",
+  },
+  credit: {
+    marginTop: dimensions.spacing5,
+    color: colors.primaryWeak,
+    lineHeight: 1.7,
+  },
+  refs: {
+    display: "flex",
+    flexDirection: "column",
+    gap: dimensions.spacing2,
+    marginTop: dimensions.spacing5,
+  },
+  refsLabel: {
+    color: colors.neutral,
+    fontWeight: dimensions.fontWeightBold,
+  },
+  refItem: {
+    fontSize: dimensions.fontSizeSm,
+    color: colors.foreground,
+    lineHeight: 1.6,
+  },
+  refLink: {
+    color: colors.brand,
+    textDecoration: "none",
+    overflowWrap: "anywhere",
+  },
+   tags: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: dimensions.spacing2,
+  },
+})
 
 const styles = stylex.create({
   // 响应式列数（Grid 单值 columns={4}，断点覆盖走 xstyle + @media）
@@ -106,10 +225,7 @@ const styles = stylex.create({
   title : {
      
   },
-  caption: {
-    opacity : "50%",
 
-  },
   desc: {
     gridColumn : "1 / -1",
   },
@@ -221,6 +337,14 @@ export const route = {
   },
 };
 
+// 秒数 → “X 分 YY 秒”（与 episode-card / episode-detail 等保持一致）
+function fmtDuration(sec: number | null): string {
+  if (!sec) return "";
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m} 分 ${String(s).padStart(2, "0")} 秒`;
+}
+
 export default function EpisodeDetailPage() {
   const { t } = useI18n();
   const params = useParams<{ slug: string }>();
@@ -328,6 +452,8 @@ export default function EpisodeDetailPage() {
 
   // 标题区元信息：主持人 · 日期 · 播放/完播统计
   const hostName = () => ep()?.callName ?? ep()?.displayName ?? ep()?.username ?? "";
+  // 本期 AI 嘉宾名称（无嘉宾节目回退主播名——文案「用户与{guest}的原始对话」仍通顺）
+  const guestName = () => ep()?.guest?.name ?? hostName();
   const pubDate = () => {
     const p = ep()?.publishedAt;
     return p ? new Date(p).toLocaleDateString("zh-CN") : "";
@@ -369,12 +495,145 @@ export default function EpisodeDetailPage() {
   });
 
   return (
-    <Page>
-      <Container>
-        <Block cols="1/3">dddd</Block>
-        <Block cols="1/2" start={6}>eeeee</Block>
+    <Suspense fallback="loading...">
+    <Show when={ep()} fallback={<div>{t("episode.notFound")}</div>}>
+      <Title>{ep()!.title || "dailog"}</Title>
+      <Meta property="og:title" content={ep()!.title || "dailog"} />
+      <Meta property="og:type" content="article" />
+      <Meta property="og:url" content={`${env.siteBaseUrl}/episode/${ep()!.slug ?? ""}`} />
+      <Meta property="og:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
+    
+    
+    <Page xstyle={css.page}>
+      <Container xstyle={css.container}>
+        <Block cols="1/3" xstyle={css.side}>
+          <Show when={ep()}>
+            <Cover episode={asQueue(ep()!)} xstyle={css.cover}/>
+            
+            <div {...stylex.props(css.titleOutter)}>
+              <div {...stylex.props(typography.caption, css.caption)}>
+                <Show when={ep()!.number}>
+                  <span>{t("episode.number", { n: ep()!.number! })}</span>
+                </Show>
+                <Show when={ep()!.durationSeconds}>
+                  <span> · </span>
+                  <span>{fmtDuration(ep()!.durationSeconds)}</span>
+                </Show>
+                {/* <span> · </span>
+                <A {...stylex.props(global.linkText,css.creatorLink)} href={"/@" + (ep()!.username ?? "")}>{t("episode.createBy", { user: ep()!.username! })}</A>
+    */}
+              </div>
+              <div {...stylex.props(typography.headingMd,styles.title)}>{ep()?.title}</div>
+            </div>
+
+            <div {...stylex.props(css.actions)}>
+              <div {...stylex.props(css.playerActions)}>
+                  <PlayButton episode={asQueue(ep()!)} appear="fill" isIconOnly={true} />
+              </div>
+              
+              <div {...stylex.props(css.otherActions)}>
+                <Button
+                  icon={liked() ? <Icon icon="material-symbols:thumb-up" width={20} />:<Icon icon="material-symbols:thumb-up-outline" width={20} /> }
+                  appear="ghost"
+                  round="full"
+                  use:auth={true}
+                  label={liked() ? t("episode.liked") : t("episode.like")}
+                  tooltip={liked() ? t("episode.liked") : t("episode.like")}
+                  isDisabled={busyLike()}
+                  onClick={toggleLike}
+                >
+                  {stats.latest?.likes ?? 0}
+                </Button>
+                <Button
+                  isIconOnly
+                  icon={favorited() ? <Icon icon="mdi:bookmark" width={20} />:<Icon icon="mdi:bookmark-outline" width={20}/>}
+                  appear="ghost"
+                  round="full"
+                  use:auth={true}
+                  label={favorited() ? t("favorite.added") : t("favorite.add")}
+                  tooltip={favorited() ? t("favorite.added") : t("favorite.add")}
+                  isDisabled={busyFav()}
+                  onClick={toggleFavorite}
+                />
+                <Button
+                  isIconOnly
+                  icon={<Icon icon="mdi:share-variant" width={20} />}
+                  appear="ghost"
+                  round="full"
+                  label={t("episode.share")}
+                  tooltip={t("episode.share")}
+                  onClick={() => setShareOpen(true)}
+                />
+              </div>
+            </div>
+          </Show>
+        </Block>
+        <Block cols={7} start={6} xstyle={css.main}>
+          <Show when={ep()?.highlights?.length}>
+            <div {...stylex.props(css.highlights)}>
+              <div {...stylex.props(typography.caption, css.highlightsTitle)}>{t("episode.highlights")}</div>
+              <For each={ep()?.highlights ?? []}>
+                {(h) => <blockquote {...stylex.props(css.highlight, typography.bodyLg)}>{h.text}</blockquote>}
+              </For>
+            </div>
+          </Show>
+          
+          <div {...stylex.props(css.desc, typography.bodyLg)}>{ep()?.description}</div>
+
+          <Show when={ep()?.references?.length}>
+            <div {...stylex.props(css.refs)}>
+              <div {...stylex.props(typography.caption, css.refsLabel)}>{t("episode.references")}</div>
+              <For each={ep()?.references ?? []}>
+                {(r) => (
+                  <div {...stylex.props(css.refItem)}>
+                    <strong>{r.term}</strong>
+                    {r.type ? `（${r.type}）` : ""}：{r.explanation}
+                    <Show when={r.links?.length}>
+                      <span>{" "}
+                        <For each={r.links}>
+                          {(l) => <a href={l} target="_blank" rel="noopener noreferrer" {...stylex.props(css.refLink)}>{l}</a>}
+                        </For>
+                      </span>
+                    </Show>
+                  </div>
+                )}
+              </For>
+            </div>
+          </Show>
+          <Show when={ep()!.tags?.length}>
+              <div {...stylex.props(styles.tags)}>
+                <For each={ep()!.tags!}>
+                  {(tag) => (
+                    <A href={`/tag/${encodeURIComponent(tag)}`} {...stylex.props(styles.tag)}>
+                      #{tag}
+                    </A>
+                  )}
+                </For>
+              </div>
+            </Show>
+
+          <div {...stylex.props(typography.caption, css.credit)}>
+            <span>
+              {t("episode.credit.prefix")}
+              <Show when={ep()?.username} fallback={<>{hostName()}</>}>
+                <A href={`/@${ep()!.username}`} {...stylex.props(global.linkText)}>{ep()!.username}</A>
+              </Show>
+              {t("episode.credit.mid1", { guest: guestName() })}
+              <Show when={ep()?.sourceUrl} fallback={<>{t("episode.credit.source")}</>}>
+                <A href={ep()!.sourceUrl!} target="_blank" rel="noopener" {...stylex.props(global.linkText)}>{t("episode.credit.source")}</A>
+              </Show>
+              {t("episode.credit.mid2")}
+              <A href="/" {...stylex.props(global.linkText)}>{t("episode.credit.submit")}</A>
+              {t("episode.credit.suffix")}
+            </span>
+          </div>
+          
+        </Block>
       </Container>
     </Page>
+    <ShareDialog episode={asQueue(ep()!)} isOpen={shareOpen()} onOpenChange={setShareOpen} />      
+    </Show>
+    </Suspense>
     // <div {...stylex.props(layouts.page,styles.page)}>
     //   <Title>Dailog</Title>
 
@@ -401,73 +660,73 @@ export default function EpisodeDetailPage() {
 
      
     //       <section {...stylex.props(styles.head, styles.grid)}>
-    //         <div {...stylex.props(styles.titleOutter)}>
-    //           <div {...stylex.props(typography.caption, styles.caption)}>
-    //             <Show when={ep()!.number}>
-    //               <span>{t("episode.number", { n: ep()!.number! })} · </span>
-    //             </Show>
-    //             <A href={"/@" + (ep()!.username ?? "")}>{"@"+ep()!.username} </A>
+            // <div {...stylex.props(styles.titleOutter)}>
+            //   <div {...stylex.props(typography.caption, styles.caption)}>
+            //     <Show when={ep()!.number}>
+            //       <span>{t("episode.number", { n: ep()!.number! })} · </span>
+            //     </Show>
+            //     <A href={"/@" + (ep()!.username ?? "")}>{"@"+ep()!.username} </A>
    
-    //           </div>
-    //           <div {...stylex.props(typography.headingMd,styles.title)}>{ep()?.title}</div>
-    //         </div>
+            //   </div>
+            //   <div {...stylex.props(typography.headingMd,styles.title)}>{ep()?.title}</div>
+            // </div>
     //         <div {...stylex.props(styles.coverOutter)}>
     //           <Cover episode={asQueue(ep()!)} xstyle={styles.cover}/>
     //         </div>
     //         <div {...stylex.props(styles.actionOutter)}>
     
     //           <PlayButton episode={asQueue(ep()!)} appear="fill" isIconOnly={false} width={96} label="duration" />
-    //           <Button
-    //             icon={liked() ? <Icon icon="material-symbols:thumb-up" width={20} />:<Icon icon="material-symbols:thumb-up-outline" width={20} /> }
-    //             appear={liked()?"fill":"outline"}
-    //             size="lg"
-    //             round="full"
-    //             use:auth={true}
-    //             label={liked() ? t("episode.liked") : t("episode.like")}
-    //             tooltip={liked() ? t("episode.liked") : t("episode.like")}
-    //             isDisabled={busyLike()}
-    //             onClick={toggleLike}
-    //           >
-    //             {stats.latest?.likes ?? 0}
-    //           </Button>
-    //           <Button
-    //             isIconOnly
-    //             icon={favorited() ? <Icon icon="mdi:bookmark" width={20} />:<Icon icon="mdi:bookmark-outline" width={20}/>}
-    //             appear={favorited() ? "fill":"outline"}
-    //             round="full"
-    //             size="lg"
-    //             use:auth={true}
-    //             label={favorited() ? t("favorite.added") : t("favorite.add")}
-    //             tooltip={favorited() ? t("favorite.added") : t("favorite.add")}
-    //             isDisabled={busyFav()}
-    //             onClick={toggleFavorite}
-    //           />
-    //           <Button
-    //             isIconOnly
-    //             icon={<Icon icon="mdi:share-variant" width={20} />}
-    //             appear="outline"
-    //             size="lg"
-    //             round="full"
-    //             label={t("episode.share")}
-    //             tooltip={t("episode.share")}
-    //             onClick={() => setShareOpen(true)}
-    //           />
+              // <Button
+              //   icon={liked() ? <Icon icon="material-symbols:thumb-up" width={20} />:<Icon icon="material-symbols:thumb-up-outline" width={20} /> }
+              //   appear={liked()?"fill":"outline"}
+              //   size="lg"
+              //   round="full"
+              //   use:auth={true}
+              //   label={liked() ? t("episode.liked") : t("episode.like")}
+              //   tooltip={liked() ? t("episode.liked") : t("episode.like")}
+              //   isDisabled={busyLike()}
+              //   onClick={toggleLike}
+              // >
+              //   {stats.latest?.likes ?? 0}
+              // </Button>
+              // <Button
+              //   isIconOnly
+              //   icon={favorited() ? <Icon icon="mdi:bookmark" width={20} />:<Icon icon="mdi:bookmark-outline" width={20}/>}
+              //   appear={favorited() ? "fill":"outline"}
+              //   round="full"
+              //   size="lg"
+              //   use:auth={true}
+              //   label={favorited() ? t("favorite.added") : t("favorite.add")}
+              //   tooltip={favorited() ? t("favorite.added") : t("favorite.add")}
+              //   isDisabled={busyFav()}
+              //   onClick={toggleFavorite}
+              // />
+              // <Button
+              //   isIconOnly
+              //   icon={<Icon icon="mdi:share-variant" width={20} />}
+              //   appear="outline"
+              //   size="lg"
+              //   round="full"
+              //   label={t("episode.share")}
+              //   tooltip={t("episode.share")}
+              //   onClick={() => setShareOpen(true)}
+              // />
     //         </div>
     //       </section>
          
     //       <section {...stylex.props(styles.main,styles.grid)}>
     //         <div {...stylex.props(styles.desc)}>{ep()?.description}</div>
-    //         <Show when={ep()!.tags?.length}>
-    //           <div {...stylex.props(styles.tags)}>
-    //             <For each={ep()!.tags!}>
-    //               {(tag) => (
-    //                 <A href={`/tag/${encodeURIComponent(tag)}`} {...stylex.props(styles.tag)}>
-    //                   #{tag}
-    //                 </A>
-    //               )}
-    //             </For>
-    //           </div>
-    //         </Show>
+            // <Show when={ep()!.tags?.length}>
+            //   <div {...stylex.props(styles.tags)}>
+            //     <For each={ep()!.tags!}>
+            //       {(tag) => (
+            //         <A href={`/tag/${encodeURIComponent(tag)}`} {...stylex.props(styles.tag)}>
+            //           #{tag}
+            //         </A>
+            //       )}
+            //     </For>
+            //   </div>
+            // </Show>
     //         <div {...stylex.props(styles.cast)}></div>
     //       </section>
 

@@ -14,6 +14,8 @@ export interface EpisodeSummary {
   summary: string | null;
   /** Step B references：对话名词术语条目（播放页「本期提到的名词」） */
   references: EpisodeReference[] | null;
+  /** Step B highlights：本期金句（详情页「本期金句」——纯文本展示） */
+  highlights?: EpisodeHighlight[] | null;
   durationSeconds: number | null;
   publishedAt: Date | null;
   coverUrl: string | null;
@@ -41,6 +43,11 @@ export interface EpisodeReference {
   type: string;
   explanation: string;
   links: string[];
+}
+
+/** 金句（Step B 配套产物 highlights；详情页「本期金句」——纯文本展示） */
+export interface EpisodeHighlight {
+  text: string;
 }
 
 /** 常驻 AI 嘉宾（guests 表）：品牌声线宿主（节目 cast 卡片 / /guest/<id> 页用） */

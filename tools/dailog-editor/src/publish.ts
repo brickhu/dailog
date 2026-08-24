@@ -1,9 +1,11 @@
 // 一次性上传发布（编辑本地制作成品 → dailog）：
-//   multipart：audio（必填）+ cover（可选）+ meta JSON（title/description/summary/references/tags/language/guestId/durationSeconds）
-//   --summary 短简介（Step B 配套产物）；--references-file <json> 名词术语条目数组（Step B references 落盘）
+//   multipart：audio（必填）+ cover（可选）+ meta JSON（title/description/summary/references/highlights/tags/language/guestId/durationSeconds）
+//   --summary 短简介（Step B 配套产物）；--references-file <json> 名词术语条目数组（Step B references 落盘）；
+//   金句 highlights 自动从草稿 script.json 读取（Step B 配套产物，详情页「本期金句」）
 // 成功后 episode 直接 published + 投稿人收到通知（「dailog 第 N 期」）
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { join } from "node:path";
 import type { EditorConfig } from "./lib.js";
 import { api, clearArtifacts, draftDir, writeProgress } from "./lib.js";
 
@@ -100,6 +102,20 @@ export async function publish(config: EditorConfig, args: string[]): Promise<voi
   }
   if (p.tags?.length) meta.tags = p.tags;
   if (p.guestId) meta.guestId = p.guestId;
+  // 金句（Step B highlights，自动读草稿 script.json；可选——缺省/解析失败忽略）
+  try {
+    const script = JSON.parse(readFileSync(join(draftDir(p.submissionId), "script.json"), "utf8")) as
+      { highlights?: { text?: string }[] } | null;
+    // 仅对象格式（script-craft 输出）带 highlights；数组格式（纯 segments）无金句信息，忽略
+    const highlights = script && !Array.isArray(script) ? script.highlights : null;
+    if (Array.isArray(highlights)) {
+      const hs = highlights
+        .filter((h): h is { text: string } => !!h && typeof h.text === "string" && h.text.trim().length > 0)
+        .map((h) => ({ text: h.text.trim().slice(0, 200) }))
+        .slice(0, 5);
+      if (hs.length) meta.highlights = hs;
+    }
+  } catch { /* 草稿无 script.json：金句可选，忽略 */ }
   // durationSeconds：ffprobe 成品音频（merge 产物）——页面「N 分钟」展示
   try {
     meta.durationSeconds = ffprobeDuration(p.audio!);
