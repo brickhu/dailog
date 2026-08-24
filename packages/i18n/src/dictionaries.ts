@@ -471,7 +471,7 @@ export const zh = {
   // ---- 投稿流程 ----
   "submit.title": "投稿",
   "submit.step1": "① 分享你的 AI 对话",
-  "submit.step1Desc": "粘贴你与 AI 对话的分享链接（Claude / ChatGPT / DeepSeek / Gemini / Kimi / 豆包），我们会自动读取内容。",
+  "submit.step1Desc": "在AI 对话窗口点击分享，复制分享链接粘贴到下方输入框，导入你和AI的对话记录",
   "submit.urlLabel": "分享链接",
   "submit.urlPlaceholder": "粘贴分享链接（claude.ai/share/…）",
   "submit.import": "导入对话",
@@ -1337,7 +1337,7 @@ export const en: Dictionary = {
   // ---- Submit flow ----
   "submit.title": "Submit",
   "submit.step1": "① Share your AI conversation",
-  "submit.step1Desc": "Paste a share link of your conversation with AI (Claude / ChatGPT / DeepSeek / Gemini / Kimi / Doubao); we'll read it automatically.",
+  "submit.step1Desc": "In the AI chat window, click Share, copy the share link, and paste it into the input box below to import your conversation with AI.",
   "submit.urlLabel": "Share link",
   "submit.urlPlaceholder": "Paste share link (claude.ai/share/…)",
   "submit.import": "Import conversation",

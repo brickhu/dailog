@@ -28,13 +28,13 @@ const styles = stylex.create({
   // 统一经 app.css 的 --dailog-safe-bottom 中转 + var() fallback 兜底。
   bar: {
     position: "fixed",
-    borderColor: colors.surfaceStrong,
+    borderTopColor: `color-mix(in srgb, currentColor 10%, transparent)`,
     borderStyle: "solid",
-    borderWidth: `1px 1px 1px 1px`,
-    left: dimensions.spacing3,
-    right: dimensions.spacing3,
-    bottom: `calc(${dimensions.spacing3} + var(--dailog-safe-bottom, 0px))`,
-    borderRadius: dimensions.radiusLg,
+    borderWidth: `1px 0px 0px 0px`,
+    left: dimensions.spacing0,
+    right: dimensions.spacing0,
+    bottom: dimensions.spacing0,
+    borderRadius: dimensions.radius0,
     padding: `${dimensions.spacing3} ${dimensions.spacing3}`,
     flexWrap: "wrap",
     // 隐藏态：不可见 + 移出视口；过渡同时声明 transform（滑入/滑出）与 visibility
@@ -44,7 +44,9 @@ const styles = stylex.create({
     // 仍留在视口外。统一用 base 的 100%+偏移（桌面 bottom:0 时 100% 同样完全出视口）
     visibility: "hidden",
     transform: `translateY(calc(100% + ${dimensions.spacing3} + var(--dailog-safe-bottom, 0px)))`,
-    transition: `transform 400ms ${easings.easeOut}, visibility 0s linear 400ms`,
+    // row-gap 一并过渡：移动端收缩时进度行折叠为 0 高，若 bar 的 flex 行间 gap 不跟着归零，
+    // 按钮行与进度行之间会残留一行空隙（见 barCollapsed）
+    transition: `transform 400ms ${easings.easeOut}, visibility 0s linear 400ms, row-gap 300ms ease`,
     pointerEvents: "none",
     [DESKTOP]: {
       left: "0",
@@ -64,21 +66,28 @@ const styles = stylex.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: dimensions.spacing3,
-    backgroundImage: `linear-gradient(to bottom,  color-mix(in srgb, ${colors.surfaceWeak} 80%, transparent) 0%, ${colors.surfaceWeak} 100%)`,
+    backgroundImage: `linear-gradient(to bottom,  color-mix(in srgb, ${colors.background} 80%, transparent) 0%, ${colors.background} 100%)`,
     backdropFilter: "blur(24px)",
     WebkitBackdropFilter: "blur(24px)",
-    color: colors.onSurfaceWeak,
-    filter: `drop-shadow(${shadows.shadowLow})`
+    color: colors.foreground,
+    // filter: `drop-shadow(${shadows.shadowLow})`
   },
   // 激活态（已开始播放）：从页面底部滑入（transform 100% → 0）；visibility 立即转为可见
   barVisible: {
     visibility: "visible",
     transform: "translateY(0)",
-    transition: `transform 400ms ${easings.easeOut}, visibility 0s`,
+    transition: `transform 400ms ${easings.easeOut}, visibility 0s, row-gap 300ms ease`,
     pointerEvents: "auto",
     "@media (prefers-reduced-motion: reduce)": {
       transition: "none"
     }
+  },
+  // 收缩态（仅移动端）：进度行（progressWrap）经 grid 0fr 折叠为 0 高后，
+  // 把 bar 的 flex 行间 gap（row-gap 12px）同步过渡为 0——否则按钮行下方会残留
+  // 一行空隙（row-gap 仍按 12px 占位）。column-gap 保留：封面/标题/按钮仍同行，
+  // 横向间距不变。定义在 bar 之后，保证与 bar 的 gap 简写冲突时本规则胜出
+  barCollapsed: {
+    rowGap: 0,
   },
   cover: {
     width: dimensions.sizeLg,
@@ -132,7 +141,7 @@ const styles = stylex.create({
   btns: {
     display: "flex",
     gap: 0, // 按钮间距交给 btnsExtra 的 margin（收缩动画时随宽度同步过渡，不留空隙）
-    minWidth: `calc(${dimensions.spacing12} *4 )`,
+    minWidth: `calc(${dimensions.spacing12} *2 )`,
     justifyContent : "end",
     order: 2,
     transition: "min-width 300ms ease",
@@ -319,7 +328,11 @@ export function PlayerBar() {
     // 激活后叠加 barVisible 由底部滑入——不再用 Show 卸载导致突兀出现
     <div
       ref={barEl}
-      {...stylex.props(styles.bar, pb.activated() && ep() ? styles.barVisible : undefined)}
+      {...stylex.props(
+        styles.bar,
+        pb.activated() && ep() ? styles.barVisible : undefined,
+        isMobile() && collapsed() ? styles.barCollapsed : undefined,
+      )}
     >
       {/* 内容依赖当前节目：无节目时不渲染内部内容，但 bar 容器常驻（隐藏态） */}
       <Show when={ep()}>
@@ -378,7 +391,6 @@ export function PlayerBar() {
             isDisabled={pb.queue().length <= 1} // 队列只有一期 → 没有可回的上一期
             isIconOnly
             round="full"
-            size="lg"
           />
           </div>
 
@@ -396,7 +408,6 @@ export function PlayerBar() {
             isDisabled={pb.audioError()}
             isIconOnly
             round="full"
-            size="lg"
           />
 
           <div
@@ -414,7 +425,6 @@ export function PlayerBar() {
             icon={<Icon icon="iconoir:skip-next" />}
             isIconOnly
             round="full"
-            size="lg"
           />
           </div>
         </div>  

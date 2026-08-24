@@ -124,6 +124,15 @@ const styles = stylex.create({
     borderColor: "color-mix(in srgb, " + TI.border + " 60%, transparent)",
     color: "color-mix(in srgb, " + TI.text + " 60%, transparent)",
   },
+  // attached：输入框容器也铺 banner 底色（透明露出 statusStack 底色，与 banner 同色），
+  // 底边保留边框（不透明）：输入框轮廓完整、banner 明确位于其下方；聚焦底色也透明，
+  // 避免聚焦时跳回 surface 底色
+  wrapperAttached: {
+    backgroundColor: "transparent",
+    ":focus-within": {
+      backgroundColor: "transparent",
+    },
+  },
   startIconSlot: {
     display: "inline-flex",
     alignItems: "center",
@@ -185,18 +194,29 @@ const styles = stylex.create({
     justifyContent: "center",
     flexShrink: 0,
   },
+  // —— 字段栈：attached 时承载「输入框 + banner」整块共用的 banner 底色 ——
+  // attached 下输入框容器与 banner 本体均为透明底，露出本层底色 → 整个区块是一整块
+  // 同色圆角背景，无缝衔接。顶角 radiusMd（跟随输入框圆角）、底角 radiusSm（跟随 banner）
+  statusStack: {
+    borderTopLeftRadius: dimensions.radiusMd,
+    borderTopRightRadius: dimensions.radiusMd,
+    borderBottomLeftRadius: dimensions.radiusSm,
+    borderBottomRightRadius: dimensions.radiusSm,
+  },
   // —— 状态消息框 ——
   messageBox: {
     display: "flex",
     alignItems: "center",
-    gap: dimensions.spacing1,
-    marginTop: dimensions.spacing1,
+    // attached（默认）：紧贴输入框下方；detached 经 messageDetached 加大间距
+    marginTop: dimensions.spacing2,
     padding: dimensions.spacing1 + " " + dimensions.spacing2,
     borderRadius: dimensions.radiusSm,
     fontSize: dimensions.fontSizeXs,
     lineHeight: "1.5",
   },
   messageDetached: { marginTop: dimensions.spacing2 },
+  // attached：底色由 statusStack 承担，banner 本体透明（否则会在底色上二次染色变深）
+  messageAttached: { backgroundColor: "transparent" },
 });
 
 // 高度档位与 Button 完全对齐（button.tsx sizeStyles 同款）：
@@ -251,6 +271,10 @@ const statusStyles = stylex.create({
     backgroundColor: "color-mix(in srgb, " + TI.success + " 12%, transparent)",
     color: TI.success,
   },
+  // attached 字段栈底色（仅底色，字色由 message* 负责）：与 banner 同款 12% 淡染
+  stackError: { backgroundColor: "color-mix(in srgb, " + TI.error + " 12%, transparent)" },
+  stackWarning: { backgroundColor: "color-mix(in srgb, " + TI.warning + " 12%, transparent)" },
+  stackSuccess: { backgroundColor: "color-mix(in srgb, " + TI.success + " 12%, transparent)" },
 });
 
 const STATUS_ICONS: Record<TextInputStatusType, string> = {
@@ -427,6 +451,14 @@ export function TextInput(props: TextInputProps) {
   const showsDisabledMessage = () => isDisabled() && local.disabledMessage != null;
   const statusMessage = () => local.status?.message ?? null;
   const statusMessageShown = () => statusMessage() != null && statusVariant() !== "tooltip";
+  // attached 变体且显示状态消息：statusStack 铺与 banner 同款底色，banner 本体透明
+  // stylex.props 条件必须是「单层裸调用表达式」：嵌套逻辑表达式（如 A() && B() && styles.x）
+  // 会被编译期求值内联函数体，函数体内的可选链（local.status?.message）触发
+  // Unsupported expression: OptionalMemberExpression。复合判断全部收进单层调用里
+  const isStackTinted = () => statusMessageShown() && !isDetached();
+  const stackTintError = () => isStackTinted() && isStatusType("error");
+  const stackTintWarning = () => isStackTinted() && isStatusType("warning");
+  const stackTintSuccess = () => isStackTinted() && isStatusType("success");
   const statusIconShown = () => local.status != null;
   const showClear = () => !!local.hasClear && local.value !== "" && !isDisabled() && !isReadOnly();
 
@@ -513,6 +545,7 @@ export function TextInput(props: TextInputProps) {
       isStatusType("warning") && statusStyles.borderWarning,
       isStatusType("success") && statusStyles.borderSuccess,
       isDisabled() && styles.wrapperDisabled,
+      isStackTinted() && styles.wrapperAttached,
       props.xstyle,
     );
     const external = local.class ?? local.className;
@@ -608,6 +641,16 @@ export function TextInput(props: TextInputProps) {
         </p>
       </Show>
 
+      {/* attached：输入框 + banner 整个区块共用一层 banner 底色（statusStack）——
+          输入框容器与 banner 均透明露出同色，形成一整块圆角底色，无缝隙 */}
+      <div
+        {...stylex.props(
+          styles.statusStack,
+          stackTintError() && statusStyles.stackError,
+          stackTintWarning() && statusStyles.stackWarning,
+          stackTintSuccess() && statusStyles.stackSuccess,
+        )}
+      >
       <div {...stylex.props(styles.wrapperAnchor)}>
       <div
         onClick={handleWrapperClick}
@@ -675,12 +718,14 @@ export function TextInput(props: TextInputProps) {
             isStatusType("error") && statusStyles.messageError,
             isStatusType("warning") && statusStyles.messageWarning,
             isStatusType("success") && statusStyles.messageSuccess,
+            // attached：底色由 statusStack 承担，banner 本体透明，避免二次染色
+            isStackTinted() && styles.messageAttached,
           )}
         >
-          <Icon icon={STATUS_ICONS[statusType() as TextInputStatusType]} width={12} height={12} />
           {statusMessage()}
         </div>
       </Show>
+      </div>
 
     </div>
   );

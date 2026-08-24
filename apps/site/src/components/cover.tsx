@@ -65,11 +65,17 @@ const styles = stylex.create({
     color: `color-mix(in srgb, ${colors.onSuccessStrong} 10%, transparent)`,
     pointerEvents: "none",
   },
+  // 品牌占位图案：随容器等比缩放（viewBox 保持 160 网格，尺寸走百分比）——
+  // 不再固定 160px：大卡片（265px+）上图案不再显小、56px 小封面不再被裁切
+  brandPattern: {
+    width: "88%",
+    height: "88%",
+  },
 });
 
 const BrandPattern = () =>{
   return(
-     <svg width="160" height="160" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+     <svg viewBox="0 0 160 160" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" fill="none" xmlns="http://www.w3.org/2000/svg" {...stylex.props(styles.brandPattern)}>
               <path d="M153.26 110.576C140.872 137.323 112.733 156 80 156C47.2669 156 19.1264 137.324 6.73926 110.576C20.238 132.774 47.9742 148 80 148C112.026 148 139.761 132.774 153.26 110.576Z" fill="currentColor"/>
               <path d="M134.885 113.656C122.512 127.809 102.537 137 80 137C57.4631 137 37.4872 127.81 25.1143 113.656C38.321 124.879 58.0089 132 80 132C101.991 132 121.678 124.879 134.885 113.656Z" fill="currentColor"/>
               <path d="M114.59 109.116C105.857 117.057 93.589 122 80 122C66.4108 122 54.1419 117.057 45.4092 109.116C54.6001 115.262 66.7175 119 80 119C93.2821 119 105.399 115.262 114.59 109.116Z" fill="currentColor"/>

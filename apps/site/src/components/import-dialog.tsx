@@ -8,7 +8,7 @@ import { useI18n } from "@dailogues/i18n";
 import { confirmLoggedIn } from "../lib/auth-guard";
 import { checkUrlAndStore, isSubmittedUrl } from "../lib/url-check";
 import * as stylex from "@stylexjs/stylex";
-import { colors, dimensions } from "@dailogues/ui/theme.stylex";
+import { colors, dimensions, typography } from "@dailogues/ui/theme.stylex";
 
 type DialogState = "input" | "checking" | "error" | "duplicate";
 
@@ -167,10 +167,7 @@ const styles = stylex.create({
     margin: 0,
   },
   desc: {
-    color: colors.neutral,
-    fontSize: dimensions.fontSizeSm,
     margin: 0,
-    lineHeight: 1.6,
   },
   actions: {
     display: "flex",
@@ -298,10 +295,11 @@ export function ImportDialog() {
                 hasClear
                 status={urlInvalid() ? { type: "error", message: t("submit.urlUnsupported") } : undefined}
                 onEnter={() => { if (canSubmit() && state() === "input") void handleConfirm(); }}
+                statusVariant="attached"
               />
-              <p {...stylex.props(styles.desc)}>{t("submit.urlHint")}</p>
+              <p {...stylex.props(styles.desc, typography.caption)}>{t("submit.urlHint")}</p>
               <div {...stylex.props(styles.actions)}>
-                <Button variant="neutral" appear="ghost" onClick={close}>
+                <Button appear="ghost" onClick={close}>
                   {t("common.cancel")}
                 </Button>
                 <Button

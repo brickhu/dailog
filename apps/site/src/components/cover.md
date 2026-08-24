@@ -73,6 +73,9 @@ const cover = stylex.create({
 │  ├─ 大图 img（srcset/sizes 响应式，opacity 0 → 就绪后 0.35s 淡入）
 │  └─ 错误占位 div（大图加载失败时覆盖，BrandPattern 品牌图案）
 └─（无封面 URL 时：直接渲染 placeholder，BrandPattern 居中）
+
+> **无图占位**：wrap 固定正方形（width 100% + aspect-ratio 1），占位始终撑满；
+> BrandPattern logo 随容器等比缩放（88%，不再固定 160px——大卡片不显小、56px 小封面不裁切）。
 ```
 
 ## 图片管线
