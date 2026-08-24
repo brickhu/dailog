@@ -35,7 +35,10 @@ const styles = stylex.create({
     right: dimensions.spacing0,
     bottom: dimensions.spacing0,
     borderRadius: dimensions.radius0,
-    padding: `${dimensions.spacing3} ${dimensions.spacing3}`,
+    // 底部 padding 预留 iOS 安全区（Home Indicator）：bar 贴底（bottom:0），安全区
+    // 改由 padding-bottom 吸收——内容避开指示条，背景/毛玻璃仍铺满到屏幕底。
+    // 与隐藏态 transform 同走 --dailog-safe-bottom 中转（webkit bug 190771 见上）
+    padding: `${dimensions.spacing3} ${dimensions.spacing3} calc(${dimensions.spacing3} + var(--dailog-safe-bottom, 0px)) ${dimensions.spacing3}`,
     flexWrap: "wrap",
     // 隐藏态：不可见 + 移出视口；过渡同时声明 transform（滑入/滑出）与 visibility
     // （visible 立即可见；hidden 延迟到 400ms 滑出结束后再隐藏，保证退出动画可见）。
@@ -54,7 +57,8 @@ const styles = stylex.create({
       bottom: "0",
       borderRadius: dimensions.radius0,
       borderWidth: `1px 0px 0px 0px`,
-      padding: `${dimensions.spacing2} ${dimensions.spacing3}`,
+      // 桌面同样留安全区：普通桌面 env()=0 无感；iPad 横屏（≥1025px 命中此断点）Home Indicator 在底边
+      padding: `${dimensions.spacing2} ${dimensions.spacing3} calc(${dimensions.spacing2} + var(--dailog-safe-bottom, 0px)) ${dimensions.spacing3}`,
       gap: dimensions.spacing8,
       flexWrap: "nowrap"
     },
