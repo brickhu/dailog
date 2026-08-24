@@ -63,6 +63,9 @@ const css = stylex.create({
     boxShadow: shadows.shadowMed,
     borderRadius : dimensions.radiusMd,
     aspectRatio : "1/1",
+    borderWidth: dimensions.borderWidthThin,
+    borderStyle: "solid",
+    borderColor: colors.surface
   },
   titleOutter : {
     display: "flex",
@@ -145,188 +148,186 @@ const css = stylex.create({
     flexWrap: "wrap",
     gap: dimensions.spacing2,
   },
-})
 
-const styles = stylex.create({
-  // 响应式列数（Grid 单值 columns={4}，断点覆盖走 xstyle + @media）
-  page: {
-    minHeight: "100vh",
-    paddingBlock: dimensions.spacing4,
-    gap: dimensions.spacing8,
-    [TABLETANDDESKTOP]: {
-      paddingBlock: dimensions.spacing12,
-    }
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns : "repeat(4, 1fr)",
-    gap: dimensions.spacing4, 
-    maxWidth: dimensions.tablet, 
-    minWidth: dimensions.mobile,
-    padding: dimensions.spacing4,
-    width: "100%",
-    [TABLETANDDESKTOP]: {
-      gridTemplateColumns : "repeat(6, 1fr)",
-    },
-  },
-  head: {
-    // backgroundColor : "blue"
-    // display: "grid",
-    // gridTemplateColumns : "repeat(4, 1fr)",
-    // gap: dimensions.spacing4, 
-    // maxWidth: dimensions.tablet, 
-    // minWidth: dimensions.mobile,
-    // padding: dimensions.spacing4,
-    // width: "100%",
-    // [TABLET]: {
-    //   gridTemplateColumns : "repeat(6, 1fr)",
-    // },
-  },
-  main: {
-
-  },
-  foot : {},
-  titleOutter : {
-    gridColumn : "1 / -1",
-    order: 2,
-    [TABLETANDDESKTOP]: {
-      gridColumn : "span 4",
-      order: 1,
-    },
-    display: "flex",
-    flexDirection: "column",
-    gap: dimensions.spacing2
-  },
-  coverOutter : {
-    gridColumn : "1 / -1",
-    gridRow: "span 2",
-    display : "flex",
-    alignItems : "center",
-    justifyContent : "center",
-    order: 1,
-    aspectRatio: 4/3,
-    [TABLETANDDESKTOP]: {
-      gridColumn : "span 2",
-      justifyContent : "flex-end",
-      order: 2,
-    },
-  },
-  actionOutter : {
-    gridColumn : "1 / -1",
-    display: "flex",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: dimensions.spacing4,
-     order: 3,
-    [TABLETANDDESKTOP]: {
-      gridColumn : "span 4",
-    },
-  },
-  title : {
-     
-  },
-
-  desc: {
-    gridColumn : "1 / -1",
-  },
-  tags: {
-    gridColumn: "1 / -1",
-    display: "flex",
-    flexWrap: "wrap",
-    gap: dimensions.spacing2,
-  },
   tag: {
     padding: `${dimensions.spacing1} ${dimensions.spacing3}`,
     borderRadius: dimensions.radiusFull,
     backgroundColor: colors.surfaceStrong,
     color: colors.neutral,
     fontSize: dimensions.fontSizeSm,
-    // 链接胶囊（详情页 tags → /tag/<tag> 标签检索页）：去下划线 + hover 反馈
     textDecoration: "none",
     ":hover": {
       opacity: 0.75,
     },
   },
-  cast: {
-    gridColumn : "1 / -1",
-  },
-  // 点赞激活态（已赞：红粉心形点亮）
-  likeActive: {
-    color: colors.danger,
-  },
-  // ── cast 演出阵容：主持人卡片 + 嘉宾卡片（嘉宾存在才渲染整块） ──
-  castSection: {
-    gridColumn: "1 / -1",
-    display: "flex",
-    flexDirection: "column",
-    gap: dimensions.spacing3,
-  },
-  castLabel: {
-    color: colors.neutral,
-  },
-  castGrid: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: dimensions.spacing4,
-  },
-  // 布局交给 xstyle，视觉（surface 底 + 圆角 + hover 反馈）由 ClickableCard 提供
-  personCard: {
-    display: "flex",
-    alignItems: "center",
-    gap: dimensions.spacing4,
-    textDecoration: "none",
-    color: "inherit",
-    minWidth: 0,
-  },
-  personAvatar: {
-    width: "56px",
-    height: "56px",
-    borderRadius: "50%",
-    objectFit: "cover",
-    flexShrink: 0,
-  },
-  personAvatarFallback: {
-    width: "56px",
-    height: "56px",
-    borderRadius: "50%",
-    backgroundColor: colors.ink,
-    color: colors.background,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: dimensions.fontSize2xl,
-    flexShrink: 0,
-  },
-  personBody: {
-    display: "flex",
-    flexDirection: "column",
-    gap: dimensions.spacing1,
-    minWidth: 0,
-  },
-  personRole: {
-    color: colors.neutral,
-  },
-  personName: {
-    fontWeight: dimensions.fontWeightBold,
-    fontSize: dimensions.fontSizeLg,
-    lineHeight: 1.3,
-    overflowWrap: "anywhere",
-  },
-  personMeta: {
-    color: colors.neutral,
-    fontSize: dimensions.fontSizeSm,
-  },
+})
 
-  cover:{
-    maxWidth : `calc(${dimensions.size2xl} * 3)`,
-    minWidth : dimensions.size2xl,
-    width : "90%",
-    boxShadow: shadows.shadowMed,
-    borderRadius : dimensions.radiusMd
-  },
+// const styles = stylex.create({
+//   page: {
+//     minHeight: "100vh",
+//     paddingBlock: dimensions.spacing4,
+//     gap: dimensions.spacing8,
+//     [TABLETANDDESKTOP]: {
+//       paddingBlock: dimensions.spacing12,
+//     }
+//   },
+//   grid: {
+//     display: "grid",
+//     gridTemplateColumns : "repeat(4, 1fr)",
+//     gap: dimensions.spacing4, 
+//     maxWidth: dimensions.tablet, 
+//     minWidth: dimensions.mobile,
+//     padding: dimensions.spacing4,
+//     width: "100%",
+//     [TABLETANDDESKTOP]: {
+//       gridTemplateColumns : "repeat(6, 1fr)",
+//     },
+//   },
+//   head: {
+
+//   },
+//   main: {
+
+//   },
+//   foot : {},
+//   titleOutter : {
+//     gridColumn : "1 / -1",
+//     order: 2,
+//     [TABLETANDDESKTOP]: {
+//       gridColumn : "span 4",
+//       order: 1,
+//     },
+//     display: "flex",
+//     flexDirection: "column",
+//     gap: dimensions.spacing2
+//   },
+//   coverOutter : {
+//     gridColumn : "1 / -1",
+//     gridRow: "span 2",
+//     display : "flex",
+//     alignItems : "center",
+//     justifyContent : "center",
+//     order: 1,
+//     aspectRatio: 4/3,
+//     [TABLETANDDESKTOP]: {
+//       gridColumn : "span 2",
+//       justifyContent : "flex-end",
+//       order: 2,
+//     },
+//   },
+//   actionOutter : {
+//     gridColumn : "1 / -1",
+//     display: "flex",
+//     alignItems: "center",
+//     flexWrap: "wrap",
+//     gap: dimensions.spacing4,
+//      order: 3,
+//     [TABLETANDDESKTOP]: {
+//       gridColumn : "span 4",
+//     },
+//   },
+//   title : {
+     
+//   },
+
+//   desc: {
+//     gridColumn : "1 / -1",
+//   },
+  // tags: {
+  //   gridColumn: "1 / -1",
+  //   display: "flex",
+  //   flexWrap: "wrap",
+  //   gap: dimensions.spacing2,
+  // },
+  // tag: {
+  //   padding: `${dimensions.spacing1} ${dimensions.spacing3}`,
+  //   borderRadius: dimensions.radiusFull,
+  //   backgroundColor: colors.surfaceStrong,
+  //   color: colors.neutral,
+  //   fontSize: dimensions.fontSizeSm,
+  //   textDecoration: "none",
+  //   ":hover": {
+  //     opacity: 0.75,
+  //   },
+  // },
+//   cast: {
+//     gridColumn : "1 / -1",
+//   },
+//   likeActive: {
+//     color: colors.danger,
+//   },
+//   castSection: {
+//     gridColumn: "1 / -1",
+//     display: "flex",
+//     flexDirection: "column",
+//     gap: dimensions.spacing3,
+//   },
+//   castLabel: {
+//     color: colors.neutral,
+//   },
+//   castGrid: {
+//     display: "flex",
+//     flexWrap: "wrap",
+//     gap: dimensions.spacing4,
+//   },
+//   // 布局交给 xstyle，视觉（surface 底 + 圆角 + hover 反馈）由 ClickableCard 提供
+//   personCard: {
+//     display: "flex",
+//     alignItems: "center",
+//     gap: dimensions.spacing4,
+//     textDecoration: "none",
+//     color: "inherit",
+//     minWidth: 0,
+//   },
+//   personAvatar: {
+//     width: "56px",
+//     height: "56px",
+//     borderRadius: "50%",
+//     objectFit: "cover",
+//     flexShrink: 0,
+//   },
+//   personAvatarFallback: {
+//     width: "56px",
+//     height: "56px",
+//     borderRadius: "50%",
+//     backgroundColor: colors.ink,
+//     color: colors.background,
+//     display: "flex",
+//     alignItems: "center",
+//     justifyContent: "center",
+//     fontSize: dimensions.fontSize2xl,
+//     flexShrink: 0,
+//   },
+//   personBody: {
+//     display: "flex",
+//     flexDirection: "column",
+//     gap: dimensions.spacing1,
+//     minWidth: 0,
+//   },
+//   personRole: {
+//     color: colors.neutral,
+//   },
+//   personName: {
+//     fontWeight: dimensions.fontWeightBold,
+//     fontSize: dimensions.fontSizeLg,
+//     lineHeight: 1.3,
+//     overflowWrap: "anywhere",
+//   },
+//   personMeta: {
+//     color: colors.neutral,
+//     fontSize: dimensions.fontSizeSm,
+//   },
+
+//   cover:{
+//     maxWidth : `calc(${dimensions.size2xl} * 3)`,
+//     minWidth : dimensions.size2xl,
+//     width : "90%",
+//     boxShadow: shadows.shadowMed,
+//     borderRadius : dimensions.radiusMd
+//   },
 
 
-});
+// });
 
 // cache() 在 lib/episode-cache.ts（列表页 hover 预取共用同一缓存）：
 // route.preload 仅客户端 hover/导航预取（SSR 端 SolidStart 不调用）——SSR 数据
@@ -523,7 +524,7 @@ export default function EpisodeDetailPage() {
                 <A {...stylex.props(global.linkText,css.creatorLink)} href={"/@" + (ep()!.username ?? "")}>{t("episode.createBy", { user: ep()!.username! })}</A>
     */}
               </div>
-              <div {...stylex.props(typography.headingMd,styles.title)}>{ep()?.title}</div>
+              <div {...stylex.props(typography.headingMd,css.title)}>{ep()?.title}</div>
             </div>
 
             <div {...stylex.props(css.actions)}>
@@ -601,10 +602,10 @@ export default function EpisodeDetailPage() {
             </div>
           </Show>
           <Show when={ep()!.tags?.length}>
-              <div {...stylex.props(styles.tags)}>
+              <div {...stylex.props(css.tags)}>
                 <For each={ep()!.tags!}>
                   {(tag) => (
-                    <A href={`/tag/${encodeURIComponent(tag)}`} {...stylex.props(styles.tag)}>
+                    <A href={`/tag/${encodeURIComponent(tag)}`} {...stylex.props(css.tag)}>
                       #{tag}
                     </A>
                   )}
