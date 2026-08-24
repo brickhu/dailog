@@ -18,6 +18,14 @@ const DESKTOP = "@media (min-width: 1025px)";
 // 滚动收缩触发阈值（px）：滚动超过才切换收缩/展开，防内容惯性滚动时状态抖动
 const SCROLL_COLLAPSE_THRESHOLD = 12;
 
+// 标题跑马灯 keyframes：轨道内双拷贝并排，整体平移 -50%（=一个拷贝宽）单向循环——
+// 结束时第二份恰好接住第一份的位置，无缝续滚（不来回、不跳变）。
+// 时长 --marquee-duration 由组件按实测单份文本宽写入（见 PlayerBar 内测量逻辑）
+const titleMarqueeKeyframes = stylex.keyframes({
+  from: { transform: "translateX(0)" },
+  to: { transform: "translateX(-50%)" },
+});
+
 const styles = stylex.create({
   // 未激活（尚未开始播放）：DOM 常驻不卸载，但 visibility:hidden 且沿 Y 轴平移到
   // 页面最底部之外（translateY 100% + 底部偏移）——不可见、不占交互；用户触发播放后
@@ -58,7 +66,7 @@ const styles = stylex.create({
       borderRadius: dimensions.radius0,
       borderWidth: `1px 0px 0px 0px`,
       // 桌面同样留安全区：普通桌面 env()=0 无感；iPad 横屏（≥1025px 命中此断点）Home Indicator 在底边
-      padding: `${dimensions.spacing2} ${dimensions.spacing3} calc(${dimensions.spacing2} + var(--dailog-safe-bottom, 0px)) ${dimensions.spacing3}`,
+      // padding: `${dimensions.spacing2} ${dimensions.spacing3} calc(${dimensions.spacing2} + var(--dailog-safe-bottom, 0px)) ${dimensions.spacing3}`,
       gap: dimensions.spacing8,
       flexWrap: "nowrap"
     },
@@ -94,8 +102,8 @@ const styles = stylex.create({
     rowGap: 0,
   },
   cover: {
-    width: dimensions.sizeLg,
-    height: dimensions.sizeLg,
+    width: dimensions.sizeMd,
+    height: dimensions.sizeMd,
     objectFit: "cover",
     flexShrink: 0,
     display: "flex",
@@ -124,18 +132,56 @@ const styles = stylex.create({
 
   },
   title: {
-    // display: "none",
-    textOverflow: "ellipsis",
+    // 跑马灯裁切容器：overflow:hidden 把内层平移的全文裁进可视区。作为 flex 子项
+    // 被 blockified，且 overflow 非 visible → min-width:auto 归 0，长标题不会撑开按钮行
     overflow: "hidden",
-    flex:1,
-    whiteSpace: "nowrap" ,
+    flex: 1,
+    whiteSpace: "nowrap",
     textDecoration: "none",
     color: colors.onSurface,
     [DESKTOP]: {
-      display : "block",
-      // color: `color-mix(in sgba, currentColor 50%, transparent)`
-    }
-
+      display: "block",
+    },
+  },
+  // 跑马灯态裁切容器附加：左右边缘 mask 线性渐变淡出（文本滑到边缘渐隐，不硬切）。
+  // 渐变固定在容器坐标（mask 挂在裁切容器上，不随轨道移动）；仅跑马灯时挂载，
+  // 常态 ellipsis 截断不受影响
+  titleMarquee: {
+    maskImage:
+      "linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent)",
+    WebkitMaskImage:
+      "linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent)",
+  },
+  // 轨道：常态 display:block（首拷贝 block 填满 + ellipsis 截断）；
+  // 跑马灯态 display:flex + width:max-content，双拷贝并排，translateX(-50%) 无缝循环
+  titleTrack: {
+    display: "block",
+  },
+  titleTrackMarquee: {
+    display: "flex",
+    width: "max-content",
+    animationName: titleMarqueeKeyframes,
+    animationDuration: "var(--marquee-duration, 8s)",
+    animationTimingFunction: "linear",
+    animationIterationCount: "infinite",
+    willChange: "transform",
+    "@media (prefers-reduced-motion: reduce)": {
+      animation: "none",
+      transform: "none",
+    },
+  },
+  // 单份拷贝文本：常态 display:block + ellipsis 截断（fill 容器）；
+  // 跑马灯态 flex:0 0 auto 保持自然宽（nowrap 继承），overflow visible 不截断
+  titleText: {
+    display: "block",
+    overflow: "hidden",
+    whiteSpace: "nowrap",
+    textOverflow: "ellipsis",
+  },
+  titleTextMarquee: {
+    flex: "0 0 auto",
+    overflow: "visible",
+    textOverflow: "clip",
   },
   btn: {
     // [DESKTOP]: {
@@ -287,6 +333,38 @@ export function PlayerBar() {
     onCleanup(() => scroller.removeEventListener("scroll", onScroll));
   });
 
+  // 标题跑马灯：播放中且标题溢出（scrollWidth > clientWidth）时启用——轨道内双拷贝
+  // 并排，translateX(-50%)（=一个拷贝宽）单向无缝循环；左右边缘由裁切容器上的
+  // mask 渐变淡出。时长按实测单份文本宽写入 --marquee-duration（50px/s 折算）。
+  // 常态（未播放/未溢出）仍是 ellipsis 静态截断。
+  // titleTextEl 用信号承载（ref={setTitleTextEl}）：span 在 <Show> 内按需创建，
+  // 普通变量 ref 在 effect 首次读到 ep 时 span 可能尚未挂载（effect 先于 Show 的
+  // 渲染 effect 执行，见 hasText=false 的实测）→ effect 提前 return、ResizeObserver
+  // 永不建立。信号 ref 保证 span 一创建 effect 就重跑并完成测量
+  const [titleTextEl, setTitleTextEl] = createSignal<HTMLSpanElement | undefined>();
+  const [titleOverflows, setTitleOverflows] = createSignal(false);
+  const marqueeActive = () => pb.playing() && titleOverflows();
+  createEffect(() => {
+    const title = ep()?.title; // 标题变化 → 重测
+    const text = titleTextEl();
+    const clip = text?.parentElement?.parentElement as HTMLAnchorElement | null; // <A> 裁切容器
+    if (!text || !clip || typeof window === "undefined") return;
+    const measure = () => {
+      const textW = text.scrollWidth; // 单份拷贝全文宽（两种形态下 scrollWidth 均=全文宽）
+      const visW = clip.clientWidth; // 容器可视宽（flex 决定，不随跑马灯态变化）
+      const over = textW > visW + 1;
+      setTitleOverflows(over);
+      if (over) {
+        // 循环位移 = 一个拷贝宽（轨道 2×textW，-50% 即 textW）；50px/s 折算时长
+        clip.style.setProperty("--marquee-duration", `${Math.max(6, Math.round(textW / 50))}s`);
+      }
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(clip);
+    onCleanup(() => ro.disconnect());
+  });
+
   // 键盘快捷键（仅播放条激活、有当前节目时生效）：
   //   Space / F8        → 播放/暂停
   //   F7 / →(ArrowRight) → 下一期
@@ -347,7 +425,35 @@ export function PlayerBar() {
             <img src={episodeCoverUrl(ep()!.id, ep()!.coverUrl, 160)!} alt="" {...stylex.props(styles.cover)} />
           </Show>
         </A>
-          <A href={`/episode/${ep()!.slug}`} {...stylex.props(styles.title, typography.caption)}>{ep()!.title || ""}</A>
+          <A
+            href={`/episode/${ep()!.slug}`}
+            {...stylex.props(
+              styles.title,
+              typography.caption,
+              marqueeActive() ? styles.titleMarquee : undefined,
+            )}
+          >
+            <span {...stylex.props(styles.titleTrack, marqueeActive() ? styles.titleTrackMarquee : undefined)}>
+              <span
+                ref={setTitleTextEl}
+                {...stylex.props(
+                  styles.titleText,
+                  marqueeActive() ? styles.titleTextMarquee : undefined,
+                )}
+              >
+                {ep()!.title || ""}
+              </span>
+              {/* 无缝循环第二份拷贝：与首份同宽并排，轨道 -50% 时恰好接位 */}
+              <Show when={marqueeActive()}>
+                <span
+                  aria-hidden="true"
+                  {...stylex.props(styles.titleText, styles.titleTextMarquee)}
+                >
+                  {ep()!.title || ""}
+                </span>
+              </Show>
+            </span>
+          </A>
         </div>
         <div
           {...stylex.props(
@@ -432,16 +538,7 @@ export function PlayerBar() {
           />
           </div>
         </div>  
-        {/* <button
-          {...stylex.props(styles.btn, styles.btnMain)}
-          onClick={pb.toggle}
-          aria-label={pb.playing() ? "pause" : "play"}
-        >
-          {pb.playing() ? <Icon icon="iconoir:pause-solid" /> : <Icon icon="iconoir:play-solid" />}
-        </button>
-        <button {...stylex.props(styles.btn)} onClick={pb.next} aria-label="next">
-          <Icon icon="iconoir:skip-next" />
-        </button> */}
+ 
         </Show>
     </div>
   );

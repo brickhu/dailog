@@ -17,6 +17,8 @@ import { Button, Icon } from "@dailogues/ui";
 import { ClickableCard } from "../../components/clickable-card";
 import { useI18n } from "@dailogues/i18n";
 import { auth } from "../../lib/auth-guard";
+import { Page } from "../../layouts/page";
+import { Block, Container } from "../../layouts/container";
 
 // 详情页（传统博客式）：dailog.fm/<episode_id> —— SSR 渲染（可索引/分享）。
 // 布局：封面（左/上，内嵌播放控件）+ 详情（右/下）；播放由全局播放条贯通，
@@ -367,170 +369,163 @@ export default function EpisodeDetailPage() {
   });
 
   return (
+    <Page>
+      <Container>
+        <Block cols="1/3">dddd</Block>
+        <Block cols="1/2" start={6}>eeeee</Block>
+      </Container>
+    </Page>
+    // <div {...stylex.props(layouts.page,styles.page)}>
+    //   <Title>Dailog</Title>
 
-    <div {...stylex.props(layouts.page,styles.page)}>
-      <Title>Dailog</Title>
-      {/* fallback 包 NoHydration：客户端挂起渲染骨架时跳过 hydration 匹配
-          （SSR 端资源等待后输出真实内容，从不输出骨架）——消除 Hydration Mismatch */}
-      <Suspense fallback={<NoHydration><DetailSkeleton /></NoHydration>}>
-        <Show
-          when={ep()}
-          fallback={<div>{t("episode.notFound")}</div>}
-        >
-          <Title>{ep()!.title || "dailog"}</Title>
-          <Meta property="og:title" content={ep()!.title || "dailog"} />
-          <Meta property="og:type" content="article" />
-          <Meta property="og:url" content={`${env.siteBaseUrl}/episode/${ep()!.slug ?? ""}`} />
-          <Meta property="og:description" content={ep()!.description?.slice(0, 200) || ""} />
-          <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
-            <Meta property="og:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
-          </Show>
-          {/* X/Twitter 卡片：summary_large_image 让封面大图展示（无 twitter 标签时 X 回退 og:*,
-              但大图卡片需要显式声明） */}
-          <Meta name="twitter:card" content="summary_large_image" />
-          <Meta name="twitter:title" content={ep()!.title || "dailog"} />
-          <Meta name="twitter:description" content={ep()!.description?.slice(0, 200) || ""} />
-          <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
-            <Meta name="twitter:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
-          </Show>
+    //   <Suspense fallback={<NoHydration><DetailSkeleton /></NoHydration>}>
+    //     <Show
+    //       when={ep()}
+    //       fallback={<div>{t("episode.notFound")}</div>}
+    //     >
+    //       <Title>{ep()!.title || "dailog"}</Title>
+    //       <Meta property="og:title" content={ep()!.title || "dailog"} />
+    //       <Meta property="og:type" content="article" />
+    //       <Meta property="og:url" content={`${env.siteBaseUrl}/episode/${ep()!.slug ?? ""}`} />
+    //       <Meta property="og:description" content={ep()!.description?.slice(0, 200) || ""} />
+    //       <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
+    //         <Meta property="og:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
+    //       </Show>
+   
+    //       <Meta name="twitter:card" content="summary_large_image" />
+    //       <Meta name="twitter:title" content={ep()!.title || "dailog"} />
+    //       <Meta name="twitter:description" content={ep()!.description?.slice(0, 200) || ""} />
+    //       <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
+    //         <Meta name="twitter:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
+    //       </Show>
 
      
-
-          {/* Grid/GridSpan 组件已移除——这里直接用 CSS 写布局（见 components/containers.tsx 的 Container 写法） */}
-          <section {...stylex.props(styles.head, styles.grid)}>
-            <div {...stylex.props(styles.titleOutter)}>
-              <div {...stylex.props(typography.caption, styles.caption)}>
-                <Show when={ep()!.number}>
-                  <span>{t("episode.number", { n: ep()!.number! })} · </span>
-                </Show>
-                <A href={"/@" + (ep()!.username ?? "")}>{"@"+ep()!.username} </A>
-                {/* {hostName()}{pubDate() ? ` · ${pubDate()}` : ""}{stats.latest ? ` · ${t("episode.plays", { count: stats.latest.plays })} · ${t("episode.completions", { count: stats.latest.completions })}` : ""} */}
-              </div>
-              <div {...stylex.props(typography.headingMd,styles.title)}>{ep()?.title}</div>
-            </div>
-            <div {...stylex.props(styles.coverOutter)}>
-              <Cover episode={asQueue(ep()!)} xstyle={styles.cover}/>
-            </div>
-            <div {...stylex.props(styles.actionOutter)}>
-              {/* 播放 + 点赞 + 收藏 + 分享：交互函数与数据都在本页（见组件顶部），
-                  时长不随播放状态切换，按钮宽度稳定 */}
-              <PlayButton episode={asQueue(ep()!)} appear="fill" isIconOnly={false} width={96} label="duration" />
-              <Button
-                icon={liked() ? <Icon icon="material-symbols:thumb-up" width={20} />:<Icon icon="material-symbols:thumb-up-outline" width={20} /> }
-                appear={liked()?"fill":"outline"}
-                size="lg"
-                round="full"
-                use:auth={true}
-                label={liked() ? t("episode.liked") : t("episode.like")}
-                tooltip={liked() ? t("episode.liked") : t("episode.like")}
-                // xstyle={liked() ? styles.likeActive : undefined}
-                isDisabled={busyLike()}
-                onClick={toggleLike}
-              >
-                {stats.latest?.likes ?? 0}
-              </Button>
-              <Button
-                isIconOnly
-                icon={favorited() ? <Icon icon="mdi:bookmark" width={20} />:<Icon icon="mdi:bookmark-outline" width={20}/>}
-                appear={favorited() ? "fill":"outline"}
-                round="full"
-                size="lg"
-                use:auth={true}
-                label={favorited() ? t("favorite.added") : t("favorite.add")}
-                tooltip={favorited() ? t("favorite.added") : t("favorite.add")}
-                isDisabled={busyFav()}
-                onClick={toggleFavorite}
-              />
-              <Button
-                isIconOnly
-                icon={<Icon icon="mdi:share-variant" width={20} />}
-                appear="outline"
-                size="lg"
-                round="full"
-                label={t("episode.share")}
-                tooltip={t("episode.share")}
-                onClick={() => setShareOpen(true)}
-              />
-            </div>
-          </section>
+    //       <section {...stylex.props(styles.head, styles.grid)}>
+    //         <div {...stylex.props(styles.titleOutter)}>
+    //           <div {...stylex.props(typography.caption, styles.caption)}>
+    //             <Show when={ep()!.number}>
+    //               <span>{t("episode.number", { n: ep()!.number! })} · </span>
+    //             </Show>
+    //             <A href={"/@" + (ep()!.username ?? "")}>{"@"+ep()!.username} </A>
+   
+    //           </div>
+    //           <div {...stylex.props(typography.headingMd,styles.title)}>{ep()?.title}</div>
+    //         </div>
+    //         <div {...stylex.props(styles.coverOutter)}>
+    //           <Cover episode={asQueue(ep()!)} xstyle={styles.cover}/>
+    //         </div>
+    //         <div {...stylex.props(styles.actionOutter)}>
+    
+    //           <PlayButton episode={asQueue(ep()!)} appear="fill" isIconOnly={false} width={96} label="duration" />
+    //           <Button
+    //             icon={liked() ? <Icon icon="material-symbols:thumb-up" width={20} />:<Icon icon="material-symbols:thumb-up-outline" width={20} /> }
+    //             appear={liked()?"fill":"outline"}
+    //             size="lg"
+    //             round="full"
+    //             use:auth={true}
+    //             label={liked() ? t("episode.liked") : t("episode.like")}
+    //             tooltip={liked() ? t("episode.liked") : t("episode.like")}
+    //             isDisabled={busyLike()}
+    //             onClick={toggleLike}
+    //           >
+    //             {stats.latest?.likes ?? 0}
+    //           </Button>
+    //           <Button
+    //             isIconOnly
+    //             icon={favorited() ? <Icon icon="mdi:bookmark" width={20} />:<Icon icon="mdi:bookmark-outline" width={20}/>}
+    //             appear={favorited() ? "fill":"outline"}
+    //             round="full"
+    //             size="lg"
+    //             use:auth={true}
+    //             label={favorited() ? t("favorite.added") : t("favorite.add")}
+    //             tooltip={favorited() ? t("favorite.added") : t("favorite.add")}
+    //             isDisabled={busyFav()}
+    //             onClick={toggleFavorite}
+    //           />
+    //           <Button
+    //             isIconOnly
+    //             icon={<Icon icon="mdi:share-variant" width={20} />}
+    //             appear="outline"
+    //             size="lg"
+    //             round="full"
+    //             label={t("episode.share")}
+    //             tooltip={t("episode.share")}
+    //             onClick={() => setShareOpen(true)}
+    //           />
+    //         </div>
+    //       </section>
          
-          <section {...stylex.props(styles.main,styles.grid)}>
-            <div {...stylex.props(styles.desc)}>{ep()?.description}</div>
-            <Show when={ep()!.tags?.length}>
-              <div {...stylex.props(styles.tags)}>
-                <For each={ep()!.tags!}>
-                  {(tag) => (
-                    // 标签胶囊 → 标签检索页 /tag/<tag>（中文标签 percent-encoded；A 保留链接语义）
-                    <A href={`/tag/${encodeURIComponent(tag)}`} {...stylex.props(styles.tag)}>
-                      #{tag}
-                    </A>
-                  )}
-                </For>
-              </div>
-            </Show>
-            <div {...stylex.props(styles.cast)}></div>
-          </section>
+    //       <section {...stylex.props(styles.main,styles.grid)}>
+    //         <div {...stylex.props(styles.desc)}>{ep()?.description}</div>
+    //         <Show when={ep()!.tags?.length}>
+    //           <div {...stylex.props(styles.tags)}>
+    //             <For each={ep()!.tags!}>
+    //               {(tag) => (
+    //                 <A href={`/tag/${encodeURIComponent(tag)}`} {...stylex.props(styles.tag)}>
+    //                   #{tag}
+    //                 </A>
+    //               )}
+    //             </For>
+    //           </div>
+    //         </Show>
+    //         <div {...stylex.props(styles.cast)}></div>
+    //       </section>
 
-          <section {...stylex.props(styles.main, styles.grid)}>
-            <div {...stylex.props(styles.castSection)}>{t("episode.cast")}</div>
-          </section>
+    //       <section {...stylex.props(styles.main, styles.grid)}>
+    //         <div {...stylex.props(styles.castSection)}>{t("episode.cast")}</div>
+    //       </section>
 
-           {/* cast 演出阵容：主持人 + 嘉宾卡片（无嘉宾不渲染整块） */}
-          <Show when={ep()!.guest}>
-            <section {...stylex.props(styles.main, styles.grid)}>
-              <div {...stylex.props(styles.castSection)}>
-                <div {...stylex.props(typography.caption, styles.castLabel)}>{t("episode.cast")}</div>
-                <div {...stylex.props(styles.castGrid)}>
-                  {/* 主持人卡片：头像 + 称呼（callName ?? displayName）+ @主页。
-                      ClickableCard 内部渲染 <A>，左键点击由 router SPA 接管
-                      （Enter/中键/Cmd+点击原生处理） */}
-                  <ClickableCard
-                    label={`${t("episode.host")} ${hostName() || ep()!.displayName}`}
-                    href={"/@" + (ep()!.username ?? "")}
-                    padding={3}
-                    xstyle={styles.personCard}
-                  >
-                    <Show
-                      when={ep()!.hostAvatar}
-                      fallback={<div {...stylex.props(styles.personAvatarFallback)}>{(hostName() || "D").slice(0, 1)}</div>}
-                    >
-                      <img src={ep()!.hostAvatar!} alt="" {...stylex.props(styles.personAvatar)} />
-                    </Show>
-                    <div {...stylex.props(styles.personBody)}>
-                      <div {...stylex.props(typography.caption, styles.personRole)}>{t("episode.host")}</div>
-                      <div {...stylex.props(styles.personName)}>{hostName() || ep()!.displayName}</div>
-                      <div {...stylex.props(styles.personMeta)}>{"@" + (ep()!.username ?? "")}</div>
-                    </div>
-                  </ClickableCard>
-                  {/* 嘉宾卡片：头像 + 名称 + 平台，链接嘉宾主页（同上，<A> SPA） */}
-                  <ClickableCard
-                    label={`${t("episode.guest")} ${ep()!.guest!.name}`}
-                    href={"/guest/" + ep()!.guest!.id}
-                    padding={3}
-                    xstyle={styles.personCard}
-                  >
-                    <Show
-                      when={ep()!.guest!.avatar}
-                      fallback={<div {...stylex.props(styles.personAvatarFallback)}>{ep()!.guest!.name.slice(0, 1)}</div>}
-                    >
-                      <img src={ep()!.guest!.avatar!} alt="" {...stylex.props(styles.personAvatar)} />
-                    </Show>
-                    <div {...stylex.props(styles.personBody)}>
-                      <div {...stylex.props(typography.caption, styles.personRole)}>{t("episode.guest")}</div>
-                      <div {...stylex.props(styles.personName)}>{ep()!.guest!.name}</div>
-                      <div {...stylex.props(styles.personMeta)}>{ep()!.guest!.platform}</div>
-                    </div>
-                  </ClickableCard>
-                </div>
-              </div>
-            </section>
-          </Show>
+        
+    //       <Show when={ep()!.guest}>
+    //         <section {...stylex.props(styles.main, styles.grid)}>
+    //           <div {...stylex.props(styles.castSection)}>
+    //             <div {...stylex.props(typography.caption, styles.castLabel)}>{t("episode.cast")}</div>
+    //             <div {...stylex.props(styles.castGrid)}>
+          
+    //               <ClickableCard
+    //                 label={`${t("episode.host")} ${hostName() || ep()!.displayName}`}
+    //                 href={"/@" + (ep()!.username ?? "")}
+    //                 padding={3}
+    //                 xstyle={styles.personCard}
+    //               >
+    //                 <Show
+    //                   when={ep()!.hostAvatar}
+    //                   fallback={<div {...stylex.props(styles.personAvatarFallback)}>{(hostName() || "D").slice(0, 1)}</div>}
+    //                 >
+    //                   <img src={ep()!.hostAvatar!} alt="" {...stylex.props(styles.personAvatar)} />
+    //                 </Show>
+    //                 <div {...stylex.props(styles.personBody)}>
+    //                   <div {...stylex.props(typography.caption, styles.personRole)}>{t("episode.host")}</div>
+    //                   <div {...stylex.props(styles.personName)}>{hostName() || ep()!.displayName}</div>
+    //                   <div {...stylex.props(styles.personMeta)}>{"@" + (ep()!.username ?? "")}</div>
+    //                 </div>
+    //               </ClickableCard>
+    //               <ClickableCard
+    //                 label={`${t("episode.guest")} ${ep()!.guest!.name}`}
+    //                 href={"/guest/" + ep()!.guest!.id}
+    //                 padding={3}
+    //                 xstyle={styles.personCard}
+    //               >
+    //                 <Show
+    //                   when={ep()!.guest!.avatar}
+    //                   fallback={<div {...stylex.props(styles.personAvatarFallback)}>{ep()!.guest!.name.slice(0, 1)}</div>}
+    //                 >
+    //                   <img src={ep()!.guest!.avatar!} alt="" {...stylex.props(styles.personAvatar)} />
+    //                 </Show>
+    //                 <div {...stylex.props(styles.personBody)}>
+    //                   <div {...stylex.props(typography.caption, styles.personRole)}>{t("episode.guest")}</div>
+    //                   <div {...stylex.props(styles.personName)}>{ep()!.guest!.name}</div>
+    //                   <div {...stylex.props(styles.personMeta)}>{ep()!.guest!.platform}</div>
+    //                 </div>
+    //               </ClickableCard>
+    //             </div>
+    //           </div>
+    //         </section>
+    //       </Show>
+    //       <ShareDialog episode={asQueue(ep()!)} isOpen={shareOpen()} onOpenChange={setShareOpen} />
 
-          {/* 弹窗：分享（渠道面板）+ 加入播放列表（列表勾选/新建）——面板抽为组件，按钮在 actionOutter */}
-          <ShareDialog episode={asQueue(ep()!)} isOpen={shareOpen()} onOpenChange={setShareOpen} />
-
-        </Show>
-      </Suspense>
-    </div>
+    //     </Show>
+    //   </Suspense>
+    // </div>
   );
 }
