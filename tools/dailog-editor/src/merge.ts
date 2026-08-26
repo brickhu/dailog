@@ -99,6 +99,14 @@ export async function merge(config: EditorConfig, args: string[]): Promise<void>
   writeProgress(submissionId, "merged");
   const size = statSync(finalPath).size;
   console.log(`[merge] 完成 → ${finalPath}（${durationLabel(duration)}，${(size / 1024 / 1024).toFixed(1)}MB）`);
-  console.log(`[merge] 试听：open ${finalPath}`);
   console.log(`[merge] 发布：pnpm editor publish ${submissionId} --audio ${finalPath} --title "..." --language ${language}`);
+
+  // 合成完成自动打开试听（QuickTime Player，macOS）：发布前必须试听——音色/断句/情绪标签
+  try {
+    const app = process.platform === "darwin" ? "-a QuickTime Player" : "";
+    execFileSync("open", app ? ["-a", "QuickTime Player", finalPath] : [finalPath], { stdio: "ignore" });
+    console.log(`[merge] ▶️ 已在 QuickTime Player 打开 ${finalPath} 试听（发布前请确认音色/断句/情绪标签正常）`);
+  } catch {
+    console.log(`[merge] 试听：open ${finalPath}（自动打开失败，请手动打开）`);
+  }
 }

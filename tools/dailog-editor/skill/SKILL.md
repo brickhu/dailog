@@ -120,9 +120,11 @@ triggers:
   │        Step B2 听感打磨（script-craft.md）→ script.json；进 tts 前内容核查（fact_check_list /
   │        privacy_redactions，见阶段 2 ⑤）
   ↓ ⑥ pnpm editor tts <id> --script script.json --language <lang>  （逐段合成）
-  ↓ ⑦ pnpm editor merge <id> --language <lang>                      （合成 final.mp3，intro/outro 按语言匹配）
-  ↓ ⑧ pnpm editor cover <id> [--guest <platform>]                      （本地模板封面，居中「主持人 × 嘉宾」称呼）
-  ↓ ⑨ 与编辑确认 → pnpm editor publish <id> --title "…" …             （一次性上传发布）
+  ↓ ⑦ pnpm editor merge <id> --language <lang>  （合成 final.m4a，intro/outro 按语言匹配；
+  │    合成完成自动用 QuickTime Player 打开试听）
+  ↓ ⑧ pnpm editor cover <id> [--guest <platform>]  （本地模板封面，居中「主持人 × 嘉宾」称呼）
+  ↓ ⑨ 确认点 ②：完整节目元数据逐项列出（标题/简介/标签/嘉宾/语言/时长/封面/分类/highlights/
+  │    references）→ 编辑确认 → pnpm editor publish <id> --title "…" …
   ↓    或 pnpm editor reject <id> --reason "…"                         （拒审）
   ↓ ⑩ 汇报：期号/节目链接 或 拒审原因
 ```
@@ -157,7 +159,7 @@ pnpm editor removal               # 节目下线申请队列（用户申请 → 
   （核心时刻原话）、spine_required（承重墙回合）、background_needed、arc、score（时刻强度分）、
   opening_question（用户开场自述的问题与动机）、suggestion_decision（节目建议取舍）等。
 - pass → 选题 JSON 存 `drafts/{id}/selection.json`，**题材确认门**：向编辑展示选题思路
-  （题材 + 为什么 + moment + 收获价值），确认后进入 Step B1；
+  （题材 + 为什么 + moment + 收获价值），选项确认（[1] 确认 / [2] 拒稿 / [3] 调整方向）后进入 Step B1；
   reject（G1-G5 / no_moment / no_spine）→ 拒稿，写 `drafts/{id}/quality.json {pass:false, reason}`
   （reason 取 reject.feedback，面向投稿人）。
 
@@ -200,8 +202,7 @@ pnpm editor removal               # 节目下线申请队列（用户申请 → 
 清单 5/8/11）——以 prompt 文件为准。
 
 **5. 开场白（轻量结构，见 script-craft.md）**：开场白只保留 问候 + 自我介绍 + 引出嘉宾 三个
-信息点（host/guest 两段），**不介绍 dailog 的用途**（节目名带过即可），切入方式按话题自由
-设计；称呼改写规则（英文原样；中文等小语种 → 拼音/罗马字）见 `prompts/script-craft.md`
+信息点（host/guest 两段），切入方式按话题自由设计；称呼改写规则（英文原样；中文等小语种 → 拼音/罗马字）见 `prompts/script-craft.md`
 检查清单 11（五拍框架 ①）；主持人称呼 callName / 嘉宾名 guests 表 / 画像 personaInfo 的取用
 见本技能「工具链已知点」与 ⑤ TTS。
 
@@ -236,15 +237,22 @@ references/highlights/category（insight/experience/advice/inspiration，由选�
 
 #### 三步确认门（选题 → 内容结构 → 成品，逐关确认）
 
+> **交互方式（统一）**：每个确认门都用**选项编号**呈现，编辑**点击选项或回复编号**即可，无需打字。
+> 支持可点击选项的交互环境（如 DSH GUI）：用选项按钮呈现，编辑点击即确认；纯文本环境：列出
+> `[1] 确认 / [2] ...` 编号，编辑回复编号。修改类选项（改结构/听感反馈）选中后可附一句简短说明。
+
 ```
-三关逐关确认，任何一关打回即重跑对应步骤；全部通过才进 tts：
+三关逐关确认，任何一关打回即重跑对应步骤；全部通过才进 tts。
+每关固定选项编号（随展示内容一起列出）：
+
   ① 题材确认门（Step A pass 后）：
      · 展示选题思路：题材 + 为什么值得做（moment / dimension / title_draft / 收获价值）
-     · 编辑：✅ 确认 → 进内容结构；❌ 拒稿 → 走 reject 流程
+     · 选项：[1] ✅ 确认 → 进内容结构 ｜ [2] ❌ 拒稿 → 走 reject 流程 ｜ [3] ✏️ 调整选题方向（附说明）
   ② 内容确认门（Step B1 后）：
      · 展示 script-draft.json：内容结构（②定向 / ③承重墙回合清单 / moment 位置 / ④落点 / ⑤收束）
        + harvest_summary（收获价值总结，编辑参考）
-     · 编辑：✅ 确认 → 进听感打磨；✏️ 改结构（换角度/切主题/加删回合）→ 回 Step B1 重跑
+     · 选项：[1] ✅ 确认 → 进听感打磨 ｜ [2] ✏️ 改结构（换角度/切主题/加删回合，附说明）→ 回 Step B1
+       重跑 ｜ [3] ❌ 拒稿 → 走 reject 流程
   ③ 成品确认门（Step B2 后）：
      · 成品脚本装进单个代码块整篇呈现（编号 + 说话人 + 情绪标签 + 停顿 + 完整文本，逐行通读）
      · 配套产物一并展示：title / summary / description / tags / coverKeywords / category /
@@ -257,8 +265,8 @@ references/highlights/category（insight/experience/advice/inspiration，由选�
      · **结构对照检查**：承重墙回合/顺序/moment 位置与 script-draft.json 一致（对照铁律 7）
      · **转场检查**：话题切换有由头（被触发/递进/补足/处境关联），无裸问、无「后来我又想」式
        万能过渡词（对照 script-craft.md「话题转移」节）——生硬 → 打回重生成
-     · 编辑：✅ 确认 → 进入 tts；✏️ 听感反馈（情绪/停顿/穿插/转场）→ 只重跑 Step B2；
-       ✏️ 结构反馈 → 回 Step B1
+     · 选项：[1] ✅ 确认 → 进入 tts ｜ [2] ✏️ 听感反馈（情绪/停顿/穿插/转场，附说明）→ 只重跑
+       Step B2 ｜ [3] ✏️ 结构反馈（附说明）→ 回 Step B1 ｜ [4] ❌ 拒稿 → 走 reject 流程
 ```
 
 **红线**：脚本未经三步确认门全部通过不得进入 tts 合成——脚本是节目内容核心
@@ -294,7 +302,8 @@ references/highlights/category（insight/experience/advice/inspiration，由选�
 - **intro/outro 统一自动匹配节目语言**：`tools/dailog-editor/assets/intro.{lang}.mp3` / `outro.{lang}.mp3`
   ——语言专属缺失自动 **fallback 通用资产** `intro.mp3` / `outro.mp3`；都缺失则警告跳过
 - 段间自动插 0.6s 静音；`--intro/--outro` 可显式指定本地文件临时替换
-- 产物 `final.mp3` + 时长/大小；`open final.mp3` 试听（**发布前必须试听**：音色/断句/情绪标签是否正常）
+- 产物 `final.m4a` + 时长/大小；**merge 完成自动用 QuickTime Player 打开试听**
+  （macOS；非 macOS 自动打开失败则提示手动 open）——**发布前必须试听**：音色/断句/情绪标签是否正常
 
 ### ⑦ 封面（本地方案——默认模板渲染，不满意贴图 URL）
 
@@ -328,13 +337,18 @@ pnpm editor publish <id> --title "…" \
 pnpm editor reject <id> --reason "拒审原因（必填，投稿人可见）"
 ```
 
-**确认呈现要求**（确认点 ② 节目信息预览）：
+**确认呈现要求**（确认点 ② 节目信息预览——**完整节目元数据逐项列出**）：
 - **封面图直接展示**（Read 图片呈现给编辑——不要只描述「已生成/什么颜色」）
 - **分类**：自动从 script.json 读取（insight/experience/advice/inspiration，由选题维度映射）——确认无误后发布
 - **description 定稿**：草稿来自 Step B（script.json，publish 自动带上，--description 可覆盖）——核对是否与最终
   title/category 匹配，不匹配则按最终信息重生成一版再确认（规格：2-4 句 80-150 字，钩子 + 上下文 +
   按分类的收获预告，不剧透时刻）
-- 连同标题/简介/标签/嘉宾/时长一并列出，编辑确认后一次执行 publish
+- **逐项列出全部元数据**：标题 / 简介 / 标签 / 嘉宾 / 语言 / 时长 / 封面 / 分类 / highlights /
+  references——编辑逐项确认后一次执行 publish（不要只给标题+封面两项）
+- **确认交互（选项化，无需打字）**：发布确认同样用选项编号——
+  [1] ✅ 确认发布 ｜ [2] ✏️ 改标题/简介/标签（附说明）→ 改完重新列出再确认 ｜ [3] 🎨 重做封面
+  （贴图 URL 或 --texture/--colors）｜ [4] 🔊 试听有问题（指出段）→ 重跑 tts --part n ｜
+  [5] ❌ 取消（改走 reject 或暂不发布）
 
 ### ⑧b 重新生成已发布节目（重做后更新，链接/期号不变）
 
@@ -353,7 +367,7 @@ pnpm editor reject <id> --reason "拒审原因（必填，投稿人可见）"
   ↓ ⑤ pnpm editor tts <submissionId> --script script.json --language <lang> [--parts]
   ↓ ⑥ pnpm editor merge <submissionId> --language <lang>
   ↓ ⑦ pnpm editor cover <submissionId> [--guest <platform>]
-  ↓ ⑧ 发布前试听（open final.mp3）+ 封面 Read 展示 → 编辑确认
+  ↓ ⑧ 发布前试听（merge 自动 QuickTime 打开 final.m4a）+ 封面 Read 展示 → 编辑确认
   ↓ ⑨ pnpm editor republish <episodeId> --title "…" [--cover cover.jpg] [--tags a,b] [--guest <platform>]
   │     （音频/封面/标题/简介/标签/分类/金句/references 全量更新；publishedAt 刷新 → 列表前移）
   ↓ ⑩ 汇报：期号/链接不变，内容已更新
@@ -401,9 +415,11 @@ pnpm editor reject <id> --reason "拒审原因（必填，投稿人可见）"
    · fact_check_list 逐条核实（无法核实的内容：从脚本删除该断言，或不下架）
    · privacy_redactions 逐条确认已在脚本中泛化处理
    核查不通过 → 返回 Step B 修改脚本，不进 tts
-⑥ 确认点 ① 语音预览：open final.mp3 试听（音色/断句/情绪标签）→ 确认
+⑥ 确认点 ① 语音预览：merge 已自动用 QuickTime Player 打开 final.m4a 试听（音色/断句/情绪标签）
+   → 选项：[1] ✅ 确认 ｜ [2] 🔊 哪条/哪段有问题（指出编号）→ 重跑 tts --part n
 ⑦ 确认点 ② 节目信息预览：确认标题/summary/简介/标签/**references**/**封面（封面图直接 Read
-   展示给编辑）**→ 确认发布
+   展示给编辑）**→ 选项：[1] ✅ 确认发布 ｜ [2] ✏️ 改元数据（附说明）→ 改完重列 ｜
+   [3] 🎨 重做封面 ｜ [4] ❌ 取消
 ⑧ pnpm editor publish <id> --title "..." [--summary ...] [--cover ...] [--tags ...]
    [--references-file <json>]
    → 发布成功：投稿状态 → published + 站内通知 + 邮件（「dailog 第 N 期」）
@@ -496,18 +512,25 @@ pnpm editor playlist cover <playlistId> [--texture ...] [--colors "#hex,#hex"] [
   改 storage 接线时别照抄 .env.local 的 127.0.0.1 代理——容器内应 host.docker.internal。
 - **local 环境端口**：API localhost:8787（统一基址）/ 站点 localhost:3000（dailog 容器 80→3000）；
   envs.json 的 siteUrl 用于发布后节目地址展示。
+- **pnpm 沙箱 EPERM（DSH harness）**：根 package.json 声明 `packageManager: pnpm@9.15.0`，
+  而 DSH 内置 pnpm 为 10.x——版本不匹配时 pnpm 的 manage-package-manager-versions 机制会尝试把
+  指定版本装到 `~/Library/pnpm/.tools/`（工作区外）→ 沙箱拦截 `EPERM: mkdir .../.tools/pnpm/9.15.0_tmp_*`。
+  **解法（已固化根 .npmrc）**：项目根 `.npmrc` 加 `manage-package-manager-versions=false`，
+  pnpm 直接用内置版本、不再写工作区外路径；或绕开 pnpm 直调 `node .agents/skills/dailog-editor/scripts/run.js`。
 
 ## 红线
 
 1. **不伪造内容**：网页拉取失败/内容无法提取 → 如实汇报，不凭猜测生成脚本
-2. **脚本必须符合 dailog 标准**：开场轻量结构（问候 + 自我介绍 + 引出嘉宾，双方称呼不可变；
-   不介绍 dailog 用途）、核心对谈 10 分钟内、Step A 选题筛选通过（时刻门含问题归位测试 + 逻辑骨架 +
+2. **脚本必须符合 dailog 标准**：开场轻量结构（问候 + 自我介绍 + 引出嘉宾，双方称呼不可变）、
+   核心对谈 10 分钟内、Step A 选题筛选通过（时刻门含问题归位测试 + 逻辑骨架 +
    价值维度，四维：认知/经验/建议/启发）、提问保真（原生提问 ≥50%、含义不歪曲）与角度保真
    （话题角度 = 用户呈现意图，节目建议为锚，见 script-craft.md 铁律 6）；无时刻/骨架断裂/
    任务型对话 → 拒审
-3. **脚本确认门**：生成脚本后必须**全文展示**给编辑确认（内容/时长/称呼/情绪），未确认不进 tts
-4. **发布前必须试听**（open final.mp3）：音色克隆异常/断句错误/情绪标签未生效 → 修好再发
-5. **发布/拒审是外发动作**：先与编辑确认（标题/封面/拒审原因），确认后一次执行；**重新生成（republish）同样是外发动作**——覆盖已上线节目的音频/封面/元数据，必须先试听 + 编辑确认
+3. **脚本确认门**：生成脚本后必须**全文展示**给编辑确认（内容/时长/称呼/情绪），用选项编号
+   （[1] 确认 / [2] 听感反馈 / [3] 结构反馈 / [4] 拒稿）收口，未确认不进 tts
+4. **发布前必须试听**（merge 自动用 QuickTime Player 打开 final.m4a）：音色克隆异常/断句错误/情绪标签未生效 → 修好再发
+5. **发布/拒审是外发动作**：先与编辑确认（标题/封面/拒审原因，选项编号收口），确认后一次执行；
+   **重新生成（republish）同样是外发动作**——覆盖已上线节目的音频/封面/元数据，必须先试听 + 编辑确认
 6. **拒审原因必填且具体**：投稿人 /me/submits 可见，邮件也会发送——写清楚为什么
 7. **密钥/token 不出本地**：`.dailog-editor/.env` 与 `session.json` 均 gitignored + chmod 600；
    汇报中不打印 token/key；登录走浏览器授权（密码不落盘）
