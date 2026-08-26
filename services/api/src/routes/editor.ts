@@ -34,6 +34,8 @@ interface PublishMeta {
   language?: string;
   guestId?: string;
   durationSeconds?: number;
+  /** 分类 token（Step A 选题维度）：insight 认知 / experience 经验 / advice 建议 / inspiration 启发 */
+  category?: string;
   /** 无情绪标签的完整台本（节目页展示用；可选） */
   transcript?: string;
 }
@@ -162,6 +164,9 @@ export function editorRoutes(deps: EditorDeps) {
     const title = typeof meta.title === "string" && meta.title.trim() ? meta.title.trim().slice(0, 200) : null;
     const description = typeof meta.description === "string" && meta.description.trim() ? meta.description.trim().slice(0, 2000) : null;
     const language = typeof meta.language === "string" && /^[a-z]{2,3}$/i.test(meta.language) ? meta.language.toLowerCase() : "zh";
+    const category = typeof meta.category === "string" && ["insight", "experience", "advice", "inspiration"].includes(meta.category)
+      ? meta.category
+      : null;
     const tags = Array.isArray(meta.tags)
       ? meta.tags.filter((t): t is string => typeof t === "string" && t.trim().length > 0).map((t) => t.trim().slice(0, 30)).slice(0, 10)
       : null;
@@ -243,6 +248,7 @@ export function editorRoutes(deps: EditorDeps) {
       durationSeconds,
       language,
       tags,
+      category,
       transcript,
       rawConversationUrl: detail.url,
     });

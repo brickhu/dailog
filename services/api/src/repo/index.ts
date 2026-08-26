@@ -137,6 +137,8 @@ export interface EpisodeCreateRow {
   durationSeconds?: number | null;
   language?: string;
   tags?: string[] | null;
+  /** 分类 token（insight/experience/advice/inspiration） */
+  category?: string | null;
   /** 无情绪标签的完整台本（节目页展示用） */
   transcript?: string | null;
   /** 原始对话链接（服务端自动填 submission.url） */
@@ -961,6 +963,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             durationSeconds: row.durationSeconds ?? null,
             language: row.language ?? "zh",
             tags: row.tags ?? null,
+            category: row.category ?? null,
             transcript: row.transcript ?? null,
             rawConversationUrl: row.rawConversationUrl ?? null,
             number,
@@ -1011,6 +1014,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           language: schema.episodes.language,
           audioUrl: schema.episodes.audioUrl,
           tags: schema.episodes.tags,
+          category: schema.episodes.category,
           transcript: schema.episodes.transcript,
           sourceUrl: sql<string>`COALESCE(${schema.episodes.rawConversationUrl}, ${schema.submissions.url})`,
           username: schema.authUsers.name,
