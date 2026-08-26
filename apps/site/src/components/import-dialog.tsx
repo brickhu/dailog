@@ -15,9 +15,12 @@ type DialogState = "input" | "checking" | "error" | "duplicate";
 /** 支持的 AI 对话平台分享链接（仅这些平台的分享页 URL 才算合法投稿链接） */
 const SHARE_HOSTS = [
   "chat.deepseek.com", "claude.ai", "chatgpt.com", "chat.openai.com",
-  "gemini.google.com", "kimi.moonshot.cn", "doubao.com", "www.doubao.com",
+  "gemini.google.com", "share.gemini.google", "kimi.moonshot.cn", "doubao.com", "www.doubao.com",
   "tongyi.aliyun.com", "perplexity.ai",
 ];
+
+/** 专用分享子域：整个域名只承载分享页（如 share.gemini.google/<id>），任意非根路径即分享页 */
+const SHARE_SUBDOMAINS = ["share.gemini.google"];
 
 /** 平台分享链接识别：host 白名单 + 分享路径（/share/ 或 /s/ 或非根路径） */
 export function isShareUrl(input: string): boolean {
@@ -27,8 +30,11 @@ export function isShareUrl(input: string): boolean {
     const host = url.hostname.toLowerCase();
     if (!SHARE_HOSTS.includes(host)) return false;
     const path = url.pathname.replace(/\/+$/, "");
+    if (path.length <= 1) return false;
+    // 专用分享子域（share.gemini.google/<shareId>）：路径即分享 ID，任意非根路径都算分享页
+    if (SHARE_SUBDOMAINS.includes(host)) return true;
     // 分享页：/share/xxx、/s/xxx，或至少是具体内容路径（非首页）
-    return path.length > 1 && (path.includes("/share/") || path.includes("/s/") || path.split("/").length > 2);
+    return path.includes("/share/") || path.includes("/s/") || path.split("/").length > 2;
   } catch {
     return false;
   }
@@ -215,7 +221,9 @@ export function ImportDialog() {
     setFailMsg("");
   };
 
-  // 确认投稿：重复检测（已投稿直接提示跳转）→ 可达性检测 → 可触达跳 /submit?url=…（第二步）
+  // 确认投稿：重复检测（已投稿直接提示跳转，可靠门槛）→ 存检测结果 → 跳 /submit?id=…（第二步）。
+  // 可达性**不阻断**：格式已由 isShareUrl 校验（可靠门槛），链接有效性由编辑端采集时验证；
+  // 可达性探测受 CORP/网络/反爬影响会误判，不能当作投稿门槛（后端投稿端点也不校验可达性）。
   const handleConfirm = async () => {
     setState("checking");
     try {
@@ -228,22 +236,17 @@ export function ImportDialog() {
         setState("duplicate");
         return;
       }
-      // 2) 可达性检测 + 结果存 localStorage（key = 确定性投稿 ID）→ 跳 /submit?id=…
-      const { id, reachable } = await checkUrlAndStore(url().trim());
-      if (reachable) {
-        close();
-        const target = `/submit?id=${encodeURIComponent(id)}`;
-        if (window.location.pathname.startsWith("/submit")) {
-          // 已在 /submit（如 empty 态点 Submit again）：整页刷新，
-          // 重新挂载并读取 localStorage 中的检测结果（客户端 navigate 不重跑 onMount）
-          window.location.href = target;
-        } else {
-          navigate(target);
-        }
-        return;
+      // 2) 存检测结果（localStorage，key = 确定性投稿 ID）→ 跳 /submit?id=…（无论可达性）
+      const { id } = await checkUrlAndStore(url().trim());
+      close();
+      const target = `/submit?id=${encodeURIComponent(id)}`;
+      if (window.location.pathname.startsWith("/submit")) {
+        // 已在 /submit（如 empty 态点 Submit again）：整页刷新，
+        // 重新挂载并读取 localStorage 中的检测结果（客户端 navigate 不重跑 onMount）
+        window.location.href = target;
+      } else {
+        navigate(target);
       }
-      setFailMsg(t("importDialog.unreachable"));
-      setState("error");
     } catch {
       setFailMsg(t("importDialog.unreachable"));
       setState("error");

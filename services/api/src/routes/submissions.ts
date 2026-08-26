@@ -31,9 +31,12 @@ export function isValidUrl(input: string): boolean {
  *  后端权威校验——防绕过前端检测直接提交任意 URL） */
 const SHARE_HOSTS = [
   "chat.deepseek.com", "claude.ai", "chatgpt.com", "chat.openai.com",
-  "gemini.google.com", "kimi.moonshot.cn", "doubao.com", "www.doubao.com",
+  "gemini.google.com", "share.gemini.google", "kimi.moonshot.cn", "doubao.com", "www.doubao.com",
   "tongyi.aliyun.com", "perplexity.ai",
 ];
+
+/** 专用分享子域：整个域名只承载分享页（如 share.gemini.google/<id>），任意非根路径即分享页 */
+const SHARE_SUBDOMAINS = ["share.gemini.google"];
 
 export function isShareUrl(input: string): boolean {
   try {
@@ -42,7 +45,10 @@ export function isShareUrl(input: string): boolean {
     const host = url.hostname.toLowerCase();
     if (!SHARE_HOSTS.includes(host)) return false;
     const path = url.pathname.replace(/\/+$/, "");
-    return path.length > 1 && (path.includes("/share/") || path.includes("/s/") || path.split("/").length > 2);
+    if (path.length <= 1) return false;
+    // 专用分享子域（share.gemini.google/<shareId>）：路径即分享 ID，任意非根路径都算分享页
+    if (SHARE_SUBDOMAINS.includes(host)) return true;
+    return path.includes("/share/") || path.includes("/s/") || path.split("/").length > 2;
   } catch {
     return false;
   }
@@ -60,29 +66,38 @@ export function canonicalUrl(input: string): string {
   }
 }
 
-/** 触达性探活：HEAD 请求，能拿到 HTTP 响应（任何状态码）即视为可达——
- *  403/429 等反爬响应说明资源存在只是被挡（编辑本地 Agent 有浏览器可处理）；
- *  仅网络层失败（DNS/连接拒绝/超时）判不可达。 */
-export async function isReachable(url: string): Promise<boolean> {
+/** 触达性探测结果：
+ *  reachable = 资源存在（200/3xx/403/429 等——反爬响应说明资源存在只是被挡，
+ *              编辑本地 Agent 有浏览器可处理；重定向 follow 后看最终状态码）；
+ *  notfound  = 明确 404——页面不存在；
+ *  unknown   = 网络层失败（DNS/连接拒绝/超时）——无法区分 404/存在，交由调用方兜底。
+ * 判定标准：白名单域名内「非 404」即可触达。 */
+export type Reachability = "reachable" | "notfound" | "unknown";
+
+export async function probeReachability(url: string): Promise<Reachability> {
+  // HEAD 优先（轻量）：非 404 响应即可判定存在；404/拿不到响应（405/网络层）不轻信，GET 确认
+  let headStatus: number | null = null;
   try {
     const res = await fetch(url, {
       method: "HEAD",
       redirect: "follow",
       signal: AbortSignal.timeout(REACH_TIMEOUT_MS),
     });
-    return true;
+    headStatus = res.status;
+    if (headStatus !== 404) return "reachable"; // 200/3xx/403/429 等：资源存在
   } catch {
-    // HEAD 可能被部分站点拒绝（405/网络层），回退 GET 再试一次（小体积探测，不读 body）
-    try {
-      const res = await fetch(url, {
-        method: "GET",
-        redirect: "follow",
-        signal: AbortSignal.timeout(REACH_TIMEOUT_MS),
-      });
-      return true;
-    } catch {
-      return false;
-    }
+    // HEAD 被拒（405/网络层）→ 走 GET 确认
+  }
+  // GET 确认（小体积探测，不读 body）：404 = 不存在；其余（含 403/429/5xx）视为存在
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      signal: AbortSignal.timeout(REACH_TIMEOUT_MS),
+    });
+    return res.status === 404 ? "notfound" : "reachable";
+  } catch {
+    return "unknown";
   }
 }
 
@@ -165,6 +180,7 @@ export function submissionsRoutes(repo: Repos) {
     responses: {
       200: { content: { "application/json": { schema: z.object({ ok: z.boolean() }) } }, description: "URL 可达" },
       400: { content: { "application/json": { schema: Err } }, description: "URL 非法" },
+      404: { content: { "application/json": { schema: Err } }, description: "URL 不存在（404）" },
       422: { content: { "application/json": { schema: Err } }, description: "URL 不可达（网络层失败）" },
     },
   });
@@ -177,8 +193,9 @@ export function submissionsRoutes(repo: Repos) {
     if (url.length > 2048) return c.json({ error: "invalid_url", detail: "链接过长" }, 400);
     // 探活用原生 URL（实际可访问性）；响应返回规范 URL 供前端存储
     const canonical = canonicalUrl(url);
-    const ok = await isReachable(url);
-    if (!ok) return c.json({ error: "url_unreachable", detail: "链接当前无法访问，请确认链接有效后重试" }, 422);
+    const r = await probeReachability(url);
+    if (r === "notfound") return c.json({ error: "not_found", detail: "链接不存在（页面返回 404），请确认链接有效" }, 404);
+    if (r === "unknown") return c.json({ error: "url_unreachable", detail: "链接当前无法访问，请确认链接有效后重试" }, 422);
     return c.json({ ok: true, url: canonical });
   }) as unknown as RouteHandler<typeof rReach, { Variables: { userId: string } }>);
 

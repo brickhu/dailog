@@ -8,7 +8,7 @@ import { Button } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../components/auth-gate";
 import { isShareUrl } from "../components/import-dialog";
-import { getUrlCheck, markSubmitted, probeReachable } from "../lib/url-check";
+import { getUrlCheck, markSubmitted, probeReachable, type Reachability } from "../lib/url-check";
 import { env } from "../lib/env";
 import { openImportDialog } from "../components/import-dialog";
 import VoiceSamplePreview from "../components/voice-sample-preview";
@@ -168,10 +168,14 @@ export default function SubmitPage() {
   const [url, setUrl] = createSignal("");
   // 当前检测结果 id（localStorage 的 json key；用于展示检测信息区块）
   const [checkId, setCheckId] = createSignal<string | null>(null);
-  // URL 本地检测（防绕过弹框手动构造 ?url=）：非法/不可达 → 导入按钮置灰
-  // 状态：checking（检测中）/ ok（可达）/ invalid（非平台链接）/ unreachable（不可达）/ empty（缺失）
+  // URL 本地检测（防绕过弹框手动构造 ?url=）：格式非法 → 导入按钮置灰
+  // 状态：checking（检测中）/ ok（格式合法）/ invalid（非平台链接）/ unreachable（探测未确认）/ empty（缺失）
+  // 可达性探测仅供参考，不阻断投稿（探测受 CORP/网络影响会误判；后端投稿端点不校验可达性）
   const [urlState, setUrlState] = createSignal<"checking" | "ok" | "invalid" | "unreachable" | "empty">("checking");
-  const urlReady = () => urlState() === "ok";
+  // 门槛：格式合法即可提交；仅明确 404（页面不存在）才拦截——其余（可达/无法确认）均可提交
+  const urlReady = () => (urlState() === "ok" || urlState() === "unreachable") && reachable() !== "notfound";
+  // 可达性探测结果（仅展示，不阻断投稿）：null = 检测中 / reachable = 存在 / notfound = 404 / unknown = 无法确认
+  const [reachable, setReachable] = createSignal<Reachability | null>(null);
   const [existing, setExisting] = createSignal<string | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   // 人设（可选）+ 采样（必填；已有采样自动填充可沿用）
@@ -191,20 +195,27 @@ export default function SubmitPage() {
   // 弹框确认投稿后 navigate('/submit?id=…') 无需整页刷新）：
   // ?id= 从 localStorage 取检测结果；无缓存/过期 → empty（独占提示）；
   // 旧链接 ?url= 兜底本地检测（手动构造无法绕过）
+  // 门槛：格式合法（isShareUrl）即可投稿——可达性探测仅供参考，不阻断
   createEffect(() => {
     const id = params.id;
     if (id) {
       setCheckId(id);
       const check = getUrlCheck(id);
-      if (check && check.valid && check.reachable) {
+      if (check && check.valid) {
         setUrl(check.url);
         setUrlState("ok");
+        // 可达性仅展示提示：重新探测一次（结果不阻断投稿）
+        setReachable(null);
+        void probeReachable(check.url)
+          .then(setReachable)
+          .catch(() => setReachable("unknown"));
         return;
       }
       setUrlState("empty");
       return;
     }
     setCheckId(null);
+    setReachable(null);
     const prefill = params.url;
     if (!prefill || !prefill.startsWith("http")) {
       setUrlState("empty");
@@ -215,10 +226,11 @@ export default function SubmitPage() {
       setUrlState("invalid");
       return;
     }
-    setUrlState("checking");
+    setUrlState("ok");
+    // 可达性仅展示提示：探测成功显示确认，失败也不阻断（见 unreachable 提示文案）
     void probeReachable(prefill)
-      .then((ok) => setUrlState(ok ? "ok" : "unreachable"))
-      .catch(() => setUrlState("unreachable"));
+      .then(setReachable)
+      .catch(() => setReachable("unknown"));
   });
 
   // 进入确认投稿态时拉取已有人设/采样（此时 AuthGate 已放行、必然登录；避免未登录 401 噪音）
@@ -330,9 +342,11 @@ export default function SubmitPage() {
                     </div>
                     <div {...stylex.props(styles.urlRow)}>
                       <p {...stylex.props(styles.urlLabel)}>{t("submit.checkValid")}</p>
-                      <p {...stylex.props(styles.urlValue)}>{urlState() === "ok" ? "✓" : "—"}</p>
+                      <p {...stylex.props(styles.urlValue)}>{urlState() === "ok" || urlState() === "unreachable" ? "✓" : "—"}</p>
                       <p {...stylex.props(styles.urlLabel)}>{t("submit.checkReachable")}</p>
-                      <p {...stylex.props(styles.urlValue)}>{urlState() === "ok" ? "✓" : "—"}</p>
+                      <p {...stylex.props(styles.urlValue)}>
+                        {reachable() === "reachable" ? "✓" : reachable() === "notfound" ? "404" : reachable() === "unknown" ? "—" : t("submit.checking")}
+                      </p>
                       <p {...stylex.props(styles.urlLabel)}>{t("submit.checkTime")}</p>
                       <p {...stylex.props(styles.urlValue)}>
                         {checkId() ? new Date(getUrlCheck(checkId()!)?.checkedAt ?? Date.now()).toLocaleString("zh-CN") : ""}
@@ -345,8 +359,11 @@ export default function SubmitPage() {
                   <Show when={urlState() === "checking"}>
                     <p {...stylex.props(styles.hint)}>{t("submit.importing")}</p>
                   </Show>
-                  <Show when={urlState() === "unreachable"}>
-                    <p {...stylex.props(styles.error)}>{t("importDialog.unreachable")}</p>
+                  <Show when={reachable() === "notfound" && (urlState() === "ok" || urlState() === "unreachable")}>
+                    <p {...stylex.props(styles.error)}>{t("submit.notFound")}</p>
+                  </Show>
+                  <Show when={reachable() === "unknown" && (urlState() === "ok" || urlState() === "unreachable")}>
+                    <p {...stylex.props(styles.hint)}>{t("submit.reachableUnconfirmed")}</p>
                   </Show>
                 </div>
 

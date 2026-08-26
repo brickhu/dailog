@@ -1,7 +1,9 @@
-// URL 合法性/可达性检测的统一入口 + 本地存储（localStorage JSON，key = 确定性投稿 ID）：
+// URL 合法性与本地存储的统一入口（localStorage JSON，key = 确定性投稿 ID）：
 // - 输入 URL → 算 ID（平台标识 + 内容 ID 的 UUID v5，与后端 submissionIdFromUrl 一致）
-// - 检测（平台白名单 + 可达性探活）→ 结果存 localStorage：{ [id]: { url, valid, reachable, checkedAt } }
-// - /submit?id=… 直接从 localStorage 取 URL 与检测结果，无需重新检测、不暴露 URL 参数
+// - 合法性（平台白名单，可靠门槛）→ 结果存 localStorage：{ [id]: { url, valid, reachable, checkedAt } }
+// - /submit?id=… 直接从 localStorage 取 URL 与合法性，无需重新检测、不暴露 URL 参数
+// 设计说明：可达性探测不可靠（CORP/网络/反爬均会误判），且后端投稿端点不校验可达性——
+// 因此 reachable 仅作展示参考，不作为投稿门槛；内容有效性由编辑端采集时验证。
 import { isShareUrl } from "../components/import-dialog";
 
 // 与后端 submissionIdFromUrl 一致的命名空间与算法（sha1 + UUID v5 位标记）
@@ -32,7 +34,8 @@ export async function submissionIdFromUrl(url: string): Promise<string> {
 export interface UrlCheckEntry {
   url: string;
   valid: boolean;
-  reachable: boolean;
+  /** 可达性探测结果（仅展示参考，不阻断投稿）：true = 可达 / false = 探测失败 / null = 未确认 */
+  reachable: boolean | null;
   checkedAt: number;
 }
 
@@ -101,27 +104,52 @@ export function getUrlCheck(id: string): UrlCheckEntry | null {
   return entry;
 }
 
-/** 用户端可达性探测：no-cors 直连目标 URL——页面是否存在（任何 HTTP 响应即存在，
- *  含 403/404/挑战页；opaque 响应无需读内容）。网络层失败（DNS/连接拒绝/超时）→ 不存在。
- *  放用户端的原因：服务端（数据中心 IP）可能被平台封锁而误判；用户能打开的页面，
- *  理论上在其浏览器环境中就能 fetch 到。 */
-export async function probeReachable(url: string): Promise<boolean> {
+/** 可达性探测结果：
+ *  reachable = 资源存在（白名单内非 404：200/3xx/403/429 等——反爬/挑战页说明资源存在）；
+ *  notfound  = 明确 404——页面不存在；
+ *  unknown   = 无法确认（用户本地与服务端都拿不到响应：网络层失败/CORP 拦截/服务器被平台封锁）。
+ * 判定标准：白名单域名内「非 404」即可触达。
+ * 通道顺序：① 用户本地优先——no-cors 直连，用户本地能拿到任何响应即视为可达
+ *          （最贴近用户真实体验：用户能打开的页面即为存在，且不依赖服务端）；
+ *          ② 服务端兜底（/v1/submissions/reachable：HEAD/GET 读真实状态码，区分 404）
+ *          ——仅在客户端失败时启用（如 Google 分享页 CORP 拦截、用户网络到目标不通）。
+ * 结果仅供展示提示，不阻断投稿（后端投稿端点不校验可达性）。 */
+export type Reachability = "reachable" | "notfound" | "unknown";
+
+export async function probeReachable(url: string): Promise<Reachability> {
+  // ① 用户本地优先：no-cors 直连——任何 HTTP 响应（含 403/挑战页/404 的 opaque）
+  //    都说明用户本地能访问该页面 → 视为可达（与用户浏览器中的实际体验一致）
   try {
     await fetch(url, { mode: "no-cors", redirect: "follow", signal: AbortSignal.timeout(8000) });
-    return true;
+    return "reachable";
   } catch {
-    return false;
+    // 客户端失败（CORP 拦截/用户网络到目标不通）→ ② 服务端兜底
+  }
+  // ② 服务端兜底：能读真实状态码（HEAD/GET），区分 404（页面不存在）
+  try {
+    const res = await fetch("/v1/submissions/reachable", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (res.ok) return "reachable";
+    if (res.status === 404) return "notfound";
+    return "unknown";
+  } catch {
+    return "unknown";
   }
 }
 
-/** 统一检测入口：算 ID → 合法性（平台白名单）→ 用户端可达性探测 → 存 localStorage → 返回结果 */
-export async function checkUrlAndStore(url: string): Promise<{ id: string; valid: boolean; reachable: boolean }> {
+/** 统一检测入口：算 ID → 合法性（平台白名单，可靠门槛）→ 存 localStorage → 返回结果。
+ *  可达性**不在入口等待探测**（探测仅供提交页展示；入口阻塞会让有效链接因误判被拦）。
+ *  reachable 字段由提交页异步探测后更新，或保持 null（未确认）。 */
+export async function checkUrlAndStore(url: string): Promise<{ id: string; valid: boolean; reachable: boolean | null }> {
   const id = await submissionIdFromUrl(url);
   const valid = isShareUrl(url);
-  const reachable = valid ? await probeReachable(url) : false;
-  const entry: UrlCheckEntry = { url, valid, reachable, checkedAt: Date.now() };
+  const entry: UrlCheckEntry = { url, valid, reachable: null, checkedAt: Date.now() };
   const store = readStore();
   store[id] = entry;
   writeStore(store);
-  return { id, valid, reachable };
+  return { id, valid, reachable: null };
 }
