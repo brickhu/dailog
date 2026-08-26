@@ -6,8 +6,11 @@ import { api, durationLabel } from "./lib.js";
 
 interface PublishedEpisodeRow {
   id: string;
+  slug: string;
   title: string | null;
   number: number | null;
+  status: string;
+  isPublic: boolean;
   isPicked: boolean;
   tags: string[] | null;
   durationSeconds: number | null;
@@ -39,13 +42,17 @@ export async function episodes(config: EditorConfig, args: string[]): Promise<vo
       return;
     }
   }
+  const site = (config.siteUrl ?? "").replace(/\/$/, "");
   console.log(`[episodes] 已发布节目（${filtered.length}/${rows.length}）:`);
   for (const r of filtered) {
-    const pick = r.isPicked ? " ⭐" : "";
+    const state = r.isPublic === false ? "已下架" : "已发布";
+    const pick = r.isPicked ? " ⭐ 精选" : "";
     const dur = r.durationSeconds != null ? ` · ${durationLabel(r.durationSeconds)}` : "";
     const tags = r.tags?.length ? ` [${r.tags.join(", ")}]` : "";
     const date = r.publishedAt ? r.publishedAt.slice(0, 10) : "?";
-    console.log(`  #${r.number ?? "?"}  ${r.title ?? "(无标题)"}${pick} · ${date}${dur}${tags}`);
+    console.log(`  #${r.number ?? "?"}  ${r.title ?? "(无标题)"}${pick}`);
+    console.log(`      状态: ${state} · ${date}${dur}`);
+    console.log(`      链接: ${site}/episode/${r.slug}`);
     console.log(`      id: ${r.id}`);
   }
   console.log("\n提示：重新生成某期 → pnpm editor detail <submissionId> 找到该投稿，重跑 三步制作 → tts → merge → cover → republish");

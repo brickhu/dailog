@@ -259,8 +259,11 @@ export interface EpisodesRepo {
   /** 已发布节目清单（编辑端）：按期号倒序 */
   listPublished(): Promise<Array<{
     id: string;
+    slug: string;
     title: string | null;
     number: number | null;
+    status: string;
+    isPublic: boolean;
     isPicked: boolean;
     tags: string[] | null;
     durationSeconds: number | null;
@@ -1255,8 +1258,11 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return db
           .select({
             id: schema.episodes.id,
+            slug: schema.episodes.slug,
             title: schema.episodes.title,
             number: schema.episodes.number,
+            status: schema.episodes.status,
+            isPublic: schema.episodes.isPublic,
             isPicked: schema.episodes.isPicked,
             tags: schema.episodes.tags,
             durationSeconds: schema.episodes.durationSeconds,
