@@ -17,6 +17,13 @@ triggers:
   - 合成语音
   - 发布节目
   - 拒审
+  - 重新生成节目
+  - 重新制作节目
+  - 重做节目
+  - 更新已发布节目
+  - 重新跑一遍工作流
+  - regenerate
+  - republish
   - 编辑工作流
   - editor
   - publish episode
@@ -184,7 +191,9 @@ pnpm editor removal               # 节目下线申请队列（用户申请 → 
 
 **2. 时长**：核心对谈 10 分钟内（≤约 2800 字；上限由 Fish Audio 多说话人接口时长上限决定，这也是分段合成 --parts 的意义）——开场+自述与落点+收束不计入（框架节拍保持轻），压缩长段落、去除冗余
 
-**3. 朗读向**：多用短句、自然断句，避免书面语和长修饰（"此外""综上所述"），标点控制朗读节奏
+**3. 朗读向**：多用短句、自然断句，避免书面语和长修饰（"此外""综上所述"），标点控制朗读节奏；
+   口播台词**不得出现会被 TTS 逐字母拼读的写法**（如 DESIGN.md → 改写为 "design 点 M D"，
+   见 script-craft.md「发音可读性」节 + 检查清单 20）
 
 **4. 真人对话感（细则已并入 script-craft.md）**：留白/穿插/比喻/打断/调侃/隐私模糊化/欢笑/
 直播感/思考 九条细则已并入 `prompts/script-craft.md`（「情绪设计」+「临场思考」+ 听感检查
@@ -327,6 +336,40 @@ pnpm editor reject <id> --reason "拒审原因（必填，投稿人可见）"
   按分类的收获预告，不剧透时刻）
 - 连同标题/简介/标签/嘉宾/时长一并列出，编辑确认后一次执行 publish
 
+### ⑧b 重新生成已发布节目（重做后更新，链接/期号不变）
+
+> 场景：已发布节目要重做（重写脚本/换音色/修复发音/改情绪）——重新跑一遍制作工作流，
+> 把新成品**更新到同一期**（保留 id/slug/期号/播放统计/精选/公开状态），而不是新建一期。
+
+```
+用户: "重新生成第 N 期" / 给 episodeId / 给节目链接
+  ↓ ① 会话初始化（选环境 → auth-status，见前）
+  ↓ ② 定位节目：pnpm editor episodes [--match "关键词|期号"]   （已发布清单：期号/标题/日期/id）
+  ↓ ③ 拿投稿：pnpm editor detail <submissionId> 或 GET /v1/editor/episodes/<episodeId>
+  │     确认原始对话/采样仍在（voiceSamples）；草稿目录 drafts/<submissionId>/ 有 dialogue.json 可复用
+  ↓ ④ 重跑三步制作（与首期相同，可带修订指令）：
+  │     Step A 选题筛选 → Step B1 内容结构 → Step B2 听感打磨（script-craft）→ script.json
+  │     修订指令示例："发音可读性：把 DESIGN.md 改为 design 点 M D" / "情绪更兴奋" / "落点更轻"
+  ↓ ⑤ pnpm editor tts <submissionId> --script script.json --language <lang> [--parts]
+  ↓ ⑥ pnpm editor merge <submissionId> --language <lang>
+  ↓ ⑦ pnpm editor cover <submissionId> [--guest <platform>]
+  ↓ ⑧ 发布前试听（open final.mp3）+ 封面 Read 展示 → 编辑确认
+  ↓ ⑨ pnpm editor republish <episodeId> --title "…" [--cover cover.jpg] [--tags a,b] [--guest <platform>]
+  │     （音频/封面/标题/简介/标签/分类/金句/references 全量更新；publishedAt 刷新 → 列表前移）
+  ↓ ⑩ 汇报：期号/链接不变，内容已更新
+```
+
+**要点**：
+- **不是新建期**：republish 更新已有 episode 行——期号、slug（节目链接）、播放统计、收藏、
+  精选标记全部保留；仅内容字段（音频/封面/元数据）替换
+- **publishedAt 刷新**：重新生成后节目按更新时间重新露出（列表/推荐前移），ETag 变化 → 客户端
+  重新拉取新音频（不会缓存旧版）
+- **草稿目录按投稿隔离**：重做沿用 drafts/<submissionId>/（dialogue.json 复用时无需重新 fetch；
+  内容来源变化则先 pnpm editor fetch <submissionId> 刷新）
+- **确认门照旧**：三步确认门（选题/内容/成品）+ 发布前试听 + 封面展示——重做也走完整确认
+- **无 cover 时保留旧封面**：republish 不传 cover → 服务端保留原封面（避免误清）
+- **投稿人通知**：服务端不自动通知（重做是编辑内部动作）；如需告知投稿人，编辑自行处理
+
 ## 批量处理（批量过滤器 → 选号 → 制作流水线）
 
 ### 阶段 1：批量过滤器（提取 + 质量检查/脚本生成）
@@ -442,6 +485,7 @@ pnpm editor playlist cover <playlistId> [--texture ...] [--colors "#hex,#hex"] [
 - **本地环境存储是 R2**：`services/api/.env.local` 为 `STORAGE_DRIVER=r2`——发布产物在
   R2 不在宿主机 `services/api/data`；`episodes/{userId}/{submissionId}.m4a|mp3` key 确定性，
   重发同投稿会**覆盖旧音频对象，但 episode 行每次新建**（publish 非幂等，见下条）。
+- **republish 是幂等的**（与 publish 不同）：更新已有 episode 行（确定性 id），重复调用只覆盖内容不产生重复期——重试安全；但仍需先确认目标 episodeId 正确（误传别的 episode 会覆盖其内容）。
 - **publish 无响应 ≠ 发布失败**：publish 是同步端点，服务端在
   createPublished（期号+状态流转）之后才等 sendEmail——受限网络下 api.resend.com 不可达且原实现
   无超时，响应被邮件挂死；客户端超时被杀后重试会再建一期。已修复：sendEmail 加 10s 超时
@@ -463,7 +507,7 @@ pnpm editor playlist cover <playlistId> [--texture ...] [--colors "#hex,#hex"] [
    任务型对话 → 拒审
 3. **脚本确认门**：生成脚本后必须**全文展示**给编辑确认（内容/时长/称呼/情绪），未确认不进 tts
 4. **发布前必须试听**（open final.mp3）：音色克隆异常/断句错误/情绪标签未生效 → 修好再发
-5. **发布/拒审是外发动作**：先与编辑确认（标题/封面/拒审原因），确认后一次执行
+5. **发布/拒审是外发动作**：先与编辑确认（标题/封面/拒审原因），确认后一次执行；**重新生成（republish）同样是外发动作**——覆盖已上线节目的音频/封面/元数据，必须先试听 + 编辑确认
 6. **拒审原因必填且具体**：投稿人 /me/submits 可见，邮件也会发送——写清楚为什么
 7. **密钥/token 不出本地**：`.dailog-editor/.env` 与 `session.json` 均 gitignored + chmod 600；
    汇报中不打印 token/key；登录走浏览器授权（密码不落盘）

@@ -56,6 +56,7 @@ function fakeRepo(): AppDeps["repo"] {
       getPublicEpisode: async () => null,
       getById: async () => null,
       updatePublished: async () => {},
+      updateEpisodeContent: async () => {},
       listPublished: async () => [],
       listBySubmission: async () => [],
       listByGuest: async () => [],

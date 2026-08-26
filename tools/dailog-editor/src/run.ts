@@ -36,6 +36,10 @@
 //   pnpm editor publish <submissionId> --title "..." [--audio final.mp3] [--cover c.jpg]
 //                                               [--description ...] [--tags a,b] [--language zh] [--guest claude]
 //   pnpm editor reject <submissionId> --reason "..."
+//   pnpm editor episodes [--match "关键词"]        已发布节目清单（重新生成时定位）
+//   pnpm editor republish <episodeId> --title "..." [--audio final.mp3] [--cover c.jpg]
+//                                                [--description ...] [--tags a,b] [--guest claude]
+//                                                重新生成已发布节目（重做成品后更新，链接/期号不变）
 //   pnpm editor removal [list|approve <id>|reject <id>] [--status pending|approved|rejected]
 //                                               节目下线申请队列（用户申请 → 编辑审批）
 //   pnpm editor playlist <list|create|episodes|add|remove|reorder|pick|unpick|public|private|delete|cover> [args]
@@ -184,6 +188,16 @@ async function main() {
       await reject(config, args);
       break;
     }
+    case "episodes": {
+      const { episodes } = await import("./episodes.js");
+      await episodes(config, args);
+      break;
+    }
+    case "republish": {
+      const { republish } = await import("./republish.js");
+      await republish(config, args);
+      break;
+    }
     case "removal": {
       const { removal } = await import("./removal.js");
       await removal(config, args);
@@ -196,7 +210,7 @@ async function main() {
     }
     default:
       console.error(`未知命令: ${cmd}\n\n` +
-        "用法：pnpm editor <login|auth-status|overview|list|batch|batch-reject|batch-scripts|produce|detail|fetch|rule-test|console-script|paste|guests|guest-voice|guest-set|progress|script-preview|tts|merge|cover|publish|reject|removal|playlist> [args]");
+        "用法：pnpm editor <login|auth-status|overview|list|batch|batch-reject|batch-scripts|produce|detail|fetch|rule-test|console-script|paste|guests|guest-voice|guest-set|progress|script-preview|tts|merge|cover|publish|reject|episodes|republish|removal|playlist> [args]");
       process.exit(1);
   }
 }

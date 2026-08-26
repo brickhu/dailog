@@ -220,10 +220,11 @@ export interface EpisodesRepo {
     displayName: string;
     callName: string | null;
   }>>;
-  /** 编辑端节目详情（无归属校验） */
+  /** 编辑端节目详情（无归属校验）——含 userId（republish 拼 R2 key 用） */
   getById(id: string): Promise<{
     id: string;
     submissionId: string;
+    userId: string;
     title: string | null;
     description: string | null;
     coverUrl: string | null;
@@ -236,6 +237,25 @@ export interface EpisodesRepo {
   } | null>;
   /** 已发布节目编辑：tags / 精选标记 / 元数据 / 公开状态（编辑端下架/恢复——内容策展权在平台） */
   updatePublished(id: string, row: { tags?: string[] | null; isPicked?: boolean; title?: string | null; description?: string | null; coverUrl?: string | null; isPublic?: boolean }): Promise<void>;
+  /** 重新生成已发布节目：全量替换内容字段（保留 id/slug/期号/统计/精选/公开状态），
+   *  publishedAt 刷新为 now（列表新鲜度 + ETag 版本变化——客户端重新拉取新音频）。
+   *  只更新显式提供的字段；undefined 字段保留旧值。 */
+  updateEpisodeContent(id: string, row: {
+    title?: string | null;
+    description?: string | null;
+    summary?: string | null;
+    references?: schema.EpisodeReference[] | null;
+    highlights?: schema.EpisodeHighlight[] | null;
+    coverUrl?: string | null;
+    audioUrl?: string;
+    audioSize?: number | null;
+    durationSeconds?: number | null;
+    language?: string;
+    tags?: string[] | null;
+    category?: string | null;
+    transcript?: string | null;
+    guestId?: string | null;
+  }): Promise<void>;
   /** 已发布节目清单（编辑端）：按期号倒序 */
   listPublished(): Promise<Array<{
     id: string;
@@ -1181,6 +1201,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .select({
             id: schema.episodes.id,
             submissionId: schema.episodes.submissionId,
+            userId: schema.episodes.userId,
             title: schema.episodes.title,
             description: schema.episodes.description,
             coverUrl: schema.episodes.coverUrl,
@@ -1205,6 +1226,28 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             ...(row.description !== undefined ? { description: row.description } : {}),
             ...(row.coverUrl !== undefined ? { coverUrl: row.coverUrl } : {}),
             ...(row.isPublic !== undefined ? { isPublic: row.isPublic } : {}),
+          })
+          .where(eq(schema.episodes.id, id));
+      },
+      async updateEpisodeContent(id, row) {
+        await db.update(schema.episodes)
+          .set({
+            ...(row.title !== undefined ? { title: row.title } : {}),
+            ...(row.description !== undefined ? { description: row.description } : {}),
+            ...(row.summary !== undefined ? { summary: row.summary } : {}),
+            // jsonb 列不接受 null（schema 默认 []）——null 归一为 []，undefined 跳过（保留旧值）
+            ...(row.references !== undefined ? { references: row.references ?? [] } : {}),
+            ...(row.highlights !== undefined ? { highlights: row.highlights ?? [] } : {}),
+            ...(row.coverUrl !== undefined ? { coverUrl: row.coverUrl } : {}),
+            ...(row.audioUrl !== undefined ? { audioUrl: row.audioUrl } : {}),
+            ...(row.audioSize !== undefined ? { audioSize: row.audioSize } : {}),
+            ...(row.durationSeconds !== undefined ? { durationSeconds: row.durationSeconds } : {}),
+            ...(row.language !== undefined ? { language: row.language } : {}),
+            ...(row.tags !== undefined ? { tags: row.tags } : {}),
+            ...(row.category !== undefined ? { category: row.category } : {}),
+            ...(row.transcript !== undefined ? { transcript: row.transcript } : {}),
+            ...(row.guestId !== undefined ? { guestId: row.guestId } : {}),
+            publishedAt: new Date(), // 重新生成：publishedAt 刷新（列表新鲜度 + ETag 版本变化）
           })
           .where(eq(schema.episodes.id, id));
       },

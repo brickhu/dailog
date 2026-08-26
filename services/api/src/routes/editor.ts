@@ -26,10 +26,10 @@ interface PublishMeta {
   description?: string;
   /** Step B 配套产物：列表/分享短简介 */
   summary?: string;
-  /** Step B 配套产物：对话名词术语条目（播放页「本期提到的名词」） */
-  references?: { term: string; type?: string; explanation?: string; links?: string[] }[];
-  /** Step B 配套产物：金句（详情页「本期金句」——纯文本展示） */
-  highlights?: { text?: string }[];
+  /** Step B 配套产物：对话名词术语条目（播放页「本期提到的名词」）——清洗后字段必填（与 EpisodeReference 对齐） */
+  references?: { term: string; type: string; explanation: string; links: string[] }[];
+  /** Step B 配套产物：金句（详情页「本期金句」——纯文本展示）——清洗后字段必填（与 EpisodeHighlight 对齐） */
+  highlights?: { text: string }[];
   tags?: string[];
   language?: string;
   guestId?: string;
@@ -42,6 +42,73 @@ interface PublishMeta {
 
 // 成品音频大小上限（100MB——单期 5-10 分钟 MP3 远小于此，纯防滥用）
 const MAX_AUDIO_BYTES = 100 * 1024 * 1024;
+
+/** 解析 publish/republish 的 meta JSON（multipart 的 meta 字段）→ 清洗后的发布元数据。
+ *  返回 null = 非法 JSON 或结构错误（调用方返回 400 invalid_meta）。
+ *  publish 与 republish 共用同一套字段清洗规则（title/description/summary/references/
+ *  highlights/tags/language/guestId/durationSeconds/category/transcript）。 */
+function parsePublishMeta(raw: string | null): PublishMeta | null {
+  if (!raw) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const m = (parsed ?? {}) as Record<string, unknown>;
+  return {
+    title: typeof m.title === "string" && m.title.trim() ? m.title.trim().slice(0, 200) : undefined,
+    description: typeof m.description === "string" && m.description.trim() ? m.description.trim().slice(0, 2000) : undefined,
+    summary: typeof m.summary === "string" && m.summary.trim() ? m.summary.trim().slice(0, 500) : undefined,
+    language: typeof m.language === "string" && /^[a-z]{2,3}$/i.test(m.language) ? m.language.toLowerCase() : undefined,
+    category: typeof m.category === "string" && ["insight", "experience", "advice", "inspiration"].includes(m.category)
+      ? m.category
+      : undefined,
+    tags: Array.isArray(m.tags)
+      ? m.tags.filter((t): t is string => typeof t === "string" && t.trim().length > 0).map((t) => t.trim().slice(0, 30)).slice(0, 10)
+      : undefined,
+    guestId: typeof m.guestId === "string" && m.guestId ? m.guestId : undefined,
+    durationSeconds: typeof m.durationSeconds === "number" && Number.isFinite(m.durationSeconds) && m.durationSeconds > 0
+      ? Math.round(m.durationSeconds)
+      : undefined,
+    transcript: typeof m.transcript === "string" && m.transcript.trim() ? m.transcript.trim().slice(0, 50000) : undefined,
+    references: Array.isArray(m.references)
+      ? m.references
+          .filter((r): r is { term: string; type?: string; explanation?: string; links?: string[] } =>
+            typeof r === "object" && r !== null && typeof (r as { term?: unknown }).term === "string" && (r as { term: string }).term.trim().length > 0)
+          .map((r) => ({
+            term: r.term.trim().slice(0, 100),
+            type: typeof r.type === "string" && r.type.trim() ? r.type.trim().slice(0, 50) : "",
+            explanation: typeof r.explanation === "string" && r.explanation.trim() ? r.explanation.trim().slice(0, 500) : "",
+            links: Array.isArray(r.links)
+              ? r.links.filter((l): l is string => typeof l === "string" && l.trim().length > 0).map((l) => l.trim().slice(0, 500)).slice(0, 5)
+              : [],
+          }))
+          .slice(0, 8)
+      : undefined,
+    highlights: Array.isArray(m.highlights)
+      ? m.highlights
+          .filter((h): h is { text: string } =>
+            typeof h === "object" && h !== null && typeof (h as { text?: unknown }).text === "string" && (h as { text: string }).text.trim().length > 0)
+          .map((h) => ({ text: h.text.trim().slice(0, 200) }))
+          .slice(0, 5)
+      : undefined,
+  };
+}
+
+/** 从 multipart 的 cover 文件生成 1400×1400 JPEG（非标尺寸才处理——编辑端已裁，漏裁/外部图兜底） */
+async function normalizeCoverBytes(coverBytes: Uint8Array): Promise<Uint8Array> {
+  try {
+    const { default: sharp } = await import("sharp");
+    const meta = await sharp(coverBytes).metadata();
+    if (meta.width !== 1400 || meta.height !== 1400) {
+      return new Uint8Array(
+        await sharp(coverBytes).resize(1400, 1400, { fit: "cover" }).jpeg({ quality: 90 }).toBuffer(),
+      );
+    }
+  } catch { /* 非图片文件：原样存（前端显示会失败占位） */ }
+  return coverBytes;
+}
 
 export function editorRoutes(deps: EditorDeps) {
   const app = new OpenAPIHono<AuthEnv>();
@@ -152,54 +219,25 @@ export function editorRoutes(deps: EditorDeps) {
     if (audioFile.size > MAX_AUDIO_BYTES) {
       return c.json({ error: "audio_too_large", detail: "音频超过 100MB 上限" }, 400);
     }
-    let meta: PublishMeta = {};
     const rawMeta = typeof form?.get("meta") === "string" ? (form.get("meta") as string) : null;
-    if (rawMeta) {
-      try {
-        meta = JSON.parse(rawMeta) as PublishMeta;
-      } catch {
-        return c.json({ error: "invalid_meta", detail: "meta 字段不是合法 JSON" }, 400);
-      }
+    const meta = parsePublishMeta(rawMeta);
+    if (!meta) {
+      return c.json({ error: "invalid_meta", detail: "meta 字段不是合法 JSON" }, 400);
     }
-    const title = typeof meta.title === "string" && meta.title.trim() ? meta.title.trim().slice(0, 200) : null;
-    const description = typeof meta.description === "string" && meta.description.trim() ? meta.description.trim().slice(0, 2000) : null;
-    const language = typeof meta.language === "string" && /^[a-z]{2,3}$/i.test(meta.language) ? meta.language.toLowerCase() : "zh";
-    const category = typeof meta.category === "string" && ["insight", "experience", "advice", "inspiration"].includes(meta.category)
-      ? meta.category
-      : null;
-    const tags = Array.isArray(meta.tags)
-      ? meta.tags.filter((t): t is string => typeof t === "string" && t.trim().length > 0).map((t) => t.trim().slice(0, 30)).slice(0, 10)
-      : null;
-    const guestId = typeof meta.guestId === "string" && meta.guestId ? meta.guestId : undefined;
-    const durationSeconds = typeof meta.durationSeconds === "number" && Number.isFinite(meta.durationSeconds) && meta.durationSeconds > 0
-      ? Math.round(meta.durationSeconds)
-      : null;
+    const title = meta.title ?? null;
+    const description = meta.description ?? null;
+    const language = meta.language ?? "zh";
+    const category = meta.category ?? null;
+    const tags = meta.tags ?? null;
+    const guestId = meta.guestId;
+    const durationSeconds = meta.durationSeconds ?? null;
     // 无情绪标签的完整台本（节目页展示用；可选）
-    const transcript = typeof meta.transcript === "string" && meta.transcript.trim() ? meta.transcript.trim().slice(0, 50000) : null;
+    const transcript = meta.transcript ?? null;
     // Step B 配套产物：summary（列表/分享短简介）与 references（名词术语条目）
-    const summary = typeof meta.summary === "string" && meta.summary.trim() ? meta.summary.trim().slice(0, 500) : null;
-    const references = Array.isArray(meta.references)
-      ? meta.references
-          .filter((r): r is { term: string; type?: string; explanation?: string; links?: string[] } =>
-            typeof r === "object" && r !== null && typeof (r as { term?: unknown }).term === "string" && (r as { term: string }).term.trim().length > 0)
-          .map((r) => ({
-            term: r.term.trim().slice(0, 100),
-            type: typeof r.type === "string" && r.type.trim() ? r.type.trim().slice(0, 50) : "",
-            explanation: typeof r.explanation === "string" && r.explanation.trim() ? r.explanation.trim().slice(0, 500) : "",
-            links: Array.isArray(r.links)
-              ? r.links.filter((l): l is string => typeof l === "string" && l.trim().length > 0).map((l) => l.trim().slice(0, 500)).slice(0, 5)
-              : [],
-          }))
-          .slice(0, 8)
-      : null;
+    const summary = meta.summary ?? null;
+    const references = meta.references ?? null;
     // Step B 配套产物：highlights（金句——纯文本，不依赖时间戳；上限 5 条）
-    const highlights = Array.isArray(meta.highlights)
-      ? meta.highlights
-          .filter((h): h is { text: string } =>
-            typeof h === "object" && h !== null && typeof (h as { text?: unknown }).text === "string" && (h as { text: string }).text.trim().length > 0)
-          .map((h) => ({ text: h.text.trim().slice(0, 200) }))
-          .slice(0, 5)
-      : null;
+    const highlights = meta.highlights ?? null;
 
     // 音频落 R2（R2 目录规划：episodes/{userId}/{submissionId}.{ext}——ext 按上传格式 mp3/m4a，
     // 决定 Content-Type 与 RSS enclosure type）
@@ -216,16 +254,7 @@ export function editorRoutes(deps: EditorDeps) {
       if (coverFile.size > 5 * 1024 * 1024) {
         return c.json({ error: "cover_too_large", detail: "封面超过 5MB 上限" }, 400);
       }
-      let coverBytes = new Uint8Array(await coverFile.arrayBuffer());
-      try {
-        const { default: sharp } = await import("sharp");
-        const meta = await sharp(coverBytes).metadata();
-        if (meta.width !== 1400 || meta.height !== 1400) {
-          coverBytes = new Uint8Array(
-            await sharp(coverBytes).resize(1400, 1400, { fit: "cover" }).jpeg({ quality: 90 }).toBuffer(),
-          );
-        }
-      } catch { /* 非图片文件：原样存（前端显示会失败占位） */ }
+      const coverBytes = await normalizeCoverBytes(new Uint8Array(await coverFile.arrayBuffer()));
       coverUrl = `covers/${id}.jpg`;
       await deps.storage.put(coverUrl, coverBytes);
     }
@@ -290,6 +319,7 @@ export function editorRoutes(deps: EditorDeps) {
     return c.json(list);
   }) as unknown as RouteHandler<typeof r5, AuthEnv>);
 
+
   /** 已发布节目编辑：tags / 精选 / 标题 / 简介 / 封面 / 公开状态（isPublic=false = 编辑下架；true = 恢复） */
   const r6 = createRoute({
     method: "put",
@@ -316,6 +346,81 @@ export function editorRoutes(deps: EditorDeps) {
     await deps.repo.episodes.updatePublished(ep.id, patch);
     return c.json({ ok: true });
   }) as unknown as RouteHandler<typeof r6, AuthEnv>);
+
+  /** 重新生成已发布节目：multipart（audio + 可选 cover + meta，结构同 publish）——
+   *  更新已有 episode 行（保留 id/slug/期号/统计/精选/公开状态），覆盖 R2 音频/封面对象，
+   *  publishedAt 刷新（列表新鲜度 + ETag 版本变化——客户端重新拉取新音频）。
+   *  用途：编辑对已发布节目重新跑工作流（重写脚本/换音色/修复发音）后更新，原链接不变。 */
+  const r16 = createRoute({
+    method: "post",
+    path: "/v1/editor/episodes/:id/republish",
+      responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/episodes/:id/republish" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r16, (async (c: Context) => {
+    const id = c.req.param("id")!;
+    const ep = await deps.repo.episodes.getById(id);
+    if (!ep) return c.json({ error: "not_found" }, 404);
+    if (ep.status !== "published") {
+      return c.json({ error: "invalid_state", detail: "仅已发布节目可重新生成" }, 409);
+    }
+
+    const form = await c.req.formData().catch(() => null);
+    const audioFile = form?.get("audio");
+    if (!(audioFile instanceof File) || audioFile.size === 0) {
+      return c.json({ error: "audio_required", detail: "缺少成品音频文件（multipart 字段 audio）" }, 400);
+    }
+    if (audioFile.size > MAX_AUDIO_BYTES) {
+      return c.json({ error: "audio_too_large", detail: "音频超过 100MB 上限" }, 400);
+    }
+    const rawMeta = typeof form?.get("meta") === "string" ? (form.get("meta") as string) : null;
+    const meta = parsePublishMeta(rawMeta);
+    if (!meta) {
+      return c.json({ error: "invalid_meta", detail: "meta 字段不是合法 JSON" }, 400);
+    }
+
+    // 音频：确定性 key 覆盖原对象（episodes/{userId}/{submissionId}.{ext}——与原 publish 同 key，
+    // 重发覆盖旧音频；ext 按上传格式 mp3/m4a，决定 Content-Type 与 RSS enclosure type）
+    const ext = /\.(mp3|m4a)$/i.test(audioFile.name) ? audioFile.name.toLowerCase().split(".").pop() : "mp3";
+    const audioKey = `episodes/${ep.userId}/${ep.submissionId}.${ext}`;
+    await deps.storage.put(audioKey, new Uint8Array(await audioFile.arrayBuffer()));
+
+    // 封面可选：有 cover 文件 → 覆盖 covers/{submissionId}.jpg；无 → 保留旧封面（重新生成未换封面不误清）
+    let coverUrl: string | null = null;
+    let updateCover = false;
+    const coverFile = form?.get("cover");
+    if (coverFile instanceof File && coverFile.size > 0) {
+      if (coverFile.size > 5 * 1024 * 1024) {
+        return c.json({ error: "cover_too_large", detail: "封面超过 5MB 上限" }, 400);
+      }
+      const coverBytes = await normalizeCoverBytes(new Uint8Array(await coverFile.arrayBuffer()));
+      coverUrl = `covers/${ep.submissionId}.jpg`;
+      await deps.storage.put(coverUrl, coverBytes);
+      updateCover = true;
+    }
+
+    // 更新节目行（全量替换内容字段；publishedAt 由 repo 刷新为 now）
+    await deps.repo.episodes.updateEpisodeContent(ep.id, {
+      title: meta.title ?? null,
+      description: meta.description ?? null,
+      summary: meta.summary ?? null,
+      references: meta.references ?? null,
+      highlights: meta.highlights ?? null,
+      ...(updateCover ? { coverUrl } : {}),
+      audioUrl: audioKey,
+      audioSize: audioFile.size,
+      durationSeconds: meta.durationSeconds ?? null,
+      language: meta.language ?? "zh",
+      tags: meta.tags ?? null,
+      category: meta.category ?? null,
+      transcript: meta.transcript ?? null,
+      guestId: meta.guestId,
+    });
+
+    return c.json({ episodeId: ep.id, number: ep.number, status: "published" }, 200);
+  }) as unknown as RouteHandler<typeof r16, AuthEnv>);
 
   // ---- 节目下线申请（用户「申请下线」→ 编辑审批） ----
 
@@ -378,6 +483,29 @@ export function editorRoutes(deps: EditorDeps) {
     }).catch(() => {});
     return c.json({ ok: true, status: "rejected" });
   }) as unknown as RouteHandler<typeof r15, AuthEnv>);
+
+  /** 已发布节目详情（编辑端）：含 submissionId（重新生成时反查草稿/投稿）——注意本路由注册在
+   *  静态路径（removal-requests 等）之后，避免 :id 吞掉静态路由。 */
+  const r6get = createRoute({
+    method: "get",
+    path: "/v1/editor/episodes/:id",
+      responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/episodes/:id" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(r6get, (async (c: Context) => {
+    const ep = await deps.repo.episodes.getById(c.req.param("id")!);
+    if (!ep) return c.json({ error: "not_found" }, 404);
+    const detail = await deps.repo.submissions.getDetail(ep.submissionId);
+    return c.json({
+      ...ep,
+      url: detail?.url ?? null,
+      callName: detail?.callName ?? null,
+      voiceSamples: detail?.voiceSamples ?? [],
+      suggestion: detail?.suggestion ?? null,
+    });
+  }) as unknown as RouteHandler<typeof r6get, AuthEnv>);
 
   // ---- 嘉宾库（品牌声线宿主，编辑本地 TTS 用） ----
 

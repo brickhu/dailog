@@ -50,6 +50,7 @@ function fakeRepo(overrides: Partial<Repos["playlists"]> = {}, episodesOverrides
       getPublicEpisode: async () => null,
       getById: async () => null,
       updatePublished: async () => {},
+      updateEpisodeContent: async () => {},
       listPublished: async () => [],
       listBySubmission: async () => [],
       listByGuest: async () => [],

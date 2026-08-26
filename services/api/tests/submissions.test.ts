@@ -41,6 +41,7 @@ function makeApp(repo: Partial<Repos["submissions"]> = {}) {
       getPublicEpisode: async () => null,
       getById: async () => null,
       updatePublished: async () => {},
+      updateEpisodeContent: async () => {},
       listPublished: async () => [],
       listBySubmission: async () => [],
       listByGuest: async () => [],

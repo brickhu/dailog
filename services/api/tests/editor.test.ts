@@ -40,6 +40,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       getPublicEpisode: async () => null,
       getById: async () => null,
       updatePublished: async () => {},
+      updateEpisodeContent: async () => {},
       listPublished: async () => [],
       listBySubmission: async () => [],
       listByGuest: async () => [],
@@ -317,7 +318,7 @@ describe("已发布节目编辑（含下架）", () => {
       repo: fakeRepo({
         episodes: {
           ...fakeRepo().episodes,
-          getById: async () => ({ id: "ep-1", submissionId: "sub-1", title: "第 1 期", description: null, coverUrl: null, tags: null, status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
+          getById: async () => ({ id: "ep-1", submissionId: "sub-1", userId: "user-1", title: "第 1 期", description: null, coverUrl: null, tags: null, status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
           updatePublished,
         },
       }),
@@ -331,6 +332,95 @@ describe("已发布节目编辑（含下架）", () => {
   });
 });
 
+describe("已发布节目详情（编辑端）", () => {
+  it("GET /v1/editor/episodes/:id 返回节目 + 投稿 URL/称呼", async () => {
+    const res = await makeApp({
+      repo: fakeRepo({
+        episodes: {
+          ...fakeRepo().episodes,
+          getById: async () => ({ id: "ep-1", submissionId: "sub-1", userId: "user-1", title: "第 1 期", description: null, coverUrl: null, tags: null, status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
+        },
+        submissions: {
+          ...fakeRepo().submissions,
+          getDetail: async () => ({ ...SUBMITTED_DETAIL, url: "https://example.com/share/abc", callName: "Fei" }),
+        },
+      }),
+    }).request("/v1/editor/episodes/ep-1");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { submissionId: string; url: string; callName: string };
+    expect(body).toMatchObject({ submissionId: "sub-1", url: "https://example.com/share/abc", callName: "Fei" });
+  });
+});
+
+describe("重新生成已发布节目（republish）", () => {
+  it("audio 缺失 → 400", async () => {
+    const res = await makeApp({
+      repo: fakeRepo({ episodes: { ...fakeRepo().episodes, getById: async () => ({ id: "ep-1", submissionId: "sub-1", userId: "user-1", title: "第 1 期", description: null, coverUrl: null, tags: null, status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }) } }),
+    }).request("/v1/editor/episodes/ep-1/republish", { method: "POST", body: new FormData() });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: "audio_required" });
+  });
+
+  it("节目不存在 → 404", async () => {
+    const res = await makeApp().request("/v1/editor/episodes/nope/republish", { method: "POST", body: new FormData() });
+    expect(res.status).toBe(404);
+  });
+
+  it("republish 成功：覆盖 R2 音频 + 更新 episode 行（保留 id/期号），publishedAt 刷新", async () => {
+    const storagePut = vi.fn(async () => {});
+    const updateEpisodeContent = vi.fn(async () => {});
+    const form = new FormData();
+    form.append("audio", new Blob([new Uint8Array([4, 5, 6])], { type: "audio/mpeg" }), "final.mp3");
+    form.append("cover", new Blob([new Uint8Array([7])], { type: "image/jpeg" }), "cover.jpg");
+    form.append("meta", JSON.stringify({ title: "重新生成后的标题", description: "新简介", tags: ["AI"], language: "zh", durationSeconds: 500 }));
+
+    const res = await makeApp({
+      storage: { put: storagePut, get: async () => ({ data: new Uint8Array(), total: 0 }), delete: async () => {} },
+      repo: fakeRepo({
+        episodes: {
+          ...fakeRepo().episodes,
+          getById: async () => ({ id: "ep-1", submissionId: "sub-1", userId: "user-1", title: "第 1 期", description: null, coverUrl: null, tags: null, status: "published", number: 3, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
+          updateEpisodeContent,
+        },
+      }),
+    }).request("/v1/editor/episodes/ep-1/republish", { method: "POST", body: form });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ episodeId: "ep-1", number: 3, status: "published" });
+    // 音频/封面覆盖落 R2（同确定性 key）
+    expect(storagePut).toHaveBeenCalledWith("episodes/user-1/sub-1.mp3", new Uint8Array([4, 5, 6]));
+    expect(storagePut).toHaveBeenCalledWith("covers/sub-1.jpg", new Uint8Array([7]));
+    // 更新 episode 行：保留 id，内容字段替换
+    expect(updateEpisodeContent).toHaveBeenCalledWith("ep-1", expect.objectContaining({
+      title: "重新生成后的标题",
+      description: "新简介",
+      tags: ["AI"],
+      language: "zh",
+      durationSeconds: 500,
+      audioUrl: "episodes/user-1/sub-1.mp3",
+    }));
+  });
+
+  it("republish 无 cover → 保留旧封面（updateCover=false 不传 coverUrl）", async () => {
+    const updateEpisodeContent = vi.fn(async (_id: string, _row: Record<string, unknown>) => {});
+    const form = new FormData();
+    form.append("audio", new Blob([new Uint8Array([1])], { type: "audio/mpeg" }), "final.mp3");
+
+    const res = await makeApp({
+      repo: fakeRepo({
+        episodes: {
+          ...fakeRepo().episodes,
+          getById: async () => ({ id: "ep-1", submissionId: "sub-1", userId: "user-1", title: null, description: null, coverUrl: "covers/sub-1.jpg", tags: null, status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
+          updateEpisodeContent,
+        },
+      }),
+    }).request("/v1/editor/episodes/ep-1/republish", { method: "POST", body: form });
+
+    expect(res.status).toBe(200);
+    const call = updateEpisodeContent.mock.calls[0][1] as Record<string, unknown>;
+    expect(call).not.toHaveProperty("coverUrl");
+  });
+});
 describe("节目下线申请（用户申请 → 编辑审批）", () => {
   it("GET /v1/editor/episodes/removal-requests 缺省 pending 队列", async () => {
     const listRemovalRequests = vi.fn(async () => []);
