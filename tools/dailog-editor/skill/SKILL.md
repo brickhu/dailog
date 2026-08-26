@@ -271,7 +271,7 @@ references/highlights/category（insight/experience/advice/inspiration，由选�
   （Railway env），编辑无需任何 TTS 密钥
 - host（主持人）= 投稿人采样：服务端从投稿人记录取用（R2 + 表内转录）
 - guest（AI 嘉宾）= **声线在服务端配置**（guest_voice_samples 表 + R2）：
-  - `--guest <platform>` 指定嘉宾（claude/chatgpt/deepseek/gemini/kimi/doubao/tongyi/perplexity）
+  - `--guest <platform>` 指定嘉宾（claude/chatgpt/deepseek/gemini/kimi/doubao/tongyi/perplexity/grok）
   - 服务端按 guestId + 语言取声线（同语种优先 → 兜底任意语种）；未配置 → 422 提示先上传
   - 查看嘉宾与声线状态：`pnpm editor guests`（管理入口）
   - 声线管理：`pnpm editor guest-voice <guestId> --audio <file> [--language zh] [--transcript "..."]`

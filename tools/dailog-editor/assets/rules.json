@@ -43,6 +43,28 @@
       "assistantContentSelector": "message-content .markdown",
       "note": "2026-08-25 真实 DOM 采样校准（规范页；同短链规则，host 差异双保险）",
       "hits": 0
+    },
+    {
+      "platform": "grok",
+      "host": "x.com",
+      "pathPrefix": "/i/grok/share/",
+      "userSelector": "div.r-obd0qt.r-1cmwbt1 > div.r-1habvwh",
+      "assistantSelector": "div.r-1awozwy.r-16lk18l",
+      "userContentSelector": ".r-1kt6imw",
+      "assistantContentSelector": ".r-rjixqe.r-16dba41.r-imh66m",
+      "note": "2026-08-26 真实 DOM 采样校准（Chromium 无头渲染后提取；turn 容器 div.r-obd0qt.r-1cmwbt1 内 user 段 .r-1habvwh + assistant 段 .r-1awozwy.r-16lk18l；实测 20 轮 40 条双全）",
+      "hits": 0
+    },
+    {
+      "platform": "grok",
+      "host": "twitter.com",
+      "pathPrefix": "/i/grok/share/",
+      "userSelector": "div.r-obd0qt.r-1cmwbt1 > div.r-1habvwh",
+      "assistantSelector": "div.r-1awozwy.r-16lk18l",
+      "userContentSelector": ".r-1kt6imw",
+      "assistantContentSelector": ".r-rjixqe.r-16dba41.r-imh66m",
+      "note": "2026-08-26 真实 DOM 采样校准（twitter.com 域名同构；与 x.com 规则双保险）",
+      "hits": 0
     }
   ]
 }

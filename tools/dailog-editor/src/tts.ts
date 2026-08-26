@@ -14,7 +14,7 @@ import type { EditorConfig } from "./lib.js";
 import { api, draftDir, readScript, writeProgress, type ScriptSegment } from "./lib.js";
 
 /** 平台枚举（guests 表；--guest 取值） */
-const PLATFORMS = ["claude", "chatgpt", "deepseek", "gemini", "kimi", "doubao", "tongyi", "perplexity"];
+const PLATFORMS = ["claude", "chatgpt", "deepseek", "gemini", "kimi", "doubao", "tongyi", "perplexity", "grok"];
 /** part 1-3 分段标签（与 script-craft 五拍映射：①+②=1，③=2，④+⑤=3） */
 const PART_LABELS = ["", "开场+定向", "对谈", "落点+收束"];
 

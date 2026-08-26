@@ -225,11 +225,11 @@ const PRESETS: Preset[] = [
 ];
 
 /** 嘉宾平台（guests 表；--guest 取值与 tts/publish 一致） */
-const GUEST_PLATFORMS = ["claude", "chatgpt", "deepseek", "gemini", "kimi", "doubao", "tongyi", "perplexity"];
+const GUEST_PLATFORMS = ["claude", "chatgpt", "deepseek", "gemini", "kimi", "doubao", "tongyi", "perplexity", "grok"];
 /** 平台 → 展示名兜底（guests 表未配置称呼/拿不到时用） */
 const GUEST_PRETTY: Record<string, string> = {
   claude: "Claude", chatgpt: "ChatGPT", deepseek: "Deepseek", gemini: "Gemini",
-  kimi: "Kimi", doubao: "Doubao", tongyi: "Tongyi", perplexity: "Perplexity",
+  kimi: "Kimi", doubao: "Doubao", tongyi: "Tongyi", perplexity: "Perplexity", grok: "Grok",
 };
 
 /** 投稿 URL → 嘉宾平台推断（cover 未传 --guest 时按平台取名） */
@@ -245,6 +245,7 @@ function guestPlatformFromUrl(url: string | null): string | null {
     if (host === "kimi.moonshot.cn") return "kimi";
     if (host === "tongyi.aliyun.com" || host === "qianwen.aliyun.com") return "tongyi";
     if (host === "perplexity.ai") return "perplexity";
+    if (host === "x.com" || host === "twitter.com") return "grok";
   } catch { /* 非法 URL 忽略 */ }
   return null;
 }

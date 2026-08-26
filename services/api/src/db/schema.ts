@@ -157,7 +157,7 @@ export const submissions = pgTable(
  *  编辑本地 TTS 用 guest_voice_samples 的 referenceId/参考音频作嘉宾音色。 */
 export const guests = pgTable("guests", {
   id: text("id").primaryKey(), // 用 platform 枚举值作 id（claude/chatgpt/...）
-  platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek", "perplexity"] }).notNull().unique(),
+  platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek", "perplexity", "grok"] }).notNull().unique(),
   name: text("name").notNull(),
   avatar: text("avatar"),
   intro: text("intro"),

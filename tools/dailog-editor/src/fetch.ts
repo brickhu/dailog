@@ -15,6 +15,7 @@
 //   首次使用：从工程种子（assets/rules.json）自动初始化复制到 .dailog-editor/rules.json
 import { writeFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { tmpdir as osTmpdir } from "node:os";
 import { join } from "node:path";
 import { load as loadHtml } from "cheerio";
 import type { EditorConfig } from "./lib.js";
@@ -150,7 +151,7 @@ function sniffMessages($: ReturnType<typeof loadHtml>): { role: string; content:
 // 接口逆向法：SPA 分享页拉不到内容时先找数据接口（deepseek/doubao 已验证）
 // ─────────────────────────────────────────────────────────────
 
-interface PlatformInfo { api?: "deepseek" | "doubao"; ssr?: "chatgpt"; gemini?: boolean }
+interface PlatformInfo { api?: "deepseek" | "doubao"; ssr?: "chatgpt"; gemini?: boolean; grok?: boolean }
 
 /** 平台识别（host + pathPrefix）——命中则优先走对应直取路径 */
 function detectPlatform(url: string): PlatformInfo | null {
@@ -162,6 +163,8 @@ function detectPlatform(url: string): PlatformInfo | null {
     if (host === "www.doubao.com" && path.startsWith("/share/")) return { api: "doubao" };
     if (host === "chatgpt.com" && path.startsWith("/share/")) return { ssr: "chatgpt" };
     if ((host === "share.gemini.google" || host === "gemini.google.com") && path.startsWith("/")) return { gemini: true };
+    // Grok 分享（x.com/i/grok/share/<id>——React SPA，对话客户端渲染，需 Chromium 无头渲染）
+    if ((host === "x.com" || host === "twitter.com") && path.startsWith("/i/grok/share/")) return { grok: true };
     return null;
   } catch {
     return null;
@@ -456,26 +459,38 @@ export function extractGeminiByRule($: ReturnType<typeof loadHtml>): { role: str
 
 /** Gemini 采集入口：短链 → 规范 URL → SSR 拉取 → 规则提取。
  *  返回 null 表示当前环境无法完成（网络/代理不可用等），回退通用 HTML 流程。 */
-/** 查找可用的 Chromium/headless-shell 可执行文件（Playwright 缓存 → 系统 Chrome） */
+/** 查找可用的 Chromium/headless-shell 可执行文件（Playwright 缓存 → 系统 Chrome）。
+ *  优先级：headless shell（chrome-headless-shell/headless_shell——专为无头设计，无 crashpad 依赖，
+ *  沙箱/CI 环境最稳）→ 完整 Chromium/Chrome（
+ *  注意：先找 headless shell 再找完整浏览器——完整浏览器在受限沙箱下可能因 crashpad/updater 权限失败） */
 function findChromium(): string | null {
   const candidates: string[] = [];
   // Playwright 缓存（ms-playwright）
   const cache = join(process.env.HOME ?? "", "Library", "Caches", "ms-playwright");
   try {
+    const headlessNames = new Set(["chrome-headless-shell", "headless_shell"]);
+    const fullNames = new Set(["Chromium", "chrome", "Google Chrome for Testing"]);
+    const walk = (p: string, depth: number, names: Set<string>): string | null => {
+      if (depth > 5) return null;
+      try {
+        for (const en of readdirSync(p, { withFileTypes: true })) {
+          const fp = join(p, en.name);
+          if (en.isDirectory()) { const r = walk(fp, depth + 1, names); if (r) return r; }
+          else if (names.has(en.name)) return fp;
+        }
+      } catch { /* 忽略 */ }
+      return null;
+    };
+    // 第一轮：headless shell（优先）
     for (const dir of readdirSync(cache)) {
-      const root = join(cache, dir);
-      const walk = (p: string, depth: number): string | null => {
-        if (depth > 4) return null;
-        try {
-          for (const en of readdirSync(p, { withFileTypes: true })) {
-            const fp = join(p, en.name);
-            if (en.isDirectory()) { const r = walk(fp, depth + 1); if (r) return r; }
-            else if (["Chromium", "chrome", "chrome-headless-shell", "headless_shell", "Google Chrome for Testing"].includes(en.name)) return fp;
-          }
-        } catch { /* 忽略 */ }
-        return null;
-      };
-      const hit = walk(root, 0);
+      if (!dir.startsWith("chromium_headless_shell")) continue;
+      const hit = walk(join(cache, dir), 0, headlessNames);
+      if (hit) candidates.push(hit);
+    }
+    // 第二轮：完整 Chromium/Chrome（headless 缺失时兜底）
+    for (const dir of readdirSync(cache)) {
+      if (dir.startsWith("chromium_headless_shell")) continue;
+      const hit = walk(join(cache, dir), 0, fullNames);
       if (hit) candidates.push(hit);
     }
   } catch { /* 缓存不存在 */ }
@@ -491,8 +506,12 @@ function findChromium(): string | null {
 function renderWithChromium(url: string, proxy: string | null): string | null {
   const chromium = findChromium();
   if (!chromium) return null;
+  // 独立 user-data-dir：无头 Chrome 默认找不到唯一用户数据目录会直接失败
+  // （"Failed to create a unique user data directory for headless"）——实测必加
+  const userDataDir = join(osTmpdir(), "dailog-render-" + Math.random().toString(36).slice(2, 10));
   const args = [
     "--headless=new", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
+    "--user-data-dir=" + userDataDir,
     "--virtual-time-budget=15000",
     "--dump-dom",
   ];
@@ -551,6 +570,81 @@ async function extractGemini(config: EditorConfig, submissionId: string, url: st
   return { ok: false, handled: true, error: "Gemini 渲染后未提取到 share-turn-viewer（可能加载超时/反爬）——可 console-script 浏览器兜底" };
 }
 
+// ─────────────────────────────────────────────────────────────
+// Grok 分享（2026-08-26 实测结构）：x.com/i/grok/share/<id> 是 React SPA——
+// 对话在客户端渲染（curl 只能拿壳，__INITIAL_STATE__ 的 grokShare 为空），必须 Chromium 无头渲染。
+// 渲染后 DOM：每轮对话 turn 容器 div.r-obd0qt.r-1cmwbt1 内 user 段 + assistant 段
+//   · user 段：div.r-obd0qt.r-1cmwbt1 > div.r-1habvwh（正文 .r-1kt6imw）
+//   · assistant 段：div.r-1awozwy.r-16lk18l（正文 .r-rjixqe.r-16dba41.r-imh66m）
+// 分享页未登录也渲染完整对话（登录横幅与对话并存），选择器不受影响。
+// 直连 x.com 被网络封锁（SSL_ERROR_SYSCALL）→ 渲染必须走本地 SOCKS5 代理。
+// ─────────────────────────────────────────────────────────────
+
+const GROK_USER_SELECTOR = "div.r-obd0qt.r-1cmwbt1 > div.r-1habvwh";
+const GROK_ASSISTANT_SELECTOR = "div.r-1awozwy.r-16lk18l";
+const GROK_USER_CONTENT = ".r-1kt6imw";
+const GROK_ASSISTANT_CONTENT = ".r-rjixqe.r-16dba41.r-imh66m";
+
+/** Grok 规则提取（内置选择器——规则库未命中时的兜底；与 extractByRule 同逻辑） */
+export function extractGrokByRule($: ReturnType<typeof loadHtml>): { role: string; content: string }[] | null {
+  const messages: { role: string; content: string }[] = [];
+  const joined = GROK_USER_SELECTOR + ", " + GROK_ASSISTANT_SELECTOR;
+  $(joined).each((_, el) => {
+    const $el = $(el);
+    const isUser = $el.is(GROK_USER_SELECTOR);
+    const perRoleSel = isUser ? GROK_USER_CONTENT : GROK_ASSISTANT_CONTENT;
+    const text = normalizeText(
+      $el.find(perRoleSel).map((_, c) => $(c).text()).get().join("\n"),
+    );
+    if (text) messages.push({ role: isUser ? "user" : "assistant", content: text });
+  });
+  return messages.length > 0 ? messages : null;
+}
+
+/** Grok 采集入口：Chromium 无头渲染（分享页客户端渲染 + 直连被封锁 → 必须真实渲染且走代理）
+ *  → DOM 规则提取。返回 { ok, messages?, handled, error? } */
+async function extractGrok(config: EditorConfig, submissionId: string, url: string): Promise<{
+  ok: boolean; messages?: { role: string; content: string }[]; error?: string; handled: boolean;
+}> {
+  const dir = draftDir(submissionId);
+
+  // ① Chromium 无头渲染（客户端渲染页面，curl 只能拿壳；x.com 直连被封锁 → 走 SOCKS5 代理）
+  let html = renderWithChromium(url, findSocksProxy());
+  if (!html) {
+    // 回退：直连拉 SSR（大概率失败/壳页，但保留现场）
+    try {
+      const res = await fetch(url, {
+        headers: { "user-agent": UA, accept: "text/html,*/*", "accept-language": "zh-CN,zh;q=0.9,en;q=0.8" },
+        redirect: "follow",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      if (res.ok) html = await res.text();
+    } catch { /* 忽略 */ }
+  }
+  if (!html) {
+    return { ok: false, handled: true, error: "Grok 渲染失败（无 Chromium / 网络不可用）——可 console-script 浏览器兜底" };
+  }
+  if (html.length > MAX_HTML_BYTES * 4) html = html.slice(0, MAX_HTML_BYTES * 4);
+  writeFileSync(join(dir, "page.html"), html);
+
+  // 清洗正文落盘 page.txt
+  const $ = loadHtml(html);
+  $("script,style,noscript,template,svg,iframe,link,meta").remove();
+  $("nav,footer,header,[role='navigation'],[role='banner'],[role='dialog'],[class*='cookie'],[class*='Cookie'],[id*='cookie']").remove();
+  writeFileSync(join(dir, "page.txt"), normalizeText($("body").text()));
+
+  // ② DOM 规则提取（规则库命中 → 按规则；未命中 → 内置 Grok 选择器）
+  const { rules } = loadRules();
+  const rule = matchRule(rules, url);
+  const messages = rule ? extractByRule($, rule) : extractGrokByRule($);
+  if (messages && messages.length > 0) {
+    writeDialogue(dir, url, rule ? "rule:" + rule.platform : "rule:grok", messages);
+    if (rule) bumpHits(rule);
+    return { ok: true, handled: true, messages };
+  }
+  return { ok: false, handled: true, error: "Grok 渲染后未提取到消息（可能加载超时/反爬）——可 console-script 浏览器兜底" };
+}
+
 
 export async function extractSubmission(
   config: EditorConfig,
@@ -578,6 +672,15 @@ export async function extractSubmission(
     if (g.handled) {
       // SSR 拉取成功但提取失败（壳页）→ 已落盘 page.html/page.txt，走通用规则/嗅探再试一次
       console.log(`[fetch] gemini 专用路径：${g.error}`);
+    }
+  }
+
+  // ①.6 Grok：Chromium 无头渲染（React SPA 客户端渲染 + x.com 直连被封锁 → 必须真实渲染走代理）
+  if (platform?.grok) {
+    const g = await extractGrok(config, submissionId, url);
+    if (g.ok && g.messages) return { ok: true, messages: g.messages };
+    if (g.handled) {
+      console.log(`[fetch] grok 专用路径：${g.error}`);
     }
   }
 

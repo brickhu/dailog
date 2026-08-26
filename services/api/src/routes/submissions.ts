@@ -32,7 +32,7 @@ export function isValidUrl(input: string): boolean {
 const SHARE_HOSTS = [
   "chat.deepseek.com", "claude.ai", "chatgpt.com", "chat.openai.com",
   "gemini.google.com", "share.gemini.google", "kimi.moonshot.cn", "doubao.com", "www.doubao.com",
-  "tongyi.aliyun.com", "perplexity.ai",
+  "tongyi.aliyun.com", "perplexity.ai", "x.com", "twitter.com",
 ];
 
 /** 专用分享子域：整个域名只承载分享页（如 share.gemini.google/<id>），任意非根路径即分享页 */

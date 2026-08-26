@@ -59,6 +59,7 @@
 | claude | 待沉淀 | 分享页内容在 JS 数据（CSS 提取不到）——浏览器兜底后按需沉淀 |
 | deepseek | ✅ API 直取内置（已实测） | 静态 HTML 是 SPA 壳无内容（CSS 规则不可用）。**分享接口**：`GET https://chat.deepseek.com/api/v0/share/content?share_id=<id>`（UA 伪装 + `Referer: https://chat.deepseek.com/share/<id>`）→ `data.biz_data.messages[]` 每条 `{role: "USER"\|"ASSISTANT", content}` → 转 `dialogue.json`（小写 role）落草稿即可继续管线 |
 | gemini | Chromium 渲染 + DOM 提取（已实测） | 分享页是 Angular 客户端渲染（SSR 只有壳，curl 拿不到对话）——fetch 内置：detectPlatform 识别 gemini → resolveGeminiCanonical 短链→规范 URL → findChromium 找 Playwright 缓存的 headless Chromium → renderWithChromium 无头渲染（15s virtual-time-budget + SOCKS5 代理）→ extractGeminiByRule（user=.query-text-line / assistant=message-content .markdown，per-role 规则，实测 3 轮 6 条双全）。已逆向分享内容 RPC：ujx1Bf（对话数据，f.req=[null,"<shareId>",[4]]）+ f.sid 会话流（每次会话变化，RPC 方案脆弱，仅记录备选）。规则已入 assets+rules.json（短链/规范页双 host）；无 Chromium 环境时 console-script 兜底 |
+| grok | ✅ Chromium 渲染 + DOM 提取（已实测） | 分享页 `x.com/i/grok/share/<id>` 是 React SPA——对话**不在初始 HTML**（`__INITIAL_STATE__` 的 grokShare entities 为空），curl 只能拿壳；且直连 x.com 被网络封锁（SSL_ERROR_SYSCALL）。fetch 内置：detectPlatform 识别 grok → renderWithChromium 无头渲染（走 SOCKS5 代理）→ 渲染后 DOM 提取：turn 容器 `div.r-obd0qt.r-1cmwbt1` 内 user 段 `> div.r-1habvwh`（正文 `.r-1kt6imw`）+ assistant 段 `div.r-1awozwy.r-16lk18l`（正文 `.r-rjixqe.r-16dba41.r-imh66m`），per-role 规则实测 20 轮 40 条双全。分享页未登录也渲染完整对话（登录横幅与对话并存）。规则已入 assets+rules.json（x.com/twitter.com 双 host）；无 Chromium 环境时 console-script 兜底 |
 | kimi/tongyi/perplexity | 待沉淀 | 首次遇到时走浏览器兜底 + 规则沉淀流程 |
 
 > **接口逆向法**（deepseek 已验证的通用路径）：SPA 分享页拉不到内容时，先拉页面 `main.*.js`
