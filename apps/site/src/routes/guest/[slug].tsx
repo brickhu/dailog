@@ -2,6 +2,7 @@ import { A, cache, createAsync } from "@solidjs/router";
 import { For, Show, Suspense } from "solid-js";
 import { useParams } from "@solidjs/router";
 import { getGuest } from "../../lib/db";
+import { fmtDate, fmtDuration } from "../../lib/format";
 import { PageSpinner } from "../../components/page-loading";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
@@ -109,13 +110,6 @@ const styles = stylex.create({
   },
 });
 
-function fmtDuration(sec: number | null): string {
-  if (!sec) return "";
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
 export default function GuestPage() {
   const { t } = useI18n();
   const params = useParams<{ slug: string }>();
@@ -160,7 +154,7 @@ export default function GuestPage() {
                   <div {...stylex.props(styles.epTitle)}>{ep.title || t("common.unnamed")}</div>
                   <div {...stylex.props(styles.meta)}>
                     {ep.displayName ?? `@${ep.username}`}
-                    {ep.publishedAt ? ` · ${new Date(ep.publishedAt).toLocaleDateString("zh-CN")}` : ""}
+                    {ep.publishedAt ? ` · ${fmtDate(ep.publishedAt)}` : ""}
                     {ep.durationSeconds ? ` · ${fmtDuration(ep.durationSeconds)}` : ""}
                   </div>
                 </A>

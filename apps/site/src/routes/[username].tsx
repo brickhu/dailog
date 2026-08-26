@@ -3,6 +3,7 @@ import { For, Show, Suspense } from "solid-js";
 import { useParams } from "@solidjs/router";
 import { getRequestEvent, isServer } from "solid-js/web";
 import { getChannel, type ChannelSummary, type EpisodeSummary } from "../lib/db";
+import { fmtDate, fmtDuration } from "../lib/format";
 import { PageSpinner } from "../components/page-loading";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
@@ -82,13 +83,6 @@ const styles = stylex.create({
   },
 });
 
-function fmtDuration(sec: number | null): string {
-  if (!sec) return "";
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
 export default function ChannelPage() {
   const { t } = useI18n();
   const params = useParams<{ username: string }>();
@@ -131,7 +125,7 @@ export default function ChannelPage() {
               <A  href={`/episode/${ep.slug}`} {...stylex.props(styles.card)}>
                 <div {...stylex.props(styles.epTitle)}>{ep.title || t("common.unnamed")}</div>
                 <div {...stylex.props(styles.meta2)}>
-                  {new Date(ep.publishedAt ?? 0).toLocaleDateString("zh-CN")} ·{" "}
+                  {fmtDate(ep.publishedAt)} ·{" "}
                   {fmtDuration(ep.durationSeconds)}
                 </div>
               </A>

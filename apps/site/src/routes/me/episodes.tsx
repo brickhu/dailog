@@ -7,6 +7,7 @@ import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../../components/auth-gate";
 import { PageSpinner } from "../../components/page-loading";
+import { fmtDate, fmtDuration } from "../../lib/format";
 
 // 我的节目（/me/episodes）：已发布节目只读列表 + 申请下线（编辑审批）。
 // 内容策展权在平台：节目信息与公开状态由编辑端维护，用户不能自助修改/下架；
@@ -47,13 +48,6 @@ const styles = stylex.create({
   empty: { color: colors.neutral, textAlign: "center", padding: dimensions.spacing12 },
   submitLink: { color: colors.primary, textDecoration: "none", marginLeft: dimensions.spacing2 },
 });
-
-function fmtDuration(sec: number | null): string {
-  if (!sec) return "";
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return m + ":" + String(s).padStart(2, "0");
-}
 
 function EpisodesList() {
   const { t } = useI18n();
@@ -130,7 +124,7 @@ function EpisodesList() {
               </div>
               <div {...stylex.props(styles.meta)}>
                 {ep.number ? "第 " + ep.number + " 期" : ""}
-                {ep.publishedAt ? " · " + new Date(ep.publishedAt).toLocaleDateString("zh-CN") : ""}
+                {ep.publishedAt ? " · " + fmtDate(ep.publishedAt) : ""}
                 {ep.durationSeconds ? " · " + fmtDuration(ep.durationSeconds) : ""}
               </div>
               <Show when={requestOpenId() === ep.id}>

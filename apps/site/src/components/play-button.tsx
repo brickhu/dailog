@@ -29,20 +29,13 @@ import {
 } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { usePlayback, type QueueEpisode } from "../lib/playback";
+import { fmtDuration } from "../lib/format";
 
 /** 加载超时兜底：10s 未进入播放（网络失败等）→ 回待播放态 */
 const LOADING_TIMEOUT_MS = 10_000;
 /** 加载中 spinner 最短显示时间：点击后即使音频立即就绪也保留 spinner（防闪——
  * 加载太快时反馈一闪而过，用户以为没反应） */
 const MIN_LOADING_MS = 350;
-
-/** 时长格式化（如 1925 → "32:05"）；无时长返回空串 */
-function fmtDuration(sec: number | null | undefined): string {
-  if (!sec || sec <= 0) return "";
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return m + ":" + String(s).padStart(2, "0");
-}
 
 export interface PlayButtonProps {
   /** 节目信息：内部据此判定是否当前播放/音源状态，并接入全局播放器 */

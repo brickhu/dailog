@@ -2,6 +2,7 @@ import { A, cache, createAsync, useParams } from "@solidjs/router";
 import { For, Show, Suspense } from "solid-js";
 import { Title } from "@solidjs/meta";
 import { listEpisodesByTag, type EpisodeSummary } from "../../lib/db";
+import { fmtDate, fmtDuration } from "../../lib/format";
 import { episodeCoverUrl } from "../../lib/env";
 import { ListSkeleton } from "../../components/page-skeletons";
 import * as stylex from "@stylexjs/stylex";
@@ -60,17 +61,6 @@ const styles = stylex.create({
     padding: dimensions.spacing12,
   },
 });
-
-function fmtDate(d: Date | null): string {
-  return d ? new Date(d).toLocaleDateString("zh-CN") : "";
-}
-
-function fmtDuration(sec: number | null): string {
-  if (!sec) return "";
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
 
 export default function TagPage() {
   const { t } = useI18n();

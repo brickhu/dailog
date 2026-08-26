@@ -18,6 +18,7 @@ import { PlayButton } from "./play-button";
 import { CARD_COVER_SIZES } from "../lib/env";
 import { getEpisodeCached } from "../lib/episode-cache";
 import { usePlayback, type QueueEpisode } from "../lib/playback";
+import { fmtDate, fmtDuration } from "../lib/format";
 
 const styles = stylex.create({
   // —— grid 网格模式（上下排列）——
@@ -130,13 +131,6 @@ const styles = stylex.create({
   },
 });
 
-function fmtDuration(sec: number | null): string {
-  if (!sec) return "";
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
 export function EpisodeCard(props: {
   /** 节目 meta（id / coverUrl / title / publishedAt / durationSeconds 等） */
   episode: QueueEpisode;
@@ -179,7 +173,7 @@ export function EpisodeCard(props: {
   };
   const date = () => {
     const d = props.episode.publishedAt;
-    return d ? new Date(d).toLocaleDateString(locale() === "zh" ? "zh-CN" : "en-US") : "";
+    return d ? fmtDate(d, locale() === "zh" ? "zh-CN" : "en-US") : "";
   };
   // grid 模式 meta：日期 + 时长（不显示用户名——卡片聚焦内容，主播身份在详情页呈现）
   const metaText = () => [date(), fmtDuration(props.episode.durationSeconds)].filter(Boolean).join(" · ");
@@ -226,7 +220,7 @@ export function EpisodeCard(props: {
         <Cover episode={props.episode} sizes={CARD_COVER_SIZES} />
         <div {...stylex.props(styles.btnSlot)}>
           <div {...stylex.props(styles.btnIdle, btnReveal() && styles.btnIdleVisible)}>
-            <PlayButton episode={props.episode} />
+            <PlayButton episode={props.episode} size="sm" />
           </div>
         </div>
       </div>

@@ -7,6 +7,7 @@ import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../../components/auth-gate";
 import { PageSpinner } from "../../components/page-loading";
+import { fmtDate } from "../../lib/format";
 
 // 我的投稿（本质版，2026-08-13）：投稿状态列表（审核中/投稿失败/已发布 + 最新节目状态）
 // 会话判定与 me.tsx 同模式（client 判定，未登录跳统一登录）
@@ -135,7 +136,7 @@ function SubmissionsList() {
                 <span {...stylex.props(styles.badge)}>{statusLabel(sub.status)}</span>
               </div>
               <div {...stylex.props(styles.meta)}>
-                {sub.createdAt ? new Date(sub.createdAt).toLocaleDateString("zh-CN") : ""}
+                {sub.createdAt ? fmtDate(sub.createdAt) : ""}
                 {" · "}
                 <a href={sub.url} target="_blank" rel="noopener" style={{ color: "inherit", "text-decoration": "underline" }}>
                   {sub.url.length > 60 ? `${sub.url.slice(0, 60)}…` : sub.url}

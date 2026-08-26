@@ -11,6 +11,7 @@ import { usePlayback, type QueueEpisode } from "../../lib/playback";
 import { getEpisodeCached } from "../../lib/episode-cache";
 import type { EpisodeSummary } from "../../lib/db";
 import { apiBaseForFetch, env, episodeCoverUrl } from "../../lib/env";
+import { fmtDate, fmtDuration } from "../../lib/format";
 import * as stylex from "@stylexjs/stylex";
 import { layouts, typography, shadows, dimensions, colors, global } from "@dailogues/ui/theme.stylex";
 import { Button, Icon } from "@dailogues/ui";
@@ -338,14 +339,6 @@ export const route = {
   },
 };
 
-// 秒数 → “X 分 YY 秒”（与 episode-card / episode-detail 等保持一致）
-function fmtDuration(sec: number | null): string {
-  if (!sec) return "";
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m} 分 ${String(s).padStart(2, "0")} 秒`;
-}
-
 export default function EpisodeDetailPage() {
   const { t } = useI18n();
   const params = useParams<{ slug: string }>();
@@ -455,10 +448,7 @@ export default function EpisodeDetailPage() {
   const hostName = () => ep()?.callName ?? ep()?.displayName ?? ep()?.username ?? "";
   // 本期 AI 嘉宾名称（无嘉宾节目回退主播名——文案「用户与{guest}的原始对话」仍通顺）
   const guestName = () => ep()?.guest?.name ?? hostName();
-  const pubDate = () => {
-    const p = ep()?.publishedAt;
-    return p ? new Date(p).toLocaleDateString("zh-CN") : "";
-  };
+  const pubDate = () => fmtDate(ep()?.publishedAt);
 
   // EpisodeSummary（lib/db）→ QueueEpisode（播放器）
   const asQueue = (e: EpisodeSummary): QueueEpisode => ({
@@ -518,7 +508,7 @@ export default function EpisodeDetailPage() {
                 </Show>
                 <Show when={ep()!.durationSeconds}>
                   <span> · </span>
-                  <span>{fmtDuration(ep()!.durationSeconds)}</span>
+                  <span>{fmtDuration(ep()!.durationSeconds, true)}</span>
                 </Show>
                 {/* <span> · </span>
                 <A {...stylex.props(global.linkText,css.creatorLink)} href={"/@" + (ep()!.username ?? "")}>{t("episode.createBy", { user: ep()!.username! })}</A>

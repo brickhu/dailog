@@ -7,6 +7,7 @@ import { layouts } from "@dailogues/ui/theme.stylex";
 import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { apiBaseForFetch } from "../../lib/env";
+import { fmtDate } from "../../lib/format";
 import { PageSpinner } from "../../components/page-loading";
 
 
@@ -157,7 +158,7 @@ function SubmissionDetailPage() {
                 )}
               </Show>
               <p {...stylex.props(styles.meta)}>
-                {t("submission.submittedAt")}：{d().createdAt ? new Date(d().createdAt).toLocaleDateString("zh-CN") : ""}
+                {t("submission.submittedAt")}：{d().createdAt ? fmtDate(d().createdAt) : ""}
               </p>
               <p {...stylex.props(styles.meta)}>
                 {t("submission.sourceUrl")}：{" "}

@@ -9,6 +9,7 @@ import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../../components/auth-gate";
 import { setFavorite } from "../../lib/favorites";
+import { fmtDuration } from "../../lib/format";
 
 /** 收藏条目（/v1/me/favorites 返回；tags/guestName 供前端分组） */
 interface FavRow {
@@ -77,13 +78,6 @@ const styles = stylex.create({
   empty: { color: colors.neutral, textAlign: "center", padding: dimensions.spacing12 },
   hint: { color: colors.neutral, fontSize: dimensions.fontSizeSm },
 });
-
-function fmtDuration(sec: number | null): string {
-  if (!sec) return "";
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
 
 export default function MeFavoritesPage() {
   const { t } = useI18n();

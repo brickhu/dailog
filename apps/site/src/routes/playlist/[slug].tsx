@@ -8,6 +8,7 @@ import { useI18n } from "@dailogues/i18n";
 import { getPlaylist, type PlaylistDetail } from "../../lib/db";
 import { episodeCoverUrl, playlistCoverUrl } from "../../lib/env";
 import { usePlayback, type QueueEpisode } from "../../lib/playback";
+import { fmtDate, fmtDuration } from "../../lib/format";
 
 // 播放列表详情（/playlist/<slug>）：列表信息 + 有序节目 + 整单连播（setQueue + play）
 const getPlaylistCached = cache((slug: string) => getPlaylist(slug), "playlist-detail");
@@ -165,13 +166,6 @@ const styles = stylex.create({
   },
 });
 
-function fmtDuration(sec: number | null): string {
-  if (!sec) return "";
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
 export default function PlaylistPage(props: { params: { slug: string } }) {
   const { t } = useI18n();
   const playback = usePlayback();
@@ -214,7 +208,7 @@ export default function PlaylistPage(props: { params: { slug: string } }) {
                     <h1 {...stylex.props(styles.title)}>{pl().title}</h1>
                     <p {...stylex.props(styles.meta)}>
                       {t("playlists.episodeCount", { count: pl().episodeCount })}
-                      <Show when={pl().updatedAt}> · {t("playlist.updatedAt", { date: new Date(pl().updatedAt!).toLocaleDateString() })}</Show>
+                      <Show when={pl().updatedAt}> · {t("playlist.updatedAt", { date: fmtDate(pl().updatedAt) })}</Show>
                     </p>
                     <Show when={pl().description}>
                       <p {...stylex.props(styles.desc)}>{pl().description}</p>

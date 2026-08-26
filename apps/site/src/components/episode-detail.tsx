@@ -11,6 +11,7 @@ import { getPlaylistsByEpisode } from "../lib/db";
 import { InteractButtons } from "./interact-buttons";
 import { ShareButton } from "./share-buttons";
 import { fetchFavoriteStatus, setFavorite } from "../lib/favorites";
+import { fmtDate, fmtDuration } from "../lib/format";
 
 const styles = stylex.create({
   favBtn: {
@@ -132,13 +133,6 @@ const styles = stylex.create({
   },
 });
 
-function fmtDuration(sec: number | null): string {
-  if (!sec) return "";
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m} 分 ${String(s).padStart(2, "0")} 秒`;
-}
-
 export function EpisodeDetail(props: { episode: QueueEpisode }) {
   const { t } = useI18n();
   const ep = () => props.episode;
@@ -201,7 +195,7 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
       <p {...stylex.props(styles.meta)}>
         {(() => {
           const pub = ep().publishedAt;
-          return `${hostName()} · ${pub ? new Date(pub).toLocaleDateString("zh-CN") : ""}${ep().durationSeconds ? ` · ${fmtDuration(ep().durationSeconds)}` : ""}`;
+          return `${hostName()} · ${pub ? fmtDate(pub) : ""}${ep().durationSeconds ? ` · ${fmtDuration(ep().durationSeconds, true)}` : ""}`;
         })()}
       </p>
       {/* 统计行：播放/完播次数（组件级骨架；0036 恢复） */}

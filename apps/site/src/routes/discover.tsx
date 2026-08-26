@@ -1,6 +1,7 @@
 import { A, cache, createAsync } from "@solidjs/router";
 import { For, Show, Suspense, createSignal } from "solid-js";
 import { listLatestEpisodes, listPublicPlaylists, type EpisodeSummary, type PlaylistSummary } from "../lib/db";
+import { fmtDate, fmtDuration } from "../lib/format";
 import { episodeCoverUrl, playlistCoverUrl } from "../lib/env";
 import * as stylex from "@stylexjs/stylex";
 import { layouts } from "@dailogues/ui/theme.stylex";
@@ -92,17 +93,6 @@ const styles = stylex.create({
     padding: dimensions.spacing12,
   },
 });
-
-function fmtDate(d: Date | null): string {
-  return d ? new Date(d).toLocaleDateString("zh-CN") : "";
-}
-
-function fmtDuration(sec: number | null): string {
-  if (!sec) return "";
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
 
 export default function DiscoverPage() {
   const { t, locale } = useI18n();
