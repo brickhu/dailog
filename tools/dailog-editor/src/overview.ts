@@ -57,7 +57,7 @@ export async function overview(config: EditorConfig, _args: string[]): Promise<v
       const hasScript = readdirSync(dir).some((f) => /^script.*\.json$/.test(f));
       const hasFinal = existsSync(join(dir, "final.mp3"));
       const progress = readProgress(id);
-      if (progress?.step === "published" || progress?.step === "rejected") continue; // 终态不计
+      if (progress?.step === "published" || progress?.step === "rejected" || progress?.step === "republished") continue; // 终态不计（含 republish 遗留 step）
       if (hasScript && !hasFinal) scriptPending++;
       if (hasFinal) voicePending++;
     }

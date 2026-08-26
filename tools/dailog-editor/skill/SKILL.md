@@ -1,6 +1,6 @@
 ---
 name: dailog-editor
-description: 
+description:
   dailog 编辑本地工作流（一条龙）。用户（编辑）给出投稿 ID、或让本技能拉取待审队列时：
   拉取队列/详情 → 本地拉取网页内容 → 按 dailog 标准生成脚本 → Fish TTS 合成语音 →
   ffmpeg 合成 → 节目信息与封面 → 一次性上传发布（或拒审）。覆盖本质版编辑管线的全部动作。
@@ -38,13 +38,13 @@ triggers:
 
 # Dailog Editor · 编辑本地 Agent 工作流（一条龙）
 
-**本质版架构**：用户只提交 URL + 声音采样 → 落库待审核；编辑在本地 Agent 完成
-内容拉取、脚本、语音、合成、封面，成品一次性上传发布。服务端不做任何采集/生成。
+**本质版架构**：用户只提交 URL + 声音采样 → 落库待审核；编辑在本地 Agent 完成内容拉取、脚本、
+语音、合成、封面，成品一次性上传发布。服务端不做任何采集/生成。
 
 ```
 用户投稿（site）: URL（合法性+触达性检查）+ 采样 → submissions(status=submitted)
-编辑（本技能）: list → detail → fetch 采集解码 → 生成脚本 → tts → merge
-              → cover → publish（published + 通知投稿人）/ reject（拒审 + 通知）
+编辑（本技能）: list → detail → fetch 解码（阶段 0）→ 生成（阶段 1：选题/草稿/终稿三确认门）
+              → tts → merge → cover → 发布（阶段 2：元数据生成 + 发布确认门）→ publish / reject
 ```
 
 ## 前置条件
@@ -53,6 +53,8 @@ triggers:
   模板 `tools/dailog-editor/templates/envs.example.json`）已配置
 - 本机有 `ffmpeg` / `ffprobe`（采样转码 + 合成）；草稿目录 `.dailog-editor/drafts/` 自动创建
 - 命令入口：`pnpm editor <cmd>`（根目录）；源码 `tools/dailog-editor/`
+- DSH 沙箱 pnpm EPERM（版本不匹配）→ 直调 `node .agents/skills/dailog-editor/scripts/run.js`
+  （详见 `reference/toolchain-notes.md`）
 
 ## 工作台概要（dailog / overview 直接触发）
 
@@ -60,517 +62,280 @@ triggers:
 
 ```
 ① 会话初始化（选环境 → auth-status，未配对先引导 login）
-② pnpm editor overview → 展示：
-   环境：<site_url>
-   编辑：<email>
-   1. N 条待审批；            ← 服务端 submitted 队列
-   2. N 条脚本待生成语音；     ← 草稿有 script.json 未合成
-   3. N 条语音待发布；         ← 草稿有 final.mp3 未发布
-   4. N 条下线申请；           ← 用户「申请下线」→ 编辑审批（removal 队列）
+② pnpm editor overview → 展示：环境 / 编辑 / 1.待审批 / 2.脚本待生成语音 / 3.语音待发布 / 4.下线申请
    → 选号：[1] 📥 审核投稿 ｜ [2] 🎙️ 制作脚本 ｜ [3] 🚀 发布 ｜ [4] 🚫 下线申请审批 ｜
            [5] 📋 节目/播放列表 ｜ [6] ⚙️ 其他（批量/嘉宾声线/重做…）
-③ 按所选编号进入对应流程（批量处理 / 审核单个 / 制作 / 发布…）
+③ 按所选编号进入对应流程
 ```
 
-## ⚠️ 会话初始化（每个新对话必做——环境与配对是会话级状态）
-
-**环境选择与配对不落全局配置**：每次新起对话，先确认环境与授权，再开始操作；
-新开对话必须重新确认（不沿用上次对话的选择）。
+## 会话初始化（每个新对话必做——环境与配对是会话级状态）
 
 ```
-新对话开始（用户请求编辑操作）
-  ↓ ① 列出环境清单（读 .dailog-editor/envs.json）→ 询问用户本次访问哪个环境
-  │    （若用户已直接指定 → 用它；否则必须问，不默认）
-  ↓ ② 检查该环境：pnpm editor --env <环境> auth-status
-  │    · 先打 /health 验证端点可用（不可达 → 换环境/查网络，不继续）
-  │    · 再查授权：✅ 有效 → 记下环境名，本对话后续命令全部带 --env <环境>
-  │    · ❌ 未配对 / token 失效 → 引导配对（③）
-  ↓ ③ 配对码登录：pnpm editor --env <环境> login
-  │    终端给授权链接（API 域内自包含授权页，不依赖 site）→ 浏览器打开登录
-  │    （已登录略过）→ 页面显示配对码 → **把码贴回对话** → 用
-  │    pnpm editor --env <环境> login --code <配对码> 完成配对 → 成功
-  │    （token 绑定该环境缓存本地；非交互环境不会自行抓码，见下「配对交接」）
-  ↓ ④ 固化到当前对话：本对话所有 `pnpm editor` 命令显式带 --env <环境>
-  │    （或导出 DAILOG_ENV=<环境> 作为本对话的环境变量）
-  ↓ ⑤ 新开对话 → 回到 ① 重新确认环境 + 检查授权
+① 读 .dailog-editor/envs.json 列出环境清单 → 询问编辑本次访问哪个环境
+  （用户已指定 → 用之；否则必须问，不默认）
+② pnpm editor --env <环境> auth-status：先打 /health 验证端点可用（不可达 → 换环境/查网络，不继续），
+  再查授权：✅ 有效 → 记下环境名，本对话后续命令全部带 --env <环境>；❌ → 走 ③
+③ 配对码登录：pnpm editor --env <环境> login（终端给授权链接）→ 编辑浏览器打开登录 →
+  把页面显示的配对码贴回对话 → pnpm editor --env <环境> login --code <配对码> 完成配对
+  （token 绑定该环境缓存本地；已登录略过）
+④ 新开对话 → 回到 ① 重新确认环境 + 授权
 ```
 
 要点：
-- **环境必须显式**：存在多个环境时命令不带 --env 会列出清单拒绝执行——防「以为是 dev 实际打到 prod」
-- **每次对话首次调用先确认端点可用**：`auth-status` 第一步打 `/health`（无鉴权）——
-  端点不可达与未授权分开提示，避免「连不上还去配对」的误导
-- **token 绑定环境**：dev 的 token 不能用于 prod（会提示先配对 prod）
-- **配对交接（非交互 harness）**：`pnpm editor login` 在非交互环境只创建授权并打印
-  授权 URL 后即返回，**绝不自行抓取/读取配对码**（页面上的配对码在本机名浏览器登录态下，
-  CLI 拿不到，也不该拿）。正确做法：创建授权 → 把 URL 给编辑在浏览器打开 → 编辑把页面
-  显示的配对码**贴回对话** → agent 用 `pnpm editor --env <环境> login --code <配对码>`
-  提交配对（复用已创建授权，无需重开/重授权）。**红线**：不得自行 GET/访问授权页或任何
-  端点去"偷"验证码，也不得伪造/编造配对码，必须等编辑回贴。
-- 用户中途说「换个环境」→ 重新走 ①-④（login 可用 `--force` 重配对）
+- **环境必须显式**：多环境下命令不带 --env 会列出清单拒绝执行——防「以为是 dev 实际打到 prod」
+- **token 绑定环境**：dev 的 token 不能用于 prod；用户说「换个环境」→ 重走 ①-④（login --force 重配对）
+- **配对交接（红线）**：`login` 在非交互环境只创建授权并打印 URL 后返回，**绝不自行抓取/读取配对码**
+  ——把 URL 给编辑在浏览器打开，编辑把页面显示的配对码贴回对话，agent 用 `login --code` 提交；
+  不得 GET 授权页偷码、不得伪造/编造配对码，必须等编辑回贴
 
 ## 工作流（一条龙）
 
 ```
 用户: "审核投稿" / 给 submissionId / 粘贴 URL
-  ↓ ① 会话初始化（见上：确认环境 → auth-status → 必要时配对）
+  ↓ ① 会话初始化（选环境 → auth-status）
   ↓ ② 拉取队列或详情
-  ↓ ③ 采集 + 内容解码：pnpm editor fetch <id>（拉取 URL → page.html/page.txt/dialogue.json）
-  │    结构化命中直接用 dialogue.json；未命中 → 浏览器/控制台兜底后提炼
-  ↓ ④ 三步制作（子代理执行，见 ④）：Step A 选题筛选 → 题材门 → Step B（B1 结构 + B2 听感
-  │        一次生成）→ 结构门 → 成品门；进 tts 前内容核查（fact_check_list /
-  │        privacy_redactions，见阶段 2 ⑤）
-  ↓ ⑥ pnpm editor tts <id> --script script.json --language <lang>  （逐段合成）
-  ↓ ⑦ pnpm editor merge <id> --language <lang>  （合成 final.m4a，intro/outro 按语言匹配；
-  │    合成完成自动用 QuickTime Player 打开试听）
-  ↓ ⑧ pnpm editor cover <id> [--guest <platform>]  （本地模板封面，居中「主持人 × 嘉宾」称呼）
-  ↓ ⑨ 确认点 ②：完整节目元数据逐项列出（标题/简介/标签/嘉宾/语言/时长/封面/分类/highlights/
-  │    references）→ 编辑确认 → pnpm editor publish <id> --title "…" …
-  ↓    或 pnpm editor reject <id> --reason "…"                         （拒审）
-  ↓ ⑩ 汇报：期号/节目链接 或 拒审原因
+  ↓ ③ 阶段 0 · 解码（独立，不跑生成）：pnpm editor fetch <id> 解码落盘
+  │    → 呈现列表（ID + 投稿人 + 标题 + URL）→ 编辑输入 ID 进入生成工作流
+  ↓ ④ 阶段 1 · 生成（单条编号驱动，子代理执行，见 ④）：
+  │    1.1 审稿+选题（dailog-select）→ 选题确认门（选号/拒稿）
+  │    1.2 脚本草稿（dailog-draft）→ 草稿确认门（下一步/修改/拒稿）
+  │    1.3 听感打磨（dailog-polish）→ 终稿确认门（确认/修改/拒稿）
+  │    → 进 tts 前内容核查（fact_check_list / privacy_redactions）+ 嘉宾声线预检
+  ↓ 1.4 pnpm editor tts <id> --script script.json --language <lang> [--guest <platform>]
+  ↓ 1.5 pnpm editor merge <id> --language <lang>（final.m4a；合成完成自动用 QuickTime 打开试听）
+  ↓ 1.6 pnpm editor cover <id> [--guest <platform>]（封面 Read 展示给编辑）
+  ↓ 阶段 2 · 发布（节目标号驱动）：
+  │    2.1 元数据生成（dailog-meta → metadata.json，基于终稿）
+  │    2.2 发布确认门：元数据逐项 + 封面 + 试听 → 编辑确认 → publish / reject
+  ↓ 汇报：期号/节目链接 或 拒审原因
 ```
 
-> 本工作流中所有 `pnpm editor` 命令均带会话选定的环境（`--env <环境>` 或 `DAILOG_ENV`），下文为简洁省略。
+> 本工作流中所有 `pnpm editor` 命令均带会话选定环境（`--env <环境>` 或 `DAILOG_ENV`），下文省略。
 
 ### ② 队列与详情
 
 ```bash
 pnpm editor list                  # 待审队列（先到先审；⚠️无采样 = 无法克隆主持人音色）
-pnpm editor detail <submissionId> # URL/投稿人/主持人称呼(callName)/节目建议/采样 transcript/已上线节目
-                                  # （采样在服务端 R2，无需下载本地）
-pnpm editor removal               # 节目下线申请队列（用户申请 → 编辑审批；approve 下架+通知，reject 拒绝+通知）
+pnpm editor detail <submissionId> # URL/投稿人/主持人称呼(callName)/节目建议/采样 transcript/画像
+pnpm editor removal               # 节目下线申请队列（approve 下架+通知 / reject 拒绝+通知）
 ```
 
-### ③ 采集 + 内容解码（`pnpm editor fetch <id>`）
+### ③ 阶段 0 · 解码（独立步骤，不跑生成工作流）
 
 - 命令：`pnpm editor fetch <id>` → 拉取投稿 URL 并解码落盘草稿目录：`page.html`（原始 HTML）/
-  `page.txt`（清洗后正文）/ `dialogue.json`（`[{role: "user"|"assistant", content}]`）
-- 平台分派 / 代理兜底 / 提取策略 / 浏览器兜底步骤 / 解码规则自进化 / 平台经验库：
-  **详见 `reference/fetch-decoding.md`**
-- 拉取失败（403/超时/失效）→ 如实汇报，引导用户走浏览器控制台兜底
-  （console-script/paste 步骤见 reference）
+  `page.txt`（清洗后正文）/ `dialogue.json`（`[{role, content}]`）
+- 本步只做**提取与解码**（LLM 按 URL 匹配内容解码器），**不跑任何生成**；解码完成即落盘
+- **完成后呈现列表**：ID + 投稿人 + 标题（页面标题，无则省略）+ URL——编辑**输入 ID** 进入阶段 1
+- 平台分派 / 代理兜底 / 浏览器兜底 / 解码规则自进化 / 平台经验库：**详见 `reference/fetch-decoding.md`**
+- 拉取失败（403/超时/失效）→ 如实汇报，引导编辑走浏览器控制台兜底
 
-### ④ 三步制作流程（选题 → 内容结构 → 听感打磨，子代理执行）
+### ④ 阶段 1 · 生成工作流（单条编号驱动，子代理执行）
 
-> **为什么用子代理**：对话原文（15-20k tokens）与提示词文件（合计 ~14k tokens）若直接进主会话，
-> 每步生成 + 每个确认门都要重处理整段累积上下文——单期 70-90k+ tokens、30+ 回合，慢且费。
-> 改为**子代理执行生成**：提示词文件与对话原文只在子代理自己的上下文里读入，主会话只收
-> 最终 JSON（~5-10k）。同一会话连续做多期时收益更大。
+> **为什么用子代理**：对话原文（15-20k tokens）与提示词文件（合计 ~14k tokens）只进子代理上下文；
+> 结果由子代理**直接写盘**，主会话只收一行校验摘要；展示内容从草稿文件读出放回复正文。
+> 单期主会话增量 ~15-25k。**子代理完整 prompt 模板（1.1/1.2/1.3 + 2.1）见 `reference/subagent-templates.md`**
+> （路径按实际情况补全：<skillDir>=.agents/skills/dailog-editor，<drafts>=.dailog-editor/drafts）。
 
-**执行方式（每个投稿一次生成，两级子代理）**：
+| 步骤 | 子代理 | 输入 | 输出（写盘） | 确认门 |
+|---|---|---|---|---|
+| 1.1 审稿+选题 | `dailog-select` | selection.md + dialogue.json + 节目建议 | selection.json（content_summary + ideas[1..N] 各带 score）或 quality.json | ① 选题 |
+| 1.2 脚本草稿 | `dailog-draft` | draft.md + five-beats.md + templates.md + chosen-idea.json + dialogue.json | script-draft.json（三段纯文本无标签） | ② 草稿 |
+| 1.3 听感打磨 | `dailog-polish` | polish.md + script-draft.json + chosen-idea.json + dialogue.json | script.json（终稿带标签 + optimization_summary） | ③ 终稿 |
 
-**Step A · 选题筛选 —— 子代理 `dailog-select`**
-- 起一个子代理（独立上下文，不占主会话），prompt 模板（路径按实际情况补全）：
-  ```
-  你是 dailog 编辑工作流的「选题筛选」子代理。
-  1. 用 read 工具读取提示词文件并**原样作为你的系统提示词**（不要改写压缩）：<skillDir>/prompts/selection.md
-  2. 用 read 工具读取对话原文：<drafts>/<id>/dialogue.json（[{role, content}] 逐条）
-  3. 投稿人节目建议（角度锚点，有则必须作为角度约束）：<suggestion>
-  4. 按提示词执行，只输出**一个合法 JSON**（verdict/dimension/moment/spine_required/
-     background_needed/arc/score/opening_question/suggestion_decision/fact_check_list/
-     privacy_redactions 等，字段以 selection.md 为准），不要解释、不要 markdown 代码块包裹。
-     verdict=reject 时输出 {verdict:"reject", reason, feedback}。
-  ```
-- 返回 JSON 落盘：pass → `drafts/{id}/selection.json`；reject（G1-G5 / no_moment / no_spine）→
-  写 `drafts/{id}/quality.json {pass:false, reason}`（reason 取 reject.feedback，面向投稿人）。
-- **题材确认门**：向编辑展示选题思路（题材 + 为什么 + moment + 收获价值），选项
-  [1] 确认 / [2] 拒稿 / [3] 调整方向；[3] 附说明重跑 dailog-select（prompt 追加修订指令）。
+- 1.1 确认门编辑选号 N → 主会话把 ideas[N-1] 写入 `drafts/{id}/chosen-idea.json`（角度锚点）
+- **打回重跑**：听感反馈（呈现层）→ 重跑 1.3；结构反馈（换角度/切主题/加删回合）→ 重跑 1.2；
+  换选题角度 → 回 1.1 重新选号。修订指令：prompt 末尾追加「修订指令：<编辑要求>」
+- **内容规范以提示词文件为准**（主会话不重复载入）：
+  - `prompts/selection.md`（1.1）：G1-G5 闸门 + 时刻门（问题归位测试）+ 逻辑骨架 + 价值维度 + 打分
+  - `prompts/draft.md` + `five-beats.md` + `templates.md`（1.2）：五拍结构 + 四模板选型 → 三段草稿
+  - `prompts/polish.md`（1.3）：情绪设计 + 现场感铁律 + 话题转移 + 检查清单（不输出元数据）
+  - `prompts/meta.md`（2.1 发布准备）：基于**终稿**生成 title/summary/description/tags/coverKeywords/category/references/highlights
+  - 产物在 `.agents/skills/dailog-editor/prompts/`，源码 `tools/dailog-editor/prompts/`
+- **提示词保真**：提示词文件由**生成子代理原样读取**作为系统提示词，任何人不许改写压缩
+- **节目建议（角度锚点）**：detail 的「节目建议」是用户呈现意图的最强信号——1.1 以它为角度约束
+  （时刻与骨架落在建议路径上），冲突取舍写进 suggestion_decision；1.2/1.3 经 chosen-idea.json
+  继承，脚本角度不得偏离（polish.md 铁律 6）
 
-**Step B · 内容结构 + 听感打磨 —— 子代理 `dailog-craft`（B1+B2 一次生成）**
-- 起一个子代理，prompt 模板：
-  ```
-  你是 dailog 编辑工作流的「内容结构 + 听感打磨」子代理。
-  1. 用 read 读取 <skillDir>/prompts/script-draft.md → 作为「内容结构」系统提示词（原样）
-  2. 用 read 读取 <skillDir>/prompts/script-craft.md → 作为「听感打磨」系统提示词（原样）
-  3. 用 read 读取 <drafts>/<id>/selection.json（选题，含 suggestion_decision，角度不得偏离）
-  4. 用 read 读取 <drafts>/<id>/dialogue.json（对话原文）
-  5. 先按 script-draft.md 生成内容结构 JSON（topic_confirm / harvest_summary / structure：
-     ②定向要点 + ③承重墙回合清单 + moment 位置 + ④落点要点 + ⑤收束要点）
-  6. 再按 script-craft.md 生成成品脚本 JSON（language/title/topic/summary/description/tags/
-     coverKeywords/category/references/highlights/creationNote/segments 含 part）
-     ——结构以第 5 步为护栏（script-craft 铁律 7），角度以 selection.json 为锚（铁律 6）；
-     现场感红线（铁律 5：非重放腔）在生成时自检
-  7. 只输出**一个合法 JSON 对象**：{"scriptDraft": {...}, "script": {...}}，不要解释/代码块
-  ```
-- 返回的两个 JSON 落盘 `drafts/{id}/script-draft.json` 与 `drafts/{id}/script.json`。
-- 修订指令（可选）：prompt 末尾追加「修订指令：<编辑要求>」（如"发音可读性：把 DESIGN.md 改为
-  design 点 M D" / "情绪更兴奋"）。
+#### 确认门（阶段 1 三关：选题 → 草稿 → 终稿，逐关确认）
 
-**打回重跑（省 token 的关键）**：
-- **听感反馈（只动呈现层）→ patch 子代理 `dailog-craft-patch`**：
-  ```
-  你是 dailog 编辑工作流的「听感打磨修订」子代理。
-  1. 用 read 读取 <skillDir>/prompts/script-craft.md → 作为系统提示词（原样）
-  2. 用 read 读取 <drafts>/<id>/script.json（现有脚本）
-  3. 编辑反馈：<feedback>
-  4. 只动呈现层（措辞/情绪/停顿/穿插/转场/节奏）；承重墙回合/moment 位置/角度/结构**不得改变**
-  5. 只输出修订后的完整 script.json（合法 JSON，字段结构与原脚本一致），不要解释/代码块
-  ```
-  （patch 不读 dialogue.json——呈现层微调不需要全量对话；反馈通常一轮解决）
-- **结构反馈（换角度/切主题/加删回合）→ 重跑 `dailog-craft`**（prompt 追加修订指令）。
-
-> **提示词保真**：三个提示词文件均由**生成子代理原样读取**作为其系统提示词，主会话不重复载入；
-> 任何人不许改写压缩（压缩会丢细节导致读稿感/漏判）。
-> **投稿人节目建议（角度锚点）**：detail 的「节目建议」是投稿人可选填写的**用户呈现意图（A）
-> 的最强信号**——投稿人明确写出的角度/主题/想分享什么，Step A 必须以它为角度约束
-> （时刻与骨架须落在建议指向的路径上，见 selection.md 步骤 0/2）；与时刻门硬冲突时按质量
-> 闸门取舍，并把取舍写进 selection.json 的 suggestion_decision。有 → 追加到 dailog-select
-> 的 prompt 末尾；Step B 不再重复处理，但输入含 suggestion_decision，脚本角度不得偏离（铁律 6）。
-
-**1. 语言**：跟随原对话主要语言（zh/en/ja/ko…）
-
-**2. 时长**：核心对谈 10 分钟内（≤约 2800 字；上限由 Fish Audio 多说话人接口时长上限决定，这也是分段合成 --parts 的意义）——开场+自述与落点+收束不计入（框架节拍保持轻），压缩长段落、去除冗余
-
-**3. 朗读向**：多用短句、自然断句，避免书面语和长修饰（"此外""综上所述"），标点控制朗读节奏；
-   口播台词**不得出现会被 TTS 逐字母拼读的写法**（如 DESIGN.md → 改写为 "design 点 M D"，
-   见 script-craft.md「发音可读性」节 + 检查清单 20）
-
-**4. 真人对话感（细则已并入 script-craft.md）**：留白/穿插/比喻/打断/调侃/隐私模糊化/欢笑/
-直播感/思考 九条细则已并入 `prompts/script-craft.md`（「情绪设计」+「临场思考」+ 听感检查
-清单 5/8/11）——以 prompt 文件为准。
-
-**5. 开场白（轻量结构，见 script-craft.md）**：开场白只保留 问候 + 自我介绍 + 引出嘉宾 三个
-信息点（host/guest 两段），切入方式按话题自由设计；称呼改写规则（英文原样；中文等小语种 → 拼音/罗马字）见 `prompts/script-craft.md`
-检查清单 11（五拍框架 ①）；主持人称呼 callName / 嘉宾名 guests 表 / 画像 personaInfo 的取用
-见本技能「工具链已知点」与 ⑤ TTS。
-
-**6. 切题与提问保真**：主题单元切分与拆期见 `prompts/selection.md` 步骤 2；提问保真
-（原生提问 ≥50%、含义不歪曲、改写只动措辞不动含义）见 `prompts/script-craft.md`
-铁律 2 与检查清单 10。
-
-**7. 情绪标注（标签清单见 script-craft.md）**：情绪标注语法与 Fish S2 标签全表（基础/进阶/
-语气/音效/停顿/组合/强度修饰）以 `prompts/script-craft.md`「情绪设计」为准。
-
-**8. 元数据（见两个 prompt 输出）**：title/topic/summary/description/tags/coverKeywords/
-references/highlights/category（insight/experience/advice/inspiration，由选题维度映射）
-见 `prompts/script-craft.md`「配套产物」；creationNote（含选题依据与节目建议取舍）见
-`prompts/selection.md` 输出 JSON。
-
-#### 提示词文件（独立参照，三级）
-
-生成时使用**独立提示词文件**——内容**原样**作为 LLM 系统提示词（对话原文作为用户消息），
-由生成子代理（dailog-select / dailog-craft / dailog-craft-patch）读取执行，
-主会话不重复载入；不要自己改写压缩（压缩会丢细节导致读稿感）：
-
-- **Step A 选题筛选**：`prompts/selection.md`
-  （产物 `.agents/skills/dailog-editor/prompts/selection.md` / 源码 `tools/dailog-editor/prompts/selection.md`）
-  ——硬性闸门 G1-G5 + 时刻门（含问题归位测试：时刻须落在用户意图路径上）+ 逻辑骨架 +
-  价值维度 + 时刻强度分，输出选题 JSON（含 opening_question / suggestion_decision）
-- **Step B1 内容结构**：`prompts/script-draft.md`
-  （产物 `.agents/skills/dailog-editor/prompts/script-draft.md` / 源码 `tools/dailog-editor/prompts/script-draft.md`）
-  ——五拍结构落位 + 承重墙回合清单 + moment 位置 + 收获价值总结，输出内容结构 JSON
-- **Step B2 听感打磨**：`prompts/script-craft.md`
-  （产物 `.agents/skills/dailog-editor/prompts/script-craft.md` / 源码 `tools/dailog-editor/prompts/script-craft.md`）
-  ——情绪设计 + 临场思考 + 话题转移 + 确认性穿插 + 结构护栏（铁律 7）+ 配套产物，输出脚本 JSON
-- `prompts/script-generation.md`：弃用，勿用（以 selection/script-draft/script-craft 三级为准）
-
-#### 三步确认门（选题 → 内容结构 → 成品，逐关确认）
-
-> **交互方式（统一）**：每个确认门都用**选项编号**呈现，编辑**点击选项或回复编号**即可，无需打字。
-> 支持可点击选项的交互环境（如 DSH GUI）：用选项按钮呈现，编辑点击即确认；纯文本环境：列出
-> `[1] 确认 / [2] ...` 编号，编辑回复编号。修改类选项（改结构/听感反馈）选中后可附一句简短说明。
+> **交互**：选项编号呈现，编辑点击/回复编号即可；修改类选项附一句说明。
+> **呈现通道红线（所有环境通用，GUI 尤甚）**：一切面向编辑的展示——内容概括 / 选题思路 / **脚本
+> 草稿与终稿全文** / 配套产物 / 封面图（Read 图片） / 节目元数据——**必须出现在 agent 回复正文**
+> （脚本全文单个 code block 整篇）；**禁止用工具输出（console.log / 命令 stdout / 子代理返回）
+> 承载展示**——GUI 里工具输出默认折叠、对编辑不可见（编辑会问「在哪儿？看不到」）。子代理 JSON
+> 直接写盘，主会话不打印全文；工具输出只用于校验与调试。
 
 ```
-三关逐关确认，任何一关打回即重跑对应子代理；全部通过才进 tts。
-每关固定选项编号（随展示内容一起列出）：
+三关逐关确认，任何一关打回即重跑对应子代理；全部通过才进 tts（1.4）。
+（元数据属发布层：阶段 2 发布确认门与封面/试听一并确认，见下。）
 
-  ① 题材确认门（Step A pass 后）：
-     · 展示选题思路：题材 + 为什么值得做（moment / dimension / title_draft / 收获价值）
-     · 选项：[1] ✅ 确认 → 进内容结构 ｜ [2] ❌ 拒稿 → 走 reject 流程 ｜ [3] ✏️ 调整选题方向（附说明）
-  ② 内容确认门（Step B 生成后）：
-     · 展示 script-draft.json 的结构概览（②定向 / ③承重墙回合清单 / moment 位置 / ④落点 / ⑤收束）
-       + harvest_summary（收获价值总结，编辑参考）——只展示结构概览，不展示成品脚本
-     · 选项：[1] ✅ 确认 → 进成品确认门 ｜ [2] ✏️ 改结构（换角度/切主题/加删回合，附说明）→
-       重跑 dailog-craft ｜ [3] ❌ 拒稿 → 走 reject 流程
-  ③ 成品确认门（Step B 生成后）：
-     · 默认展示**脚本摘要**（pnpm editor script-preview <id> 输出：段数/字数/时长/每段说话人与开头）
-       + 配套产物：title / summary / description / tags / coverKeywords / category /
-       references / highlights——references 外链须人工确认无编造（链接安全红线）
-     · 编辑要求看全文（"把脚本展示出来"/"看全文"）→ 单个代码块整篇呈现
-       （编号 + 说话人 + 情绪标签 + 停顿 + 完整文本，逐行通读）
-     · **现场感检查**：开场无剧透结局、无倒叙腔/预知走向/旁观评判/回声附和、落点无"今天聊完"式
-       完成态回顾（对照 script-craft.md 铁律 5）——编辑可凭「这段像不像正在发生的对话」判断；
-       发现重放腔/复读腔 → 打回重生成
-     · **角度保真检查**：开场定向是用户原话的含义、时刻是用户问题的答案、落点是用户自己的认识
-       （对照铁律 6 投稿人测试）——投稿人听完应能说「这就是我那段对话」，认不出 → 打回重生成
-     · **结构对照检查**：承重墙回合/顺序/moment 位置与 script-draft.json 一致（对照铁律 7）
-     · **转场检查**：话题切换有由头（被触发/递进/补足/处境关联），无裸问、无「后来我又想」式
-       万能过渡词（对照 script-craft.md「话题转移」节）——生硬 → 打回重生成
-     · 选项：[1] ✅ 确认 → 进入 tts ｜ [2] ✏️ 听感反馈（情绪/停顿/穿插/转场，附说明）→
-       只跑 dailog-craft-patch ｜ [3] ✏️ 结构反馈（附说明）→ 重跑 dailog-craft ｜
-       [4] ❌ 拒稿 → 走 reject 流程
+  ① 选题确认门（1.1 pass 后）：
+     · 展示：原文内容概括（3-5 句）+ 选题思路列表（1..N，每个：why_this_idea + title_draft +
+       score，按得分排序，推荐标 ⭐）
+     · 选项：[1..N] ✅ 选第 N 个思路 ｜ [R] ❌ 拒稿 → reject ｜ [M] ✏️ 修改（附说明重跑 1.1）
+  ② 草稿确认门（1.2 生成后）：
+     · 展示：三段脚本草稿，分别三个 code block（part1 开场+点题 / part2 对话主题 / part3 落点+收尾），
+       纯文本无情绪标签 + draft_notes
+     · 选项：[1] ✅ 下一步 → 听感打磨 ｜ [2] ✏️ 提修改意见（附说明重跑 1.2）｜ [3] ❌ 拒稿
+  ③ 终稿确认门（1.3 生成后）：
+     · 展示：终稿全文（单个 code block 整篇）+ 优化总结（optimization_summary，逐条）
+       + 摘要（script-preview）作附加信息
+     · 嘉宾声线预检：进 tts 前 pnpm editor guests 确认目标嘉宾（--guest <platform>）有声线；
+       ⚠️ 无声线 → 本门内立即告知编辑（上传声线/换有声线嘉宾/暂停），不得闷头跑 tts 到 422
+     · 质量自检：现场感/角度保真/结构对照/转场（对照 polish.md 铁律 5/6/7 + 检查清单）——
+       不合格打回重生成
+     · 选项：[1] ✅ 确认 → tts ｜ [2] ✏️ 提交修改意见（听感，附说明）→ 重跑 1.3 ｜
+       [3] ✏️ 结构反馈（附说明）→ 重跑 1.2 ｜ [4] ❌ 拒稿
 ```
 
-**红线**：脚本未经三步确认门全部通过不得进入 tts 合成——脚本是节目内容核心
-（说什么/怎么说/称呼/时长），编辑把关后才能生成语音。
-**展示要求**：确认环节必须给编辑看**脚本摘要 + 配套产物**（默认）；编辑要求看全文时
-立即补**完整脚本全文**（单个代码块整篇呈现）——「把脚本展示出来我看看」即补全文，不得省略。
+**红线**：脚本未经三个确认门（选题/草稿/终稿）全部通过不得进入 tts；「把脚本展示出来我看看」
+是默认态（终稿全文默认在正文），不得让编辑催第二遍。发布层面（元数据/封面/试听）在阶段 2 发布确认门一并确认。
 
-### ⑤ TTS（`pnpm editor tts <id> --script script.json [--language zh|en] [--guest <platform>]`）
+### 1.4 TTS（`pnpm editor tts <id> --script script.json [--language zh|en] [--guest <platform>]`）
 
-- **整集一次合成（multi speaker——Fish 官方多说话人接口，默认）**：完整脚本 JSON 提交服务端
-  `POST /v1/editor/tts`，服务端组装 `<|speaker:0|>`（host）`<|speaker:1|>`（guest）标签 +
-  references 2D 零样本克隆（host 采样 + guest 声线）→ 一次调用返回整集 mp3（`full.mp3`）
-- **三段落合成（`--parts`，推荐）**：脚本按 part 字段分 3 段独立合成（script-craft 生成时标注：
-  part1=开场+定向、part2=对谈、part3=落点+收束）→ 每段一次请求（part1/2/3.mp3）→ 拼接
-  `full.mp3`（段间 0.6s 静音）。好处：单段输入更短（长稿质量更稳）、某段音色/情绪有问题只重跑
-  该段（`--part <n>`）不重跑整集（省配额与时间）
-- `--part <1|2|3>`：只重跑某一段（part{n}.mp3）→ 自动与已有段落重新拼接 full.mp3
-- **统一走服务端端点**——编辑本地不直连 Fish Audio，**Fish key 只配在服务端**
-  （Railway env），编辑无需任何 TTS 密钥
-- host（主持人）= 投稿人采样：服务端从投稿人记录取用（R2 + 表内转录）
-- guest（AI 嘉宾）= **声线在服务端配置**（guest_voice_samples 表 + R2）：
-  - `--guest <platform>` 指定嘉宾（claude/chatgpt/deepseek/gemini/kimi/doubao/tongyi/perplexity/grok）
-  - 服务端按 guestId + 语言取声线（同语种优先 → 兜底任意语种）；未配置 → 422 提示先上传
-  - 查看嘉宾与声线状态：`pnpm editor guests`（管理入口）
-  - 声线管理：`pnpm editor guest-voice <guestId> --audio <file> [--language zh] [--transcript "..."]`
-  - 嘉宾称呼/简介（节目中的称呼）也在服务端：`pnpm editor guest-set <guestId> --name "..." [--intro "..."]`
-- 纯 host 脚本（无 guest 段）→ 服务端 single 整集合成；含 guest → multi speaker
-- 产物：`full.mp3`（整集）→ 下一步 merge（intro + full + outro）
-- 失败：汇报错误（服务端 Fish 余额/限流/超时），按提示重跑该段（--part n）或整集
+- 整集一次合成（multi speaker，默认）或 `--parts` 三段落合成（推荐：单段更稳、可 `--part n` 单段重跑）
+- **统一走服务端端点**——编辑本地不直连 Fish Audio，Fish key 只配在服务端；host=投稿人采样，
+  guest=服务端 guest_voice_samples 声线：`pnpm editor guests` 查看、`guest-voice <id> --audio <file>`
+  上传、`guest-set <id> --name` 改称呼；未配置声线 → 422，先在终稿确认门解决
+- 产物 `full.mp3`；失败：汇报错误（Fish 余额/限流/超时），按提示重跑该段（--part n）或整集
 
-### ⑥ 合成（`pnpm editor merge <id> [--language zh|en]`）
+### 1.5 合成（`pnpm editor merge <id> [--language zh|en]`）
 
-- **intro/outro 统一自动匹配节目语言**：`tools/dailog-editor/assets/intro.{lang}.mp3` / `outro.{lang}.mp3`
-  ——语言专属缺失自动 **fallback 通用资产** `intro.mp3` / `outro.mp3`；都缺失则警告跳过
-- 段间自动插 0.6s 静音；`--intro/--outro` 可显式指定本地文件临时替换
-- 产物 `final.m4a` + 时长/大小；**merge 完成自动用 QuickTime Player 打开试听**
-  （macOS；非 macOS 自动打开失败则提示手动 open）——**发布前必须试听**：音色/断句/情绪标签是否正常
+- intro/outro 按语言自动匹配（`assets/intro.{lang}.mp3`，缺失 fallback 通用资产）；段间插 0.6s 静音
+- 产物 `final.m4a`；**merge 完成自动用 QuickTime Player 打开试听**（macOS）——**发布前必须试听**
+  （音色/断句/情绪标签）；异常 → 修好再发
 
-### ⑦ 封面（本地方案——默认模板渲染，不满意贴图 URL）
+### 1.6 封面（`pnpm editor cover <id> [--texture ...] [--colors "#hex,#hex"] [--guest <platform>] [--image-url <URL>]`）
 
-```
-pnpm editor cover <id> [--texture squares|crosses|hexagons|woven|diagonal|zigzag] [--colors "#hex,#hex"] [--guest <platform>] [--image-url <URL>]
-```
+- 默认：纹理指令预置库随机（无 Pexels 依赖）→ 1400×1400 JPEG；居中「主持人称呼 × 嘉宾称呼」
+  （callName × guests 表 name，超宽自动缩字号，文字颜色按底色明暗）
+- 不满意 → `--image-url <URL>`（下载裁切）；**生成后立即把封面图 Read 展示给编辑**（确认环节再展示）
 
-- **默认：从 riccardoscalco.it/textures 页面指令预置库随机选 1 条完整执行**（无 Pexels 依赖）：
-  - 31 条页面指令全部收录（lines 13 / circles 10 / paths 8）：纹理 + 密度（heavier/lighter/size）+
-    线宽（thicker/thinner/strokeWidth）+ 颜色（darkorange/firebrick）按指令一起随机
-  - 无指令指定颜色时：先定底色（深色池随机）→ 纹理色选**色相差 ≥120°**（鲜明对比）
-  - 布局：纹理中间 80%（四周 10% 留白），单块尺寸按容器整除（边缘吻合）
-  - 渲染：渐变底色 + pattern 纹理 + 噪点 → resvg → 1400×1400 标准 JPEG
-  - 固定复现：`--texture <名> --colors "<底色>,<纹理色>"`（日志会给出当前指令与组合）
-- **居中称呼（无外部图片时叠加）**：图片中心显示**主持人称呼 × 嘉宾称呼**（如 `Fei × Deepseek`）：
-  - 主持人称呼 = 投稿 detail 的 callName（无则画像 displayName）；嘉宾称呼 = `--guest <platform>`
-    对应 guests 表 name（无配置 → 平台展示名兜底；未传 --guest → 按投稿 URL 推断平台）
-  - **文本区宽度不超过底纹区域**：超宽自动缩小字号（起始 120px，下限 32px）
-  - **文字颜色按底色明暗**：底色偏黑 → 白字 60% 透明度；底色偏白 → 黑字 60% 透明度
-  - 外部图片（--image-url）不叠加文字
-- **编辑不满意** → 贴图片 URL：`pnpm editor cover <id> --image-url <URL>`（下载 → ffmpeg 裁 1400×1400）
-- **生成后立即把封面图展示给编辑**（Read 图片直接呈现——确认环节也要再次展示）
-- 发布时不传封面 → 播放页自适应（无封面）
+### 阶段 2 · 发布（节目标号驱动，与编辑确认后执行）
 
-### ⑧ 发布 / 拒审（与编辑确认后执行）
+**2.1 元数据生成（子代理 dailog-meta——发布准备，基于终稿）**：
+- 起子代理（模板见 `reference/subagent-templates.md`），读取 `prompts/meta.md` + script.json（终稿）+
+  chosen-idea.json + dialogue.json → 生成 title / summary / description / tags / coverKeywords /
+  category / references / highlights → 写入 `drafts/{id}/metadata.json`
+- **基于终稿**：金句逐字来自终稿 segments；脚本修改（重跑 1.2/1.3）后须重跑本步
+- 产物 metadata.json：publish 自动读取（description/highlights/category/summary；旧草稿 fallback script.json）
+
+**2.2 发布确认门（元数据 + 封面 + 试听，一并确认）**：
+- 展示（回复正文）：**metadata.json 全部字段逐项列出**（标题 / 简介 / 摘要 / 标签 / 分类 / 金句 /
+  references——references 外链须人工确认无编造，链接安全红线）+ **封面图 Read 直出** + 试听确认
+  （merge 已自动打开 final.m4a）——不要只给标题+封面
+- --description/--tags 可覆盖，与最终 title/category 不匹配则重生成一版再确认
+- 确认交互：[1] ✅ 确认发布 ｜ [2] ✏️ 改元数据（附说明）→ 重跑 2.1 ｜ [3] 🎨 重做封面 ｜
+  [4] 🔊 试听有问题（指出段）→ 重跑 tts --part n ｜ [5] ❌ 取消（改走 reject 或暂不发布）
 
 ```bash
-pnpm editor publish <id> --title "…" \
-  [--description "…"] [--tags a,b] [--language zh] [--guest claude] [--cover cover.jpg] [--audio final.mp3]
-# 成功后：episode 直接 published（期号 max+1），投稿人收到「dailog 第 N 期」通知+邮件
+pnpm editor publish <id> --title "…" [--description "…"] [--tags a,b] [--language zh]
+  [--guest claude] [--cover cover.jpg] [--audio final.m4a]
 pnpm editor reject <id> --reason "拒审原因（必填，投稿人可见）"
 ```
 
-**确认呈现要求**（确认点 ② 节目信息预览——**完整节目元数据逐项列出**）：
-- **封面图直接展示**（Read 图片呈现给编辑——不要只描述「已生成/什么颜色」）
-- **分类**：自动从 script.json 读取（insight/experience/advice/inspiration，由选题维度映射）——确认无误后发布
-- **description 定稿**：草稿来自 Step B（script.json，publish 自动带上，--description 可覆盖）——核对是否与最终
-  title/category 匹配，不匹配则按最终信息重生成一版再确认（规格：2-4 句 80-150 字，钩子 + 上下文 +
-  按分类的收获预告，不剧透时刻）
-- **逐项列出全部元数据**：标题 / 简介 / 标签 / 嘉宾 / 语言 / 时长 / 封面 / 分类 / highlights /
-  references——编辑逐项确认后一次执行 publish（不要只给标题+封面两项）
-- **确认交互（选项化，无需打字）**：发布确认同样用选项编号——
-  [1] ✅ 确认发布 ｜ [2] ✏️ 改标题/简介/标签（附说明）→ 改完重新列出再确认 ｜ [3] 🎨 重做封面
-  （贴图 URL 或 --texture/--colors）｜ [4] 🔊 试听有问题（指出段）→ 重跑 tts --part n ｜
-  [5] ❌ 取消（改走 reject 或暂不发布）
-
-### ⑧b 重新生成已发布节目（重做后更新，链接/期号不变）
-
-> 场景：已发布节目要重做（重写脚本/换音色/修复发音/改情绪）——重新跑一遍制作工作流，
-> 把新成品**更新到同一期**（保留 id/slug/期号/播放统计/精选/公开状态），而不是新建一期。
+### ⑧b 重新生成已发布节目（republish：重做后更新，链接/期号不变）
 
 ```
 用户: "重新生成第 N 期" / 给 episodeId / 给节目链接
-  ↓ ① 会话初始化（选环境 → auth-status，见前）
-  ↓ ② 定位节目：pnpm editor episodes [--match "关键词|期号"]   （已发布清单：期号/标题/日期/id）
-  ↓ ③ 拿投稿：pnpm editor detail <submissionId> 或 GET /v1/editor/episodes/<episodeId>
-  │     确认原始对话/采样仍在（voiceSamples）；草稿目录 drafts/<submissionId>/ 有 dialogue.json 可复用
-  ↓ ④ 重跑三步制作（子代理执行，与首期相同，可带修订指令，见 ④）：
-  │     dailog-select（选题）→ 题材门 → dailog-craft（B1 结构 + B2 听感一次）→ 结构门 → 成品门
-  │     修订指令示例："发音可读性：把 DESIGN.md 改为 design 点 M D" / "情绪更兴奋" / "落点更轻"
-  ↓ ⑤ pnpm editor tts <submissionId> --script script.json --language <lang> [--parts]
-  ↓ ⑥ pnpm editor merge <submissionId> --language <lang>
-  ↓ ⑦ pnpm editor cover <submissionId> [--guest <platform>]
-  ↓ ⑧ 发布前试听（merge 自动 QuickTime 打开 final.m4a）+ 封面 Read 展示 → 编辑确认
+  ↓ ① 会话初始化 ② pnpm editor episodes [--match "关键词|期号"] 定位节目
+  ↓ ③ pnpm editor detail <submissionId>（确认原始对话/采样仍在；drafts/<id>/dialogue.json 可复用，
+  │     内容来源变化则先 fetch 刷新）
+  ↓ ④ 重跑生成工作流（与首期相同，可带修订指令）：1.1 选题 → 选题确认门 → 1.2 草稿 → 草稿确认门
+  │     → 1.3 终稿 → 终稿确认门
+  ↓ ⑤ tts → ⑥ merge（试听）→ ⑦ cover（Read 展示）
+  ↓ ⑧ 阶段 2：2.1 元数据生成（metadata.json）→ 2.2 发布确认门（元数据+封面+试听）
   ↓ ⑨ pnpm editor republish <episodeId> --title "…" [--cover cover.jpg] [--tags a,b] [--guest <platform>]
-  │     （音频/封面/标题/简介/标签/分类/金句/references 全量更新；publishedAt 刷新 → 列表前移）
   ↓ ⑩ 汇报：期号/链接不变，内容已更新
 ```
 
-**要点**：
-- **不是新建期**：republish 更新已有 episode 行——期号、slug（节目链接）、播放统计、收藏、
-  精选标记全部保留；仅内容字段（音频/封面/元数据）替换
-- **publishedAt 刷新**：重新生成后节目按更新时间重新露出（列表/推荐前移），ETag 变化 → 客户端
-  重新拉取新音频（不会缓存旧版）
-- **草稿目录按投稿隔离**：重做沿用 drafts/<submissionId>/（dialogue.json 复用时无需重新 fetch；
-  内容来源变化则先 pnpm editor fetch <submissionId> 刷新）
-- **确认门照旧**：三步确认门（选题/内容/成品）+ 发布前试听 + 封面展示——重做也走完整确认
-- **无 cover 时保留旧封面**：republish 不传 cover → 服务端保留原封面（避免误清）
-- **投稿人通知**：服务端不自动通知（重做是编辑内部动作）；如需告知投稿人，编辑自行处理
+要点：**不是新建期**——期号/slug/播放统计/收藏/精选保留，仅内容字段替换；publishedAt 刷新（列表前移，
+ETag 变化客户端重新拉取）；**republish 幂等**（重复调用只覆盖内容不产生重复期，重试安全——先确认
+目标 episodeId 正确）；无 cover 时保留旧封面；确认门照旧（阶段 1 三个确认门：选题/草稿/终稿 + 阶段 2 发布确认门：元数据+封面+试听）；
+服务端不自动通知投稿人（重做是内部动作）。
 
 ## 批量处理（批量过滤器 → 选号 → 制作流水线）
 
-### 阶段 1：批量过滤器（提取 + 质量检查/脚本生成）
-
 ```
 ① pnpm editor batch [--limit N]（并发提取，已提取跳过）→ 分组展示（✅/❌/⚠️ + url + email）
-   → 处置选号：[1] ✅ 组保留进自动生成 ｜ [2] ❌/⚠️ 组拒审（batch-reject，通知+状态）｜
-              [3] 人工处理 ｜ [4] 跳过
-② ✅ 组自动生成（无询问，子代理执行——每个投稿一个 dailog-select + dailog-craft，
-   prompt 模板见 ④，可并发；主会话只收 JSON）：
-   · Step A（dailog-select）→ pass：写 drafts/{id}/selection.json；
-     reject：写 drafts/{id}/quality.json {pass:false, reason}
-   · Step B（dailog-craft，B1+B2 一次）→ 写 drafts/{id}/script-draft.json + script.json
+   → 处置选号：[1] ✅ 组保留进自动生成 ｜ [2] ❌/⚠️ 组拒审（batch-reject）｜ [3] 人工处理 ｜ [4] 跳过
+② ✅ 组自动生成（无询问，子代理执行——每个投稿一个 dailog-select + dailog-draft + dailog-polish，
+   可并发；子代理直接写盘，主会话只收校验摘要）：
+   · 1.1 → pass：写 selection.json（无人工选号，自动取推荐思路 ideas[0] 写入 chosen-idea.json）；
+     reject：写 quality.json {pass:false, reason}
+   · 1.2+1.3 连续执行 → 写 script-draft.json + script.json（元数据在 produce 阶段生成）
 ③ pnpm editor batch-scripts → 分组呈现（已生成/质量不过关/待生成）
    → 处置选号：[1] ✅ 已生成脚本保留，进入阶段 2 ｜ [2] ❌ 质量不过关拒审（batch-reject）｜
               [3] 人工处理 ｜ [4] 跳过
+④ 用户选号：pnpm editor produce --ids <id1,id2,...> [--language zh] [--guest <platform>]
+   → 逐个自动：tts（逐段）→ merge（intro/outro 按语言）→ cover → **2.1 元数据生成（dailog-meta → metadata.json）**
+   → 输出：final.mp3 路径 + metadata.json + 节目信息草稿（标题）
+⑤ 内容核查（进 tts 前必做）：对照 selection.json 的 fact_check_list 逐条核实（无法核实 → 删除断言）
+   与 privacy_redactions（逐条确认已泛化）——核查不通过 → 返回 1.3 修改脚本，不进 tts
+⑥ 确认点① 语音预览：merge 已自动 QuickTime 试听 → [1] ✅ ｜ [2] 🔊 哪段有问题 → 重跑 tts --part n
+⑦ 发布确认门（确认点②）：metadata.json 逐项（标题/简介/摘要/标签/**references**/金句）+ **封面（Read 展示）**→
+   [1] ✅ 确认发布 ｜ [2] ✏️ 改元数据 ｜ [3] 🎨 重做封面 ｜ [4] ❌ 取消
+⑧ pnpm editor publish <id> --title "..." [--summary ...] [--cover ...] [--tags ...] [--references-file <json>]
+   → 发布成功：状态 → published + 站内通知 + 邮件 + 草稿自动清理
 ```
 
-**批量过滤器本质**：提取 + 质量检查/脚本生成滤出「合格脚本」——不达标的在两级决策点
-（提取后、脚本后）由管理员处置，合格脚本汇聚成待制作清单。
+**要点**：机器批量跑（提取并发 → 脚本自动生成 → produce 流水线），人工只在两级决策点 + 两个确认点介入。
 
-### 阶段 2：选号 → 制作流水线（两个确认点）
-
-```
-④ 用户选号（从 batch-scripts 清单选编号/ID）：
-   pnpm editor produce --ids <id1,id2,...> [--language zh] [--guest <platform>]
-   → 逐个自动：tts（逐段）→ merge（intro/outro 按语言）→ cover（脚本 coverKeywords）
-   → 输出：final.mp3 路径 + 节目信息草稿（标题）
-⑤ 内容核查（进 tts 前必做）：对照 selection.json——
-   · fact_check_list 逐条核实（无法核实的内容：从脚本删除该断言，或不下架）
-   · privacy_redactions 逐条确认已在脚本中泛化处理
-   核查不通过 → 返回 Step B 修改脚本，不进 tts
-⑥ 确认点 ① 语音预览：merge 已自动用 QuickTime Player 打开 final.m4a 试听（音色/断句/情绪标签）
-   → 选项：[1] ✅ 确认 ｜ [2] 🔊 哪条/哪段有问题（指出编号）→ 重跑 tts --part n
-⑦ 确认点 ② 节目信息预览：确认标题/summary/简介/标签/**references**/**封面（封面图直接 Read
-   展示给编辑）**→ 选项：[1] ✅ 确认发布 ｜ [2] ✏️ 改元数据（附说明）→ 改完重列 ｜
-   [3] 🎨 重做封面 ｜ [4] ❌ 取消
-⑧ pnpm editor publish <id> --title "..." [--summary ...] [--cover ...] [--tags ...]
-   [--references-file <json>]
-   → 发布成功：投稿状态 → published + 站内通知 + 邮件（「dailog 第 N 期」）
-   → 草稿自动清理（发布为终态）
-```
-
-**要点**：机器批量跑（提取并发 → 脚本自动生成 → produce 流水线），人工只在
-两级决策点 + 两个确认点介入——每批一次决策，不逐个打断；发布成功自动完成
-状态流转 + 通知 + 邮件 + 草稿清理。
-
-### ⑨ 播放列表（平台策展）
-
-> 平台把已发布节目打包成主题列表（首页横滑区 / /playlists / 节目页「收录于」）。
-> 数据模型：`playlists`（kind=platform/user）+ `playlist_episodes`（position 有序）。
+## 播放列表（平台策展）
 
 ```
-pnpm editor playlist list                                  # 平台列表清单（期数/精选/公开）
-pnpm editor playlist create "<标题>" [--desc "..."] [--picked] [--private]
-pnpm editor playlist episodes <playlistId>                 # 列表节目（id + /episode 链接）
-pnpm editor playlist add <playlistId> <episodeId|#期号>     # 加节目（#N 按期号解析）
-pnpm editor playlist remove <playlistId> <episodeId>       # 移除
-pnpm editor playlist reorder <playlistId> <id1,id2,...>    # 重排（逗号分隔有序 id）
-pnpm editor playlist pick <playlistId> | unpick <playlistId>   # 精选标记（首页/发现页露出）
-pnpm editor playlist public <playlistId> | private <playlistId> # 公开/下架
-pnpm editor playlist delete <playlistId>                   # 删除（级联清条目）
-pnpm editor playlist cover <playlistId> [--texture ...] [--colors "#hex,#hex"] [--image-url <URL>]
+pnpm editor playlist list | create "<标题>" [--desc] [--picked] [--private]
+pnpm editor playlist episodes <id> | add <id> <episodeId|#期号> | remove <id> <episodeId>
+pnpm editor playlist reorder <id> <id1,id2,...> | pick/unpick <id> | public/private <id> | delete <id>
+pnpm editor playlist cover <id> [--texture ...] [--colors ...] [--image-url <URL>]
 ```
 
-- **封面**：复用本地模板渲染（与单集 cover 同一引擎）→ 直接上传服务端
-  （R2 `covers/playlists/{id}.jpg`，sharp 归一 1400²）；无自定义封面时前端自动取首期节目封面
-- 节目引用支持 **#期号**（如 `playlist add <id> #7`——从编辑端节目清单按期号解析）
-- 收录节目仅限已发布公开节目（服务端校验）；列表删除/节目删除均级联清理条目
+- 封面复用单集 cover 引擎 → 上传 R2（sharp 归一 1400²）；无自定义封面前端自动取首期封面
+- 节目引用支持 #期号；收录仅限已发布公开节目；删除级联清理条目
 
 ## 进度与恢复（会话中断不丢）
 
-每个命令完成时自动写进度标记 `drafts/{id}/progress.json`（step + 时间）。对话中断/退出后，
-**新对话直接恢复断点**：
+每命令完成自动写 `drafts/{id}/progress.json`。新对话恢复：① 会话初始化 → ② `pnpm editor progress
+<submissionId>`（进度 + 下一步 + 产物清单）→ ③ 按提示继续（已有产物自动跳过重复步骤）。
 
-```
-① 会话初始化（选环境 → auth-status，token 仍在直接可用）
-② pnpm editor progress <submissionId>   → 显示进度 + 下一步 + 草稿产物清单
-③ 按提示继续：tts → merge → cover → publish（已有产物自动跳过重复步骤）
-```
+## 草稿目录（gitignored）
 
-产物全部在草稿目录持久（对话 JSON/脚本/分段音频/final.mp3/封面），无需重做已完成的步骤；
-**发布成功后语音/封面自动清理**（published 为终态——文本草稿保留）。
+`.dailog-editor/drafts/{submissionId}/`：dialogue.json / selection.json / chosen-idea.json /
+script-draft.json / script.json / metadata.json / 分段音频 / final.m4a / 封面。**发布成功后自动清理语音/封面文件**
+（publish 完成即删该投稿的 *.mp3/*.wav/*.webm 与 *.jpg/*.jpeg/*.png）；对话/脚本等文本草稿保留可重做。
 
-## 草稿目录（db-ops 风格，gitignored）
+## 工具链要点（详细运维记忆见 `reference/toolchain-notes.md`）
 
-`.dailog-editor/drafts/{submissionId}/`：对话 JSON、脚本、分段音频、final.mp3、封面。
-**发布成功后自动清理语音/封面文件**（`publish` 完成即删除该投稿草稿中的 `*.mp3/*.wav/*.webm`
-与 `*.jpg/*.jpeg/*.png`——整集/合成/逐段语音与封面不留本地；对话/脚本/页面等文本草稿保留，
-可查阅与重做；重做时重新 tts 即可）。
-
-## 工具链已知点（维护记忆）
-
-- **生成子代理（省 token 的关键，见 ④）**：Step A（dailog-select）/ Step B（dailog-craft，
-  B1+B2 一次）/ 听感打回（dailog-craft-patch）三步生成一律起子代理执行，主会话只收最终 JSON——
-  对话原文（15-20k）与提示词文件（~14k）不进主上下文。单期主会话增量从 ~70-90k 降到 ~15-25k；
-  打回重跑走 patch（听感）或重跑 craft（结构），不重新全量注入。
-- **script-preview 是成品确认门默认视图**：`pnpm editor script-preview <id>` 输出段数/字数/时长/
-  每段说话人与开头摘要——成品确认门默认用它，编辑要全文再整篇展示（红线 3）。
-- **本地环境基址统一为 `http://localhost:8787`**（`api.dailog.orb.local` 已废弃）：
-  `.dailog-editor/envs.json` 的 local 项 apiBase/siteUrl 均指向 localhost:8787（API/站点同端口）；
-  纯 HTTP 走原生 fetch，`lib.ts` 中 `.orb.local` 的 TLS 忽略逻辑仅保留兼容旧地址。
-- **代理探测**（`src/fetch.ts findSocksProxy`）：env `ALL_PROXY`/`HTTPS_PROXY`（含 socks）优先，
-  其次 macOS `scutil --proxy`（SOCKSEnable+SOCKSPort）。走代理用 `curl --socks5-hostname`
-  子进程（DNS 也过代理）——Node fetch/undici 原生不支持 SOCKS，别引入 socks 依赖重造。
-- **chatgpt SSR 解码**（`src/fetch.ts decodeStreamTable`）：解码结构见 `reference/fetch-decoding.md`
-  平台经验库 chatgpt 行——平台改版优先检查流式引用编码结构，别先改 DOM 规则。
-- **multipart 上传必须走 `serializeFormData`**（`src/lib.ts`）：历史 `.orb.local`
-  自签证书的 undici dispatcher 路径下原生 `FormData` 作 body 会失效——服务端收到空表单，
-  publish/guest-voice 报 400 `audio_required`/`invalid_body`。`api()` 已接上自定义编码
-  （字节流 + 手写 boundary + 显式 content-type）。**改 api()/加上传端点时别再把 formData
-  直接当 body 传**——回归测试：multipart 请求后服务端能读到文件字段。
-- **detail 已含主持人称呼与画像**：`getDetail` 返回 `callName`（submissions.call_name，投稿时配置、
-  默认 displayName 可改）与 `personaInfo` 快照（displayName/性别/职业/年龄/国籍/bio），
-  detail.ts 展示「主持人称呼」与「画像」行；脚本生成时用 callName 替换 {主持人称呼}，
-  无则「主持人」。脚本语言与称呼语言不同时按 script-craft.md 检查清单 11 的称呼改写规则转英文形式（如 飞→Fei）。
-- **采样匹配（服务端自动）**：TTS 按脚本语言取采样 → 无则英文采样 → 无则最近一条采样兜底；
-  `detail` 返回 voiceSamples 列表（全部语种），供编辑确认。
-- **测试红线**：`publish` 端点无 dry-run——curl/脚本直打真实 submission 就是真实发布
-  （curl 探测把投稿发布成带测试元数据的期）。探测 multipart 用本地回环
-  服务器解析结构，或打已 published 的投稿（状态检查在 formData 解析前，不污染数据）。
-- **本地环境存储是 R2**：`services/api/.env.local` 为 `STORAGE_DRIVER=r2`——发布产物在
-  R2 不在宿主机 `services/api/data`；`episodes/{userId}/{submissionId}.m4a|mp3` key 确定性，
-  重发同投稿会**覆盖旧音频对象，但 episode 行每次新建**（publish 非幂等，见下条）。
-- **republish 是幂等的**（与 publish 不同）：更新已有 episode 行（确定性 id），重复调用只覆盖内容不产生重复期——重试安全；但仍需先确认目标 episodeId 正确（误传别的 episode 会覆盖其内容）。
-- **publish 无响应 ≠ 发布失败**：publish 是同步端点，服务端在
-  createPublished（期号+状态流转）之后才等 sendEmail——受限网络下 api.resend.com 不可达且原实现
-  无超时，响应被邮件挂死；客户端超时被杀后重试会再建一期。已修复：sendEmail 加 10s 超时
-  （`services/api/src/email/resend.ts`）；编辑侧 publish.ts 已加状态预检（非 submitted 拒绝）。
-  遇 publish 无响应先 `pnpm editor detail/list` 查状态——published 即成功，勿重试。
-- **本地容器 R2 代理是死配置**：`services/api/src/index.ts` 的 createStorage 未传 r2ProxyUrl，
-  .env.local 的 R2_PROXY_URL 不生效；容器（OrbStack VM）直连 R2 可用（宿主直连才需代理）。
-  改 storage 接线时别照抄 .env.local 的 127.0.0.1 代理——容器内应 host.docker.internal。
-- **local 环境端口**：API localhost:8787（统一基址）/ 站点 localhost:3000（dailog 容器 80→3000）；
-  envs.json 的 siteUrl 用于发布后节目地址展示。
-- **pnpm 沙箱 EPERM（DSH harness）**：根 package.json 声明 `packageManager: pnpm@9.15.0`，
-  而 DSH 内置 pnpm 为 10.x——版本不匹配时 pnpm 的 manage-package-manager-versions 机制会尝试把
-  指定版本装到 `~/Library/pnpm/.tools/`（工作区外）→ 沙箱拦截 `EPERM: mkdir .../.tools/pnpm/9.15.0_tmp_*`。
-  **解法（已固化根 .npmrc）**：项目根 `.npmrc` 加 `manage-package-manager-versions=false`，
-  pnpm 直接用内置版本、不再写工作区外路径；或绕开 pnpm 直调 `node .agents/skills/dailog-editor/scripts/run.js`。
+- **detail 含主持人称呼与画像**：`callName`（脚本开场自我介绍用，替换 {主持人称呼}，无则「主持人」；
+  脚本语言与称呼语言不同时按 polish.md 检查清单 11 转写，如 飞→Fei）与 `personaInfo` 快照
+- **采样匹配（服务端自动）**：TTS 按脚本语言取采样 → 无则英文 → 无则最近一条兜底；detail 返回
+  voiceSamples 列表（全部语种）
+- **publish 无响应 ≠ 失败**：服务端同步端点，受限网络下响应可能被邮件挂死——先 `detail/list` 查状态，
+  published 即成功，勿重试
+- **multipart 上传必须走 serializeFormData**（lib.ts 已接上；改上传端点时别把 formData 直接当 body）
+- **本地环境存储是 R2**：发布产物在 R2 不在宿主机 data；重发同投稿覆盖旧音频但 episode 行每次新建
+  （publish 非幂等；republish 幂等）
+- **pnpm EPERM（DSH）**：根 .npmrc 已加 manage-package-manager-versions=false；仍报错直调
+  `node .agents/skills/dailog-editor/scripts/run.js`
+- 其余（代理探测 / chatgpt SSR 解码 / 测试红线 / 本地容器 R2 代理 / local 端口等）：见
+  `reference/toolchain-notes.md`
 
 ## 红线
 
 1. **不伪造内容**：网页拉取失败/内容无法提取 → 如实汇报，不凭猜测生成脚本
 2. **脚本必须符合 dailog 标准**：开场轻量结构（问候 + 自我介绍 + 引出嘉宾，双方称呼不可变）、
-   核心对谈 10 分钟内、Step A 选题筛选通过（时刻门含问题归位测试 + 逻辑骨架 +
-   价值维度，四维：认知/经验/建议/启发）、提问保真（原生提问 ≥50%、含义不歪曲）与角度保真
-   （话题角度 = 用户呈现意图，节目建议为锚，见 script-craft.md 铁律 6）；无时刻/骨架断裂/
-   任务型对话 → 拒审
-3. **脚本确认门**：生成脚本后必须给编辑确认（默认脚本摘要 + 配套产物，编辑要求看全文时
-   立即整篇展示），用选项编号（[1] 确认 / [2] 听感反馈 / [3] 结构反馈 / [4] 拒稿）收口，未确认不进 tts
-4. **发布前必须试听**（merge 自动用 QuickTime Player 打开 final.m4a）：音色克隆异常/断句错误/情绪标签未生效 → 修好再发
+   核心对谈 10 分钟内、1.1 选题筛选通过（时刻门含问题归位测试 + 逻辑骨架 + 价值维度）、提问保真
+   （原生提问 ≥50%、含义不歪曲）与角度保真（话题角度 = 用户呈现意图，节目建议为锚，
+   polish.md 铁律 6）；无时刻/骨架断裂/任务型对话 → 拒审
+3. **脚本确认门**：生成后必须给编辑确认（终稿确认门默认在回复正文展示完整脚本全文 + 优化总结），
+   选项编号收口，未确认不进 tts；配套产物（元数据）在阶段 2 发布确认门与封面/试听一并确认，未确认不发布
+4. **发布前必须试听**（merge 自动 QuickTime）：音色克隆异常/断句错误/情绪标签未生效 → 修好再发
 5. **发布/拒审是外发动作**：先与编辑确认（标题/封面/拒审原因，选项编号收口），确认后一次执行；
-   **重新生成（republish）同样是外发动作**——覆盖已上线节目的音频/封面/元数据，必须先试听 + 编辑确认
-6. **拒审原因必填且具体**：投稿人 /me/submits 可见，邮件也会发送——写清楚为什么
-7. **密钥/token 不出本地**：`.dailog-editor/.env` 与 `session.json` 均 gitignored + chmod 600；
-   汇报中不打印 token/key；登录走浏览器授权（密码不落盘）
-8. **内容核查**：进 tts 前必须对照 selection.json 的 fact_check_list 核实事实（无法核实 → 删除断言）
-   与 privacy_redactions（逐条确认已泛化）——未核查不进 tts、不发布
+   **republish 同样是外发动作**——必须先试听 + 编辑确认
+6. **拒审原因必填且具体**：投稿人可见，邮件也会发送——写清楚为什么
+7. **密钥/token 不出本地**：.dailog-editor/.env 与 session.json gitignored + chmod 600；汇报不打印
+   token/key；登录走浏览器授权
+8. **内容核查**：进 tts 前必须对照 fact_check_list 核实事实（无法核实 → 删除断言）与
+   privacy_redactions（逐条确认已泛化）——未核查不进 tts、不发布
+9. **呈现通道**：所有面向编辑的展示必须在 agent 回复正文（脚本全文单个 code block、封面 Read 直出），
+   **禁止用工具输出承载展示**；子代理 JSON 直接写盘，主会话不打印全文

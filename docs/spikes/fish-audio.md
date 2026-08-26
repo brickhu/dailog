@@ -135,7 +135,43 @@ OpenAPI schema 对 `text` 无 `maxLength` 约束 → 服务端限制，实测为
 6. **混合模式不支持（实测）**：单次多说话人调用里「主持人零样本内联 `references` + 嘉宾固定 `reference_id`」混搭不可行——实测 `references` 2D + `reference_id: [null, guest]` → 400（`data did not match any variant of untagged enum ClientSideReferenceId`）；`reference_id: ["", guest]` → 400（`reference_id[0] must be 1..=128 chars of [A-Za-z0-9_-]`）。多说话人只支持两种纯模式：全模型 id（`reference_id` 数组）或全内联音频（`references` 2D）。产品需要混排时走「先建主持人音色模型（§3-b，5–8s，免费）→ `reference_id` 数组」路径（本次 `out-multi.mp3` 即此路径）
 7. **多说话人仅限 S2-Pro 系**：`s1` 报 422；`s2.1-pro-free` 实测支持（官方 SKILL.md 写「S2-Pro only」指 S2 架构，free 变体实测可用）
 
-## 10. 复现与产物
+
+## 10. 发音控制（细粒度控制 Fine-grained Control）——DESIGN.md 类文本读法
+
+> 调研日期：2026-08-26 · 官方文档：`docs.fish.audio/developer-guide/core-features/fine-grained-control`（含 english/chinese/japanese 分页）· 实测脚本：`scripts/spikes/fish-phoneme.py`（GIF/JIF + DESIGN.md 标签验证）/ `fish-phoneme-ctrl.py`（READ/REED 歧义词 + 改写方案；免费 + 付费模型，ASR 回听）
+
+### 10.1 结论（TL;DR）
+
+- **官方提供 phoneme 音素控制标签**：`<|phoneme_start|>...<|phoneme_end|>`，英文用 CMU Arpabet、中文用带调号拼音（tone3）、日文用 OpenJTalk romaji；另有一套 paralanguage 效果（`(break)`/`(long-break)`/`(breath)`/`(laugh)` 等，V1.6 Experimental）
+- **但实测（s2.1-pro-free 与 s2.1-pro 均同）：phoneme 标签在当前 S2 系模型上不按预期生效**——英文 GIF 用 `JH IH1 F`（JIF）标签后仍读 GIF；中文句里 `<|phoneme_start|>D IH0 Z AY1 N<|phoneme_end|>` 甚至被**当作普通文本读出**（ASR 转写为 `T N R E S E R V E D P H O N E M E ...`，音频异常变长）。官方 playground 标注「V1.6 Control Model」可用，API 侧当前 S2 模型未实测支持（文档未明确模型矩阵，需以实际试听为准）
+- **可靠方案 = 改写文本为期望读音**（TTS 文本预处理阶段）：
+  - `DESIGN.md` → `design 点 M D`（ASR 回听：`design 点 md` ✓，中文语境 M/D 读作 em/dee 自然）
+  - 或更明确：`design 点 markdown`（回听 `design 点 markdown` ✓）
+  - 大写 `DESIGN 点 M D` 同样正确（`design 点 md` ✓）
+  - 多文件混排（`DESIGN.md 和 AGENTS.md`）必须逐项改写：原文回听为 `D EZNMD / Agents NMD`（字母拼读 ❌），改写后 `design 点 md / agents 点 md` ✓
+- **normalize 参数**：`normalize`（默认 true）会把 `DESIGN.md` 当「大写字母串 + .md 后缀」处理 → 逐字母拼读；这是现状 `D-E-S-I-G-N dot md` 的根因。设 `normalize: false` 可避免改写周边文本（数字/日期/URL），但英文缩写类仍不稳定（实测 `DESIGN.md` + 标签 + normalize=false → `Design Dem`，仍不理想），**首选仍是改写文本**
+- **计费无关**：phoneme 标签与改写文本都按输入 UTF-8 字节计费，无额外费用
+
+### 10.2 为什么 phoneme 标签不可依赖（实测数据）
+
+| 场景（s2.1-pro-free，en 音色） | 输入 | ASR 回听 |
+|---|---|---|
+| GIF 基线 | `The image format is GIF.` | `GIF` |
+| GIF→JIF 标签 | `... <|phoneme_start|>JH IH1 F<|phoneme_end|>.` | 仍 `GIF`（标签被忽略） |
+| GIF→GIF 标签 | `... <|phoneme_start|>G IH1 F<|phoneme_end|>.` | `GIF` |
+| DESIGN.md 基线 | `这份文档叫 DESIGN.md。` | `D E Z E A N A M D`（字母拼读 ❌） |
+| DESIGN.md 标签 | `... <|phoneme_start|>D IH0 Z AY1 N<|phoneme_end|>.md。` | `T N R E S E R V E D P H O N E M E...`（标签被当文本 ❌） |
+| 改写（推荐） | `这份文档叫 design 点 M D。` | `design 点 md` ✓ |
+
+付费模型 `s2.1-pro` 同场景复测：标签版仍读出 `T N R E S E R V E D P H O N E M E...`（同样不生效），纯文本 `DESIGN.md` 回听 `DZZN 点 ND`（拼读）。结论与模型档次无关。
+
+### 10.3 工程落地建议
+
+- **预处理层（推荐）**：在 script-craft 生成台词后、送入 `/v1/editor/tts` 前，加一个「读音改写」pass：把 `[A-Za-z0-9_-]+\\.md`（及同类 `.md`/`.txt`/文件名/专有名词）改写为「小写词 + 点 + 字母逐读」形式（如 `DESIGN.md` → `design 点 M D`）。注意中文 TTS 里「点」最自然，英文语境用 `dot`
+- **也可在 AI 写稿 prompt 里约束**：要求口播文本中文件/专有名词直接用读音写法（`design 点 M D`），避免原文直写 `DESIGN.md`
+- **不要依赖 phoneme 标签**：官方功能存在但当前 S2 API 实测不生效（且异常时会被当文本读出，比不标更糟）；若官方后续支持（V1.6 Control Model 进 API），再评估切换
+
+## 11. 复现与产物
 
 ```bash
 cd scripts/spikes
