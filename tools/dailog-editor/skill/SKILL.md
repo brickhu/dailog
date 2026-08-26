@@ -115,9 +115,8 @@ triggers:
   ↓ ② 拉取队列或详情
   ↓ ③ 采集 + 内容解码：pnpm editor fetch <id>（拉取 URL → page.html/page.txt/dialogue.json）
   │    结构化命中直接用 dialogue.json；未命中 → 浏览器/控制台兜底后提炼
-  ↓ ④ 三步制作：Step A 选题筛选（selection.md）→ pass 写 selection.json / reject 写 quality.json；
-  │        Step B1 内容结构（script-draft.md）→ script-draft.json；
-  │        Step B2 听感打磨（script-craft.md）→ script.json；进 tts 前内容核查（fact_check_list /
+  ↓ ④ 三步制作（子代理执行，见 ④）：Step A 选题筛选 → 题材门 → Step B（B1 结构 + B2 听感
+  │        一次生成）→ 结构门 → 成品门；进 tts 前内容核查（fact_check_list /
   │        privacy_redactions，见阶段 2 ⑤）
   ↓ ⑥ pnpm editor tts <id> --script script.json --language <lang>  （逐段合成）
   ↓ ⑦ pnpm editor merge <id> --language <lang>  （合成 final.m4a，intro/outro 按语言匹配；
@@ -149,45 +148,72 @@ pnpm editor removal               # 节目下线申请队列（用户申请 → 
 - 拉取失败（403/超时/失效）→ 如实汇报，引导用户走浏览器控制台兜底
   （console-script/paste 步骤见 reference）
 
-### ④ 三步制作流程（选题 → 内容结构 → 听感打磨）
+### ④ 三步制作流程（选题 → 内容结构 → 听感打磨，子代理执行）
 
-用 LLM（本环境任意可用模型）按两级流程把对话做成**朗读向播客脚本**，两个提示词文件独立：
+> **为什么用子代理**：对话原文（15-20k tokens）与提示词文件（合计 ~14k tokens）若直接进主会话，
+> 每步生成 + 每个确认门都要重处理整段累积上下文——单期 70-90k+ tokens、30+ 回合，慢且费。
+> 改为**子代理执行生成**：提示词文件与对话原文只在子代理自己的上下文里读入，主会话只收
+> 最终 JSON（~5-10k）。同一会话连续做多期时收益更大。
 
-**Step A · 选题筛选（`prompts/selection.md`——批量质量检查环节）**
-- 系统提示词 = selection.md **原样**；用户消息 = 对话原文（逐条）+ 节目建议（如有，角度锚点）。
-- 输出选题 JSON：verdict（pass/reject）、dimension（认知/经验/建议/启发）、moment.quote
-  （核心时刻原话）、spine_required（承重墙回合）、background_needed、arc、score（时刻强度分）、
-  opening_question（用户开场自述的问题与动机）、suggestion_decision（节目建议取舍）等。
-- pass → 选题 JSON 存 `drafts/{id}/selection.json`，**题材确认门**：向编辑展示选题思路
-  （题材 + 为什么 + moment + 收获价值），选项确认（[1] 确认 / [2] 拒稿 / [3] 调整方向）后进入 Step B1；
-  reject（G1-G5 / no_moment / no_spine）→ 拒稿，写 `drafts/{id}/quality.json {pass:false, reason}`
-  （reason 取 reject.feedback，面向投稿人）。
+**执行方式（每个投稿一次生成，两级子代理）**：
 
-**Step B1 · 内容结构（`prompts/script-draft.md`——内容确认门）**
-- 系统提示词 = script-draft.md **原样**；用户消息 = selection.json + 对话原文。
-- 输出内容结构 JSON：topic_confirm / harvest_summary / structure（②定向要点 + ③承重墙回合清单
-  + moment 位置 + ④落点要点 + ⑤收束要点）→ 存 `drafts/{id}/script-draft.json`。
-- **内容确认门**：向编辑展示 内容结构 + harvest_summary（收获价值总结，编辑参考）——
-  确认结构/改结构后进入 Step B2。
+**Step A · 选题筛选 —— 子代理 `dailog-select`**
+- 起一个子代理（独立上下文，不占主会话），prompt 模板（路径按实际情况补全）：
+  ```
+  你是 dailog 编辑工作流的「选题筛选」子代理。
+  1. 用 read 工具读取提示词文件并**原样作为你的系统提示词**（不要改写压缩）：<skillDir>/prompts/selection.md
+  2. 用 read 工具读取对话原文：<drafts>/<id>/dialogue.json（[{role, content}] 逐条）
+  3. 投稿人节目建议（角度锚点，有则必须作为角度约束）：<suggestion>
+  4. 按提示词执行，只输出**一个合法 JSON**（verdict/dimension/moment/spine_required/
+     background_needed/arc/score/opening_question/suggestion_decision/fact_check_list/
+     privacy_redactions 等，字段以 selection.md 为准），不要解释、不要 markdown 代码块包裹。
+     verdict=reject 时输出 {verdict:"reject", reason, feedback}。
+  ```
+- 返回 JSON 落盘：pass → `drafts/{id}/selection.json`；reject（G1-G5 / no_moment / no_spine）→
+  写 `drafts/{id}/quality.json {pass:false, reason}`（reason 取 reject.feedback，面向投稿人）。
+- **题材确认门**：向编辑展示选题思路（题材 + 为什么 + moment + 收获价值），选项
+  [1] 确认 / [2] 拒稿 / [3] 调整方向；[3] 附说明重跑 dailog-select（prompt 追加修订指令）。
 
-**Step B2 · 听感打磨（`prompts/script-craft.md`——成品确认门）**
-- 系统提示词 = script-craft.md **原样**；用户消息 = script-draft.json + selection.json + 对话原文
-  + 修订指令（可选）。
-- 只动**呈现层**（措辞/情绪/停顿/穿插/转场/节奏）；承重墙回合/moment 位置/角度以 script-draft
-  为准（铁律 7 结构护栏）——结构反馈先回 Step B1，听感反馈只重跑本层。
-- **现场感（Live Feel）红线**：脚本是「对话当时的剪辑」不是「重放」——开场禁止剧透结局、
-  禁止倒叙腔/事后视角、禁止预知对话走向、禁止旁观评判腔、禁止回声附和腔（host 复读 AI 观点
-  补"记住了/学到了"）、禁止自大腔（未做先宣称，详见 script-craft.md 铁律 5）。
-- 输出脚本 JSON：language/title/topic/summary/description/tags/coverKeywords/category/references/
-  creationNote/segments（含 part）→ 存 `drafts/{id}/script.json`。
+**Step B · 内容结构 + 听感打磨 —— 子代理 `dailog-craft`（B1+B2 一次生成）**
+- 起一个子代理，prompt 模板：
+  ```
+  你是 dailog 编辑工作流的「内容结构 + 听感打磨」子代理。
+  1. 用 read 读取 <skillDir>/prompts/script-draft.md → 作为「内容结构」系统提示词（原样）
+  2. 用 read 读取 <skillDir>/prompts/script-craft.md → 作为「听感打磨」系统提示词（原样）
+  3. 用 read 读取 <drafts>/<id>/selection.json（选题，含 suggestion_decision，角度不得偏离）
+  4. 用 read 读取 <drafts>/<id>/dialogue.json（对话原文）
+  5. 先按 script-draft.md 生成内容结构 JSON（topic_confirm / harvest_summary / structure：
+     ②定向要点 + ③承重墙回合清单 + moment 位置 + ④落点要点 + ⑤收束要点）
+  6. 再按 script-craft.md 生成成品脚本 JSON（language/title/topic/summary/description/tags/
+     coverKeywords/category/references/highlights/creationNote/segments 含 part）
+     ——结构以第 5 步为护栏（script-craft 铁律 7），角度以 selection.json 为锚（铁律 6）；
+     现场感红线（铁律 5：非重放腔）在生成时自检
+  7. 只输出**一个合法 JSON 对象**：{"scriptDraft": {...}, "script": {...}}，不要解释/代码块
+  ```
+- 返回的两个 JSON 落盘 `drafts/{id}/script-draft.json` 与 `drafts/{id}/script.json`。
+- 修订指令（可选）：prompt 末尾追加「修订指令：<编辑要求>」（如"发音可读性：把 DESIGN.md 改为
+  design 点 M D" / "情绪更兴奋"）。
 
-> **提示词保真**：三个提示词文件均**原样**作为 LLM 系统提示词，不要自己改写压缩
-> （压缩会丢细节导致读稿感/漏判）。
+**打回重跑（省 token 的关键）**：
+- **听感反馈（只动呈现层）→ patch 子代理 `dailog-craft-patch`**：
+  ```
+  你是 dailog 编辑工作流的「听感打磨修订」子代理。
+  1. 用 read 读取 <skillDir>/prompts/script-craft.md → 作为系统提示词（原样）
+  2. 用 read 读取 <drafts>/<id>/script.json（现有脚本）
+  3. 编辑反馈：<feedback>
+  4. 只动呈现层（措辞/情绪/停顿/穿插/转场/节奏）；承重墙回合/moment 位置/角度/结构**不得改变**
+  5. 只输出修订后的完整 script.json（合法 JSON，字段结构与原脚本一致），不要解释/代码块
+  ```
+  （patch 不读 dialogue.json——呈现层微调不需要全量对话；反馈通常一轮解决）
+- **结构反馈（换角度/切主题/加删回合）→ 重跑 `dailog-craft`**（prompt 追加修订指令）。
+
+> **提示词保真**：三个提示词文件均由**生成子代理原样读取**作为其系统提示词，主会话不重复载入；
+> 任何人不许改写压缩（压缩会丢细节导致读稿感/漏判）。
 > **投稿人节目建议（角度锚点）**：detail 的「节目建议」是投稿人可选填写的**用户呈现意图（A）
 > 的最强信号**——投稿人明确写出的角度/主题/想分享什么，Step A 必须以它为角度约束
 > （时刻与骨架须落在建议指向的路径上，见 selection.md 步骤 0/2）；与时刻门硬冲突时按质量
-> 闸门取舍，并把取舍写进 selection.json 的 suggestion_decision。有 → 追加到 Step A 用户消息
-> 末尾；Step B 不再重复处理，但输入含 suggestion_decision，脚本角度不得偏离（铁律 6）。
+> 闸门取舍，并把取舍写进 selection.json 的 suggestion_decision。有 → 追加到 dailog-select
+> 的 prompt 末尾；Step B 不再重复处理，但输入含 suggestion_decision，脚本角度不得偏离（铁律 6）。
 
 **1. 语言**：跟随原对话主要语言（zh/en/ja/ko…）
 
@@ -221,7 +247,8 @@ references/highlights/category（insight/experience/advice/inspiration，由选�
 #### 提示词文件（独立参照，三级）
 
 生成时使用**独立提示词文件**——内容**原样**作为 LLM 系统提示词（对话原文作为用户消息），
-不要自己改写压缩（压缩会丢细节导致读稿感）：
+由生成子代理（dailog-select / dailog-craft / dailog-craft-patch）读取执行，
+主会话不重复载入；不要自己改写压缩（压缩会丢细节导致读稿感）：
 
 - **Step A 选题筛选**：`prompts/selection.md`
   （产物 `.agents/skills/dailog-editor/prompts/selection.md` / 源码 `tools/dailog-editor/prompts/selection.md`）
@@ -242,21 +269,23 @@ references/highlights/category（insight/experience/advice/inspiration，由选�
 > `[1] 确认 / [2] ...` 编号，编辑回复编号。修改类选项（改结构/听感反馈）选中后可附一句简短说明。
 
 ```
-三关逐关确认，任何一关打回即重跑对应步骤；全部通过才进 tts。
+三关逐关确认，任何一关打回即重跑对应子代理；全部通过才进 tts。
 每关固定选项编号（随展示内容一起列出）：
 
   ① 题材确认门（Step A pass 后）：
      · 展示选题思路：题材 + 为什么值得做（moment / dimension / title_draft / 收获价值）
      · 选项：[1] ✅ 确认 → 进内容结构 ｜ [2] ❌ 拒稿 → 走 reject 流程 ｜ [3] ✏️ 调整选题方向（附说明）
-  ② 内容确认门（Step B1 后）：
-     · 展示 script-draft.json：内容结构（②定向 / ③承重墙回合清单 / moment 位置 / ④落点 / ⑤收束）
-       + harvest_summary（收获价值总结，编辑参考）
-     · 选项：[1] ✅ 确认 → 进听感打磨 ｜ [2] ✏️ 改结构（换角度/切主题/加删回合，附说明）→ 回 Step B1
-       重跑 ｜ [3] ❌ 拒稿 → 走 reject 流程
-  ③ 成品确认门（Step B2 后）：
-     · 成品脚本装进单个代码块整篇呈现（编号 + 说话人 + 情绪标签 + 停顿 + 完整文本，逐行通读）
-     · 配套产物一并展示：title / summary / description / tags / coverKeywords / category /
+  ② 内容确认门（Step B 生成后）：
+     · 展示 script-draft.json 的结构概览（②定向 / ③承重墙回合清单 / moment 位置 / ④落点 / ⑤收束）
+       + harvest_summary（收获价值总结，编辑参考）——只展示结构概览，不展示成品脚本
+     · 选项：[1] ✅ 确认 → 进成品确认门 ｜ [2] ✏️ 改结构（换角度/切主题/加删回合，附说明）→
+       重跑 dailog-craft ｜ [3] ❌ 拒稿 → 走 reject 流程
+  ③ 成品确认门（Step B 生成后）：
+     · 默认展示**脚本摘要**（pnpm editor script-preview <id> 输出：段数/字数/时长/每段说话人与开头）
+       + 配套产物：title / summary / description / tags / coverKeywords / category /
        references / highlights——references 外链须人工确认无编造（链接安全红线）
+     · 编辑要求看全文（"把脚本展示出来"/"看全文"）→ 单个代码块整篇呈现
+       （编号 + 说话人 + 情绪标签 + 停顿 + 完整文本，逐行通读）
      · **现场感检查**：开场无剧透结局、无倒叙腔/预知走向/旁观评判/回声附和、落点无"今天聊完"式
        完成态回顾（对照 script-craft.md 铁律 5）——编辑可凭「这段像不像正在发生的对话」判断；
        发现重放腔/复读腔 → 打回重生成
@@ -265,14 +294,15 @@ references/highlights/category（insight/experience/advice/inspiration，由选�
      · **结构对照检查**：承重墙回合/顺序/moment 位置与 script-draft.json 一致（对照铁律 7）
      · **转场检查**：话题切换有由头（被触发/递进/补足/处境关联），无裸问、无「后来我又想」式
        万能过渡词（对照 script-craft.md「话题转移」节）——生硬 → 打回重生成
-     · 选项：[1] ✅ 确认 → 进入 tts ｜ [2] ✏️ 听感反馈（情绪/停顿/穿插/转场，附说明）→ 只重跑
-       Step B2 ｜ [3] ✏️ 结构反馈（附说明）→ 回 Step B1 ｜ [4] ❌ 拒稿 → 走 reject 流程
+     · 选项：[1] ✅ 确认 → 进入 tts ｜ [2] ✏️ 听感反馈（情绪/停顿/穿插/转场，附说明）→
+       只跑 dailog-craft-patch ｜ [3] ✏️ 结构反馈（附说明）→ 重跑 dailog-craft ｜
+       [4] ❌ 拒稿 → 走 reject 流程
 ```
 
 **红线**：脚本未经三步确认门全部通过不得进入 tts 合成——脚本是节目内容核心
 （说什么/怎么说/称呼/时长），编辑把关后才能生成语音。
-**展示要求**：确认环节必须给编辑看**完整脚本全文**（非预览摘要）——编辑说
-「把脚本展示出来我看看」即此环节漏做，直接补全文展示（单个代码块整篇呈现）。
+**展示要求**：确认环节必须给编辑看**脚本摘要 + 配套产物**（默认）；编辑要求看全文时
+立即补**完整脚本全文**（单个代码块整篇呈现）——「把脚本展示出来我看看」即补全文，不得省略。
 
 ### ⑤ TTS（`pnpm editor tts <id> --script script.json [--language zh|en] [--guest <platform>]`）
 
@@ -361,8 +391,8 @@ pnpm editor reject <id> --reason "拒审原因（必填，投稿人可见）"
   ↓ ② 定位节目：pnpm editor episodes [--match "关键词|期号"]   （已发布清单：期号/标题/日期/id）
   ↓ ③ 拿投稿：pnpm editor detail <submissionId> 或 GET /v1/editor/episodes/<episodeId>
   │     确认原始对话/采样仍在（voiceSamples）；草稿目录 drafts/<submissionId>/ 有 dialogue.json 可复用
-  ↓ ④ 重跑三步制作（与首期相同，可带修订指令）：
-  │     Step A 选题筛选 → Step B1 内容结构 → Step B2 听感打磨（script-craft）→ script.json
+  ↓ ④ 重跑三步制作（子代理执行，与首期相同，可带修订指令，见 ④）：
+  │     dailog-select（选题）→ 题材门 → dailog-craft（B1 结构 + B2 听感一次）→ 结构门 → 成品门
   │     修订指令示例："发音可读性：把 DESIGN.md 改为 design 点 M D" / "情绪更兴奋" / "落点更轻"
   ↓ ⑤ pnpm editor tts <submissionId> --script script.json --language <lang> [--parts]
   ↓ ⑥ pnpm editor merge <submissionId> --language <lang>
@@ -391,11 +421,11 @@ pnpm editor reject <id> --reason "拒审原因（必填，投稿人可见）"
 ```
 ① pnpm editor batch [--limit N]（并发提取，已提取跳过）→ 分组展示（✅/❌/⚠️ + url + email）
    → 询问处置：✅ 组保留草稿进入自动生成；❌/⚠️ 组拒审（batch-reject，通知+状态）/人工/跳过
-② ✅ 组自动三步处理（无询问）：
-   · Step A 选题筛选（selection.md）→ pass：写 drafts/{id}/selection.json；
+② ✅ 组自动生成（无询问，子代理执行——每个投稿一个 dailog-select + dailog-craft，
+   prompt 模板见 ④，可并发；主会话只收 JSON）：
+   · Step A（dailog-select）→ pass：写 drafts/{id}/selection.json；
      reject：写 drafts/{id}/quality.json {pass:false, reason}
-   · Step B1 内容结构（script-draft.md）→ 写 drafts/{id}/script-draft.json
-   · Step B2 听感打磨（script-craft.md）→ 写 drafts/{id}/script.json
+   · Step B（dailog-craft，B1+B2 一次）→ 写 drafts/{id}/script-draft.json + script.json
 ③ pnpm editor batch-scripts → 分组呈现（已生成/质量不过关/待生成）→ 询问处置
    · ❌ 质量不过关 → batch-reject（通知+状态）/ 跳过 / 人工
    · ✅ 已生成脚本 → 保留，进入阶段 2
@@ -476,6 +506,12 @@ pnpm editor playlist cover <playlistId> [--texture ...] [--colors "#hex,#hex"] [
 
 ## 工具链已知点（维护记忆）
 
+- **生成子代理（省 token 的关键，见 ④）**：Step A（dailog-select）/ Step B（dailog-craft，
+  B1+B2 一次）/ 听感打回（dailog-craft-patch）三步生成一律起子代理执行，主会话只收最终 JSON——
+  对话原文（15-20k）与提示词文件（~14k）不进主上下文。单期主会话增量从 ~70-90k 降到 ~15-25k；
+  打回重跑走 patch（听感）或重跑 craft（结构），不重新全量注入。
+- **script-preview 是成品确认门默认视图**：`pnpm editor script-preview <id>` 输出段数/字数/时长/
+  每段说话人与开头摘要——成品确认门默认用它，编辑要全文再整篇展示（红线 3）。
 - **本地环境基址统一为 `http://localhost:8787`**（`api.dailog.orb.local` 已废弃）：
   `.dailog-editor/envs.json` 的 local 项 apiBase/siteUrl 均指向 localhost:8787（API/站点同端口）；
   纯 HTTP 走原生 fetch，`lib.ts` 中 `.orb.local` 的 TLS 忽略逻辑仅保留兼容旧地址。
@@ -526,8 +562,8 @@ pnpm editor playlist cover <playlistId> [--texture ...] [--colors "#hex,#hex"] [
    价值维度，四维：认知/经验/建议/启发）、提问保真（原生提问 ≥50%、含义不歪曲）与角度保真
    （话题角度 = 用户呈现意图，节目建议为锚，见 script-craft.md 铁律 6）；无时刻/骨架断裂/
    任务型对话 → 拒审
-3. **脚本确认门**：生成脚本后必须**全文展示**给编辑确认（内容/时长/称呼/情绪），用选项编号
-   （[1] 确认 / [2] 听感反馈 / [3] 结构反馈 / [4] 拒稿）收口，未确认不进 tts
+3. **脚本确认门**：生成脚本后必须给编辑确认（默认脚本摘要 + 配套产物，编辑要求看全文时
+   立即整篇展示），用选项编号（[1] 确认 / [2] 听感反馈 / [3] 结构反馈 / [4] 拒稿）收口，未确认不进 tts
 4. **发布前必须试听**（merge 自动用 QuickTime Player 打开 final.m4a）：音色克隆异常/断句错误/情绪标签未生效 → 修好再发
 5. **发布/拒审是外发动作**：先与编辑确认（标题/封面/拒审原因，选项编号收口），确认后一次执行；
    **重新生成（republish）同样是外发动作**——覆盖已上线节目的音频/封面/元数据，必须先试听 + 编辑确认
