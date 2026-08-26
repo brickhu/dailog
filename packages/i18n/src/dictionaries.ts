@@ -599,6 +599,9 @@ export const zh = {
   "submit.checkValid": "链接有效",
   "submit.checkReachable": "可达",
   "submit.checkTime": "检测时间",
+  "submit.checking": "检测中…",
+  "submit.reachableUnconfirmed": "未能确认链接可达（可能受浏览器安全策略或网络限制），若确认链接有效可直接提交。",
+  "submit.notFound": "链接不存在（页面返回 404），请确认链接正确后再投稿。",
   "notif.title": "通知",
   "notif.empty": "暂无通知",
   "notif.readAll": "全部已读",
@@ -876,6 +879,10 @@ export const zh = {
   "favorites.groupGuests": "按嘉宾",
   "favorites.untagged": "未分类",
   "favorites.noGuest": "无嘉宾",
+
+  // ---- MetadataList ----
+  "metadataList.showMore": "显示更多",
+  "metadataList.showLess": "显示更少",
 
 } as const;
 
@@ -1474,6 +1481,9 @@ export const en: Dictionary = {
   "submit.checkValid": "Valid",
   "submit.checkReachable": "Reachable",
   "submit.checkTime": "Checked at",
+  "submit.checking": "Checking…",
+  "submit.reachableUnconfirmed": "Couldn't confirm the link is reachable (browser security policies or network may block the probe). If you're sure the link is valid, you can still submit.",
+  "submit.notFound": "This link doesn't exist (page returned 404). Please double-check the link before submitting.",
   "notif.title": "Notifications",
   "notif.empty": "No notifications yet",
   "notif.readAll": "Mark all read",
@@ -1751,6 +1761,10 @@ export const en: Dictionary = {
   "favorites.groupGuests": "By guest",
   "favorites.untagged": "Untagged",
   "favorites.noGuest": "No guest",
+
+  // ---- MetadataList ----
+  "metadataList.showMore": "Show more",
+  "metadataList.showLess": "Show less",
 
 };
 

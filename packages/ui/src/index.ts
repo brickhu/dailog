@@ -66,5 +66,17 @@ export { default as Examples } from "./examples";
 export { Icon, type IconProps } from "./components/icon";
 export { Logo, type LogoColorVars } from "./components/logo";
 export { Drawer, type DrawerProps, type DrawerSide } from "./components/drawer";
+export {
+  MetadataList,
+  useMetadataListContext,
+  type MetadataListProps,
+  type MetadataListColumns,
+  type MetadataListLabelConfig,
+  type MetadataListContextValue,
+} from "./components/metadata-list";
+export {
+  MetadataListItem,
+  type MetadataListItemProps,
+} from "./components/metadata-list-item";
 
 export { registerDirective, getDirective } from "./directives";
