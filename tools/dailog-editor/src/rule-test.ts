@@ -15,6 +15,8 @@ function parseArgs(args: string[]): {
   userSelector: string;
   assistantSelector: string;
   contentSelector?: string;
+  userContentSelector?: string;
+  assistantContentSelector?: string;
   platform?: string;
   save: boolean;
 } {
@@ -26,7 +28,7 @@ function parseArgs(args: string[]): {
   const userSelector = take("--user-selector");
   const assistantSelector = take("--assistant-selector");
   if (!submissionId || !userSelector || !assistantSelector) {
-    console.error("用法：pnpm editor rule-test <submissionId> --user-selector \"...\" --assistant-selector \"...\" [--content-selector \"...\"] [--platform claude] [--save]");
+    console.error("用法：pnpm editor rule-test <submissionId> --user-selector \"...\" --assistant-selector \"...\" [--content-selector \"...\"] [--user-content-selector \"...\"] [--assistant-content-selector \"...\"] [--platform claude] [--save]");
     process.exit(1);
   }
   return {
@@ -34,6 +36,8 @@ function parseArgs(args: string[]): {
     userSelector,
     assistantSelector,
     contentSelector: take("--content-selector"),
+    userContentSelector: take("--user-content-selector"),
+    assistantContentSelector: take("--assistant-content-selector"),
     platform: take("--platform"),
     save: args.includes("--save"),
   };
@@ -44,7 +48,7 @@ function normalizeText(s: string): string {
 }
 
 export async function ruleTest(config: EditorConfig, args: string[]): Promise<void> {
-  const { submissionId, userSelector, assistantSelector, contentSelector, platform, save } = parseArgs(args);
+  const { submissionId, userSelector, assistantSelector, contentSelector, userContentSelector, assistantContentSelector, platform, save } = parseArgs(args);
   const dir = draftDir(submissionId);
   const pagePath = join(dir, "page.html");
   if (!existsSync(pagePath)) {
@@ -58,8 +62,16 @@ export async function ruleTest(config: EditorConfig, args: string[]): Promise<vo
   $(`${userSelector}, ${assistantSelector}`).each((_, el) => {
     const $el = $(el);
     const isUser = $el.is(userSelector);
-    const $content = contentSelector ? $el.find(contentSelector).first() : $el;
-    const text = normalizeText($content.length > 0 ? $content.text() : $el.text());
+    const perRoleSel = isUser ? userContentSelector : assistantContentSelector;
+    let text = "";
+    if (perRoleSel) {
+      text = normalizeText($(el).find(perRoleSel).map((_, c) => $(c).text()).get().join("\n"));
+    } else if (contentSelector) {
+      const $content = $el.find(contentSelector).first();
+      text = normalizeText($content.length > 0 ? $content.text() : $el.text());
+    } else {
+      text = normalizeText($el.text());
+    }
     if (text) messages.push({ role: isUser ? "user" : "assistant", content: text });
   });
 
@@ -111,6 +123,8 @@ export async function ruleTest(config: EditorConfig, args: string[]): Promise<vo
     userSelector,
     assistantSelector,
     contentSelector: contentSelector ?? null,
+    userContentSelector: userContentSelector ?? null,
+    assistantContentSelector: assistantContentSelector ?? null,
     note: `${new Date().toISOString().slice(0, 10)} 大模型学习沉淀（rule-test 验证通过）`,
     hits: 0,
   };

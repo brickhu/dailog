@@ -17,6 +17,9 @@ interface DecodeRule {
   userSelector: string;
   assistantSelector: string;
   contentSelector?: string | null;
+  /** 角色专属正文容器（优先于 contentSelector；Gemini 等两端结构不同的平台用） */
+  userContentSelector?: string | null;
+  assistantContentSelector?: string | null;
   note?: string;
 }
 
@@ -53,10 +56,19 @@ function buildScript(rule: DecodeRule | null): string {
   const userSelector = ${JSON.stringify(rule.userSelector)};
   const assistantSelector = ${JSON.stringify(rule.assistantSelector)};
   const contentSelector = ${JSON.stringify(rule.contentSelector ?? null)};
+  const userContentSelector = ${JSON.stringify(rule.userContentSelector ?? null)};
+  const assistantContentSelector = ${JSON.stringify(rule.assistantContentSelector ?? null)};
+  const pickContent = (el, sel) => {
+    if (!sel) return null;
+    const nodes = el.querySelectorAll(sel);
+    if (nodes.length === 0) return null;
+    return [...nodes].map((n) => n.innerText).join("\\n");
+  };
   document.querySelectorAll(userSelector + ", " + assistantSelector).forEach((el) => {
     const role = el.matches(userSelector) ? "user" : "assistant";
-    const contentEl = contentSelector ? el.querySelector(contentSelector) : el;
-    const text = (contentEl || el).innerText.replace(/[ \\t]+/g, " ").replace(/\\n{3,}/g, "\\n\\n").trim();
+    const perRoleSel = role === "user" ? userContentSelector : assistantContentSelector;
+    const contentEl = perRoleSel ? pickContent(el, perRoleSel) : (contentSelector ? pickContent(el, contentSelector) : null);
+    const text = (contentEl ?? el.innerText).replace(/[ \\t]+/g, " ").replace(/\\n{3,}/g, "\\n\\n").trim();
     if (text) messages.push({ role, content: text });
   });`
     : `

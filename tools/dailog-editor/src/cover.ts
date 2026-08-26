@@ -241,7 +241,7 @@ function guestPlatformFromUrl(url: string | null): string | null {
     if (host === "www.doubao.com") return "doubao";
     if (host === "chatgpt.com") return "chatgpt";
     if (host === "claude.ai") return "claude";
-    if (host.endsWith(".gemini.google.com") || host === "gemini.google.com") return "gemini";
+    if (host === "share.gemini.google" || host.endsWith(".gemini.google.com") || host === "gemini.google.com") return "gemini";
     if (host === "kimi.moonshot.cn") return "kimi";
     if (host === "tongyi.aliyun.com" || host === "qianwen.aliyun.com") return "tongyi";
     if (host === "perplexity.ai") return "perplexity";

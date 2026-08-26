@@ -13,7 +13,7 @@
 //      2. 无规则命中 → 通用嗅探（data-message-author-role 容器）
 //      3. 都失败 → 提示沉淀新规则（浏览器兜底后直接更新 .dailog-editor/rules.json，下次生效）
 //   首次使用：从工程种子（assets/rules.json）自动初始化复制到 .dailog-editor/rules.json
-import { writeFileSync, existsSync, readFileSync } from "node:fs";
+import { writeFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { load as loadHtml } from "cheerio";
@@ -31,6 +31,9 @@ export interface DecodeRule {
   userSelector: string;
   assistantSelector: string;
   contentSelector?: string | null;
+  /** 角色专属正文容器（优先于 contentSelector；Gemini 等两端结构不同的平台用） */
+  userContentSelector?: string | null;
+  assistantContentSelector?: string | null;
   note?: string;
   hits?: number;
 }
@@ -100,15 +103,27 @@ function matchRule(rules: DecodeRule[], url: string): DecodeRule | null {
   }
 }
 
-/** 按规则提取（user/assistant 选择器联合匹配，matches 判定角色；内容取 contentSelector 或自身） */
+/** 按规则提取（user/assistant 选择器联合匹配，matches 判定角色；
+ *  内容优先级：角色专属 userContentSelector/assistantContentSelector → contentSelector → 自身；
+ *  专属选择器命中多个元素时按文档序拼接（多段正文），contentSelector 取首个） */
 function extractByRule($: ReturnType<typeof loadHtml>, rule: DecodeRule): { role: string; content: string }[] {
   const messages: { role: string; content: string }[] = [];
   const joined = `${rule.userSelector}, ${rule.assistantSelector}`;
   $(joined).each((_, el) => {
     const $el = $(el);
     const isUser = $el.is(rule.userSelector);
-    const $content = rule.contentSelector ? $el.find(rule.contentSelector).first() : $el;
-    const text = normalizeText($content.length > 0 ? $content.text() : $el.text());
+    const perRoleSel = isUser ? rule.userContentSelector : rule.assistantContentSelector;
+    let text = "";
+    if (perRoleSel) {
+      text = normalizeText(
+        $(el).find(perRoleSel).map((_, c) => $(c).text()).get().join("\n"),
+      );
+    } else if (rule.contentSelector) {
+      const $content = $el.find(rule.contentSelector).first();
+      text = normalizeText($content.length > 0 ? $content.text() : $el.text());
+    } else {
+      text = normalizeText($el.text());
+    }
     if (text) messages.push({ role: isUser ? "user" : "assistant", content: text });
   });
   return messages;
@@ -135,7 +150,7 @@ function sniffMessages($: ReturnType<typeof loadHtml>): { role: string; content:
 // 接口逆向法：SPA 分享页拉不到内容时先找数据接口（deepseek/doubao 已验证）
 // ─────────────────────────────────────────────────────────────
 
-interface PlatformInfo { api?: "deepseek" | "doubao"; ssr?: "chatgpt" }
+interface PlatformInfo { api?: "deepseek" | "doubao"; ssr?: "chatgpt"; gemini?: boolean }
 
 /** 平台识别（host + pathPrefix）——命中则优先走对应直取路径 */
 function detectPlatform(url: string): PlatformInfo | null {
@@ -146,6 +161,7 @@ function detectPlatform(url: string): PlatformInfo | null {
     if (host === "chat.deepseek.com" && path.startsWith("/share/")) return { api: "deepseek" };
     if (host === "www.doubao.com" && path.startsWith("/share/")) return { api: "doubao" };
     if (host === "chatgpt.com" && path.startsWith("/share/")) return { ssr: "chatgpt" };
+    if ((host === "share.gemini.google" || host === "gemini.google.com") && path.startsWith("/")) return { gemini: true };
     return null;
   } catch {
     return null;
@@ -398,6 +414,144 @@ function writeDialogue(dir: string, url: string, source: string, messages: { rol
 
 /** 共享提取：平台直取 + 拉取 + 解码 + 落盘（fetch 命令与 batch 批量处理共用）。
  *  返回 { ok, messages?, error? }——失败给出原因（反爬/失效/未提取到消息）。 */
+// ─────────────────────────────────────────────────────────────
+// Gemini 分享（2026-08-25 实测结构）：分享页是 Angular SSR（对话在 HTML 组件树里，非客户端渲染）
+//   · 短链 https://share.gemini.google/<短码> → 301 → https://gemini.google.com/share/<规范ID>?skid=...
+//   · 规范页 HTML 含 share-turn-viewer（每轮 user-query + response-container）
+//   · 用户正文 .query-text-line（可多段），助手正文 message-content .markdown
+//   · skid 是分享者标识参数，抓取时需保留（不带 skid 可能拿到壳页）
+// ─────────────────────────────────────────────────────────────
+
+/** Gemini 规范 URL 解析：短链 301 重定向到规范页（带 skid）。返回规范 URL；失败返回 null */
+export async function resolveGeminiCanonical(url: string): Promise<string | null> {
+  try {
+    const u = new URL(url);
+    if (u.hostname === "gemini.google.com" && u.pathname.startsWith("/share/")) return url; // 已是规范页
+    const res = await fetch(url, {
+      method: "HEAD",
+      redirect: "manual",
+      headers: { "user-agent": UA, accept: "text/html,*/*" },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    const loc = res.headers.get("location");
+    if (res.status >= 300 && res.status < 400 && loc) return new URL(loc, url).href;
+    return url; // 无重定向 → 原样用（短链也可能直接 200 SSR）
+  } catch {
+    return null;
+  }
+}
+
+/** Gemini 规则提取（复用通用 extractByRule——规则已含 per-role content selector） */
+export function extractGeminiByRule($: ReturnType<typeof loadHtml>): { role: string; content: string }[] | null {
+  const messages: { role: string; content: string }[] = [];
+  $("share-turn-viewer user-query, share-turn-viewer response-container").each((_, el) => {
+    const $el = $(el);
+    const isUser = $el.is("share-turn-viewer user-query");
+    const perRoleSel = isUser ? ".query-text-line" : "message-content .markdown";
+    const text = normalizeText($el.find(perRoleSel).map((_, c) => $(c).text()).get().join("\n"));
+    if (text) messages.push({ role: isUser ? "user" : "assistant", content: text });
+  });
+  return messages.length > 0 ? messages : null;
+}
+
+/** Gemini 采集入口：短链 → 规范 URL → SSR 拉取 → 规则提取。
+ *  返回 null 表示当前环境无法完成（网络/代理不可用等），回退通用 HTML 流程。 */
+/** 查找可用的 Chromium/headless-shell 可执行文件（Playwright 缓存 → 系统 Chrome） */
+function findChromium(): string | null {
+  const candidates: string[] = [];
+  // Playwright 缓存（ms-playwright）
+  const cache = join(process.env.HOME ?? "", "Library", "Caches", "ms-playwright");
+  try {
+    for (const dir of readdirSync(cache)) {
+      const root = join(cache, dir);
+      const walk = (p: string, depth: number): string | null => {
+        if (depth > 4) return null;
+        try {
+          for (const en of readdirSync(p, { withFileTypes: true })) {
+            const fp = join(p, en.name);
+            if (en.isDirectory()) { const r = walk(fp, depth + 1); if (r) return r; }
+            else if (["Chromium", "chrome", "chrome-headless-shell", "headless_shell", "Google Chrome for Testing"].includes(en.name)) return fp;
+          }
+        } catch { /* 忽略 */ }
+        return null;
+      };
+      const hit = walk(root, 0);
+      if (hit) candidates.push(hit);
+    }
+  } catch { /* 缓存不存在 */ }
+  candidates.push(
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium",
+  );
+  return candidates.find((c) => existsSync(c)) ?? null;
+}/** Chromium 无头渲染 URL → 渲染后 HTML（分享页等客户端渲染页面用）。
+ *  proxy: SOCKS5 代理地址（host:port）或 null。返回 null 表示渲染失败。 */
+function renderWithChromium(url: string, proxy: string | null): string | null {
+  const chromium = findChromium();
+  if (!chromium) return null;
+  const args = [
+    "--headless=new", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
+    "--virtual-time-budget=15000",
+    "--dump-dom",
+  ];
+  if (proxy) args.push("--proxy-server=socks5://" + proxy);
+  args.push(url);
+  try {
+    return execFileSync(chromium, args, { encoding: "utf-8", timeout: 90_000, maxBuffer: MAX_HTML_BYTES * 6 });
+  } catch {
+    return null;
+  }
+}
+
+/** Gemini 采集入口：规范 URL 解析 → Chromium 无头渲染（客户端渲染的分享页必须真实渲染）
+ *  → DOM 规则提取。返回 { ok, messages?, handled, error? } */
+async function extractGemini(config: EditorConfig, submissionId: string, url: string): Promise<{
+  ok: boolean; messages?: { role: string; content: string }[]; error?: string; handled: boolean;
+}> {
+  const dir = draftDir(submissionId);
+  const canonical = await resolveGeminiCanonical(url);
+  const target = canonical ?? url;
+
+  // ① Chromium 无头渲染（客户端渲染页面，curl 只能拿到壳）
+  let html = renderWithChromium(target, findSocksProxy());
+  if (!html) {
+    // 回退：直连拉 SSR（可能拿到壳，但保留现场）
+    try {
+      const res = await fetch(target, {
+        headers: { "user-agent": UA, accept: "text/html,*/*", "accept-language": "zh-CN,zh;q=0.9,en;q=0.8" },
+        redirect: "follow",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      if (res.ok) html = await res.text();
+    } catch { /* 忽略 */ }
+  }
+  if (!html) {
+    return { ok: false, handled: true, error: "Gemini 渲染失败（无 Chromium / 网络不可用）——可 console-script 浏览器兜底" };
+  }
+  if (html.length > MAX_HTML_BYTES * 4) html = html.slice(0, MAX_HTML_BYTES * 4);
+  writeFileSync(join(dir, "page.html"), html);
+
+  // 清洗正文落盘 page.txt
+  const $ = loadHtml(html);
+  $("script,style,noscript,template,svg,iframe,link,meta").remove();
+  $("nav,footer,header,[role='navigation'],[role='banner'],[role='dialog'],[class*='cookie'],[class*='Cookie'],[id*='cookie']").remove();
+  writeFileSync(join(dir, "page.txt"), normalizeText($("body").text()));
+
+  // ② DOM 规则提取（per-role）
+  const { rules } = loadRules();
+  const rule = matchRule(rules, target) ?? matchRule(rules, url);
+  const messages = extractGeminiByRule($);
+  if (messages) {
+    writeDialogue(dir, target, rule ? `rule:${rule.platform}` : "rule:gemini", messages);
+    if (rule) bumpHits(rule);
+    return { ok: true, handled: true, messages };
+  }
+  return { ok: false, handled: true, error: "Gemini 渲染后未提取到 share-turn-viewer（可能加载超时/反爬）——可 console-script 浏览器兜底" };
+}
+
+
 export async function extractSubmission(
   config: EditorConfig,
   submissionId: string,
@@ -415,6 +569,16 @@ export async function extractSubmission(
       return { ok: true, messages: apiMsgs };
     }
     console.log(`[fetch] ${platform.api} 分享 API 未命中 → 回退 HTML 提取`);
+  }
+
+  // ①.5 Gemini：短链 → 规范 URL → SSR 规则提取（分享页 Angular SSR，对话在组件树里）
+  if (platform?.gemini) {
+    const g = await extractGemini(config, submissionId, url);
+    if (g.ok && g.messages) return { ok: true, messages: g.messages };
+    if (g.handled) {
+      // SSR 拉取成功但提取失败（壳页）→ 已落盘 page.html/page.txt，走通用规则/嗅探再试一次
+      console.log(`[fetch] gemini 专用路径：${g.error}`);
+    }
   }
 
   // ② HTML 拉取：直连 → 失败且有本地代理 → 自动走 SOCKS5 重试（chatgpt 等被封锁域名）
