@@ -391,6 +391,8 @@ export function readProgress(submissionId: string): { step: string; updatedAt: s
 export interface ScriptSegment {
   speaker: "host" | "guest";
   text: string;
+  /** TTS 分段标注（script-craft 五拍映射）：1=开场+定向 2=对谈 3=落点+收束；供 tts --parts 分 3 段独立合成 */
+  part?: 1 | 2 | 3;
 }
 
 /** 读取脚本 JSON 文件（skill 生成），校验结构 */

@@ -49,6 +49,13 @@ mkdirSync(promptsOut, { recursive: true });
 for (const f of readdirSync(promptsSrc)) {
   cpSync(join(promptsSrc, f), join(promptsOut, f));
 }
+// 3.2 参考文档（深度参考，随产物分发）
+const refSrc = join(here, "reference");
+const refOut = join(outDir, "reference");
+mkdirSync(refOut, { recursive: true });
+for (const f of readdirSync(refSrc)) {
+  cpSync(join(refSrc, f), join(refOut, f));
+}
 cpSync(join(here, "templates", "envs.example.json"), join(outDir, "envs.example.json"));
 cpSync(join(here, "templates", "env.example"), join(outDir, "env.example"));
 

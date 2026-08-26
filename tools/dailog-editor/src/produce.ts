@@ -71,7 +71,7 @@ export async function produce(config: EditorConfig, args: string[]): Promise<voi
     const meta = scriptMeta(scriptPath);
     try {
       // ① TTS（逐段合成，服务端端点）
-      await tts(config, [id, "--script", scriptPath, "--language", language, ...(guest ? ["--guest", guest] : [])]);
+      await tts(config, [id, "--script", scriptPath, "--language", language, ...(guest ? ["--guest", guest] : []), "--parts"]);
       // ② 合成（intro/outro 按语言自动匹配）
       await merge(config, [id, "--language", language]);
       // ③ 封面（本地模板渲染：居中显示「主持人称呼 × 嘉宾称呼」，传 --guest 取嘉宾名）

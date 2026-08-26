@@ -90,6 +90,15 @@ export async function publish(config: EditorConfig, args: string[]): Promise<voi
   }
   const meta: Record<string, unknown> = { title: p.title, language: p.language };
   if (p.description) meta.description = p.description;
+  // description（Step B 配套产物，自动读草稿 script.json；--description 可覆盖）
+  if (!p.description) {
+    try {
+      const script = JSON.parse(readFileSync(join(draftDir(p.submissionId), "script.json"), "utf8")) as { description?: unknown } | null;
+      if (script && !Array.isArray(script) && typeof script.description === "string" && script.description.trim()) {
+        meta.description = script.description.trim();
+      }
+    } catch { /* 草稿无 script.json：description 可选，忽略 */ }
+  }
   if (p.summary) meta.summary = p.summary;
   if (p.referencesFile) {
     try {
@@ -116,6 +125,15 @@ export async function publish(config: EditorConfig, args: string[]): Promise<voi
       if (hs.length) meta.highlights = hs;
     }
   } catch { /* 草稿无 script.json：金句可选，忽略 */ }
+  // 分类（Step B category：insight/experience/reasoning/inspiration——由选题维度映射，自动读草稿 script.json）
+  try {
+    const script = JSON.parse(readFileSync(join(draftDir(p.submissionId), "script.json"), "utf8")) as { category?: unknown } | null;
+    const category = script && !Array.isArray(script) && typeof script.category === "string" &&
+      ["insight", "experience", "advice", "inspiration"].includes(script.category)
+      ? script.category
+      : null;
+    if (category) meta.category = category;
+  } catch { /* 草稿无 script.json：分类可选，忽略 */ }
   // durationSeconds：ffprobe 成品音频（merge 产物）——页面「N 分钟」展示
   try {
     meta.durationSeconds = ffprobeDuration(p.audio!);
