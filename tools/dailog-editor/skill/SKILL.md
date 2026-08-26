@@ -67,8 +67,9 @@ triggers:
    2. N 条脚本待生成语音；     ← 草稿有 script.json 未合成
    3. N 条语音待发布；         ← 草稿有 final.mp3 未发布
    4. N 条下线申请；           ← 用户「申请下线」→ 编辑审批（removal 队列）
-   请问你接下来想处理什么？
-③ 根据用户答复进入对应流程（批量处理 / 审核单个 / 制作 / 发布…）
+   → 选号：[1] 📥 审核投稿 ｜ [2] 🎙️ 制作脚本 ｜ [3] 🚀 发布 ｜ [4] 🚫 下线申请审批 ｜
+           [5] 📋 节目/播放列表 ｜ [6] ⚙️ 其他（批量/嘉宾声线/重做…）
+③ 按所选编号进入对应流程（批量处理 / 审核单个 / 制作 / 发布…）
 ```
 
 ## ⚠️ 会话初始化（每个新对话必做——环境与配对是会话级状态）
@@ -420,15 +421,16 @@ pnpm editor reject <id> --reason "拒审原因（必填，投稿人可见）"
 
 ```
 ① pnpm editor batch [--limit N]（并发提取，已提取跳过）→ 分组展示（✅/❌/⚠️ + url + email）
-   → 询问处置：✅ 组保留草稿进入自动生成；❌/⚠️ 组拒审（batch-reject，通知+状态）/人工/跳过
+   → 处置选号：[1] ✅ 组保留进自动生成 ｜ [2] ❌/⚠️ 组拒审（batch-reject，通知+状态）｜
+              [3] 人工处理 ｜ [4] 跳过
 ② ✅ 组自动生成（无询问，子代理执行——每个投稿一个 dailog-select + dailog-craft，
    prompt 模板见 ④，可并发；主会话只收 JSON）：
    · Step A（dailog-select）→ pass：写 drafts/{id}/selection.json；
      reject：写 drafts/{id}/quality.json {pass:false, reason}
    · Step B（dailog-craft，B1+B2 一次）→ 写 drafts/{id}/script-draft.json + script.json
-③ pnpm editor batch-scripts → 分组呈现（已生成/质量不过关/待生成）→ 询问处置
-   · ❌ 质量不过关 → batch-reject（通知+状态）/ 跳过 / 人工
-   · ✅ 已生成脚本 → 保留，进入阶段 2
+③ pnpm editor batch-scripts → 分组呈现（已生成/质量不过关/待生成）
+   → 处置选号：[1] ✅ 已生成脚本保留，进入阶段 2 ｜ [2] ❌ 质量不过关拒审（batch-reject）｜
+              [3] 人工处理 ｜ [4] 跳过
 ```
 
 **批量过滤器本质**：提取 + 质量检查/脚本生成滤出「合格脚本」——不达标的在两级决策点
