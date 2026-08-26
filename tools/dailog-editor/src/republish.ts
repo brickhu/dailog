@@ -16,6 +16,17 @@ function ffprobeDuration(file: string): number {
   return Math.round(parseFloat(out.trim()));
 }
 
+/** 读 2.1 元数据（metadata.json）——republish 元数据（description/summary/highlights/category/references/tags）来源；
+ *  与 publish 一致：metadata.json 优先、旧草稿 fallback script.json */
+function loadMetadata(submissionId: string): Record<string, unknown> | null {
+  try {
+    const raw = JSON.parse(readFileSync(join(draftDir(submissionId), "metadata.json"), "utf8")) as unknown;
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
 interface RepublishArgs {
   episodeId: string;
   audio?: string;
@@ -92,8 +103,11 @@ export async function republish(config: EditorConfig, args: string[]): Promise<v
     form.append("cover", new Blob([new Uint8Array(coverBytes)], { type: "image/jpeg" }), "cover.jpg");
   }
   const meta: Record<string, unknown> = { title: p.title, language: p.language };
+  const md = loadMetadata(submissionId);
+  // description（2.1 metadata.json 自动读取；旧草稿 fallback script.json；--description 可覆盖）
   if (p.description) meta.description = p.description;
-  if (!p.description) {
+  else if (md && typeof md.description === "string" && md.description.trim()) meta.description = md.description.trim();
+  else {
     try {
       const script = JSON.parse(readFileSync(join(draftDir(submissionId), "script.json"), "utf8")) as { description?: unknown } | null;
       if (script && !Array.isArray(script) && typeof script.description === "string" && script.description.trim()) {
@@ -101,37 +115,60 @@ export async function republish(config: EditorConfig, args: string[]): Promise<v
       }
     } catch { /* 草稿无 script.json：description 可选，忽略 */ }
   }
+  // summary（2.1 metadata.json 自动读取；旧草稿 fallback script.json；--summary 可覆盖）
   if (p.summary) meta.summary = p.summary;
+  else if (md && typeof md.summary === "string" && md.summary.trim()) meta.summary = md.summary.trim();
+  else {
+    try {
+      const script = JSON.parse(readFileSync(join(draftDir(submissionId), "script.json"), "utf8")) as { summary?: unknown } | null;
+      if (script && !Array.isArray(script) && typeof script.summary === "string" && script.summary.trim()) {
+        meta.summary = script.summary.trim();
+      }
+    } catch { /* 可选，忽略 */ }
+  }
+  // references（2.1 metadata.json 自动读取；--references-file 可覆盖）
   if (p.referencesFile) {
     try {
       const refs = JSON.parse(readFileSync(p.referencesFile, "utf8"));
       if (Array.isArray(refs)) meta.references = refs;
       else console.warn(`[republish] ⚠️ references-file 内容不是数组，忽略（${p.referencesFile}）`);
     } catch { console.warn(`[republish] ⚠️ references-file 读取/解析失败，忽略（${p.referencesFile}）`); }
+  } else if (md && Array.isArray(md.references) && md.references.length > 0) {
+    meta.references = md.references;
   }
+  // tags（2.1 metadata.json 自动读取；--tags 可覆盖）
   if (p.tags?.length) meta.tags = p.tags;
+  else if (md && Array.isArray(md.tags) && md.tags.length > 0) meta.tags = md.tags;
   if (p.guestId) meta.guestId = p.guestId;
-  // 金句（script.json highlights，自动）
-  try {
-    const script = JSON.parse(readFileSync(join(draftDir(submissionId), "script.json"), "utf8")) as { highlights?: { text?: string }[] } | null;
-    const highlights = script && !Array.isArray(script) ? script.highlights : null;
-    if (Array.isArray(highlights)) {
-      const hs = highlights
-        .filter((h): h is { text: string } => !!h && typeof h.text === "string" && h.text.trim().length > 0)
-        .map((h) => ({ text: h.text.trim().slice(0, 200) }))
-        .slice(0, 5);
-      if (hs.length) meta.highlights = hs;
-    }
-  } catch { /* 可选，忽略 */ }
-  // 分类（script.json category，自动）
-  try {
-    const script = JSON.parse(readFileSync(join(draftDir(submissionId), "script.json"), "utf8")) as { category?: unknown } | null;
-    const category = script && !Array.isArray(script) && typeof script.category === "string" &&
-      ["insight", "experience", "advice", "inspiration"].includes(script.category)
-      ? script.category
-      : null;
-    if (category) meta.category = category;
-  } catch { /* 可选，忽略 */ }
+  // 金句（2.1 metadata.json 自动读取；旧草稿 fallback script.json；可选——缺省/解析失败忽略）
+  let highlights: unknown = null;
+  if (md && Array.isArray(md.highlights)) highlights = md.highlights;
+  if (!highlights) {
+    try {
+      const script = JSON.parse(readFileSync(join(draftDir(submissionId), "script.json"), "utf8")) as
+        { highlights?: { text?: string }[] } | null;
+      highlights = script && !Array.isArray(script) ? script.highlights : null;
+    } catch { /* 草稿无 script.json：金句可选，忽略 */ }
+  }
+  if (Array.isArray(highlights)) {
+    const hs = highlights
+      .filter((h): h is { text: string } => !!h && typeof (h as { text?: unknown }).text === "string" && (h as { text: string }).text.trim().length > 0)
+      .map((h) => ({ text: (h as { text: string }).text.trim().slice(0, 200) }))
+      .slice(0, 5);
+    if (hs.length) meta.highlights = hs;
+  }
+  // 分类（2.1 metadata.json 自动读取；旧草稿 fallback script.json：insight/experience/advice/inspiration）
+  let category: unknown = null;
+  if (md) category = md.category;
+  if (!category) {
+    try {
+      const script = JSON.parse(readFileSync(join(draftDir(submissionId), "script.json"), "utf8")) as { category?: unknown } | null;
+      category = script && !Array.isArray(script) ? script.category : null;
+    } catch { /* 草稿无 script.json：分类可选，忽略 */ }
+  }
+  if (typeof category === "string" && ["insight", "experience", "advice", "inspiration"].includes(category)) {
+    meta.category = category;
+  }
   // durationSeconds：ffprobe 成品音频
   try {
     meta.durationSeconds = ffprobeDuration(audio);

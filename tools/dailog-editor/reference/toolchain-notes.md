@@ -51,3 +51,12 @@
   指定版本装到 `~/Library/pnpm/.tools/`（工作区外）→ 沙箱拦截 `EPERM: mkdir .../.tools/pnpm/9.15.0_tmp_*`。
   **解法（已固化根 .npmrc）**：项目根 `.npmrc` 加 `manage-package-manager-versions=false`，
   pnpm 直接用内置版本、不再写工作区外路径；或绕开 pnpm 直调 `node .agents/skills/dailog-editor/scripts/run.js`。
+- **改 skill 必须改源码再 build（产物勿手改）**：`.agents/skills/dailog-editor/` 是构建产物
+  （scripts/*.js 由 src/*.ts esbuild 编译、SKILL.md/prompts/reference 从 `tools/dailog-editor/`
+  `skill/``prompts/``reference/` 复制），手改产物会在下次 build 被覆盖回源码——SKILL 文档/
+  提示词/模板/命令逻辑一律改 `tools/dailog-editor/` 下源码，然后 `cd tools/dailog-editor && node build.mjs`
+  （或 `pnpm --filter @dailogues/dailog-editor build`）同步产物；改完用 grep 校验产物已含新内容。
+- **republish 元数据来自 metadata.json**：republish.ts 与 publish.ts 一致——description/summary/
+  references/tags/highlights/category 自动读草稿 `metadata.json`（旧草稿 fallback script.json），
+  `--description/--summary/--references-file/--tags` 可覆盖；漏读 metadata.json 会让服务端
+  description/tags 等字段被清成 null（2026-08-26 踩坑：republish 后详情页无简介/标签）。

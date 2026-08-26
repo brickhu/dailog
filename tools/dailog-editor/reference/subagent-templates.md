@@ -5,6 +5,11 @@
 > <drafts> = .dailog-editor/drafts
 > 提示词文件（selection.md / draft.md+five-beats.md+templates.md / polish.md / meta.md）由子代理**原样读取**作为系统提示词，
 > 任何人不许改写压缩；对话原文 content 可能含未转义换行，严格 JSON.parse 失败时基于 read 逐行容错解析。
+>
+> **主持人称呼（callName）必填输入（1.2/1.3/2.1 模板均有）**：主会话起子代理前必须从
+> `pnpm editor detail <id>` 的 callName 字段提取填入模板（如 飞 / Fei；无则填「主持人」），
+> 子代理开场自我介绍与嘉宾致意一律用该值，禁止退化为泛称「主持人」——提示词里的
+> {主持人称呼} 占位符由主会话在这里完成替换，子代理不自行猜测。
 
 ## 1.1 审稿+选题 —— dailog-select
 
@@ -31,6 +36,7 @@ ideas[N-1] 写入 <drafts>/<id>/chosen-idea.json（角度锚点，1.2/1.3 的输
 ```
 你是 dailog 编辑工作流的「脚本草稿」子代理。
 1. 用 read 读取 <skillDir>/prompts/draft.md（任务/铁律/输出）与 <skillDir>/prompts/five-beats.md（五拍各拍要点）、<skillDir>/prompts/templates.md（四模板选型表）→ 三个文件均**原样**作为系统提示词（不要改写压缩）
+1a. 主持人称呼（callName）：<主会话从 detail 注入，如 飞；无则「主持人」>——开场自我介绍（我是{主持人称呼}）与 guest 致意（你好，{主持人称呼}！）一律用该值，不得用泛称「主持人」；称呼语言与脚本语言不同时按 polish.md 清单 11 改写
 2. 用 read 读取 <drafts>/<id>/chosen-idea.json（已确认选题，角度锚点，不得偏离）
 3. 用 read 读取 <drafts>/<id>/dialogue.json（对话原文，容错解析同 1.1）
 4. 按提示词执行：四模板选型 + 五拍结构直接落地为**三段脚本草稿**（纯文本、无情绪标签/停顿标记），
@@ -46,10 +52,11 @@ ideas[N-1] 写入 <drafts>/<id>/chosen-idea.json（角度锚点，1.2/1.3 的输
 ```
 你是 dailog 编辑工作流的「听感打磨」子代理。
 1. 用 read 读取 <skillDir>/prompts/polish.md → 作为系统提示词（原样，不要改写压缩）
+1a. 主持人称呼（callName）：<主会话从 detail 注入，如 飞；无则「主持人」>——开场自我介绍（我是{主持人称呼}）与 guest 致意（你好，{主持人称呼}！）一律用该值，不得用泛称「主持人」；称呼语言与脚本语言不同时按 polish.md 清单 11 改写
 2. 用 read 读取 <drafts>/<id>/script-draft.json（已确认草稿，结构基准，不得偏离）
 3. 用 read 读取 <drafts>/<id>/chosen-idea.json（已确认选题，保真锚点）
 4. 用 read 读取 <drafts>/<id>/dialogue.json（对话原文，供保真取材）
-5. 按提示词执行：在草稿基础上补情绪标签/停顿/转场衔接/拆段/发音改写 → 终稿 segments
+5. 按提示词执行（**先听众视角阅读、后听感手段**，顺序见 polish.md「本质」节）：先以普通听众身份通读草稿——听不懂的补承接、逻辑接不住的补衔接；前两步通过后才补情绪标签/停顿/转场衔接/拆段/发音改写 → 终稿 segments
    （带情绪标签）+ language/topic/creationNote + **optimization_summary（优化总结，逐条）**；
    **本层不输出元数据**（title/summary/description/tags/references/highlights 由 1.4 基于终稿生成）
 6. 用 write 工具把终稿 JSON **直接写入** <drafts>/<id>/script.json（字段以 polish.md 输出约定为准）
@@ -61,6 +68,8 @@ ideas[N-1] 写入 <drafts>/<id>/chosen-idea.json（角度锚点，1.2/1.3 的输
 ```
 你是 dailog 编辑工作流的「元数据生成」子代理。
 1. 用 read 读取 <skillDir>/prompts/meta.md → 作为系统提示词（原样，不要改写压缩）
+1a. 主持人称呼（callName）：<主会话从 detail 注入，如 飞；无则「主持人」>——meta.md 点题处
+    （本期节目 {主持人称呼} 和 {嘉宾名}…）用该值替换，不得用泛称「主持人」
 2. 用 read 读取 <drafts>/<id>/script.json（最终脚本，元数据来源；金句逐字取自终稿）
 3. 用 read 读取 <drafts>/<id>/chosen-idea.json（选题：dimension/moment/title_draft 等）
 4. 用 read 读取 <drafts>/<id>/dialogue.json（对话原文，references 名词条目提取用）

@@ -44,7 +44,8 @@ triggers:
 ```
 用户投稿（site）: URL（合法性+触达性检查）+ 采样 → submissions(status=submitted)
 编辑（本技能）: list → detail → fetch 解码（阶段 0）→ 生成（阶段 1：选题/草稿/终稿三确认门）
-              → tts → merge → cover → 发布（阶段 2：元数据生成 + 发布确认门）→ publish / reject
+              → tts → merge（试听）→ cover → **语音确认门（试听通过才进入元数据）**
+              → 发布（阶段 2：元数据生成 + 发布确认门）→ publish / reject
 ```
 
 ## 前置条件
@@ -182,7 +183,9 @@ pnpm editor removal               # 节目下线申请队列（approve 下架+�
        + 摘要（script-preview）作附加信息
      · 嘉宾声线预检：进 tts 前 pnpm editor guests 确认目标嘉宾（--guest <platform>）有声线；
        ⚠️ 无声线 → 本门内立即告知编辑（上传声线/换有声线嘉宾/暂停），不得闷头跑 tts 到 422
-     · 质量自检：现场感/角度保真/结构对照/转场（对照 polish.md 铁律 5/6/7 + 检查清单）——
+     · 质量自检：现场感/角度保真/结构对照/转场 + **称呼核对（开场自我介绍 = detail 的
+       callName，非「主持人」泛称）** + **听众视角抽查（host 抛出符号/术语/专名前有无承接；
+       二人对话逻辑是否接得住）**（对照 polish.md 本质节 + 铁律 5/6/7 + 检查清单）——
        不合格打回重生成
      · 选项：[1] ✅ 确认 → tts ｜ [2] ✏️ 提交修改意见（听感，附说明）→ 重跑 1.3 ｜
        [3] ✏️ 结构反馈（附说明）→ 重跑 1.2 ｜ [4] ❌ 拒稿
@@ -205,6 +208,14 @@ pnpm editor removal               # 节目下线申请队列（approve 下架+�
 - 产物 `final.m4a`；**merge 完成自动用 QuickTime Player 打开试听**（macOS）——**发布前必须试听**
   （音色/断句/情绪标签）；异常 → 修好再发
 
+### 1.5b 语音确认门（**试听通过后才进入阶段 2 元数据生成**）
+
+- **顺序红线**：TTS/merge 出语音后，必须先经编辑试听确认，**通过后才允许开始 2.1 元数据生成**
+  （dailog-meta）——语音是内容核心，音色/断句/情绪不过关时先修（--part n 重跑单段或整集），
+  不浪费 token 生成注定要改的元数据
+- 交互：[1] ✅ 试听通过 → 进 1.6 封面 + 阶段 2 元数据 ｜ [2] 🔊 哪段有问题 → 重跑 tts --part n →
+  重新 merge 试听 ｜ [3] 🎨 顺带重做封面（1.6 亦可后置到发布确认门）
+
 ### 1.6 封面（`pnpm editor cover <id> [--texture ...] [--colors "#hex,#hex"] [--guest <platform>] [--image-url <URL>]`）
 
 - 默认：纹理指令预置库随机（无 Pexels 依赖）→ 1400×1400 JPEG；居中「主持人称呼 × 嘉宾称呼」
@@ -212,6 +223,9 @@ pnpm editor removal               # 节目下线申请队列（approve 下架+�
 - 不满意 → `--image-url <URL>`（下载裁切）；**生成后立即把封面图 Read 展示给编辑**（确认环节再展示）
 
 ### 阶段 2 · 发布（节目标号驱动，与编辑确认后执行）
+
+> **前置红线**：阶段 2 必须在 **1.5b 语音确认门通过后**才开始——未经编辑试听确认的语音，
+> 不得进入 2.1 元数据生成（语音未确认时元数据生成属于浪费且顺序违规）。
 
 **2.1 元数据生成（子代理 dailog-meta——发布准备，基于终稿）**：
 - 起子代理（模板见 `reference/subagent-templates.md`），读取 `prompts/meta.md` + script.json（终稿）+
@@ -243,7 +257,7 @@ pnpm editor reject <id> --reason "拒审原因（必填，投稿人可见）"
   │     内容来源变化则先 fetch 刷新）
   ↓ ④ 重跑生成工作流（与首期相同，可带修订指令）：1.1 选题 → 选题确认门 → 1.2 草稿 → 草稿确认门
   │     → 1.3 终稿 → 终稿确认门
-  ↓ ⑤ tts → ⑥ merge（试听）→ ⑦ cover（Read 展示）
+  ↓ ⑤ tts → ⑥ merge（试听）→ **语音确认门（试听通过）** → ⑦ cover（Read 展示）
   ↓ ⑧ 阶段 2：2.1 元数据生成（metadata.json）→ 2.2 发布确认门（元数据+封面+试听）
   ↓ ⑨ pnpm editor republish <episodeId> --title "…" [--cover cover.jpg] [--tags a,b] [--guest <platform>]
   ↓ ⑩ 汇报：期号/链接不变，内容已更新
@@ -268,14 +282,16 @@ ETag 变化客户端重新拉取）；**republish 幂等**（重复调用只覆�
    → 处置选号：[1] ✅ 已生成脚本保留，进入阶段 2 ｜ [2] ❌ 质量不过关拒审（batch-reject）｜
               [3] 人工处理 ｜ [4] 跳过
 ④ 用户选号：pnpm editor produce --ids <id1,id2,...> [--language zh] [--guest <platform>]
-   → 逐个自动：tts（逐段）→ merge（intro/outro 按语言）→ cover → **2.1 元数据生成（dailog-meta → metadata.json）**
-   → 输出：final.mp3 路径 + metadata.json + 节目信息草稿（标题）
+   → 逐个自动：tts（逐段）→ merge（intro/outro 按语言）→ cover（**produce 不含元数据生成**）
+   → 输出：final.mp3/final.m4a 路径 + 节目信息草稿（标题）
 ⑤ 内容核查（进 tts 前必做）：对照 selection.json 的 fact_check_list 逐条核实（无法核实 → 删除断言）
    与 privacy_redactions（逐条确认已泛化）——核查不通过 → 返回 1.3 修改脚本，不进 tts
-⑥ 确认点① 语音预览：merge 已自动 QuickTime 试听 → [1] ✅ ｜ [2] 🔊 哪段有问题 → 重跑 tts --part n
-⑦ 发布确认门（确认点②）：metadata.json 逐项（标题/简介/摘要/标签/**references**/金句）+ **封面（Read 展示）**→
+⑥ 确认点① 语音预览（**顺序红线：2.1 元数据生成必须在此之后**）：merge 已自动 QuickTime 试听 →
+   [1] ✅ 试听通过 → 进 2.1 元数据生成 ｜ [2] 🔊 哪段有问题 → 重跑 tts --part n → 重新 merge 试听
+⑦ 2.1 元数据生成（dailog-meta → metadata.json，仅对试听通过者）
+⑧ 发布确认门（确认点②）：metadata.json 逐项（标题/简介/摘要/标签/**references**/金句）+ **封面（Read 展示）**→
    [1] ✅ 确认发布 ｜ [2] ✏️ 改元数据 ｜ [3] 🎨 重做封面 ｜ [4] ❌ 取消
-⑧ pnpm editor publish <id> --title "..." [--summary ...] [--cover ...] [--tags ...] [--references-file <json>]
+⑨ pnpm editor publish <id> --title "..." [--summary ...] [--cover ...] [--tags ...] [--references-file <json>]
    → 发布成功：状态 → published + 站内通知 + 邮件 + 草稿自动清理
 ```
 
