@@ -16,8 +16,8 @@
 
 1. 把 `prompts/selection.md` **原样**作为 LLM 系统提示词；
 2. 逐条用各用例的 `dialogue` 作为用户消息运行；
-3. 对比输出与 `expected`（verdict / code / dimension / new_knowledge_direction；
-   moment_present = moment.quote 非空；spine_complete = spine_required 非空）；
+3. 对比输出与 `expected`（verdict / code / dimension；
+   moment_present = 创作建议中含逐字核心时刻；spine_complete = 创作建议中列出承重墙回合）；
 4. 任一用例不匹配 → 说明改动引入回归，修完再合并。
 
 ## 说明

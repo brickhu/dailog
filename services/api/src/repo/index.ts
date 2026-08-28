@@ -482,7 +482,6 @@ export interface GuestVoiceSampleRow {
   guestId: string;
   language: string;
   audioKey: string;
-  referenceId: string | null;
   transcript: string | null;
 }
 
@@ -491,12 +490,12 @@ export interface GuestsRepo {
   list(): Promise<{ id: string; platform: string; name: string; avatar: string | null; intro: string | null; url: string | null }[]>;
   /** 嘉宾详情（按 id = platform 值，公开详情页用） */
   getById(id: string): Promise<{ id: string; platform: string; name: string; avatar: string | null; intro: string | null; url: string | null } | null>;
-  /** 嘉宾音频采样：按语种取（本地 TTS 同语种优先注入）；无该语种 → null（调用方兜底任意语种） */
+  /** 嘉宾音频采样：按语种取（TTS 同语种优先注入）；无该语种 → null（调用方按 en 兜底） */
   voiceSampleByLanguage(guestId: string, language: string): Promise<GuestVoiceSampleRow | null>;
-  /** 兜底：该嘉宾任意语种采样（缺目标语种时用） */
+  /** 任意语种采样（/v1/editor/samples/guest/:id/audio 参考音频下载用，无语言参数） */
   voiceSampleAny(guestId: string): Promise<GuestVoiceSampleRow | null>;
   /** 管理录入/更新（guest_id + language 唯一，upsert） */
-  upsertVoiceSample(row: { guestId: string; language: string; audioKey: string; referenceId?: string | null; transcript?: string | null }): Promise<void>;
+  upsertVoiceSample(row: { guestId: string; language: string; audioKey: string; transcript?: string | null }): Promise<void>;
   /** 更新嘉宾称呼/简介（guests 表——节目中的称呼服务端配置） */
   update(id: string, row: { name?: string; intro?: string | null }): Promise<void>;
   /** 管理列表（join guests 展示名） */
@@ -506,7 +505,6 @@ export interface GuestsRepo {
     guestName: string;
     language: string;
     audioKey: string;
-    referenceId: string | null;
     transcript: string | null;
   }[]>;
 }
@@ -639,7 +637,6 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             guestId: schema.guestVoiceSamples.guestId,
             language: schema.guestVoiceSamples.language,
             audioKey: schema.guestVoiceSamples.audioKey,
-            referenceId: schema.guestVoiceSamples.referenceId,
             transcript: schema.guestVoiceSamples.transcript,
           })
           .from(schema.guestVoiceSamples)
@@ -657,7 +654,6 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             guestId: schema.guestVoiceSamples.guestId,
             language: schema.guestVoiceSamples.language,
             audioKey: schema.guestVoiceSamples.audioKey,
-            referenceId: schema.guestVoiceSamples.referenceId,
             transcript: schema.guestVoiceSamples.transcript,
           })
           .from(schema.guestVoiceSamples)
@@ -671,13 +667,11 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           guestId: row.guestId,
           language: row.language,
           audioKey: row.audioKey,
-          referenceId: row.referenceId ?? null,
           transcript: row.transcript ?? null,
         }).onConflictDoUpdate({
           target: [schema.guestVoiceSamples.guestId, schema.guestVoiceSamples.language],
           set: {
             audioKey: row.audioKey,
-            referenceId: row.referenceId ?? null,
             transcript: row.transcript ?? null,
           },
         });
@@ -698,7 +692,6 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             guestName: schema.guests.name,
             language: schema.guestVoiceSamples.language,
             audioKey: schema.guestVoiceSamples.audioKey,
-            referenceId: schema.guestVoiceSamples.referenceId,
             transcript: schema.guestVoiceSamples.transcript,
           })
           .from(schema.guestVoiceSamples)

@@ -18,7 +18,6 @@ interface VoiceSampleRow {
   guestName: string;
   language: string;
   audioKey: string;
-  referenceId: string | null;
   transcript: string | null;
 }
 

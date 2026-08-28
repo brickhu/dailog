@@ -7,7 +7,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { EditorConfig } from "./lib.js";
-import { api, draftDir } from "./lib.js";
+import { api, draftDir, writeProgress } from "./lib.js";
 
 /** 读取草稿 quality.json 的拒审原因（Step A reject.feedback 落盘）；无则 null */
 function qualityReason(id: string): string | null {
@@ -42,6 +42,7 @@ export async function batchReject(config: EditorConfig, args: string[]): Promise
     }
     try {
       await api(config, `/v1/editor/submissions/${id}/reject`, { method: "POST", body: { reason } });
+      writeProgress(id, "rejected"); // 拒审 = 终态：不计入概览待处理（见 RES）
       ok++;
       console.log(`  ✅ ${id.slice(0, 8)}… 已拒审（原因：${reason.length > 40 ? reason.slice(0, 40) + "…" : reason}）`);
     } catch {

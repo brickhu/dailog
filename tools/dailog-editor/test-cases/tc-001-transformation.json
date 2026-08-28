@@ -1,6 +1,6 @@
 {
   "id": "tc-001",
-  "name": "转变弧线型（新知·向内）——应通过",
+  "name": "转变弧线型（认知·向内）——应通过",
   "dialogue": [
     {
       "role": "user",
@@ -25,8 +25,7 @@
   ],
   "expected": {
     "verdict": "pass",
-    "dimension": "新知",
-    "new_knowledge_direction": "向内",
+    "dimension": "认知",
     "moment_present": true,
     "spine_complete": true
   }

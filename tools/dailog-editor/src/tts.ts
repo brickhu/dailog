@@ -1,7 +1,7 @@
 // 整集语音合成（multi speaker——官方多说话人接口）：
 //   pnpm editor tts <submissionId> --script <script.json> [--language zh] [--guest <platform>]
-//   · 默认：整集一次合成 → drafts/{submissionId}/full.mp3
-//   · --parts：按 script.json 段落的 part 字段分 3 段独立合成（1=开场+定向 2=对谈 3=落点+收束）
+//   · 分段合成 --parts 为标准流程（片头插在点题与对谈之间，merge 需要 part1/2/3）；不带 --parts 时整集一次合成 → full.mp3（旧流程兜底）
+//   · --parts：按 script.json 段落的 part 字段分 3 段独立合成（1=点题 2=对谈 3=落点+收束）
 //     → 每段一次请求（part1/2/3.mp3）→ 拼接 full.mp3（段间 0.6s 静音）——长稿输入更短，单段可独立重做
 //   · --part <n>：只重跑第 n 段（part{n}.mp3）→ 与已有段落重新拼接 full.mp3（省配额）
 //   → POST /v1/editor/tts（JSON：submissionId + language + guestId + segments）
@@ -15,8 +15,8 @@ import { api, draftDir, readScript, writeProgress, type ScriptSegment } from "./
 
 /** 平台枚举（guests 表；--guest 取值） */
 const PLATFORMS = ["claude", "chatgpt", "deepseek", "gemini", "kimi", "doubao", "tongyi", "perplexity", "grok"];
-/** part 1-3 分段标签（与 script-craft 五拍映射：①+②=1，③=2，④+⑤=3） */
-const PART_LABELS = ["", "开场+定向", "对谈", "落点+收束"];
+/** part 1-3 分段标签（1=点题 2=对谈 3=落点+收束） */
+const PART_LABELS = ["", "点题", "对谈", "落点+收束"];
 
 interface ParsedArgs {
   submissionId: string;
@@ -52,7 +52,7 @@ function parseArgs(args: string[]): ParsedArgs {
   if (partIdx >= 0) {
     part = Number(args[partIdx + 1]);
     if (!Number.isInteger(part) || part < 1 || part > 3) {
-      console.error("[tts] --part 取值 1|2|3（1=开场+定向 2=对谈 3=落点+收束）");
+      console.error("[tts] --part 取值 1|2|3（1=点题 2=对谈 3=落点+收束）");
       process.exit(1);
     }
   }
@@ -130,7 +130,7 @@ export async function tts(config: EditorConfig, args: string[]): Promise<void> {
   // 分段模式：按段落的 part 字段分组（script-craft 生成时标注；缺省视为 part 1）
   const maxPart = segments.reduce((m, s) => Math.max(m, s.part ?? 1), 1);
   if (maxPart > 3) {
-    console.error("[tts] part 仅支持 1-3（1=开场+定向 2=对谈 3=落点+收束）——脚本需由新版 script-craft 生成（段带 part 字段）");
+    console.error("[tts] part 仅支持 1-3（1=点题 2=对谈 3=落点+收束）——脚本需由新版 script-craft 生成（段带 part 字段）");
     process.exit(1);
   }
   const targets = part !== null ? [part] : [1, 2, 3];

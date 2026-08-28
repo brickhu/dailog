@@ -1,73 +1,96 @@
 ---
 name: dailog-editor
-description:
-  dailog 编辑本地工作流（一条龙）。用户（编辑）给出投稿 ID、或让本技能拉取待审队列时：
-  拉取队列/详情 → 本地拉取网页内容 → 按 dailog 标准生成脚本 → Fish TTS 合成语音 →
-  ffmpeg 合成 → 节目信息与封面 → 一次性上传发布（或拒审）。覆盖本质版编辑管线的全部动作。
-  触发方式两种：① 显性触发（编辑投稿/批量处理/overview 等关键词）；② "dailog" 或
-  "dailog overview" 直接触发工作台概要（环境 + 编辑账号 + 三类待办计数）。
-triggers:
-  - 编辑投稿
-  - 审核投稿
-  - 制作节目
-  - 拉取队列
-  - 投稿队列
-  - 待审投稿
-  - 生成脚本
-  - 合成语音
-  - 发布节目
-  - 拒审
-  - 重新生成节目
-  - 重新制作节目
-  - 重做节目
-  - 更新已发布节目
-  - 重新跑一遍工作流
-  - regenerate
-  - republish
-  - 编辑工作流
-  - editor
-  - publish episode
-  - dailog 编辑
-  - dailog overview
-  - dailog
-  - overview
-  - 概要
-  - 工作台概要
-  - 当前有什么待办
+description: >
+  dailog是一个将「人机聊天记录」模拟为真人采访AI的播客，该SKILL是面向编辑人员的本地管理工作台。该技能承载如下几个方面的功能：
+  1. 概要：概要信息查询，例如N条待处理投稿，用户多少... 通常通过"dailog","dailog overview"，"/dailog-editor"显性触发；
+  2. 采集：批量采集用户的投稿的原始聊天记录，用户投稿本质是分享一个「人机聊天记录」的URL，通过URL匹配采集器获取具体的聊天记录,通常通过"采集"，"采集:{ID}"触发；
+  3. 脚本：该工作流细分为2步：① 确定选题方向；② 脚本生成（内容 + 听感打磨）；通常通过"生产脚本:{ID}"，"生成{ID}的脚本"触发，用户直接输入"生成脚本"拉取列表选号触发；
+  4. TTS：调用Fish-Audio的api接口生成语音（分段合成 --parts——片头插在点题与对谈之间，支持单段重跑），然后通过本地ffmpeg合成语音文件(m4a)，并调用本地播放器(首选quicktime player)打开播放，通常通过"TTS:{ID}"，"生成语音:{ID}"触发，用户直接输入"生成语音"，"TTS"拉取列表选号触发；
+  5. 发布：将已生成了语音的投稿生成为节目的封面，标题，简介，摘要，参考信息，等结构化数据，让用户确认后发布，通过"发布"选号触发或"发布:{ID}"单条触发；
+  6. 管理：对已经发布的节目进行重新生成，修改封面，标题等操作；通过"修改标题:{ID}","修改简介:{ID}","重新生成:{ID}"等方式触发；
+  7. 配置：编辑人员可在agent工作台中配置播放列表，AI嘉宾信息，AI嘉宾音色等，通常通过"配置XX"触发
 ---
 
-# Dailog Editor · 编辑本地 Agent 工作流（一条龙）
+# Dailog Editor
 
-**本质版架构**：用户只提交 URL + 声音采样 → 落库待审核；编辑在本地 Agent 完成内容拉取、脚本、
-语音、合成、封面，成品一次性上传发布。服务端不做任何采集/生成。
+面向Dailog编辑人员的本地管理工作台，承载 **7 项功能**（与 description 一一对应）：
+**① 概要（OV）｜ ② 采集（CL）｜ ③ 脚本（SC）｜ ④ TTS｜ ⑤ 发布（PUB）｜ ⑥ 管理（MGT）｜ ⑦ 配置（CFG）**。
+全部动作由 Agent + CLI（`pnpm editor <cmd>`）完成。
 
-```
-用户投稿（site）: URL（合法性+触达性检查）+ 采样 → submissions(status=submitted)
-编辑（本技能）: list → detail → fetch 解码（阶段 0）→ 生成（阶段 1：选题/草稿/终稿三确认门）
-              → tts → merge（试听）→ cover → **语音确认门（试听通过才进入元数据）**
-              → 发布（阶段 2：元数据生成 + 发布确认门）→ publish / reject
-```
+**文档结构（片段切分）**：本文件是**索引枢纽**——只含各功能**定义 / 用途 / 触发**与全局前置；
+每个功能的操作细节（流程 / 输入 / 确认门 / 输出 / 错误处理）在独立分册 `docs/*.md`，见「编号规范」文件索引表。
 
-## 前置条件
+1. CLI：命令入口 `pnpm editor <cmd>`（根目录）；源码 `tools/dailog-editor/`，CLI 是打通本地 Agent 工作台和 dailog API 之间的桥梁
+2. 该技能仅面向拥有编辑权限的账号开放；Agent 对话触发 skill 时，通过 CLI 的用户授权配对将 API bearer key 注入会话
+3. 技能配套目录缓存工作流临时文件/日志/环境变量，位于项目根 `.dailog-editor/`（gitignored）
+4. 技能区分环境：环境清单 `.dailog-editor/envs.json`（模板 `tools/dailog-editor/templates/envs.example.json`）
+5. 涉及 Fish Audio / Pexels 密钥：从 `.dailog-editor/.env` 获取（gitignored，chmod 600）
+6. DSH 沙箱 pnpm EPERM（版本不匹配）→ 直调 `node .agents/skills/dailog-editor/scripts/run.js`
+7. 本机有 `ffmpeg` / `ffprobe`（采样转码 + 合成）；草稿目录 `.dailog-editor/drafts/` 自动创建
 
-- `.dailog-editor/.env`（Fish/Pexels 密钥）与 `.dailog-editor/envs.json`（**环境清单**，
-  模板 `tools/dailog-editor/templates/envs.example.json`）已配置
-- 本机有 `ffmpeg` / `ffprobe`（采样转码 + 合成）；草稿目录 `.dailog-editor/drafts/` 自动创建
-- 命令入口：`pnpm editor <cmd>`（根目录）；源码 `tools/dailog-editor/`
-- DSH 沙箱 pnpm EPERM（版本不匹配）→ 直调 `node .agents/skills/dailog-editor/scripts/run.js`
-  （详见 `reference/toolchain-notes.md`）
+## 名词口径（全文统一）
 
-## 工作台概要（dailog / overview 直接触发）
+| 名词 | 统一口径 |
+|---|---|
+| 投稿（submission） | 用户分享的「人机聊天记录」URL（附主持人采样）；全流程以 `submissionId` 驱动 |
+| 采集 | 拉取投稿 URL 并**解码提取对话原文**（命令 `fetch`）；**默认批量**（`batch` 并发） |
+| 对话原文 | `dialogue.json`（`[{role, content}]`），脚本 / TTS / 发布的唯一事实来源 |
+| 主持人（host） | 即投稿人；脚本 host 角色，开场自我介绍用称呼 `callName` |
+| 嘉宾（guest） | AI 对谈对象（AI 嘉宾）；声线在服务端配置 |
+| 声线 | 嘉宾的声音配置（即「音色」）；`guests` / `guest-voice` / `guest-set` 管理 |
+| 节目（episode） | 一个期次；「期号」= 节目编号；以 `episodeId` 定位 |
+| 脚本 | 三段对谈稿（part1 点题 / part2 对谈 / part3 落点+收束）；两步：**选题方向 → 脚本生成（内容+听感打磨）** |
+| TTS（生成语音） | 分段调用 Fish TTS 生成语音 + ffmpeg 合成 m4a + 本地播放器试听 |
+| 发布 | 为已生成语音的投稿制作**封面 + 元数据**（标题/简介/摘要/标签/分类/金句/参考信息/封面关键词），确认后发布（publish）或拒审（reject） |
+| 管理 | 已发布节目的重新生成、修改标题/简介/封面、下线申请审批 |
+| 配置 | 在 Agent 工作台配置播放列表 / AI 嘉宾信息 / AI 嘉宾声线 |
+| 确认门 | 选题 / 终稿 / 语音 / 发布 四道确认门，选项编号收口、统一选号格式（RULES-10） |
+| 拒稿（拒审） | 拒绝一篇投稿；原因必填且具体（投稿人可见）；规范见 REJ |
+| 草稿目录 | `.dailog-editor/drafts/{submissionId}/`，存全部中间产物 |
 
-用户说「dailog」「overview」「概要」等时——**直接展示工作台概要**（不进入完整流程）：
+## 编号规范（索引体系 + 文件索引）
 
-```
-① 会话初始化（选环境 → auth-status，未配对先引导 login）
-② pnpm editor overview → 展示：环境 / 编辑 / 1.待审批 / 2.脚本待生成语音 / 3.语音待发布 / 4.下线申请
-   → 选号：[1] 📥 审核投稿 ｜ [2] 🎙️ 制作脚本 ｜ [3] 🚀 发布 ｜ [4] 🚫 下线申请审批 ｜
-           [5] 📋 节目/播放列表 ｜ [6] ⚙️ 其他（批量/嘉宾声线/重做…）
-③ 按所选编号进入对应流程
-```
+- **章节码**：OV 概要 / CL 采集 / SC 脚本 / TTS / PUB 发布 / MGT 管理 / CFG 配置；附录 BATCH 批量 / REJ 拒稿 / RES 进度恢复 / DRAFT 草稿目录 / TOOL 工具链 / RULES 红线
+- **节码**（每章固定 6 段式；**「定义 / 用途及触发机制」为主文档索引段，不参与编号**，其余 5 节编码，见分册）：
+  - `<章节码>-FLOW` 流程 / 原则 / CLI 调用逻辑
+  - `<章节码>-IN` 输入规范与依赖
+  - `<章节码>-GATE` 确认门选项与输出模板（内含具体门 `<章节码>-GATE-<n>`）
+  - `<章节码>-OUT` 输出物存放与命名标准
+  - `<章节码>-ERR` 错误处理
+- **步骤码**：`<章节码>-STEP-<n>`（如 SC-STEP-1 选题方向、TTS-STEP-2 合成、PUB-STEP-3 发布确认门）
+- **确认门码**：`<章节码>-GATE-<n>`（SC-GATE-1 选题 / SC-GATE-2 终稿 / TTS-GATE-1 语音 / PUB-GATE-1 发布）
+- **红线码**：RULES-1..9
+- **索引层级**：`SC-GATE-2`（终稿确认门）⊂ `SC-GATE`（确认门节）⊂ `SC`（脚本章节）；引用写作「见 SC-GATE-2」「见 REJ」「见 RULES-9」
+
+**文件索引表**（所有分册相对本文件路径，产物同步到 `.agents/skills/dailog-editor/docs/`）：
+
+| 章节 | 码 | 分册 | 步骤 | 确认门 | 节码 |
+|---|---|---|---|---|---|
+| 概要 | OV | docs/OV.md | OV-STEP-1..3 | — | OV-FLOW / OV-IN / OV-GATE / OV-OUT / OV-ERR |
+| 采集 | CL | docs/CL.md | CL-STEP-1..3 | — | CL-FLOW / CL-IN / CL-GATE / CL-OUT / CL-ERR |
+| 脚本 | SC | docs/SC.md | SC-STEP-1..2 | SC-GATE-1..2 | SC-FLOW / SC-IN / SC-GATE / SC-OUT / SC-ERR |
+| TTS | TTS | docs/TTS.md | TTS-STEP-1..3 | TTS-GATE-1 | TTS-FLOW / TTS-IN / TTS-GATE / TTS-OUT / TTS-ERR |
+| 发布 | PUB | docs/PUB.md | PUB-STEP-1..3 | PUB-GATE-1 | PUB-FLOW / PUB-IN / PUB-GATE / PUB-OUT / PUB-ERR |
+| 管理 | MGT | docs/MGT.md | MGT-STEP-1..3 | 复用 SC/TTS/PUB 门 | MGT-FLOW / MGT-IN / MGT-GATE / MGT-OUT / MGT-ERR |
+| 配置 | CFG | docs/CFG.md | CFG-STEP-1..2 | — | CFG-FLOW / CFG-IN / CFG-GATE / CFG-OUT / CFG-ERR |
+| 批量流水线 | BATCH | docs/BATCH.md | BATCH-STEP-1..9 | 复用 TTS-GATE-1 + PUB-GATE-1 | — |
+| 拒稿规范 | REJ | docs/REJ.md | — | — | — |
+| 进度与恢复 | RES | docs/RES.md | — | — | — |
+| 草稿目录 | DRAFT | docs/DRAFT.md | — | — | — |
+| 工具链要点 | TOOL | docs/TOOL.md | — | — | — |
+| 红线 | RULES | docs/RULES.md | RULES-1..9 | — | — |
+
+## Triggers
+
+| 分类 | 主关键词 | 说明 | 关键词变体 | 分册 |
+|---|---|---|---|---|
+| 概要（OV） | `dailog` | 触发工作台概要 | `/dailog-editor`, `dailog overview`, `dailog概要`, `概要` | docs/OV.md |
+| 采集（CL） | `采集` | 批量按投稿 URL/ID 拉取原始聊天记录并解码落盘（fetch → dialogue.json，默认批量） | `采集:{ID}`、`采集 {ID}`、直接粘贴投稿 URL | docs/CL.md |
+| 脚本（SC） | `生成脚本` | 进入脚本工作流：选题 → 终稿（两确认门） | `生产脚本:{ID}`、`生成{ID}的脚本`、`脚本:{ID}` | docs/SC.md |
+| TTS | `TTS` | 分段调用 Fish TTS 生成语音，ffmpeg 合成 m4a 并本地试听 | `生成语音`、`TTS:{ID}`、`生成语音:{ID}` | docs/TTS.md |
+| 发布（PUB） | `发布` | 生成封面/标题/简介/摘要/元数据，确认后发布或拒审 | `发布:{ID}`、`发布 {ID}`、`拒审` | docs/PUB.md |
+| 管理（MGT） | `重新生成` | 已发布节目的重做与修改（期号/链接不变） | `修改标题:{ID}`、`修改简介:{ID}`、`重新生成:{ID}`、`重新生成第 N 期` | docs/MGT.md |
+| 配置（CFG） | `配置` | 在 Agent 工作台配置播放列表 / AI 嘉宾信息 / 嘉宾音色（playlist / guests / guest-voice / guest-set） | `配置播放列表`、`配置嘉宾`、`配置嘉宾音色`、`配置音色`、`配置声线`、`播放列表`、`playlist`、`歌单` | docs/CFG.md |
 
 ## 会话初始化（每个新对话必做——环境与配对是会话级状态）
 
@@ -89,269 +112,89 @@ triggers:
   ——把 URL 给编辑在浏览器打开，编辑把页面显示的配对码贴回对话，agent 用 `login --code` 提交；
   不得 GET 授权页偷码、不得伪造/编造配对码，必须等编辑回贴
 
-## 工作流（一条龙）
+> 以下所有 `pnpm editor` 命令均带会话选定环境（`--env <环境>` 或 `DAILOG_ENV`），下文省略。
+> **功能间关系（不作串行绑定）**：CL（采集）为 SC/TTS/PUB 提供对话原文；SC（脚本）终稿两关（SC-GATE-1/2）通过后
+> 进 TTS；TTS 语音经试听确认（TTS-GATE-1）后进 PUB（发布）。各功能独立触发、独立完成。
 
-```
-用户: "审核投稿" / 给 submissionId / 粘贴 URL
-  ↓ ① 会话初始化（选环境 → auth-status）
-  ↓ ② 拉取队列或详情
-  ↓ ③ 阶段 0 · 解码（独立，不跑生成）：pnpm editor fetch <id> 解码落盘
-  │    → 呈现列表（ID + 投稿人 + 标题 + URL）→ 编辑输入 ID 进入生成工作流
-  ↓ ④ 阶段 1 · 生成（单条编号驱动，子代理执行，见 ④）：
-  │    1.1 审稿+选题（dailog-select）→ 选题确认门（选号/拒稿）
-  │    1.2 脚本草稿（dailog-draft）→ 草稿确认门（下一步/修改/拒稿）
-  │    1.3 听感打磨（dailog-polish）→ 终稿确认门（确认/修改/拒稿）
-  │    → 进 tts 前内容核查（fact_check_list / privacy_redactions）+ 嘉宾声线预检
-  ↓ 1.4 pnpm editor tts <id> --script script.json --language <lang> [--guest <platform>]
-  ↓ 1.5 pnpm editor merge <id> --language <lang>（final.m4a；合成完成自动用 QuickTime 打开试听）
-  ↓ 1.6 pnpm editor cover <id> [--guest <platform>]（封面 Read 展示给编辑）
-  ↓ 阶段 2 · 发布（节目标号驱动）：
-  │    2.1 元数据生成（dailog-meta → metadata.json，基于终稿）
-  │    2.2 发布确认门：元数据逐项 + 封面 + 试听 → 编辑确认 → publish / reject
-  ↓ 汇报：期号/节目链接 或 拒审原因
-```
+## OV 概要（Overview）
 
-> 本工作流中所有 `pnpm editor` 命令均带会话选定环境（`--env <环境>` 或 `DAILOG_ENV`），下文省略。
+**定义 / 用途及触发机制**
+定义：概要信息查询——环境 / 网站 / 账号 / 共计投稿与发布 / 采集·脚本·语音·节目 四管道待处理与共计 / 待处理选项 / 其他功能入口。
+用途：用户说「dailog」「overview」「概要」等时——**直接展示工作台概要**（不进入完整流程），提供各功能的入口导航。
+触发：`dailog`、`dailog overview`、`/dailog-editor`、`概要`。
 
-### ② 队列与详情
+→ 完整操作（OV-FLOW 流程 / OV-IN 输入 / OV-GATE 选号菜单 / OV-OUT 输出 / OV-ERR 错误）：见 `docs/OV.md`
 
-```bash
-pnpm editor list                  # 待审队列（先到先审；⚠️无采样 = 无法克隆主持人音色）
-pnpm editor detail <submissionId> # URL/投稿人/主持人称呼(callName)/节目建议/采样 transcript/画像
-pnpm editor removal               # 节目下线申请队列（approve 下架+通知 / reject 拒绝+通知）
-```
+## CL 采集（Collect）
 
-### ③ 阶段 0 · 解码（独立步骤，不跑生成工作流）
+**定义 / 用途及触发机制**
+定义：批量采集用户投稿的原始聊天记录——投稿即「人机聊天记录」URL，通过 URL 匹配采集器解码提取对话原文；**默认批量**。
+用途：把用户投稿（人机聊天 URL）拉取并**解码提取对话原文**（dialogue.json），作为脚本 / TTS / 发布的唯一事实来源；默认批量并发。
+触发：`采集`、`采集:{ID}`、直接粘贴投稿 URL。
 
-- 命令：`pnpm editor fetch <id>` → 拉取投稿 URL 并解码落盘草稿目录：`page.html`（原始 HTML）/
-  `page.txt`（清洗后正文）/ `dialogue.json`（`[{role, content}]`）
-- 本步只做**提取与解码**（LLM 按 URL 匹配内容解码器），**不跑任何生成**；解码完成即落盘
-- **完成后呈现列表**：ID + 投稿人 + 标题（页面标题，无则省略）+ URL——编辑**输入 ID** 进入阶段 1
-- 平台分派 / 代理兜底 / 浏览器兜底 / 解码规则自进化 / 平台经验库：**详见 `reference/fetch-decoding.md`**
-- 拉取失败（403/超时/失效）→ 如实汇报，引导编辑走浏览器控制台兜底
+→ 完整操作（CL-FLOW 流程 / CL-IN 输入 / CL-GATE 输出模板 / CL-OUT 输出 / CL-ERR 错误）：见 `docs/CL.md`
 
-### ④ 阶段 1 · 生成工作流（单条编号驱动，子代理执行）
+## SC 脚本（Script）
 
-> **为什么用子代理**：对话原文（15-20k tokens）与提示词文件（合计 ~14k tokens）只进子代理上下文；
-> 结果由子代理**直接写盘**，主会话只收一行校验摘要；展示内容从草稿文件读出放回复正文。
-> 单期主会话增量 ~15-25k。**子代理完整 prompt 模板（1.1/1.2/1.3 + 2.1）见 `reference/subagent-templates.md`**
-> （路径按实际情况补全：<skillDir>=.agents/skills/dailog-editor，<drafts>=.dailog-editor/drafts）。
+**定义 / 用途及触发机制**
+定义：脚本工作流细分 2 步——① 确定选题方向（SC-STEP-1）；② 脚本生成（内容 + 听感打磨，SC-STEP-2）。
+用途：把对话原文制作成**三段对谈脚本**（part1 点题 / part2 对谈 / part3 落点+收束），两步各带确认门；全部通过才进 TTS。
+触发：`生产脚本:{ID}`、`生成{ID}的脚本`；直接输入 `生成脚本` 拉取列表选号。
 
-| 步骤 | 子代理 | 输入 | 输出（写盘） | 确认门 |
-|---|---|---|---|---|
-| 1.1 审稿+选题 | `dailog-select` | selection.md + dialogue.json + 节目建议 | selection.json（content_summary + ideas[1..N] 各带 score）或 quality.json | ① 选题 |
-| 1.2 脚本草稿 | `dailog-draft` | draft.md + five-beats.md + templates.md + chosen-idea.json + dialogue.json | script-draft.json（三段纯文本无标签） | ② 草稿 |
-| 1.3 听感打磨 | `dailog-polish` | polish.md + script-draft.json + chosen-idea.json + dialogue.json | script.json（终稿带标签 + optimization_summary） | ③ 终稿 |
+→ 完整操作（SC-FLOW 流程 / SC-IN 输入 / SC-GATE 两确认门 SC-GATE-1..2 / SC-OUT 输出 / SC-ERR 错误）：见 `docs/SC.md`
 
-- 1.1 确认门编辑选号 N → 主会话把 ideas[N-1] 写入 `drafts/{id}/chosen-idea.json`（角度锚点）
-- **打回重跑**：听感反馈（呈现层）→ 重跑 1.3；结构反馈（换角度/切主题/加删回合）→ 重跑 1.2；
-  换选题角度 → 回 1.1 重新选号。修订指令：prompt 末尾追加「修订指令：<编辑要求>」
-- **内容规范以提示词文件为准**（主会话不重复载入）：
-  - `prompts/selection.md`（1.1）：G1-G5 闸门 + 时刻门（问题归位测试）+ 逻辑骨架 + 价值维度 + 打分
-  - `prompts/draft.md` + `five-beats.md` + `templates.md`（1.2）：五拍结构 + 四模板选型 → 三段草稿
-  - `prompts/polish.md`（1.3）：情绪设计 + 现场感铁律 + 话题转移 + 检查清单（不输出元数据）
-  - `prompts/meta.md`（2.1 发布准备）：基于**终稿**生成 title/summary/description/tags/coverKeywords/category/references/highlights
-  - 产物在 `.agents/skills/dailog-editor/prompts/`，源码 `tools/dailog-editor/prompts/`
-- **提示词保真**：提示词文件由**生成子代理原样读取**作为系统提示词，任何人不许改写压缩
-- **节目建议（角度锚点）**：detail 的「节目建议」是用户呈现意图的最强信号——1.1 以它为角度约束
-  （时刻与骨架落在建议路径上），冲突取舍写进 suggestion_decision；1.2/1.3 经 chosen-idea.json
-  继承，脚本角度不得偏离（polish.md 铁律 6）
+## TTS 生成语音（Voice）
 
-#### 确认门（阶段 1 三关：选题 → 草稿 → 终稿，逐关确认）
+**定义 / 用途及触发机制**
+定义：调用 Fish-Audio API 生成语音（分段合成 `--parts` 为标准流程——片头插在点题与对谈之间；整集 full.mp3 仅旧流程兜底）→ 本地 ffmpeg 合成 m4a → 本地播放器（QuickTime）打开试听。
+用途：把终稿脚本（script.json）合成可发布的语音成品（final.m4a），本地试听确认。
+触发：`TTS:{ID}`、`生成语音:{ID}`；直接输入 `生成语音`、`TTS` 拉取列表选号。
 
-> **交互**：选项编号呈现，编辑点击/回复编号即可；修改类选项附一句说明。
-> **呈现通道红线（所有环境通用，GUI 尤甚）**：一切面向编辑的展示——内容概括 / 选题思路 / **脚本
-> 草稿与终稿全文** / 配套产物 / 封面图（Read 图片） / 节目元数据——**必须出现在 agent 回复正文**
-> （脚本全文单个 code block 整篇）；**禁止用工具输出（console.log / 命令 stdout / 子代理返回）
-> 承载展示**——GUI 里工具输出默认折叠、对编辑不可见（编辑会问「在哪儿？看不到」）。子代理 JSON
-> 直接写盘，主会话不打印全文；工具输出只用于校验与调试。
+→ 完整操作（TTS-FLOW 流程 / TTS-IN 输入 / TTS-GATE 语音确认门 TTS-GATE-1 / TTS-OUT 输出 / TTS-ERR 错误）：见 `docs/TTS.md`
 
-```
-三关逐关确认，任何一关打回即重跑对应子代理；全部通过才进 tts（1.4）。
-（元数据属发布层：阶段 2 发布确认门与封面/试听一并确认，见下。）
+## PUB 发布（Publish）
 
-  ① 选题确认门（1.1 pass 后）：
-     · 展示：原文内容概括（3-5 句）+ 选题思路列表（1..N，每个：why_this_idea + title_draft +
-       score，按得分排序，推荐标 ⭐）
-     · 选项：[1..N] ✅ 选第 N 个思路 ｜ [R] ❌ 拒稿 → reject ｜ [M] ✏️ 修改（附说明重跑 1.1）
-  ② 草稿确认门（1.2 生成后）：
-     · 展示：三段脚本草稿，分别三个 code block（part1 开场+点题 / part2 对话主题 / part3 落点+收尾），
-       纯文本无情绪标签 + draft_notes
-     · 选项：[1] ✅ 下一步 → 听感打磨 ｜ [2] ✏️ 提修改意见（附说明重跑 1.2）｜ [3] ❌ 拒稿
-  ③ 终稿确认门（1.3 生成后）：
-     · 展示：终稿全文（单个 code block 整篇）+ 优化总结（optimization_summary，逐条）
-       + 摘要（script-preview）作附加信息
-     · 嘉宾声线预检：进 tts 前 pnpm editor guests 确认目标嘉宾（--guest <platform>）有声线；
-       ⚠️ 无声线 → 本门内立即告知编辑（上传声线/换有声线嘉宾/暂停），不得闷头跑 tts 到 422
-     · 质量自检：现场感/角度保真/结构对照/转场 + **称呼核对（开场自我介绍 = detail 的
-       callName，非「主持人」泛称）** + **听众视角抽查（host 抛出符号/术语/专名前有无承接；
-       二人对话逻辑是否接得住）**（对照 polish.md 本质节 + 铁律 5/6/7 + 检查清单）——
-       不合格打回重生成
-     · 选项：[1] ✅ 确认 → tts ｜ [2] ✏️ 提交修改意见（听感，附说明）→ 重跑 1.3 ｜
-       [3] ✏️ 结构反馈（附说明）→ 重跑 1.2 ｜ [4] ❌ 拒稿
-```
+**定义 / 用途及触发机制**
+定义：将已生成语音的投稿生成为封面、标题、简介、摘要、参考信息等结构化数据，让编辑确认后发布。
+用途：为已通过语音确认的投稿制作**封面 + 元数据**，经发布确认门后发布（publish）或拒稿（reject）。
+触发：`发布` 选号 或 `发布:{ID}` 单条。
 
-**红线**：脚本未经三个确认门（选题/草稿/终稿）全部通过不得进入 tts；「把脚本展示出来我看看」
-是默认态（终稿全文默认在正文），不得让编辑催第二遍。发布层面（元数据/封面/试听）在阶段 2 发布确认门一并确认。
+→ 完整操作（PUB-FLOW 流程 / PUB-IN 输入 / PUB-GATE 发布确认门 PUB-GATE-1 / PUB-OUT 输出 / PUB-ERR 错误）：见 `docs/PUB.md`
 
-### 1.4 TTS（`pnpm editor tts <id> --script script.json [--language zh|en] [--guest <platform>]`）
+## MGT 管理（Manage）
 
-- 整集一次合成（multi speaker，默认）或 `--parts` 三段落合成（推荐：单段更稳、可 `--part n` 单段重跑）
-- **统一走服务端端点**——编辑本地不直连 Fish Audio，Fish key 只配在服务端；host=投稿人采样，
-  guest=服务端 guest_voice_samples 声线：`pnpm editor guests` 查看、`guest-voice <id> --audio <file>`
-  上传、`guest-set <id> --name` 改称呼；未配置声线 → 422，先在终稿确认门解决
-- 产物 `full.mp3`；失败：汇报错误（Fish 余额/限流/超时），按提示重跑该段（--part n）或整集
+**定义 / 用途及触发机制**
+定义：对已发布节目重新生成、修改封面/标题等。
+用途：已发布节目的重新生成（republish）、修改标题/简介/封面、下线申请审批。
+触发：`修改标题:{ID}`、`修改简介:{ID}`、`重新生成:{ID}`、`重新生成第 N 期`。
 
-### 1.5 合成（`pnpm editor merge <id> [--language zh|en]`）
+→ 完整操作（MGT-FLOW 流程 / MGT-IN 输入 / MGT-GATE 复用门 / MGT-OUT 输出 / MGT-ERR 错误）：见 `docs/MGT.md`
 
-- intro/outro 按语言自动匹配（`assets/intro.{lang}.mp3`，缺失 fallback 通用资产）；段间插 0.6s 静音
-- 产物 `final.m4a`；**merge 完成自动用 QuickTime Player 打开试听**（macOS）——**发布前必须试听**
-  （音色/断句/情绪标签）；异常 → 修好再发
+## CFG 配置（Config）
 
-### 1.5b 语音确认门（**试听通过后才进入阶段 2 元数据生成**）
+**定义 / 用途及触发机制**
+定义：在 Agent 工作台配置播放列表、AI 嘉宾信息、AI 嘉宾音色等。
+用途：在 Agent 工作台配置三类内容：播放列表（平台策展）、AI 嘉宾信息与声线。
+触发：`配置XX`（如 `配置播放列表`、`配置嘉宾`、`配置音色`）。
 
-- **顺序红线**：TTS/merge 出语音后，必须先经编辑试听确认，**通过后才允许开始 2.1 元数据生成**
-  （dailog-meta）——语音是内容核心，音色/断句/情绪不过关时先修（--part n 重跑单段或整集），
-  不浪费 token 生成注定要改的元数据
-- 交互：[1] ✅ 试听通过 → 进 1.6 封面 + 阶段 2 元数据 ｜ [2] 🔊 哪段有问题 → 重跑 tts --part n →
-  重新 merge 试听 ｜ [3] 🎨 顺带重做封面（1.6 亦可后置到发布确认门）
+→ 完整操作（CFG-FLOW 流程 / CFG-IN 输入 / CFG-GATE / CFG-OUT 输出 / CFG-ERR 错误）：见 `docs/CFG.md`
 
-### 1.6 封面（`pnpm editor cover <id> [--texture ...] [--colors "#hex,#hex"] [--guest <platform>] [--image-url <URL>]`）
+## 附录（跨功能机制）
 
-- 默认：纹理指令预置库随机（无 Pexels 依赖）→ 1400×1400 JPEG；居中「主持人称呼 × 嘉宾称呼」
-  （callName × guests 表 name，超宽自动缩字号，文字颜色按底色明暗）
-- 不满意 → `--image-url <URL>`（下载裁切）；**生成后立即把封面图 Read 展示给编辑**（确认环节再展示）
+| 附录 | 码 | 分册 | 说明 |
+|---|---|---|---|
+| 批量流水线 | BATCH | docs/BATCH.md | 批量采集 → 批量脚本 → produce，人工只在决策点介入（BATCH-STEP-1..9） |
+| 拒稿规范 | REJ | docs/REJ.md | 拒绝一篇投稿：发生点 / 原因规范 / 状态通知（被 SC-GATE、PUB-GATE、BATCH、MGT 引用） |
+| 进度与恢复 | RES | docs/RES.md | 会话中断不丢：progress.json 断点续跑 |
+| 草稿目录 | DRAFT | docs/DRAFT.md | 中间产物统一存放与发布后清理 |
+| 工具链要点 | TOOL | docs/TOOL.md | 运维记忆（callName / 采样匹配 / publish 无响应 / R2 / EPERM 等） |
+| 红线 | RULES | docs/RULES.md | RULES-1..9 跨功能底线（呈现通道 / 试听 / 确认门 / 拒稿原因等） |
 
-### 阶段 2 · 发布（节目标号驱动，与编辑确认后执行）
+## 使用提示
 
-> **前置红线**：阶段 2 必须在 **1.5b 语音确认门通过后**才开始——未经编辑试听确认的语音，
-> 不得进入 2.1 元数据生成（语音未确认时元数据生成属于浪费且顺序违规）。
+> **分册路径解析**：`docs/`、`reference/`、`prompts/` 均为技能根同级目录——源码 `tools/dailog-editor/{docs,reference,prompts}/`，产物 `.agents/skills/dailog-editor/{docs,reference,prompts}/`；
+> 文中 `docs/X.md` 相对技能根解析（<skillDir>=.agents/skills/dailog-editor，<drafts>=.dailog-editor/drafts）。
 
-**2.1 元数据生成（子代理 dailog-meta——发布准备，基于终稿）**：
-- 起子代理（模板见 `reference/subagent-templates.md`），读取 `prompts/meta.md` + script.json（终稿）+
-  chosen-idea.json + dialogue.json → 生成 title / summary / description / tags / coverKeywords /
-  category / references / highlights → 写入 `drafts/{id}/metadata.json`
-- **基于终稿**：金句逐字来自终稿 segments；脚本修改（重跑 1.2/1.3）后须重跑本步
-- 产物 metadata.json：publish 自动读取（description/highlights/category/summary；旧草稿 fallback script.json）
-
-**2.2 发布确认门（元数据 + 封面 + 试听，一并确认）**：
-- 展示（回复正文）：**metadata.json 全部字段逐项列出**（标题 / 简介 / 摘要 / 标签 / 分类 / 金句 /
-  references——references 外链须人工确认无编造，链接安全红线）+ **封面图 Read 直出** + 试听确认
-  （merge 已自动打开 final.m4a）——不要只给标题+封面
-- --description/--tags 可覆盖，与最终 title/category 不匹配则重生成一版再确认
-- 确认交互：[1] ✅ 确认发布 ｜ [2] ✏️ 改元数据（附说明）→ 重跑 2.1 ｜ [3] 🎨 重做封面 ｜
-  [4] 🔊 试听有问题（指出段）→ 重跑 tts --part n ｜ [5] ❌ 取消（改走 reject 或暂不发布）
-
-```bash
-pnpm editor publish <id> --title "…" [--description "…"] [--tags a,b] [--language zh]
-  [--guest claude] [--cover cover.jpg] [--audio final.m4a]
-pnpm editor reject <id> --reason "拒审原因（必填，投稿人可见）"
-```
-
-### ⑧b 重新生成已发布节目（republish：重做后更新，链接/期号不变）
-
-```
-用户: "重新生成第 N 期" / 给 episodeId / 给节目链接
-  ↓ ① 会话初始化 ② pnpm editor episodes [--match "关键词|期号"] 定位节目
-  ↓ ③ pnpm editor detail <submissionId>（确认原始对话/采样仍在；drafts/<id>/dialogue.json 可复用，
-  │     内容来源变化则先 fetch 刷新）
-  ↓ ④ 重跑生成工作流（与首期相同，可带修订指令）：1.1 选题 → 选题确认门 → 1.2 草稿 → 草稿确认门
-  │     → 1.3 终稿 → 终稿确认门
-  ↓ ⑤ tts → ⑥ merge（试听）→ **语音确认门（试听通过）** → ⑦ cover（Read 展示）
-  ↓ ⑧ 阶段 2：2.1 元数据生成（metadata.json）→ 2.2 发布确认门（元数据+封面+试听）
-  ↓ ⑨ pnpm editor republish <episodeId> --title "…" [--cover cover.jpg] [--tags a,b] [--guest <platform>]
-  ↓ ⑩ 汇报：期号/链接不变，内容已更新
-```
-
-要点：**不是新建期**——期号/slug/播放统计/收藏/精选保留，仅内容字段替换；publishedAt 刷新（列表前移，
-ETag 变化客户端重新拉取）；**republish 幂等**（重复调用只覆盖内容不产生重复期，重试安全——先确认
-目标 episodeId 正确）；无 cover 时保留旧封面；确认门照旧（阶段 1 三个确认门：选题/草稿/终稿 + 阶段 2 发布确认门：元数据+封面+试听）；
-服务端不自动通知投稿人（重做是内部动作）。
-
-## 批量处理（批量过滤器 → 选号 → 制作流水线）
-
-```
-① pnpm editor batch [--limit N]（并发提取，已提取跳过）→ 分组展示（✅/❌/⚠️ + url + email）
-   → 处置选号：[1] ✅ 组保留进自动生成 ｜ [2] ❌/⚠️ 组拒审（batch-reject）｜ [3] 人工处理 ｜ [4] 跳过
-② ✅ 组自动生成（无询问，子代理执行——每个投稿一个 dailog-select + dailog-draft + dailog-polish，
-   可并发；子代理直接写盘，主会话只收校验摘要）：
-   · 1.1 → pass：写 selection.json（无人工选号，自动取推荐思路 ideas[0] 写入 chosen-idea.json）；
-     reject：写 quality.json {pass:false, reason}
-   · 1.2+1.3 连续执行 → 写 script-draft.json + script.json（元数据在 produce 阶段生成）
-③ pnpm editor batch-scripts → 分组呈现（已生成/质量不过关/待生成）
-   → 处置选号：[1] ✅ 已生成脚本保留，进入阶段 2 ｜ [2] ❌ 质量不过关拒审（batch-reject）｜
-              [3] 人工处理 ｜ [4] 跳过
-④ 用户选号：pnpm editor produce --ids <id1,id2,...> [--language zh] [--guest <platform>]
-   → 逐个自动：tts（逐段）→ merge（intro/outro 按语言）→ cover（**produce 不含元数据生成**）
-   → 输出：final.mp3/final.m4a 路径 + 节目信息草稿（标题）
-⑤ 内容核查（进 tts 前必做）：对照 selection.json 的 fact_check_list 逐条核实（无法核实 → 删除断言）
-   与 privacy_redactions（逐条确认已泛化）——核查不通过 → 返回 1.3 修改脚本，不进 tts
-⑥ 确认点① 语音预览（**顺序红线：2.1 元数据生成必须在此之后**）：merge 已自动 QuickTime 试听 →
-   [1] ✅ 试听通过 → 进 2.1 元数据生成 ｜ [2] 🔊 哪段有问题 → 重跑 tts --part n → 重新 merge 试听
-⑦ 2.1 元数据生成（dailog-meta → metadata.json，仅对试听通过者）
-⑧ 发布确认门（确认点②）：metadata.json 逐项（标题/简介/摘要/标签/**references**/金句）+ **封面（Read 展示）**→
-   [1] ✅ 确认发布 ｜ [2] ✏️ 改元数据 ｜ [3] 🎨 重做封面 ｜ [4] ❌ 取消
-⑨ pnpm editor publish <id> --title "..." [--summary ...] [--cover ...] [--tags ...] [--references-file <json>]
-   → 发布成功：状态 → published + 站内通知 + 邮件 + 草稿自动清理
-```
-
-**要点**：机器批量跑（提取并发 → 脚本自动生成 → produce 流水线），人工只在两级决策点 + 两个确认点介入。
-
-## 播放列表（平台策展）
-
-```
-pnpm editor playlist list | create "<标题>" [--desc] [--picked] [--private]
-pnpm editor playlist episodes <id> | add <id> <episodeId|#期号> | remove <id> <episodeId>
-pnpm editor playlist reorder <id> <id1,id2,...> | pick/unpick <id> | public/private <id> | delete <id>
-pnpm editor playlist cover <id> [--texture ...] [--colors ...] [--image-url <URL>]
-```
-
-- 封面复用单集 cover 引擎 → 上传 R2（sharp 归一 1400²）；无自定义封面前端自动取首期封面
-- 节目引用支持 #期号；收录仅限已发布公开节目；删除级联清理条目
-
-## 进度与恢复（会话中断不丢）
-
-每命令完成自动写 `drafts/{id}/progress.json`。新对话恢复：① 会话初始化 → ② `pnpm editor progress
-<submissionId>`（进度 + 下一步 + 产物清单）→ ③ 按提示继续（已有产物自动跳过重复步骤）。
-
-## 草稿目录（gitignored）
-
-`.dailog-editor/drafts/{submissionId}/`：dialogue.json / selection.json / chosen-idea.json /
-script-draft.json / script.json / metadata.json / 分段音频 / final.m4a / 封面。**发布成功后自动清理语音/封面文件**
-（publish 完成即删该投稿的 *.mp3/*.wav/*.webm 与 *.jpg/*.jpeg/*.png）；对话/脚本等文本草稿保留可重做。
-
-## 工具链要点（详细运维记忆见 `reference/toolchain-notes.md`）
-
-- **detail 含主持人称呼与画像**：`callName`（脚本开场自我介绍用，替换 {主持人称呼}，无则「主持人」；
-  脚本语言与称呼语言不同时按 polish.md 检查清单 11 转写，如 飞→Fei）与 `personaInfo` 快照
-- **采样匹配（服务端自动）**：TTS 按脚本语言取采样 → 无则英文 → 无则最近一条兜底；detail 返回
-  voiceSamples 列表（全部语种）
-- **publish 无响应 ≠ 失败**：服务端同步端点，受限网络下响应可能被邮件挂死——先 `detail/list` 查状态，
-  published 即成功，勿重试
-- **multipart 上传必须走 serializeFormData**（lib.ts 已接上；改上传端点时别把 formData 直接当 body）
-- **本地环境存储是 R2**：发布产物在 R2 不在宿主机 data；重发同投稿覆盖旧音频但 episode 行每次新建
-  （publish 非幂等；republish 幂等）
-- **pnpm EPERM（DSH）**：根 .npmrc 已加 manage-package-manager-versions=false；仍报错直调
-  `node .agents/skills/dailog-editor/scripts/run.js`
-- 其余（代理探测 / chatgpt SSR 解码 / 测试红线 / 本地容器 R2 代理 / local 端口等）：见
-  `reference/toolchain-notes.md`
-
-## 红线
-
-1. **不伪造内容**：网页拉取失败/内容无法提取 → 如实汇报，不凭猜测生成脚本
-2. **脚本必须符合 dailog 标准**：开场轻量结构（问候 + 自我介绍 + 引出嘉宾，双方称呼不可变）、
-   核心对谈 10 分钟内、1.1 选题筛选通过（时刻门含问题归位测试 + 逻辑骨架 + 价值维度）、提问保真
-   （原生提问 ≥50%、含义不歪曲）与角度保真（话题角度 = 用户呈现意图，节目建议为锚，
-   polish.md 铁律 6）；无时刻/骨架断裂/任务型对话 → 拒审
-3. **脚本确认门**：生成后必须给编辑确认（终稿确认门默认在回复正文展示完整脚本全文 + 优化总结），
-   选项编号收口，未确认不进 tts；配套产物（元数据）在阶段 2 发布确认门与封面/试听一并确认，未确认不发布
-4. **发布前必须试听**（merge 自动 QuickTime）：音色克隆异常/断句错误/情绪标签未生效 → 修好再发
-5. **发布/拒审是外发动作**：先与编辑确认（标题/封面/拒审原因，选项编号收口），确认后一次执行；
-   **republish 同样是外发动作**——必须先试听 + 编辑确认
-6. **拒审原因必填且具体**：投稿人可见，邮件也会发送——写清楚为什么
-7. **密钥/token 不出本地**：.dailog-editor/.env 与 session.json gitignored + chmod 600；汇报不打印
-   token/key；登录走浏览器授权
-8. **内容核查**：进 tts 前必须对照 fact_check_list 核实事实（无法核实 → 删除断言）与
-   privacy_redactions（逐条确认已泛化）——未核查不进 tts、不发布
-9. **呈现通道**：所有面向编辑的展示必须在 agent 回复正文（脚本全文单个 code block、封面 Read 直出），
-   **禁止用工具输出承载展示**；子代理 JSON 直接写盘，主会话不打印全文
+- **每个新对话先做**：会话初始化（环境 + 配对）→ 用户意图落到某个功能（Triggers）→ 打开对应分册执行
+- **索引优先**：遇到未列出的名词/步骤，按「编号规范」的码体系回溯（如 SC-GATE-2 在 docs/SC.md 的 SC-GATE 节）
+- **跨功能联动**：REJ（拒稿）被 SC-GATE-1/2、PUB-GATE-1、BATCH-STEP-1/3、MGT-STEP-3 引用；RULES 被全文引用；RES 用于任何中断恢复

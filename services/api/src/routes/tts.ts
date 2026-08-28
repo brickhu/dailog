@@ -117,13 +117,13 @@ export function ttsRoutes(deps: TtsDeps) {
     const hostBytes = await deps.storage.get(hostSample.audioUrl).then((r) => r.data).catch(() => null);
     if (!hostBytes) return c.json({ error: "no_voice_sample", detail: "采样音频读取失败" }, 422);
 
-    // guest 参考（声线服务端配置：同语种优先 → 任意语种兜底）
+    // guest 参考（声线服务端配置：同语种优先 → 未定义语种统一英文兜底）
     let guestSample: { audioKey: string; transcript: string | null } | null = null;
     if (hasGuest) {
       guestSample = (await deps.repo.guests.voiceSampleByLanguage(guestId!, language).catch(() => null))
-        ?? (await deps.repo.guests.voiceSampleAny(guestId!).catch(() => null));
+        ?? (language !== "en" ? await deps.repo.guests.voiceSampleByLanguage(guestId!, "en").catch(() => null) : null);
       if (!guestSample) {
-        return c.json({ error: "no_guest_voice", detail: `嘉宾 ${guestId} 无 ${language} 声线（服务端未配置——用 guest-voice 命令上传）` }, 422);
+        return c.json({ error: "no_guest_voice", detail: `嘉宾 ${guestId} 无 ${language}（或 en）声线（服务端未配置——用 guest-voice 命令上传）` }, 422);
       }
     }
 

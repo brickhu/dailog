@@ -353,10 +353,10 @@ export function writeProgress(submissionId: string, step: string): void {
 }
 
 /** 发布成功后清理语音/封面等大文件产物（保留对话/脚本/页面等文本草稿）：
- *  删除 *.mp3/*.wav/*.webm（整集 full.mp3、合成 final.mp3、逐段 seg-*、静音段）+
+ *  删除 *.mp3/*.m4a/*.wav/*.webm（整集 full.mp3、合成 final.m4a、逐段 seg-*、静音段）+
  *  *.jpg/*.jpeg/*.png（封面）——本地不留语音与图片；文本资料保留供查阅/重做。
  *  清理后验证：仍有音频/图片残留时输出警告。 */
-const ARTIFACT_RE = /\.(mp3|wav|webm|jpg|jpeg|png)$/i;
+const ARTIFACT_RE = /\.(mp3|m4a|wav|webm|jpg|jpeg|png)$/i;
 export function clearArtifacts(submissionId: string): void {
   const dir = draftDir(submissionId);
   if (!existsSync(dir)) return;
@@ -391,17 +391,31 @@ export function readProgress(submissionId: string): { step: string; updatedAt: s
 export interface ScriptSegment {
   speaker: "host" | "guest";
   text: string;
-  /** TTS 分段标注（script-craft 五拍映射）：1=开场+定向 2=对谈 3=落点+收束；供 tts --parts 分 3 段独立合成 */
+  /** TTS 分段标注：1=点题 2=对谈 3=落点+收束；供 tts --parts 分 3 段独立合成 */
   part?: 1 | 2 | 3;
 }
 
-/** 读取脚本 JSON 文件（skill 生成），校验结构 */
+/** 读取脚本 JSON（skill 生成），校验并摊平为带 part 的扁平段：
+ *  新结构 { parts: [{segments}, {segments}, {segments}], ... } → part = 数组位置+1（1=点题 2=对谈 3=落点+收束）；
+ *  旧结构 { segments: [...] } / 直接数组 → 兼容（段自带 part 字段）。 */
 export function readScript(path: string): ScriptSegment[] {
   const raw = readFileSync(path, "utf-8");
-  const data = JSON.parse(raw) as { segments?: ScriptSegment[] } | ScriptSegment[];
-  const segments = Array.isArray(data) ? data : data.segments;
-  if (!Array.isArray(segments) || segments.length === 0) {
-    console.error(`[script] ${path} 不是合法脚本（需要 segments: [{speaker, text}]）`);
+  const data = JSON.parse(raw) as
+    | { parts?: Array<{ segments?: ScriptSegment[] }>; segments?: ScriptSegment[] }
+    | ScriptSegment[];
+  let segments: ScriptSegment[];
+  if (Array.isArray(data)) {
+    segments = data;
+  } else if (Array.isArray(data.parts) && data.parts.length > 0) {
+    segments = data.parts.flatMap((p, i) => (p.segments ?? []).map((s) => ({ ...s, part: (i + 1) as 1 | 2 | 3 })));
+  } else if (Array.isArray(data.segments)) {
+    segments = data.segments;
+  } else {
+    console.error(`[script] ${path} 不是合法脚本（需要 parts: [{segments}] 或 segments: [{speaker, text}]）`);
+    process.exit(1);
+  }
+  if (segments.length === 0) {
+    console.error(`[script] ${path} 无任何段落`);
     process.exit(1);
   }
   for (const seg of segments) {

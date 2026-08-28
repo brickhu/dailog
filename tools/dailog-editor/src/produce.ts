@@ -2,8 +2,8 @@
 //   pnpm editor produce --ids <submissionId,...> [--language zh] [--guest <platform>]
 //   → 逐个：找草稿 script.json → 逐段 TTS（服务端）→ ffmpeg 合成（intro/outro 自动匹配）
 //     → 封面（脚本 coverKeywords；无则跳过提示）
-//   → 输出：每条 final.mp3 路径 + 节目信息草稿（title）
-//   → 人工确认点：① 试听 final.mp3（语音预览确认）② 节目信息呈现 → 确认后 publish
+//   → 输出：每条 final.m4a 路径 + 节目信息草稿（title）
+//   → 人工确认门：① 语音确认门（试听 final.m4a）② 发布确认门（节目信息呈现）→ 确认后 publish
 //   publish 完成：投稿状态 → published + 站内通知 + 邮件（服务端 publish 端点已实现）
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -76,16 +76,16 @@ export async function produce(config: EditorConfig, args: string[]): Promise<voi
       await merge(config, [id, "--language", language]);
       // ③ 封面（本地模板渲染：居中显示「主持人称呼 × 嘉宾称呼」，传 --guest 取嘉宾名）
       await cover(config, [id, ...(guest ? ["--guest", guest] : [])]);
-      const finalPath = join(draftDir(id), "final.mp3");
+      const finalPath = join(draftDir(id), "final.m4a");
       results.push({ id, ok: true, finalPath, title: meta.title });
-      console.log(`[produce] ${id.slice(0, 8)}… ✅ 完成（final.mp3 + 封面）\n`);
+      console.log(`[produce] ${id.slice(0, 8)}… ✅ 完成（final.m4a + 封面）\n`);
     } catch (e) {
       console.log(`❌ ${(e as Error).message}`);
       results.push({ id, ok: false, title: meta.title, error: (e as Error).message });
     }
   }
 
-  // 汇总 + 两个人工确认点
+  // 汇总 + 两个人工确认门
   console.log("========== produce 结果 ==========");
   for (const r of results) {
     if (r.ok) {
@@ -94,7 +94,7 @@ export async function produce(config: EditorConfig, args: string[]): Promise<voi
       console.log(`❌ ${r.id} — ${r.error}`);
     }
   }
-  console.log("\n确认点 ① 语音预览：open <final.mp3> 试听（音色/断句/情绪标签）——确认后进入发布确认");
-  console.log("确认点 ② 节目信息：确认标题/简介/标签/封面 → publish（状态 published + 通知 + 邮件）");
+  console.log("\n确认门 ① 语音预览：open <final.m4a> 试听（音色/断句/情绪标签）——确认后进入发布确认");
+  console.log("确认门 ② 节目信息：确认标题/简介/标签/封面 → publish（状态 published + 通知 + 邮件）");
   console.log("命令：pnpm editor publish <id> --title \"...\" [--cover <path>] [--tags a,b] [--guest <platform>]");
 }

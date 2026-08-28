@@ -18,7 +18,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
         { id: "claude", platform: "claude", name: "Claude", avatar: null, intro: "Anthropic 的 AI 助手", url: null },
       ],
       voiceSampleByLanguage: async () => null,
-      voiceSampleAny: async () => ({ id: "gvs-1", guestId: "claude", language: "zh", audioKey: "guests/claude/zh.mp3", referenceId: "ref-1", transcript: "你好" }),
+      voiceSampleAny: async () => ({ id: "gvs-1", guestId: "claude", language: "zh", audioKey: "guests/claude/zh.mp3", transcript: "你好" }),
       upsertVoiceSample: async () => {},
       update: async () => {},
       listVoiceSamples: async () => [],

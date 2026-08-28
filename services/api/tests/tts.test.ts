@@ -150,7 +150,7 @@ function baseDeps(): Partial<TtsDeps> {
       },
       guests: {
         ...fakeRepo().guests,
-        voiceSampleByLanguage: async () => ({ id: "gvs-1", guestId: "claude", language: "zh", audioKey: "guests/claude/zh.mp3", referenceId: null, transcript: "声线文案" }),
+        voiceSampleByLanguage: async () => ({ id: "gvs-1", guestId: "claude", language: "zh", audioKey: "guests/claude/zh.mp3", transcript: "声线文案" }),
       },
     }),
     storage: { get: async () => ({ data: wav, total: wav.length }), put: async () => {}, delete: async () => {} },
@@ -224,6 +224,30 @@ describe("POST /v1/editor/tts（multi speaker 整集合成）", () => {
     expect(res.status).toBe(200);
     expect(synthesizeSingle).toHaveBeenCalledWith(expect.objectContaining({ text: "大家好", referenceAudioTranscript: "大家好" }));
     expect(synthesizeMultiSpeaker).not.toHaveBeenCalled();
+  });
+
+  it("guest 未定义语种 → 英文声线兜底（只配了 en 采样也出声音）", async () => {
+    // 嘉宾只配了 en 采样；请求 ja → 应落到 en，合成成功而非 422
+    const synthesizeMultiSpeaker = vi.fn(async () => new Uint8Array([7, 7, 7]));
+    const app = makeApp({
+      ...baseDeps(),
+      fish: { synthesizeSingle: async () => new Uint8Array([1]), synthesizeMultiSpeaker },
+      repo: fakeRepo({
+        submissions: { ...fakeRepo().submissions, getDetail: async () => SUBMITTED_DETAIL },
+        episodes: { ...fakeRepo().episodes, getVoiceSampleByLanguage: async () => ({ userId: "user-1", language: "zh", audioUrl: "v", transcript: "t", duration: 5, status: "ready" }) },
+        guests: {
+          ...fakeRepo().guests,
+          voiceSampleByLanguage: async (_g: string, lang: string) =>
+            lang === "en" ? { id: "gvs-en", guestId: "claude", language: "en", audioKey: "guests/claude/en.mp3", transcript: "Hello" } : null,
+        },
+      }),
+    });
+    const res = await postJson(app, { submissionId: "sub-1", language: "ja", guestId: "claude", segments: SEGMENTS });
+    expect(res.status).toBe(200);
+    expect(await res.arrayBuffer()).toEqual(new Uint8Array([7, 7, 7]).buffer);
+    expect(synthesizeMultiSpeaker).toHaveBeenCalledWith(expect.objectContaining({
+      transcripts: ["大家好", "Hello"],
+    }));
   });
 
   it("guest 声线服务端未配置 → 422", async () => {

@@ -42,6 +42,14 @@ writeFileSync(join(scriptsDir, "README.md"), [
 
 // 3. skill 文档与配置模板
 cpSync(join(here, "skill", "SKILL.md"), join(outDir, "SKILL.md"));
+// 3.0 分册文档（能力/附录独立分册，随产物分发；与 reference/、prompts/ 同级，SKILL.md 按 docs/*.md 引用）
+const docsSrc = join(here, "docs");
+const docsOut = join(outDir, "docs");
+rmSync(docsOut, { recursive: true, force: true });
+mkdirSync(docsOut, { recursive: true });
+for (const f of readdirSync(docsSrc)) {
+  cpSync(join(docsSrc, f), join(docsOut, f));
+}
 // 3.1 提示词模板（脚本生成参照文件）
 const promptsSrc = join(here, "prompts");
 const promptsOut = join(outDir, "prompts");

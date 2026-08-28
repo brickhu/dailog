@@ -100,7 +100,7 @@ published + 期号 max+1）→ 投稿人收到通知（站内 + 邮件）。内�
 |---|---|---|
 | `submissions` | `user_id`, `url`, `title`, `status`(submitted/rejected/published), `rejected_reason`, `reviewed_at` | **投稿**：URL + 采样（采样在 voice_samples，投稿只关联 userId）；唯一约束 `(user_id, url)` 防重复 |
 | `episodes` | `submission_id`, `user_id`, `host_id`, `guest_id`, `slug`, `title`, `description`, `cover_url`, `audio_url`(R2), `audio_size`, `duration_seconds`, `language`, `tags`, `number`(期号), `is_picked`, `status`(published), `is_public`, `published_at` | **成品节目**：编辑上传即发布（published + isPublic）；期号发布时 max+1 分配——"dailog 第 N 期" |
-| `guests` / `guest_voice_samples` | `platform`(枚举), `name`, `intro` + `audio_key`, `reference_id`, `transcript` | **AI 平台嘉宾库 + 品牌声线采样**（编辑本地 TTS 的嘉宾音色来源；guest×language 唯一） |
+| `guests` / `guest_voice_samples` | `platform`(枚举), `name`, `intro` + `audio_key`, `transcript` | **AI 平台嘉宾库 + 品牌声线采样**（编辑本地 TTS 的嘉宾音色来源；guest×language 唯一，未定义语种 TTS 按英文兜底；reference_id 已移除 0043） |
 | `voice_samples` | `user_id`, `language`, `audio_url`(R2), `transcript`, `duration`, `status` | 投稿人声音采样（一人多语种各一条；主持人克隆音色参考） |
 | `profiles` | `id`(=auth.users), `display_name`, `bio`, `persona`(JSONB) | 主持人档案（账号级属性在 user 表：`name`=@slug、`role`(user/editor/admin)、`image`） |
 | `notifications` | `user_id`, `type`(rejected/published), `title`, `body`, `link` | 站内通知（拒审/上线） |

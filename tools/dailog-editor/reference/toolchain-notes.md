@@ -1,10 +1,10 @@
 # dailog 工具链运维记忆（不常用，按需查阅）
 
-- **生成子代理（省 token 的关键）**：1.1（dailog-select）/ 1.2（dailog-draft）/ 1.3（dailog-polish）
-  三步生成一律起子代理执行，结果由子代理用 write 工具直接写盘（selection.json / chosen-idea.json /
-  script-draft.json / script.json），主会话只收一行校验摘要、不拉取不打印 JSON 全文——对话原文
+- **生成子代理（省 token 的关键）**：SC-STEP-1（dailog-select）/ SC-STEP-2（dailog-draft）
+  两步生成一律起子代理执行，结果由子代理用 write 工具直接写盘（selection.json / chosen-idea.json /
+  script.json），主会话只收一行校验摘要、不拉取不打印 JSON 全文——对话原文
   （15-20k）与提示词文件（~14k）不进主上下文。单期主会话增量从 ~70-90k 降到 ~15-25k；
-  打回重跑：听感反馈重跑 polish、结构反馈重跑 draft（不重新全量注入）。
+  打回重跑：听感/结构反馈均重跑 SC-STEP-2（不重新全量注入）。
 - **终稿确认门默认全文**：`pnpm editor script-preview <id>` 输出段数/字数/时长/每段说话人与开头
   摘要——作为终稿确认门的附加信息；完整脚本全文默认直接展示在回复正文（红线 3）。
 - **呈现通道**：GUI（如 DSH）里工具输出对编辑不可见（默认折叠）——一切面向编辑的展示必须放
@@ -24,8 +24,8 @@
   直接当 body 传**——回归测试：multipart 请求后服务端能读到文件字段。
 - **detail 已含主持人称呼与画像**：`getDetail` 返回 `callName`（submissions.call_name，投稿时配置、
   默认 displayName 可改）与 `personaInfo` 快照（displayName/性别/职业/年龄/国籍/bio），
-  脚本生成时用 callName 替换 {主持人称呼}，无则「主持人」。脚本语言与称呼语言不同时按
-  polish.md 检查清单 11 的称呼改写规则转英文形式（如 飞→Fei）。
+  脚本生成时用 role_block 的 {callName}，无则「主持人」。脚本语言与称呼语言不同时按
+  draft.md 点题段落的称呼改写规则转英文形式（如 飞→Fei）。
 - **采样匹配（服务端自动）**：TTS 按脚本语言取采样 → 无则英文采样 → 无则最近一条采样兜底；
   `detail` 返回 voiceSamples 列表（全部语种），供编辑确认。
 - **测试红线**：`publish` 端点无 dry-run——curl/脚本直打真实 submission 就是真实发布

@@ -13,7 +13,7 @@
 //   pnpm editor batch-reject --ids <id1,id2> --reason "..."   批量拒审（通知+状态）
 //   pnpm editor batch-scripts [--limit N]    脚本批次汇总（生成/质量不过关/待生成）
 //   pnpm editor produce --ids <id1,id2> [--language zh] [--guest claude]
-//                                               制作流水线（tts→merge→cover，两个确认点）
+//                                               制作流水线（tts→merge→cover，两个确认门）
 //   pnpm editor detail <submissionId>          投稿详情（URL/投稿人/采样 transcript）
 //   pnpm editor fetch <submissionId>           采集 + 内容解码（拉取 URL → page.html/page.txt/dialogue.json）
 //   pnpm editor rule-test <submissionId> --user-selector "..." --assistant-selector "..." [--save]
@@ -30,14 +30,14 @@
 //   pnpm editor tts <submissionId> --script <script.json> [--language zh|en]
 //                                              逐段合成语音（host 采样克隆 / guest 品牌声线资源文件）
 //   pnpm editor merge <submissionId> [--language zh|en] [--intro f.mp3] [--outro f.mp3]
-//                                               ffmpeg 拼接（intro/outro 按语言匹配，fallback 英文）→ final.mp3
+//                                               ffmpeg 拼接（intro/outro 按语言匹配，fallback 英文）→ final.m4a
 //   pnpm editor cover <submissionId> [--texture ...] [--colors "#hex,#hex"] [--guest <platform>] [--image-url <URL>]
 //                                               本地模板封面（居中「主持人称呼 × 嘉宾称呼」，不满意贴图 URL）
-//   pnpm editor publish <submissionId> --title "..." [--audio final.mp3] [--cover c.jpg]
+//   pnpm editor publish <submissionId> --title "..." [--audio final.m4a] [--cover c.jpg]
 //                                               [--description ...] [--tags a,b] [--language zh] [--guest claude]
 //   pnpm editor reject <submissionId> --reason "..."
 //   pnpm editor episodes [--match "关键词"]        已发布节目清单（重新生成时定位）
-//   pnpm editor republish <episodeId> --title "..." [--audio final.mp3] [--cover c.jpg]
+//   pnpm editor republish <episodeId> --title "..." [--audio final.m4a] [--cover c.jpg]
 //                                                [--description ...] [--tags a,b] [--guest claude]
 //                                                重新生成已发布节目（重做成品后更新，链接/期号不变）
 //   pnpm editor removal [list|approve <id>|reject <id>] [--status pending|approved|rejected]

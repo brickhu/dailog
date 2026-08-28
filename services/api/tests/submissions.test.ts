@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import { submissionsRoutes } from "../src/routes/submissions";
+import { canonicalUrl, submissionIdFromUrl, submissionsRoutes } from "../src/routes/submissions";
 import type { Repos } from "../src/repo";
 import { fakePlaylistsRepo } from "./helpers/fake-playlists";
 
@@ -89,7 +89,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("POST /v1/submissions —— URL 合法性与触达性", () => {
+// 白名单内分享链接（平台分享页；原测试用 example.com 已被 SHARE_HOSTS 白名单拦截 → 400）
+const VALID_URL = "https://chat.deepseek.com/share/abc123";
+
+describe("POST /v1/submissions —— URL 合法性", () => {
   it("rejects missing url with 400", async () => {
     const res = await makeApp().request("/v1/submissions", {
       method: "POST",
@@ -110,122 +113,84 @@ describe("POST /v1/submissions —— URL 合法性与触达性", () => {
     expect((await res.json()) as { error: string }).toMatchObject({ error: "invalid_url" });
   });
 
-  it("rejects unreachable URL with 422（网络层失败）", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => {
-      throw new TypeError("fetch failed");
-    }));
+  it("rejects non-whitelisted share host with 400（unsupported_url）", async () => {
     const res = await makeApp().request("/v1/submissions", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ url: "https://example.com/share/abc" }),
     });
-    expect(res.status).toBe(422);
-    expect((await res.json()) as { error: string }).toMatchObject({ error: "url_unreachable" });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: "unsupported_url" });
   });
 
-  it("accepts reachable URL（任意响应码 = 可达，含 403 反爬）", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 403 })));
+  it("accepts whitelisted share URL（服务端不探活，直接 201）", async () => {
     const res = await makeApp().request("/v1/submissions", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: "https://example.com/share/abc" }),
+      body: JSON.stringify({ url: VALID_URL }),
     });
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ submissionId: "sub-1", status: "submitted" });
-  });
-
-  it("falls back to GET when HEAD is rejected（405 → GET 成功）", async () => {
-    let headTried = false;
-    vi.stubGlobal("fetch", vi.fn(async () => {
-      if (!headTried) {
-        headTried = true;
-        return new Response(null, { status: 405 });
-      }
-      return new Response("body", { status: 200 });
-    }));
-    const res = await makeApp().request("/v1/submissions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: "https://example.com/share/abc" }),
-    });
-    expect(res.status).toBe(201);
   });
 });
 
 describe("POST /v1/submissions —— 并发上限 / 重复 / 入库", () => {
   it("rejects when pending count at limit with 429", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
     const app = makeApp({ countPendingByUser: async () => 5 });
     const res = await app.request("/v1/submissions", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: "https://example.com/share/abc" }),
+      body: JSON.stringify({ url: VALID_URL }),
     });
     expect(res.status).toBe(429);
     expect((await res.json()) as { error: string }).toMatchObject({ error: "pending_limit" });
   });
 
   it("rejects when user has no ready voice sample with 422（voice_sample_required）", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
     const app = makeApp({ hasReadyVoiceSample: async () => false });
     const res = await app.request("/v1/submissions", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: "https://example.com/share/abc" }),
+      body: JSON.stringify({ url: VALID_URL }),
     });
     expect(res.status).toBe(422);
     expect((await res.json()) as { error: string }).toMatchObject({ error: "voice_sample_required" });
   });
 
-  it("returns existing submission when same user+url already submitted", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
+  it("returns existing submission when same url already submitted", async () => {
     const app = makeApp({ findByUrl: async () => ({ id: "sub-old", status: "submitted" }) });
     const res = await app.request("/v1/submissions", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: "https://example.com/share/abc" }),
+      body: JSON.stringify({ url: VALID_URL }),
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ existing: true, submissionId: "sub-old", status: "submitted", episode: null });
   });
 
   it("creates submission with url + optional title + callName + suggestion + voiceSampleId（采样校验传参、trim 入库）", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
     const create = vi.fn(async (_id: string, _u: string, _url: string, _t: string | null, _cn?: string | null, _pi?: unknown, _vs?: string | null, _sug?: string | null) => ({ id: _id || "sub-new" }));
     const hasReadyVoiceSample = vi.fn(async () => true);
     const app = makeApp({ create, hasReadyVoiceSample });
     const res = await app.request("/v1/submissions", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: "https://example.com/share/abc", title: "我的对话", callNameInEpisode: "飞", suggestion: "  想聊聊 AI 编程的实际用法  ", voiceSampleId: "11111111-1111-4111-8111-111111111111" }),
+      body: JSON.stringify({ url: VALID_URL, title: "我的对话", callNameInEpisode: "飞", suggestion: "  想聊聊 AI 编程的实际用法  ", voiceSampleId: "11111111-1111-4111-8111-111111111111" }),
     });
     expect(res.status).toBe(201);
     // 采样归属校验：传入的 voiceSampleId 必须原样交给校验（防引用他人采样）
     expect(hasReadyVoiceSample).toHaveBeenCalledWith("user-1", "11111111-1111-4111-8111-111111111111");
     expect(create).toHaveBeenCalledWith(
-      "user-1", "https://example.com/share/abc", "我的对话", "飞",
+      submissionIdFromUrl(VALID_URL), "user-1", canonicalUrl(VALID_URL), "我的对话", "飞",
       expect.objectContaining({ displayName: "测试员" }), "11111111-1111-4111-8111-111111111111", "想聊聊 AI 编程的实际用法",
     );
-  });
-
-  it("does not call create when URL unreachable（探活失败不落库）", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => {
-      throw new TypeError("fetch failed");
-    }));
-    const create = vi.fn(async () => ({ id: "sub-x" }));
-    await makeApp({ create }).request("/v1/submissions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: "https://example.com/share/abc" }),
-    });
-    expect(create).not.toHaveBeenCalled();
   });
 });
 
 describe("GET /v1/me/submissions", () => {
   it("returns my submissions list", async () => {
     const listByUser = vi.fn(async () => [
-      { id: "sub-1", url: "https://example.com/share/abc", title: null, callName: null, status: "submitted", rejectedReason: null, episodeStatus: null, createdAt: new Date() },
+      { id: "sub-1", url: VALID_URL, title: null, callName: null, status: "submitted", rejectedReason: null, episodeStatus: null, createdAt: new Date() },
     ]);
     const res = await makeApp({ listByUser }).request("/v1/me/submissions");
     expect(res.status).toBe(200);

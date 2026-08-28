@@ -31,24 +31,37 @@ export async function scriptPreview(config: EditorConfig, args: string[]): Promi
   }
   const path = pickScript(submissionId, explicit);
   const raw = JSON.parse(readFileSync(path, "utf-8")) as {
+    category?: string;
+    host?: string;
+    guest?: string;
+    lang?: string;
     topic?: string;
     title?: string;
     creationNote?: string;
+    parts?: Array<{ segments?: Array<{ speaker: string; text: string }> }>;
     segments?: Array<{ speaker: string; text: string }>;
   } | Array<{ speaker: string; text: string }>;
-  const segments = Array.isArray(raw) ? raw : raw.segments ?? [];
+  let segments: Array<{ speaker: string; text: string }>;
+  if (Array.isArray(raw)) segments = raw;
+  else if (Array.isArray(raw.parts) && raw.parts.length > 0) segments = raw.parts.flatMap((p) => p.segments ?? []);
+  else segments = raw.segments ?? [];
   if (segments.length === 0) {
-    console.error("[script-preview] 脚本为空（需要 segments: [{speaker, text}]）");
+    console.error("[script-preview] 脚本为空（需要 parts: [{segments}] 或 segments: [{speaker, text}]）");
     process.exit(1);
   }
 
   const chars = segments.reduce((n, s) => n + s.text.length, 0);
   const minutes = Math.round((chars / ZH_CHARS_PER_MIN) * 10) / 10;
   const users = segments.filter((s) => s.speaker === "host").length;
-  const topics = !Array.isArray(raw) && raw.topic ? raw.topic : null;
-  const title = !Array.isArray(raw) && raw.title ? raw.title : null;
+  const category = !Array.isArray(raw) ? raw.category ?? null : null;
+  const host = !Array.isArray(raw) ? raw.host ?? null : null;
+  const guest = !Array.isArray(raw) ? raw.guest ?? null : null;
+  const topics = !Array.isArray(raw) ? raw.topic ?? null : null;
+  const title = !Array.isArray(raw) ? raw.title ?? null : null;
 
   console.log(`[script-preview] 脚本：${path}`);
+  if (category) console.log(`  分类：${category}`);
+  if (host || guest) console.log(`  对谈：${host ?? "?"} × ${guest ?? "?"}`);
   if (title) console.log(`  标题：${title}`);
   if (topics) console.log(`  主题：${topics}`);
   if (!Array.isArray(raw) && raw.creationNote) console.log(`  创作说明：${raw.creationNote}`);

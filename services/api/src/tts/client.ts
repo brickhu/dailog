@@ -10,7 +10,7 @@ export interface TtsClient {
     /** 每 speaker 参考音频转录文本（精确克隆；缺省占位） */
     transcripts?: (string | null)[];
   }): Promise<Uint8Array>;
-  /** 按段合成（降级路径：主持人内联参考音频 msgpack 零样本 / 嘉宾固定音色 reference_id） */
+  /** 按段合成（降级路径：主持人内联参考音频 msgpack 零样本；或固定音色模型 id referenceId） */
   synthesizeSingle(args: {
     text: string;
     referenceAudio?: Uint8Array; // msgpack references 内联

@@ -1,7 +1,7 @@
 // 一次性上传发布（编辑本地制作成品 → dailog）：
 //   multipart：audio（必填）+ cover（可选）+ meta JSON（title/description/summary/references/highlights/tags/language/guestId/durationSeconds）
-//   --summary 短简介（1.4 元数据）；--references-file <json> 名词术语条目数组（1.4 references 落盘）；
-//   description/highlights/category 自动读草稿 metadata.json（1.4 生成；旧草稿 fallback script.json）
+//   --summary 短简介（PUB-STEP-2 元数据）；--references-file <json> 名词术语条目数组（PUB-STEP-2 references 落盘）；
+//   description/highlights/category 自动读草稿 metadata.json（PUB-STEP-2 生成；旧草稿 fallback script.json）
 // 成功后 episode 直接 published + 投稿人收到通知（「dailog 第 N 期」）
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -15,7 +15,7 @@ function ffprobeDuration(file: string): number {
   return Math.round(parseFloat(out.trim()));
 }
 
-/** 读 1.4 元数据（metadata.json）——发布元数据（description/highlights/category/summary/references/tags）来源 */
+/** 读 PUB-STEP-2 元数据（metadata.json）——发布元数据（description/highlights/category/summary/references/tags）来源 */
 function loadMetadata(submissionId: string): Record<string, unknown> | null {
   try {
     const raw = JSON.parse(readFileSync(join(draftDir(submissionId), "metadata.json"), "utf8")) as unknown;
@@ -43,7 +43,7 @@ interface PublishArgs {
 function parseArgs(args: string[]): PublishArgs {
   const submissionId = args[0];
   if (!submissionId) {
-    console.error("用法：pnpm editor publish <submissionId> --title \"...\" [--audio final.mp3] [--cover c.jpg] [--description ...] [--summary ...] [--references-file <json>] [--tags a,b] [--language zh] [--guest claude]");
+    console.error("用法：pnpm editor publish <submissionId> --title \"...\" [--audio final.m4a] [--cover c.jpg] [--description ...] [--summary ...] [--references-file <json>] [--tags a,b] [--language zh] [--guest claude]");
     process.exit(1);
   }
   const take = (flag: string) => {
@@ -51,11 +51,11 @@ function parseArgs(args: string[]): PublishArgs {
     return idx >= 0 && args[idx + 1] ? args[idx + 1] : undefined;
   };
   const audio = take("--audio") ?? (() => {
-    const fallback = `${draftDir(submissionId)}/final.mp3`;
+    const fallback = `${draftDir(submissionId)}/final.m4a`;
     try { readFileSync(fallback); return fallback; } catch { return undefined; }
   })();
   if (!audio) {
-    console.error("[publish] 缺少成品音频（--audio 或草稿目录 final.mp3）——先运行 merge");
+    console.error("[publish] 缺少成品音频（--audio 或草稿目录 final.m4a）——先运行 merge");
     process.exit(1);
   }
   return {
@@ -91,7 +91,7 @@ export async function publish(config: EditorConfig, args: string[]): Promise<voi
 
   const form = new FormData();
   const audioBytes = readFileSync(p.audio!);
-  // 按文件后缀声明类型（merge 产出 final.m4a / 兼容旧 final.mp3）——服务端按扩展名存 R2 + 回 Content-Type
+  // 按文件后缀声明类型（成品统一 final.m4a；--audio 传其他后缀按扩展名识别）——服务端按扩展名存 R2 + 回 Content-Type
   const isM4a = p.audio!.toLowerCase().endsWith(".m4a");
   form.append("audio", new Blob([new Uint8Array(audioBytes)], { type: isM4a ? "audio/mp4" : "audio/mpeg" }), isM4a ? "final.m4a" : "final.mp3");
   if (p.cover) {
@@ -100,7 +100,7 @@ export async function publish(config: EditorConfig, args: string[]): Promise<voi
   }
   const meta: Record<string, unknown> = { title: p.title, language: p.language };
   if (p.description) meta.description = p.description;
-  // description（1.4 metadata.json 自动读取；旧草稿 fallback script.json；--description 可覆盖）
+  // description（PUB-STEP-2 metadata.json 自动读取；旧草稿 fallback script.json；--description 可覆盖）
   if (!p.description) {
     const md = loadMetadata(p.submissionId);
     if (md && typeof md.description === "string" && md.description.trim()) {
@@ -116,7 +116,7 @@ export async function publish(config: EditorConfig, args: string[]): Promise<voi
   }
   if (p.summary) meta.summary = p.summary;
   else {
-    // summary（1.4 metadata.json 自动读取；旧草稿 fallback script.json）
+    // summary（PUB-STEP-2 metadata.json 自动读取；旧草稿 fallback script.json）
     const md = loadMetadata(p.submissionId);
     if (md && typeof md.summary === "string" && md.summary.trim()) meta.summary = md.summary.trim();
     else {
@@ -139,7 +139,7 @@ export async function publish(config: EditorConfig, args: string[]): Promise<voi
   }
   if (p.tags?.length) meta.tags = p.tags;
   if (p.guestId) meta.guestId = p.guestId;
-  // 金句（1.4 metadata.json 自动读取；旧草稿 fallback script.json；可选——缺省/解析失败忽略）
+  // 金句（PUB-STEP-2 metadata.json 自动读取；旧草稿 fallback script.json；可选——缺省/解析失败忽略）
   let highlights: unknown = null;
   const mdH = loadMetadata(p.submissionId);
   if (mdH && Array.isArray(mdH.highlights)) highlights = mdH.highlights;
@@ -158,7 +158,7 @@ export async function publish(config: EditorConfig, args: string[]): Promise<voi
       .slice(0, 5);
     if (hs.length) meta.highlights = hs;
   }
-  // 分类（1.4 metadata.json 自动读取；旧草稿 fallback script.json：insight/experience/advice/inspiration）
+  // 分类（PUB-STEP-2 metadata.json 自动读取；旧草稿 fallback script.json：insight/experience/advice/inspiration）
   let category: unknown = null;
   const mdC = loadMetadata(p.submissionId);
   if (mdC) category = mdC.category;

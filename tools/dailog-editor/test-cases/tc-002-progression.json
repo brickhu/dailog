@@ -1,6 +1,6 @@
 {
   "id": "tc-002",
-  "name": "递进链型（新知·向外）——应通过",
+  "name": "递进链型（认知·向外）——应通过",
   "dialogue": [
     {
       "role": "user",
@@ -29,8 +29,7 @@
   ],
   "expected": {
     "verdict": "pass",
-    "dimension": "新知",
-    "new_knowledge_direction": "向外",
+    "dimension": "认知",
     "moment_present": true,
     "spine_complete": true
   }

@@ -110,8 +110,8 @@ dailog/
    `publish`（发布=状态+通知+邮件+草稿清理）/ `reject` / `guests` / `guest-voice` / `guest-set` /
    `playlist`（平台播放列表：list/create/add/remove/reorder/pick/cover 等）/ `progress`（中断恢复）/
    `login` / `auth-status` / `list` / `detail` 等
-4. 完整流程与规范：`.agents/skills/dailog-editor/SKILL.md`（含 `prompts/script-generation.md` 提示词模板；
-   批量两级流程：提取分组处置 → 自动质量检查/脚本生成 → 脚本分组处置 → 选号 produce → 两个确认点 → publish）
+4. 完整流程与规范：`.agents/skills/dailog-editor/SKILL.md`（含 `prompts/` 下 selection/draft/polish/meta 提示词模板；
+   批量两级流程：提取分组处置 → 自动质量检查/脚本生成 → 脚本分组处置 → 选号 produce → 两个确认门 → publish）
 5. 草稿：`.dailog-editor/drafts/{submissionId}/`（gitignored；发布后自动清理）
 
 ## 共享设计系统约束（StyleX 硬性规则）

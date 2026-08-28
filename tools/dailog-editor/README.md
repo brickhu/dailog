@@ -77,7 +77,7 @@ pnpm editor --env <环境名> fetch <submissionId>     # 采集 + 内容解码�
 # ① 本地拉取网页内容（Agent 浏览器/WebFetch）→ 提取对话
 # ② 生成脚本（dailog 编辑规范见 skill：.agents/skills/dailog-editor/SKILL.md）→ script.json
 pnpm editor --env <环境名> tts <submissionId> --script script.json [--language zh|en] [--guest claude]
-#   · 统一走服务端 /v1/editor/tts 端点（Fish key 只在服务端；multi speaker 整集一次合成 → full.mp3）
+#   · 统一走服务端 /v1/editor/tts 端点（Fish key 只在服务端；分段合成 --parts 为标准流程——片头插在点题与对谈之间 → part1/2/3.mp3；整集 full.mp3 仅旧流程兜底）
 #   · guest 声线在服务端配置（guest-voice 上传；guest-set 设置称呼）；tts 传 --guest <platform>
 pnpm editor --env <环境名> merge <submissionId> [--language zh|en] [--intro x.mp3] [--outro x.mp3]
 #   · intro/outro 统一自动匹配语言：assets/intro.{lang}.mp3（语言专属缺失 → fallback 通用 intro.mp3）

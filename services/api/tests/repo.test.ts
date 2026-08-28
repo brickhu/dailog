@@ -165,9 +165,9 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
   describe("guests repo（品牌声线宿主）", () => {
     it("list + voiceSampleByLanguage + upsert（guest×language 唯一）", async () => {
       // guests 是固定平台表（id = platform 枚举）；复用 claude 做采样 upsert，测试后清理采样行
-      await repo.guests.upsertVoiceSample({ guestId: "claude", language: "zz", audioKey: "guests/claude/zz.mp3", referenceId: "ref-zz", transcript: "你好" });
+      await repo.guests.upsertVoiceSample({ guestId: "claude", language: "zz", audioKey: "guests/claude/zz.mp3", transcript: "你好" });
       const sample = await repo.guests.voiceSampleByLanguage("claude", "zz");
-      expect(sample?.referenceId).toBe("ref-zz");
+      expect(sample?.transcript).toBe("你好");
       expect((await repo.guests.list()).some((g) => g.id === "claude")).toBe(true);
       await db.delete(guestVoiceSamples).where(and(eq(guestVoiceSamples.guestId, "claude"), eq(guestVoiceSamples.language, "zz")));
     });

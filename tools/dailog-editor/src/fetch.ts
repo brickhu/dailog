@@ -13,7 +13,7 @@
 //      2. 无规则命中 → 通用嗅探（data-message-author-role 容器）
 //      3. 都失败 → 提示沉淀新规则（浏览器兜底后直接更新 .dailog-editor/rules.json，下次生效）
 //   首次使用：从工程种子（assets/rules.json）自动初始化复制到 .dailog-editor/rules.json
-import { writeFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
+import { writeFileSync, existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir as osTmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,6 +24,26 @@ import { api, defaultAssetsDir, draftDir, rulesPath, writeProgress } from "./lib
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 const FETCH_TIMEOUT_MS = 30_000;
 const MAX_HTML_BYTES = 5 * 1024 * 1024; // 5MB 上限（超长页截断）
+
+// —— 内容过短硬门槛（采集层直接拒审，不落草稿）——
+export const MIN_USER_TURNS = 3; // user 轮次下限
+export const MIN_CHARS = 500;    // 总字数下限
+export const SHORT_REASON = "Conversation too short: dialogue rounds must exceed 3, and total message length must be greater than 500 characters.";
+
+export function isTooShort(users: number, words: number): boolean {
+  return users < MIN_USER_TURNS || words < MIN_CHARS;
+}
+
+/** 过短投稿：删除已落盘 dialogue.json（不保留草稿）+ 直接拒审（reason 统一）——单条 fetch / 批量采集共用 */
+export async function rejectShort(config: EditorConfig, submissionId: string, users: number, words: number): Promise<void> {
+  rmSync(join(draftDir(submissionId), "dialogue.json"), { force: true });
+  try {
+    await api(config, `/v1/editor/submissions/${submissionId}/reject`, { method: "POST", body: { reason: SHORT_REASON } });
+    writeProgress(submissionId, "rejected");
+  } catch (e) {
+    console.warn(`[fetch] 拒审失败（${submissionId}）：${(e as Error).message}`);
+  }
+}
 
 export interface DecodeRule {
   platform: string;
@@ -777,6 +797,11 @@ export async function fetchPage(config: EditorConfig, args: string[]): Promise<v
   }
   const users = result.messages!.filter((m) => m.role === "user").length;
   const words = result.messages!.reduce((n, m) => n + m.content.length, 0);
+  if (isTooShort(users, words)) {
+    await rejectShort(config, submissionId, users, words);
+    console.log(`[fetch] ⛔ 内容过短（user ${users} 轮 / ${words} 字 < ${MIN_USER_TURNS} 轮 / ${MIN_CHARS} 字）——已直接拒审（原因：${SHORT_REASON}），不落草稿`);
+    return;
+  }
   console.log(`[fetch] ✅ 提取成功：${result.messages!.length} 条消息（user ${users} / assistant ${result.messages!.length - users}），共 ${words} 字 → dialogue.json`);
   console.log("[fetch] 下一步：基于 dialogue.json 生成脚本（脚本生成规范见 skill ④）");
 }

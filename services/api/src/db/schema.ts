@@ -154,7 +154,7 @@ export const submissions = pgTable(
 );
 
 /** AI 平台嘉宾库：品牌声线宿主（跨期统一的 AI 受访嘉宾）。
- *  编辑本地 TTS 用 guest_voice_samples 的 referenceId/参考音频作嘉宾音色。 */
+ *  编辑本地 TTS 用 guest_voice_samples 的参考音频作嘉宾音色（2D references 内联）。 */
 export const guests = pgTable("guests", {
   id: text("id").primaryKey(), // 用 platform 枚举值作 id（claude/chatgpt/...）
   platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek", "perplexity", "grok"] }).notNull().unique(),
@@ -166,14 +166,13 @@ export const guests = pgTable("guests", {
 });
 
 /** 嘉宾音频采样（按平台 × 语种各一条）：编辑本地 TTS 的嘉宾音色来源；
- *  audio_key = storage key（R2/fs），reference_id = TTS 音色 id，
- *  transcript = 参考音频转录文本（2D references 用） */
+ *  audio_key = storage key（R2/fs），transcript = 参考音频转录文本（2D references 内联用）；
+ *  多语种：同一嘉宾按语种各一条，未定义语种由 TTS 按英文兜底。 */
 export const guestVoiceSamples = pgTable("guest_voice_samples", {
   id: uuid("id").defaultRandom().primaryKey(),
   guestId: text("guest_id").notNull().references(() => guests.id, { onDelete: "cascade" }),
   language: text("language").notNull().default("zh"),
   audioKey: text("audio_key").notNull(),
-  referenceId: text("reference_id"),
   transcript: text("transcript"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("guest_voice_samples_guest_language_unique").on(t.guestId, t.language)]);

@@ -11,10 +11,11 @@ const STEP_HINTS: Record<string, string> = {
   fetched: "已采集解码（dialogue.json 就绪）——下一步：生成脚本 → tts",
   pasted: "已粘贴入库（dialogue.json 就绪）——下一步：生成脚本 → tts",
   tts: "语音已合成（seg-NN.mp3 就绪）——下一步：merge",
-  merged: "已合成 final.mp3——下一步：试听 → cover（可选）→ publish",
+  merged: "已合成 final.m4a——下一步：试听 → cover（可选）→ publish",
   covered: "封面已就绪——下一步：publish",
   published: "✅ 已发布——无需继续",
   rejected: "✅ 已拒审——无需继续",
+  republished: "✅ 已重新生成（republish）——无需继续",
 };
 
 export async function progress(config: EditorConfig, args: string[]): Promise<void> {

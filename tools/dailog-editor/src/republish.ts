@@ -1,6 +1,6 @@
 // 重新生成已发布节目（重做后更新）：multipart 上传新成品 → 服务端更新已有 episode 行
 //   （保留 id/slug/期号/统计/精选/公开状态，覆盖 R2 音频/封面，publishedAt 刷新）
-//   pnpm editor republish <episodeId> --title "..." [--audio final.mp3] [--cover c.jpg]
+//   pnpm editor republish <episodeId> --title "..." [--audio final.m4a] [--cover c.jpg]
 //     [--description ...] [--summary ...] [--references-file <json>] [--tags a,b] [--language zh] [--guest claude]
 //   流程：episodes 定位 → detail <episodeId>（拿 submissionId/URL）→ 重跑 三步制作 → tts → merge → cover
 //         → republish <episodeId>（本命令）——与 publish 相同参数，但目标是已发布节目而非新投稿
@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import type { EditorConfig } from "./lib.js";
-import { api, draftDir } from "./lib.js";
+import { api, clearArtifacts, draftDir, writeProgress } from "./lib.js";
 
 /** ffprobe 音频时长（秒）——meta durationSeconds 来源（页面显示「N 分钟」） */
 function ffprobeDuration(file: string): number {
@@ -16,7 +16,7 @@ function ffprobeDuration(file: string): number {
   return Math.round(parseFloat(out.trim()));
 }
 
-/** 读 2.1 元数据（metadata.json）——republish 元数据（description/summary/highlights/category/references/tags）来源；
+/** 读 PUB-STEP-2 元数据（metadata.json）——republish 元数据（description/summary/highlights/category/references/tags）来源；
  *  与 publish 一致：metadata.json 优先、旧草稿 fallback script.json */
 function loadMetadata(submissionId: string): Record<string, unknown> | null {
   try {
@@ -43,7 +43,7 @@ interface RepublishArgs {
 function parseArgs(args: string[]): RepublishArgs {
   const episodeId = args[0];
   if (!episodeId) {
-    console.error("用法：pnpm editor republish <episodeId> --title \"...\" [--audio final.mp3] [--cover c.jpg] [--description ...] [--summary ...] [--references-file <json>] [--tags a,b] [--language zh] [--guest claude]");
+    console.error("用法：pnpm editor republish <episodeId> --title \"...\" [--audio final.m4a] [--cover c.jpg] [--description ...] [--summary ...] [--references-file <json>] [--tags a,b] [--language zh] [--guest claude]");
     process.exit(1);
   }
   const take = (flag: string) => {
@@ -84,13 +84,13 @@ export async function republish(config: EditorConfig, args: string[]): Promise<v
   }
   const submissionId = ep.submissionId!;
 
-  // 成品音频：--audio 或草稿目录 final.mp3（按投稿目录）
+  // 成品音频：--audio 或草稿目录 final.m4a（按投稿目录）
   const audio = p.audio ?? (() => {
-    const fallback = `${draftDir(submissionId)}/final.mp3`;
+    const fallback = `${draftDir(submissionId)}/final.m4a`;
     try { readFileSync(fallback); return fallback; } catch { return undefined; }
   })();
   if (!audio) {
-    console.error(`[republish] 缺少成品音频（--audio 或草稿 ${draftDir(submissionId)}/final.mp3）——先跑 merge 或指定 --audio`);
+    console.error(`[republish] 缺少成品音频（--audio 或草稿 ${draftDir(submissionId)}/final.m4a）——先跑 merge 或指定 --audio`);
     process.exit(1);
   }
 
@@ -104,7 +104,7 @@ export async function republish(config: EditorConfig, args: string[]): Promise<v
   }
   const meta: Record<string, unknown> = { title: p.title, language: p.language };
   const md = loadMetadata(submissionId);
-  // description（2.1 metadata.json 自动读取；旧草稿 fallback script.json；--description 可覆盖）
+  // description（PUB-STEP-2 metadata.json 自动读取；旧草稿 fallback script.json；--description 可覆盖）
   if (p.description) meta.description = p.description;
   else if (md && typeof md.description === "string" && md.description.trim()) meta.description = md.description.trim();
   else {
@@ -115,7 +115,7 @@ export async function republish(config: EditorConfig, args: string[]): Promise<v
       }
     } catch { /* 草稿无 script.json：description 可选，忽略 */ }
   }
-  // summary（2.1 metadata.json 自动读取；旧草稿 fallback script.json；--summary 可覆盖）
+  // summary（PUB-STEP-2 metadata.json 自动读取；旧草稿 fallback script.json；--summary 可覆盖）
   if (p.summary) meta.summary = p.summary;
   else if (md && typeof md.summary === "string" && md.summary.trim()) meta.summary = md.summary.trim();
   else {
@@ -126,7 +126,7 @@ export async function republish(config: EditorConfig, args: string[]): Promise<v
       }
     } catch { /* 可选，忽略 */ }
   }
-  // references（2.1 metadata.json 自动读取；--references-file 可覆盖）
+  // references（PUB-STEP-2 metadata.json 自动读取；--references-file 可覆盖）
   if (p.referencesFile) {
     try {
       const refs = JSON.parse(readFileSync(p.referencesFile, "utf8"));
@@ -136,11 +136,11 @@ export async function republish(config: EditorConfig, args: string[]): Promise<v
   } else if (md && Array.isArray(md.references) && md.references.length > 0) {
     meta.references = md.references;
   }
-  // tags（2.1 metadata.json 自动读取；--tags 可覆盖）
+  // tags（PUB-STEP-2 metadata.json 自动读取；--tags 可覆盖）
   if (p.tags?.length) meta.tags = p.tags;
   else if (md && Array.isArray(md.tags) && md.tags.length > 0) meta.tags = md.tags;
   if (p.guestId) meta.guestId = p.guestId;
-  // 金句（2.1 metadata.json 自动读取；旧草稿 fallback script.json；可选——缺省/解析失败忽略）
+  // 金句（PUB-STEP-2 metadata.json 自动读取；旧草稿 fallback script.json；可选——缺省/解析失败忽略）
   let highlights: unknown = null;
   if (md && Array.isArray(md.highlights)) highlights = md.highlights;
   if (!highlights) {
@@ -157,7 +157,7 @@ export async function republish(config: EditorConfig, args: string[]): Promise<v
       .slice(0, 5);
     if (hs.length) meta.highlights = hs;
   }
-  // 分类（2.1 metadata.json 自动读取；旧草稿 fallback script.json：insight/experience/advice/inspiration）
+  // 分类（PUB-STEP-2 metadata.json 自动读取；旧草稿 fallback script.json：insight/experience/advice/inspiration）
   let category: unknown = null;
   if (md) category = md.category;
   if (!category) {
@@ -178,4 +178,6 @@ export async function republish(config: EditorConfig, args: string[]): Promise<v
   console.log(`[republish] 更新已发布节目 ${p.episodeId}（投稿 ${submissionId}）：${audio}（${(audioBytes.length / 1024 / 1024).toFixed(1)}MB）…`);
   const res = await api(config, `/v1/editor/episodes/${p.episodeId}/republish`, { method: "POST", formData: form });
   console.log(`[republish] ✅ 已更新：dailog 第 ${(res as { number?: number }).number ?? "?"} 期「${p.title}」（链接/期号不变）`);
+  writeProgress(submissionId, "republished"); // 重做是终态：不计入概览待办（见 RES）
+  clearArtifacts(submissionId); // 同 publish 惯例：清理语音/封面大文件（文本草稿保留——对话/脚本可查阅/再重做，见 DRAFT）
 }
