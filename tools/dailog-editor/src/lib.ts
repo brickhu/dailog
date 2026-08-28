@@ -26,6 +26,12 @@ const root = findRoot(dirname(fileURLToPath(import.meta.url)));
 const configDir = join(root, ".dailog-editor");
 /** 草稿根目录（overview 遍历全部投稿草稿用） */
 export const draftsDir = join(configDir, "drafts");
+/** 编辑反馈日志目录（自进化素材——SC-GATE-2 等确认门的修改意见落盘，本地无 API 依赖） */
+export const feedbackDir = join(configDir, "feedback");
+/** 反馈日志文件（JSONL：一行一条 FeedbackEntry） */
+export const feedbackFile = join(feedbackDir, "feedback.jsonl");
+/** 学习规则文件（L2 演进层）：编辑反馈蒸馏沉淀的通用规则——SC-STEP-1/2 作为附加输入注入 */
+export const learnedRulesFile = join(configDir, "learned-rules.md");
 const sessionFile = join(configDir, "session.json");
 const envsFile = join(configDir, "envs.json");
 

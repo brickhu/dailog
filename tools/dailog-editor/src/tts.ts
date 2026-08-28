@@ -11,7 +11,7 @@ import { writeFileSync, readFileSync, copyFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import type { EditorConfig } from "./lib.js";
-import { api, draftDir, readScript, writeProgress, type ScriptSegment } from "./lib.js";
+import { api, tryApi, draftDir, readScript, writeProgress, type ScriptSegment } from "./lib.js";
 
 /** 平台枚举（guests 表；--guest 取值） */
 const PLATFORMS = ["claude", "chatgpt", "deepseek", "gemini", "kimi", "doubao", "tongyi", "perplexity", "grok"];
@@ -63,6 +63,34 @@ function parseArgs(args: string[]): ParsedArgs {
   return { submissionId, scriptPath: args[scriptIdx + 1], language: language.toLowerCase(), platform, parts, part };
 }
 
+interface GuestVoiceRow {
+  guestId: string;
+  guestName?: string;
+  language: string;
+  audioKey: string;
+  transcript: string | null;
+}
+
+/** 解析有效 guestId（音色替换，本地决策、零服务端依赖）：
+ *  目标嘉宾无声线 → 用系统内其他嘉宾同语种音色兜底——替换音色、不替换嘉宾名字（脚本里的 guest 称呼不变）。
+ *  返回结构化 note（ASCII）：guest-voice-replacement:<来源嘉宾>:<语种>；无替换返回 null。 */
+async function resolveGuestId(
+  config: EditorConfig,
+  platform: string,
+  language: string,
+): Promise<{ guestId: string; note: string | null }> {
+  const samples = (await tryApi(config, "/v1/editor/guests/voice-samples").catch(() => null)) as GuestVoiceRow[] | null;
+  if (!samples || samples.length === 0) return { guestId: platform, note: null };
+  const mine = samples.filter((s) => s.guestId === platform);
+  const pickMine = (lang: string) => mine.find((s) => s.language === lang) ?? null;
+  if (pickMine(language) || (language !== "en" ? pickMine("en") : null)) return { guestId: platform, note: null };
+  const other = samples.filter((s) => s.guestId !== platform);
+  const pickOther = (lang: string) => other.find((s) => s.language === lang) ?? null;
+  const fallback = pickOther(language) ?? (language !== "en" ? pickOther("en") : null) ?? other[0] ?? null;
+  if (!fallback) return { guestId: platform, note: null };
+  return { guestId: fallback.guestId, note: `guest-voice-replacement:${fallback.guestId}:${fallback.language}` };
+}
+
 /** 提交一段脚本给服务端合成，落盘 {name}.mp3 */
 async function synthesize(
   config: EditorConfig,
@@ -78,14 +106,32 @@ async function synthesize(
     language,
     segments: segments.map(({ speaker, text }) => ({ speaker, text })),
   };
-  if (platform) body.guestId = platform;
+  // 音色替换（本地决策）：目标嘉宾无声线 → 用系统内其他嘉宾音色，guestId 换发；嘉宾名字不变
+  let effectivePlatform = platform;
+  let voiceNote: string | null = null;
+  if (platform && segments.some((s) => s.speaker === "guest")) {
+    const resolved = await resolveGuestId(config, platform, language);
+    effectivePlatform = resolved.guestId;
+    voiceNote = resolved.note;
+  }
+  if (effectivePlatform) body.guestId = effectivePlatform;
   const chars = segments.reduce((n, s) => n + s.text.length, 0);
   console.log(`[tts] 段落 ${name} 合成：${segments.length} 段 / ${chars} 字 / ${language}${platform ? ` / 嘉宾 ${platform}` : ""}…`);
+  if (voiceNote) {
+    const m = /^guest-voice-replacement:(.+):(.+)$/.exec(voiceNote);
+    if (m) console.log(`[tts] ⚠️ 音色替换：${platform} 无声线，使用 ${m[1]}（${m[2]}）音色——嘉宾名字不变`);
+    else console.log(`[tts] ⚠️ ${voiceNote}`);
+  }
   const res = await api(config, "/v1/editor/tts", { method: "POST", body, expectJson: false });
   const audio = new Uint8Array(await (res as Response).arrayBuffer());
   const p = join(dir, `${name}.mp3`);
   writeFileSync(p, audio);
   console.log(`[tts] ✅ ${name} → ${p}（${(audio.length / 1024 / 1024).toFixed(2)}MB）`);
+  if (voiceNote) {
+    const m = /^guest-voice-replacement:(.+):(.+)$/.exec(voiceNote);
+    if (m) console.log(`[tts] ⚠️ 音色替换：${platform ?? "嘉宾"} 无声线，使用 ${m[1]}（${m[2]}）音色——嘉宾名字不变`);
+    else console.log(`[tts] ⚠️ ${voiceNote}`);
+  }
 }
 
 /** 按序拼接已有段落 → full.mp3（段间 0.6s 静音） */

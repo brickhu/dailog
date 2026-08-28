@@ -8,7 +8,13 @@
 ```
 MGT-STEP-1 重新生成（republish，重做后更新，链接/期号不变）：
   episodes [--match "关键词|期号"] 定位节目 → detail <submissionId> 确认原始对话/采样仍在
-  （drafts/<id>/dialogue.json 可复用，内容来源变化则先 fetch 刷新）→ 重跑脚本两关（SC-STEP-1..2）
+  （drafts/<id>/dialogue.json 可复用，内容来源变化则先 fetch 刷新）
+  → **选题已确认，跳过 SC-STEP-1 选题审核**：
+     · 本地有 chosen-idea.json → 直接复用（角度不变），不重跑选题
+     · 本地没有 → 沿用现有终稿/从元数据重建最简角度（dimension/听众价值/创作建议）
+     · 仅当编辑**明确要求换选题角度**才重跑 SC-STEP-1——且已发布节目**只列思路不拒稿**
+       （强度不足 → 沿用旧角度；**不写 quality.json**）
+  → SC-STEP-2 脚本（只重做语音不想改稿 → 跳过，直接用现有 script.json）
   → TTS（TTS-STEP-1..3）→ PUB-STEP-1 封面 → PUB-STEP-2 元数据 → PUB-GATE-1 发布确认门
   → pnpm editor republish <episodeId> --title "…" [--cover cover.jpg] [--tags a,b] [--guest <platform>]
 MGT-STEP-2 修改标题/简介/封面：走同一 republish，--title / --description / --cover 覆盖对应字段
@@ -17,6 +23,9 @@ MGT-STEP-3 下线申请审批：pnpm editor removal → approve 下架+通知 / 
 原则：**不是新建期**——期号/slug/播放统计/收藏/精选保留，仅内容字段替换；publishedAt 刷新（列表前移，ETag 变化客户端重新拉取）；
 **republish 幂等**（重复调用只覆盖内容不产生重复期，重试安全——先确认目标 episodeId 正确）；无 cover 时保留旧封面；
 服务端不自动通知投稿人（重做是内部动作）。
+**选题审核只用于首次决策**：SC-STEP-1 的强度门槛（RULES-2）决定「这段对话值不值得做成一期」；
+已发布节目已过此决策，重新生成是执行层重做——不再过门槛，防止「对话没变、门槛变严」导致已确认选题被误拒
+（2026-08-26 实例：挂谷猜想一期重新生成被 no_moment 拒稿，同对话当年选题已通过）。
 
 **MGT-IN 输入规范与依赖**
 - republish 参数与 publish 一致：--title --description --summary --tags --language --guest --cover --audio
@@ -30,6 +39,8 @@ MGT-STEP-3 下线申请审批：pnpm editor removal → approve 下架+通知 / 
 republish 成功即终态：progress 记 republished（不计入概览待办），并同 publish 清理语音/封面大文件（final.m4a / cover.jpg 等，见 DRAFT）；再重做需重跑 TTS → merge → cover。
 
 **MGT-ERR 错误处理**
+- **草稿残留 quality.json（重跑选题误写的拒稿记录）**：投稿已发布却存在 quality.json → 忽略并删除该文件
+  （重新生成不再重跑 SC-STEP-1，见 MGT-STEP-1；残留不影响重做）
 - episodes --match 定位不到 → 换关键词/期号重试；detail <submissionId> 确认
 - 目标 episodeId 错误 → 先核对再 republish（幂等但会覆盖目标内容）
 - 无 cover → 保留旧封面；试听未过 → 修好再发，不 republish

@@ -3,6 +3,7 @@
 > 主会话起子代理时按此模板填充（路径按实际情况补全）：
 > <skillDir> = .agents/skills/dailog-editor（产物）或 tools/dailog-editor（源码）
 > <drafts> = .dailog-editor/drafts
+> <configDir> = .dailog-editor（learned-rules.md 所在——L2 演进层，有则 SC-STEP-1/2 读取作为附加规则）
 > 提示词文件（selection.md / draft.md / meta.md）由子代理**原样读取**作为系统提示词，
 > 任何人不许改写压缩；对话原文 content 可能含未转义换行，严格 JSON.parse 失败时基于 read 逐行容错解析。
 >
@@ -15,6 +16,8 @@
 ```
 你是 dailog 编辑工作流的「审稿+选题」子代理。
 1. 用 read 工具读取提示词文件并**原样作为你的系统提示词**（不要改写压缩）：<skillDir>/prompts/selection.md
+1a. 用 read 读取 <configDir>/learned-rules.md（可选——存在则作为**附加选题规则**与 selection.md 并列生效；
+    无则跳过；冲突以 selection.md 为准；这是编辑反馈蒸馏沉淀的学习规则，须遵守）
 2. 用 read 工具读取对话原文：<drafts>/<id>/dialogue.json（[{role, content}] 逐条；content 可能含
    未转义换行，严格 JSON.parse 失败时基于 read 逐行内容容错解析）
 3. 投稿人节目建议（可选，角度锚点，有则作为角度约束）：<suggestion>
@@ -54,17 +57,19 @@ fact_check_list / privacy_redactions 留在 selection.json（SC-GATE-2 核查仍
 0. 角色（SC-GATE-1 已拼装进 chosen-idea.json 的 role_block，直接采信，勿自行推断/编造）：
    对谈双方身份、称呼、选题方向与创作思路一律以 chosen-idea.json 的 role_block 为准
    （即"1. {host}：… 2. {guest}：…"段落）；不得自行推断或编造画像外细节。
-1. 用 read 读取 <skillDir>/prompts/draft.md（写作指南：角色及任务/输入依赖/创作原则（核心思想·听感与语域·不好的脚本）/写作结构（结构原则·4.1 点题·4.2 对话·4.3 落点收束）/情绪·停顿·穿插设计/输出）与 <skillDir>/prompts/draft-{dimension}.md（对应维度：结构 + 好坏判断标准，判断标准不是可抄的措辞）→ 两个文件均**原样**作为系统提示词（不要改写压缩）
-    （<draft-{dimension}.md> 由主会话按 chosen-idea.dimension 注入：insight→draft-insight.md、experience→draft-experience.md、advice→draft-advice.md、inspiration→draft-inspiration.md）
+1. 用 read 读取 <skillDir>/prompts/draft.md（写作指南：角色及任务/输入依赖/创作原则（核心思想·听感与语域·不好的脚本）/写作结构（结构原则·4.1 点题·4.2 对话·4.3 落点收束）/情绪·停顿·穿插设计/输出）→ **原样**作为系统提示词（不要改写压缩）
+    （无维度文件——维度差异已由 chosen-idea 的创作建议承载）
 1a. 主持人称呼（callName）：<取自 role_block 的 {callName}>——开场自我介绍（我是{callName}）与 guest 致意（你好，{callName}！）一律用该值，不得用泛称「主持人」；称呼语言与脚本语言不同时按 draft.md 4.1 称呼改写规则改写
 1b. 主持人画像（personaInfo，从 detail 注入，有则给）：性别/职业/年龄/国籍/简介——开场自我介绍 + 对谈「处境关联」转场与落点的参考素材；**只使用注入内容、不得编造画像外细节**，画像不改变选题角度（A 锚定优先）
 1c. 嘉宾信息（guests 表，主会话注入，有则给，role_block 已含嘉宾身份，此处为补充背景）：嘉宾名（{guest}——开场引嘉宾与 guest 打招呼用，不得用泛称「AI」）/ 平台 / 简介——对谈背景参考；不得编造
+1d. 用 read 读取 <configDir>/learned-rules.md（可选——存在则作为**附加脚本规则**与 draft.md 并列生效；
+    无则跳过；冲突以 draft.md 为准；这是编辑反馈蒸馏沉淀的学习规则，须遵守）
 2. 用 read 读取 <drafts>/<id>/chosen-idea.json（dimension + 听众价值（价值锚点）+ **创作建议**（角度锚点，不得偏离）+ role_block 角色段；角色以 role_block 为准）
 3. 用 read 读取 <drafts>/<id>/dialogue.json（对话原文，容错解析同 SC-STEP-1）
 4. 用 read 读取 <drafts>/<id>/selection.json（privacy_redactions——逐条泛化到终稿；fact_check_list 属
    SC-GATE-2 核查门，本层不依赖；保真以原文为基准——本层直接对照对话原文）
 5. 按提示词执行——**分 3 次生成、3 次写盘**（每次输出必须在一次生成内完成，避免长 JSON 截断续写）：
-   · 第 1 次：按固定结构（点题/对谈/落点+收束）+ 各维度写法 + 听感设计（对照原文保真）产出
+   · 第 1 次：按写作结构（点题/对谈/落点+收束）+ 听感设计（对照原文保真）产出
      category（由 chosen-idea.dimension 映射）/ host（role_block 的 {callName}）/ guest（{guest}）/ lang /
      creationNote（≤100 字）+ **parts[0]（点题）** segments
      （**仅这 6 个字段**——禁止混入 title/summary/description/tags/reference_items 等发布元数据字段，由 PUB-STEP-2 生成）

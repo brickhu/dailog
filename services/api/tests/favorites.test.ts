@@ -30,7 +30,7 @@ function fakeRepo(): AppDeps["repo"] {
       getById: async () => null,
       list: async () => [],
       voiceSampleByLanguage: async () => null,
-      voiceSampleAny: async () => null,
+      voiceSampleAny: async () => null, anyVoiceSampleByLanguage: async () => null,
       upsertVoiceSample: async () => {},
       update: async () => {},
       listVoiceSamples: async () => [],
@@ -47,7 +47,7 @@ function fakeRepo(): AppDeps["repo"] {
       listQueue: async () => [],
       getDetail: async () => null,
       reject: async () => {},
-      markPublished: async () => {},
+      markPublished: async () => {}, setCallName: async () => ({ id: "sub-1" }),
     },
     episodes: {
       createPublished: async () => ({ id: "ep-1", number: 1, slug: "abc12345" }),

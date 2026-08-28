@@ -224,7 +224,7 @@ export const episodes = pgTable("episodes", {
   language: text("language").notNull().default("zh"),
   /** 标签（编辑提交） */
   tags: text("tags").array(),
-  /** 节目分类（Step A 选题维度 → token）：insight 认知 / experience 经验 / advice 建议 / inspiration 启发 */
+  /** 节目分类（Step A 选题维度 → token）：insight 新知 / experience 经验 / advice 建议 / inspiration 启发 */
   category: text("category"),
   /** 数字期号：发布时分配（max+1，唯一；无空洞）——"dailog 第 N 期" */
   number: integer("number"),

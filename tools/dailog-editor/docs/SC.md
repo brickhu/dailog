@@ -13,13 +13,15 @@
 | 步骤 | 子代理 | 输入 | 输出（写盘） | 确认门 |
 |---|---|---|---|---|
 | SC-STEP-1 选题方向（审稿+选题） | `dailog-select` | selection.md + dialogue.json + 节目建议 | selection.json（content_summary + ideas[1..N] 各带 score）或 quality.json | SC-GATE-1 选题 |
-| SC-STEP-2 脚本生成（内容 + 听感打磨） | `dailog-draft` | draft.md + draft-{dimension}.md + chosen-idea.json + dialogue.json + selection.json | script.json（终稿带标签 + reference_items + optimization_summary） | SC-GATE-2 终稿 |
+| SC-STEP-2 脚本生成（内容 + 听感打磨） | `dailog-draft` | draft.md + chosen-idea.json + dialogue.json + selection.json | script.json（终稿带标签 + reference_items + optimization_summary） | SC-GATE-2 终稿 |
 
 原则：
 - **打回重跑**：听感反馈（呈现层）与结构反馈（换角度/切主题/加删回合）→ 均重跑 SC-STEP-2（dailog-draft，prompt 追加修订指令）；
-  换选题角度 → 回 SC-STEP-1 重新选号。
+  换选题角度 → 回 SC-STEP-1 重新选号。**编辑反馈先落盘再重跑**：收到听感/结构反馈（含说明）时，先用
+  `pnpm editor feedback add` 落盘一条（issue/reason/change；编辑说「以后都要」→ --general）——修订指令只
+  作用于本期重跑，落盘让意见跨期沉淀（见 FB 分册；蒸馏沉淀规则须编辑审批，不自动进提示词）。
 - **内容规范以提示词文件为准**（主会话不重复载入）：`prompts/selection.md`（SC-STEP-1：选题打分器强度闸门 <60 拒稿 + G1-G5 闸门 + 时刻门 +
-  逻辑骨架 + 价值维度 + 思路打分排序）；`prompts/draft.md` + `draft-{dimension}.md`（SC-STEP-2：创作原则（核心思想/好的脚本/坏的脚本/去噪）+ 写作结构（点题/对话）+ 情绪/停顿/穿插设计 + 对应维度结构与好坏判断标准 → 终稿）；
+  逻辑骨架 + 价值维度 + 思路打分排序）；`prompts/draft.md`（SC-STEP-2：创作原则（核心思想/好的脚本/坏的脚本/去噪）+ 写作结构（点题/对话）+ 情绪/停顿/穿插设计 → 终稿；维度差异由 chosen-idea 创作建议承载）；
   `prompts/meta.md`（PUB-STEP-2 发布）
 - **提示词保真**：提示词文件由**生成子代理原样读取**作为系统提示词，任何人不许改写压缩
 - **节目建议（角度锚点）**：detail 的「节目建议」是用户呈现意图的最强信号——SC-STEP-1 以它为角度约束
@@ -41,16 +43,25 @@
 
 SC-GATE-1 选题确认门（SC-STEP-1 pass 后）：
   · 展示：原文内容概括（3-5 句）+ 选题思路列表（1-N 个：门槛高、通过的全部列出；每个：选题分类 + 选题逻辑 + 听众价值 + 得分 + 创作建议（可改），推荐标 ⭐）
+  · **主持人称呼（callName）补录**：detail 显示「主持人称呼：无」→ 先询问编辑本期主持人的称呼（如 飞），
+    用 `pnpm editor callname <submissionId> --name "飞"` 持久化到投稿，再拼装 role_block 的 {callName}——
+    避免每次重新生成都回退「主持人」（老投稿 call_name 常为空，见 2026-08-28 挂谷猜想实例）
+  · **选题反馈落盘（审美进化）**：编辑拒稿或修改思路（附说明）时，先用 `pnpm editor feedback add --stage selection`
+    落盘一条（类别：门槛|价值|角度|维度|标题|其他；编辑说「以后都要」→ --general）——AI 选题判断与编辑审美
+    的偏差跨期沉淀，蒸馏后进化 selection.md（见 FB 分册）
   · 选项（统一选号格式，见 RULES-10，一项一行）：
     `[1..N] : ✅ 选第 N 个思路`
     `[R] : ❌ 拒稿 → 见 REJ`
     `[M] : ✏️ 修改（附说明重跑 SC-STEP-1）`
 SC-GATE-2 终稿确认门（SC-STEP-2 生成后）：
   · 展示：终稿全文（单个 code block 整篇）+ 优化总结（optimization_summary，逐条）+ 摘要（script-preview）作附加信息
-  · 嘉宾声线预检：进 TTS 前 pnpm editor guests 确认目标嘉宾（--guest <platform>）有声线；
-    ⚠️ 无声线 → 本门内立即告知编辑（上传声线/换有声线嘉宾/暂停），不得闷头跑 tts 到 422
+  · 嘉宾声线预检：进 TTS 前 pnpm editor guests 确认目标嘉宾（--guest <platform>）；
+    无声线 → **不再阻塞**——服务端自动用系统内其他嘉宾音色替换（替换音色、不替换嘉宾名字，CLI 会提示），
+    告知编辑即可继续；想用专属声线 → guest-voice 上传后 --part n 重跑；系统内完全无音色才 422
   · 质量自检：现场感/角度保真/结构对照/转场 + 称呼核对（开场自我介绍 = detail 的 callName，非「主持人」泛称）
     + 听众视角抽查（host 抛出符号/术语/专名前有无承接；二人对话逻辑是否接得住）——不合格打回重生成
+  · 机器校验（附加信息）：pnpm editor check-script <id>（三段结构/6 字段/句尾标签/收尾三步/笑声≤1/
+    AI 长段/host 问句可追溯/停顿密度）——**存在硬性失败（✗）→ 打回重跑 SC-STEP-2**；警告项人工核对
   · 事实核查（进 TTS 前必做，见 RULES-8）：对照 selection.json 的 fact_check_list 逐条核实（无法核实 → 删除断言）
     + privacy_redactions 逐条确认已泛化——未核查不进 TTS
   · 选项（统一选号格式，见 RULES-10，一项一行）：

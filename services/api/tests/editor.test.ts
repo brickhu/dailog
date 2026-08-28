@@ -19,6 +19,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       ],
       voiceSampleByLanguage: async () => null,
       voiceSampleAny: async () => ({ id: "gvs-1", guestId: "claude", language: "zh", audioKey: "guests/claude/zh.mp3", transcript: "你好" }),
+      anyVoiceSampleByLanguage: async () => null,
       upsertVoiceSample: async () => {},
       update: async () => {},
       listVoiceSamples: async () => [],
@@ -77,7 +78,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       listQueue: async () => [],
       getDetail: async () => null,
       reject: async () => {},
-      markPublished: async () => {},
+      markPublished: async () => {}, setCallName: async () => ({ id: "sub-1" }),
     },
     ...overrides,
   };

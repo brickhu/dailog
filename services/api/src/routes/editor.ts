@@ -34,7 +34,7 @@ interface PublishMeta {
   language?: string;
   guestId?: string;
   durationSeconds?: number;
-  /** 分类 token（Step A 选题维度）：insight 认知 / experience 经验 / advice 建议 / inspiration 启发 */
+  /** 分类 token（Step A 选题维度）：insight 新知 / experience 经验 / advice 建议 / inspiration 启发 */
   category?: string;
   /** 无情绪标签的完整台本（节目页展示用；可选） */
   transcript?: string;
@@ -149,6 +149,28 @@ export function editorRoutes(deps: EditorDeps) {
     const episodes = await deps.repo.episodes.listBySubmission(detail.id);
     return c.json({ ...detail, episodes });
   }) as unknown as RouteHandler<typeof r2, AuthEnv>);
+
+  /** 补录主持人称呼（callName）：投稿缺称呼（detail 显示「主持人称呼：无」）时编辑确认后写入——
+   *  持久化到投稿，避免每次重新生成回退「主持人」（2026-08-28 实例：挂谷猜想一期 call_name 为空） */
+  const rCallname = createRoute({
+    method: "post",
+    path: "/v1/editor/submissions/:id/callname",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/submissions/:id/callname" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(rCallname, (async (c: Context) => {
+    const id = c.req.param("id")!;
+    const detail = await deps.repo.submissions.getDetail(id);
+    if (!detail) return c.json({ error: "not_found" }, 404);
+    const body = (await c.req.json().catch(() => null)) as { name?: unknown } | null;
+    const name = typeof body?.name === "string" ? body.name.trim() : "";
+    if (!name || name.length > 20) return c.json({ error: "invalid_name", detail: "称呼必填且 ≤20 字" }, 400);
+    const res = await deps.repo.submissions.setCallName(id, name);
+    if (!res) return c.json({ error: "not_found" }, 404);
+    return c.json({ ok: true, callName: name });
+  }) as unknown as RouteHandler<typeof rCallname, AuthEnv>);
 
   // ---- 拒审 ----
 

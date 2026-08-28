@@ -117,13 +117,22 @@ export function ttsRoutes(deps: TtsDeps) {
     const hostBytes = await deps.storage.get(hostSample.audioUrl).then((r) => r.data).catch(() => null);
     if (!hostBytes) return c.json({ error: "no_voice_sample", detail: "采样音频读取失败" }, 422);
 
-    // guest 参考（声线服务端配置：同语种优先 → 未定义语种统一英文兜底）
+    // guest 参考（声线服务端配置）：同语种优先 → en 兜底 → **系统内其他嘉宾音色替换**
+    // （替换音色、不替换嘉宾名字——嘉宾无声线时用系统内存在音色兜底，响应头 X-Guest-Voice-Note 注明）
     let guestSample: { audioKey: string; transcript: string | null } | null = null;
+    let guestVoiceNote: string | null = null;
     if (hasGuest) {
       guestSample = (await deps.repo.guests.voiceSampleByLanguage(guestId!, language).catch(() => null))
         ?? (language !== "en" ? await deps.repo.guests.voiceSampleByLanguage(guestId!, "en").catch(() => null) : null);
       if (!guestSample) {
-        return c.json({ error: "no_guest_voice", detail: `嘉宾 ${guestId} 无 ${language}（或 en）声线（服务端未配置——用 guest-voice 命令上传）` }, 422);
+        const fallback = (await deps.repo.guests.anyVoiceSampleByLanguage(language, guestId!).catch(() => null))
+          ?? (language !== "en" ? await deps.repo.guests.anyVoiceSampleByLanguage("en", guestId!).catch(() => null) : null);
+        if (!fallback) {
+          return c.json({ error: "no_guest_voice", detail: `嘉宾 ${guestId} 无 ${language}（或 en）声线，且系统内无其他可用音色（用 guest-voice 上传）` }, 422);
+        }
+        guestSample = fallback;
+        // 头部值必须 ASCII（HTTP 头不允许非 ASCII）——CLI 按结构化值格式化中文提示
+        guestVoiceNote = `guest-voice-replacement:${fallback.guestId}:${fallback.language}`;
       }
     }
 
@@ -158,9 +167,9 @@ export function ttsRoutes(deps: TtsDeps) {
           referenceAudioTranscript: hostSample.transcript ?? undefined,
         });
       }
-      return new Response(mp3 as unknown as BodyInit, {
-        headers: { "Content-Type": "audio/mpeg", "Cache-Control": "private, max-age=60" },
-      });
+      const resHeaders: Record<string, string> = { "Content-Type": "audio/mpeg", "Cache-Control": "private, max-age=60" };
+      if (guestVoiceNote) resHeaders["X-Guest-Voice-Note"] = guestVoiceNote;
+      return new Response(mp3 as unknown as BodyInit, { headers: resHeaders });
     } catch (e) {
       return c.json({ error: "tts_failed", detail: (e as Error).message.slice(0, 300) }, 502);
     }

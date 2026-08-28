@@ -110,6 +110,8 @@ export interface SubmissionsRepo {
   reject(id: string, reason: string): Promise<void>;
   /** 编辑已上传成品 → published */
   markPublished(id: string): Promise<void>;
+  /** 补录主持人称呼（callName）：投稿缺称呼时编辑确认后写入；不存在返回 null */
+  setCallName(id: string, callName: string): Promise<{ id: string } | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -494,6 +496,9 @@ export interface GuestsRepo {
   voiceSampleByLanguage(guestId: string, language: string): Promise<GuestVoiceSampleRow | null>;
   /** 任意语种采样（/v1/editor/samples/guest/:id/audio 参考音频下载用，无语言参数） */
   voiceSampleAny(guestId: string): Promise<GuestVoiceSampleRow | null>;
+  /** 系统内任意嘉宾可用音色（TTS 兜底：目标嘉宾无声线时用其他嘉宾音色替换——替换音色、不替换嘉宾名字；
+   *  excludeGuestId 排除目标嘉宾，避免自兜底） */
+  anyVoiceSampleByLanguage(language: string, excludeGuestId?: string): Promise<GuestVoiceSampleRow | null>;
   /** 管理录入/更新（guest_id + language 唯一，upsert） */
   upsertVoiceSample(row: { guestId: string; language: string; audioKey: string; transcript?: string | null }): Promise<void>;
   /** 更新嘉宾称呼/简介（guests 表——节目中的称呼服务端配置） */
@@ -658,6 +663,24 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           })
           .from(schema.guestVoiceSamples)
           .where(eq(schema.guestVoiceSamples.guestId, guestId))
+          .orderBy(desc(schema.guestVoiceSamples.createdAt))
+          .limit(1);
+        return rows[0] ?? null;
+      },
+      async anyVoiceSampleByLanguage(language, excludeGuestId) {
+        const rows = await db
+          .select({
+            id: schema.guestVoiceSamples.id,
+            guestId: schema.guestVoiceSamples.guestId,
+            language: schema.guestVoiceSamples.language,
+            audioKey: schema.guestVoiceSamples.audioKey,
+            transcript: schema.guestVoiceSamples.transcript,
+          })
+          .from(schema.guestVoiceSamples)
+          .where(and(
+            eq(schema.guestVoiceSamples.language, language),
+            excludeGuestId ? ne(schema.guestVoiceSamples.guestId, excludeGuestId) : undefined,
+          ))
           .orderBy(desc(schema.guestVoiceSamples.createdAt))
           .limit(1);
         return rows[0] ?? null;
@@ -951,6 +974,15 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         await db.update(schema.submissions)
           .set({ status: "published", reviewedAt: new Date(), updatedAt: new Date() })
           .where(eq(schema.submissions.id, id));
+      },
+      /** 补录主持人称呼（callName）：投稿缺称呼（detail 显示「主持人称呼：无」）时编辑确认后写入——
+       *  持久化到投稿，避免每次重新生成回退「主持人」（2026-08-28 实例：挂谷猜想一期 call_name 为空） */
+      async setCallName(id: string, callName: string) {
+        const rows = await db.update(schema.submissions)
+          .set({ callName, updatedAt: new Date() })
+          .where(eq(schema.submissions.id, id))
+          .returning({ id: schema.submissions.id });
+        return rows[0]?.id ? { id: rows[0].id } : null;
       },
     },
 

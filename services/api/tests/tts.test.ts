@@ -21,7 +21,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       getById: async () => null,
       list: async () => [],
       voiceSampleByLanguage: async () => null,
-      voiceSampleAny: async () => null,
+      voiceSampleAny: async () => null, anyVoiceSampleByLanguage: async () => null,
       upsertVoiceSample: async () => {},
       update: async () => {},
       listVoiceSamples: async () => [],
@@ -80,7 +80,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       listQueue: async () => [],
       getDetail: async () => null,
       reject: async () => {},
-      markPublished: async () => {},
+      markPublished: async () => {}, setCallName: async () => ({ id: "sub-1" }),
     },
     ...overrides,
   };
@@ -247,6 +247,36 @@ describe("POST /v1/editor/tts（multi speaker 整集合成）", () => {
     expect(await res.arrayBuffer()).toEqual(new Uint8Array([7, 7, 7]).buffer);
     expect(synthesizeMultiSpeaker).toHaveBeenCalledWith(expect.objectContaining({
       transcripts: ["大家好", "Hello"],
+    }));
+  });
+
+  it("guest 无声线 → 系统内其他嘉宾音色替换（X-Guest-Voice-Note 注明，嘉宾名字不变）", async () => {
+    // deepseek 无声线 → 兜底用 doubao（zh）音色：合成成功 + 响应头注明替换来源
+    const synthesizeMultiSpeaker = vi.fn(async () => new Uint8Array([8]));
+    const app = makeApp({
+      ...baseDeps(),
+      fish: { synthesizeSingle: async () => new Uint8Array([1]), synthesizeMultiSpeaker },
+      repo: fakeRepo({
+        submissions: { ...fakeRepo().submissions, getDetail: async () => SUBMITTED_DETAIL },
+        episodes: {
+          ...fakeRepo().episodes,
+          getVoiceSampleByLanguage: async () => ({ userId: "user-1", language: "zh", audioUrl: "voices/user-1/zh.webm", transcript: "大家好", duration: 5, status: "ready" }),
+        },
+        guests: {
+          ...fakeRepo().guests,
+          voiceSampleByLanguage: async () => null,
+          anyVoiceSampleByLanguage: async (_lang: string) => ({ id: "gvs-db", guestId: "doubao", language: "zh", audioKey: "guests/doubao/zh.mp3", transcript: "豆包声线" }),
+        },
+      }),
+    });
+    const res = await postJson(app, { submissionId: "sub-1", language: "zh", guestId: "deepseek", segments: SEGMENTS });
+    if (res.status !== 200) console.log("DEBUG status", res.status, await res.text());
+    expect(res.status).toBe(200);
+    const note = res.headers.get("x-guest-voice-note") ?? "";
+    expect(note).toBe("guest-voice-replacement:doubao:zh");
+    expect(await res.arrayBuffer()).toEqual(new Uint8Array([8]).buffer);
+    expect(synthesizeMultiSpeaker).toHaveBeenCalledWith(expect.objectContaining({
+      transcripts: ["大家好", "豆包声线"],
     }));
   });
 

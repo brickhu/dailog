@@ -50,7 +50,7 @@ description: >
 
 ## 编号规范（索引体系 + 文件索引）
 
-- **章节码**：OV 概要 / CL 采集 / SC 脚本 / TTS / PUB 发布 / MGT 管理 / CFG 配置；附录 BATCH 批量 / REJ 拒稿 / RES 进度恢复 / DRAFT 草稿目录 / TOOL 工具链 / RULES 红线
+- **章节码**：OV 概要 / CL 采集 / SC 脚本 / TTS / PUB 发布 / MGT 管理 / CFG 配置；附录 BATCH 批量 / REJ 拒稿 / RES 进度恢复 / DRAFT 草稿目录 / FB 编辑反馈日志 / TOOL 工具链 / RULES 红线
 - **节码**（每章固定 6 段式；**「定义 / 用途及触发机制」为主文档索引段，不参与编号**，其余 5 节编码，见分册）：
   - `<章节码>-FLOW` 流程 / 原则 / CLI 调用逻辑
   - `<章节码>-IN` 输入规范与依赖
@@ -59,7 +59,7 @@ description: >
   - `<章节码>-ERR` 错误处理
 - **步骤码**：`<章节码>-STEP-<n>`（如 SC-STEP-1 选题方向、TTS-STEP-2 合成、PUB-STEP-3 发布确认门）
 - **确认门码**：`<章节码>-GATE-<n>`（SC-GATE-1 选题 / SC-GATE-2 终稿 / TTS-GATE-1 语音 / PUB-GATE-1 发布）
-- **红线码**：RULES-1..9
+- **红线码**：RULES-1..11
 - **索引层级**：`SC-GATE-2`（终稿确认门）⊂ `SC-GATE`（确认门节）⊂ `SC`（脚本章节）；引用写作「见 SC-GATE-2」「见 REJ」「见 RULES-9」
 
 **文件索引表**（所有分册相对本文件路径，产物同步到 `.agents/skills/dailog-editor/docs/`）：
@@ -77,8 +77,9 @@ description: >
 | 拒稿规范 | REJ | docs/REJ.md | — | — | — |
 | 进度与恢复 | RES | docs/RES.md | — | — | — |
 | 草稿目录 | DRAFT | docs/DRAFT.md | — | — | — |
+| 反馈日志 | FB | docs/FB.md | FB-STEP-1..3 | — | FB-FLOW / FB-IN / FB-OUT / FB-ERR |
 | 工具链要点 | TOOL | docs/TOOL.md | — | — | — |
-| 红线 | RULES | docs/RULES.md | RULES-1..9 | — | — |
+| 红线 | RULES | docs/RULES.md | RULES-1..11 | — | — |
 
 ## Triggers
 
@@ -92,18 +93,22 @@ description: >
 | 管理（MGT） | `重新生成` | 已发布节目的重做与修改（期号/链接不变） | `修改标题:{ID}`、`修改简介:{ID}`、`重新生成:{ID}`、`重新生成第 N 期` | docs/MGT.md |
 | 配置（CFG） | `配置` | 在 Agent 工作台配置播放列表 / AI 嘉宾信息 / 嘉宾音色（playlist / guests / guest-voice / guest-set） | `配置播放列表`、`配置嘉宾`、`配置嘉宾音色`、`配置音色`、`配置声线`、`播放列表`、`playlist`、`歌单` | docs/CFG.md |
 
-## 会话初始化（每个新对话必做——环境与配对是会话级状态）
+## 会话初始化（环境确认门——新开对话的第一道强制门槛）
 
+**ENV-GATE 环境确认门（必须，硬门槛）**：新开对话触发 dailog-editor 后，**第一步必须先过本门**——
+在任何功能操作（概览/采集/脚本/TTS/发布/管理）之前：
 ```
-① 读 .dailog-editor/envs.json 列出环境清单 → 询问编辑本次访问哪个环境
-  （用户已指定 → 用之；否则必须问，不默认）
+① 读 .dailog-editor/envs.json 列出环境清单 → **请编辑明确确认本次访问哪个环境**
+  （必须让编辑选择；不默认、不猜测、不沿用旧对话记忆）
 ② pnpm editor --env <环境> auth-status：先打 /health 验证端点可用（不可达 → 换环境/查网络，不继续），
   再查授权：✅ 有效 → 记下环境名，本对话后续命令全部带 --env <环境>；❌ → 走 ③
 ③ 配对码登录：pnpm editor --env <环境> login（终端给授权链接）→ 编辑浏览器打开登录 →
   把页面显示的配对码贴回对话 → pnpm editor --env <环境> login --code <配对码> 完成配对
   （token 绑定该环境缓存本地；已登录略过）
-④ 新开对话 → 回到 ① 重新确认环境 + 授权
 ```
+**未过门禁令**：环境未确认 / 授权未验证 → **不执行任何功能（连概览也不展示）**——直接向编辑发起环境确认，
+确认并验证通过后才进入功能。环境 + 授权是**会话级状态**：新开对话一律重走本门，不跨会话继承（RULES-11）。
+环境一旦确认，本对话所有命令统一带该 `--env <环境>`；编辑说「换个环境」→ 重走本门（login --force 重配对）。
 
 要点：
 - **环境必须显式**：多环境下命令不带 --env 会列出清单拒绝执行——防「以为是 dev 实际打到 prod」
@@ -120,7 +125,7 @@ description: >
 
 **定义 / 用途及触发机制**
 定义：概要信息查询——环境 / 网站 / 账号 / 共计投稿与发布 / 采集·脚本·语音·节目 四管道待处理与共计 / 待处理选项 / 其他功能入口。
-用途：用户说「dailog」「overview」「概要」等时——**直接展示工作台概要**（不进入完整流程），提供各功能的入口导航。
+用途：用户说「dailog」「overview」「概要」等时——**先过环境确认门（ENV-GATE，见「会话初始化」）**，确认后直接展示工作台概要（不进入完整流程），提供各功能的入口导航。
 触发：`dailog`、`dailog overview`、`/dailog-editor`、`概要`。
 
 → 完整操作（OV-FLOW 流程 / OV-IN 输入 / OV-GATE 选号菜单 / OV-OUT 输出 / OV-ERR 错误）：见 `docs/OV.md`
@@ -167,6 +172,8 @@ description: >
 定义：对已发布节目重新生成、修改封面/标题等。
 用途：已发布节目的重新生成（republish）、修改标题/简介/封面、下线申请审批。
 触发：`修改标题:{ID}`、`修改简介:{ID}`、`重新生成:{ID}`、`重新生成第 N 期`。
+⚠️ **重新生成不重跑选题审核（SC-STEP-1）**：已发布节目选题已确认——本地有 chosen-idea.json 直接复用，
+   没有则沿用旧角度；仅编辑明确要求换角度才重跑，且只列思路不拒稿（选题门槛只用于首次决策，见 MGT-FLOW）。
 
 → 完整操作（MGT-FLOW 流程 / MGT-IN 输入 / MGT-GATE 复用门 / MGT-OUT 输出 / MGT-ERR 错误）：见 `docs/MGT.md`
 

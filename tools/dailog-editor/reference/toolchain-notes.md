@@ -26,8 +26,13 @@
   默认 displayName 可改）与 `personaInfo` 快照（displayName/性别/职业/年龄/国籍/bio），
   脚本生成时用 role_block 的 {callName}，无则「主持人」。脚本语言与称呼语言不同时按
   draft.md 点题段落的称呼改写规则转英文形式（如 飞→Fei）。
+  **老投稿 call_name 常为空**（在线生成期未持久化）——detail 显示「无」时用 `pnpm editor callname <id> --name "飞"`
+  补录（POST /v1/editor/submissions/:id/callname，2026-08-28 新增），持久化后不再回退「主持人」。
 - **采样匹配（服务端自动）**：TTS 按脚本语言取采样 → 无则英文采样 → 无则最近一条采样兜底；
   `detail` 返回 voiceSamples 列表（全部语种），供编辑确认。
+  **guest 音色替换（2026-08-28 新增）**：目标嘉宾无声线 → 自动用系统内其他嘉宾同语种音色替换合成
+  （替换音色、不替换嘉宾名字）；响应头 `X-Guest-Voice-Note: guest-voice-replacement:<来源嘉宾>:<语种>`
+  （ASCII，HTTP 头不允许中文）——CLI 解析后打印中文提示。
 - **测试红线**：`publish` 端点无 dry-run——curl/脚本直打真实 submission 就是真实发布
   （curl 探测把投稿发布成带测试元数据的期）。探测 multipart 用本地回环
   服务器解析结构，或打已 published 的投稿（状态检查在 formData 解析前，不污染数据）。

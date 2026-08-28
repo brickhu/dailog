@@ -5,7 +5,7 @@
 
 **OV-FLOW 流程 / 原则 / CLI 调用逻辑**
 ```
-OV-STEP-1 会话初始化（选环境 → auth-status，未配对先引导 login）
+OV-STEP-1 环境确认门（强制，见 SKILL.md「会话初始化」ENV-GATE）：选环境 → auth-status，未配对先引导 login——未过门不展示概要
 OV-STEP-2 pnpm editor overview → 拉取：环境/网站/账号 + 采集·脚本·语音·节目 四管道待处理与共计 + 待处理选项
 OV-STEP-3 按「工作台概要」模板展示（见 OV-GATE）；用户选号或输入入口关键词进入对应流程
 ```

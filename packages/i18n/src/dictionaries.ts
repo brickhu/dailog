@@ -283,7 +283,7 @@ export const zh = {
   "home.guests": "常驻 AI 嘉宾",
   "home.guestIntro": "{platform} · {intro}",
   "home.hero.tagline": "听见人类和AI的思想交锋",
-"home.hero.what": "dailog 是一档将「AI聊天记录」模拟为真人采访AI的播客，单期5-10分钟呈现对话原文中的收获时刻：认知，经验，建议及启发",
+"home.hero.what": "dailog 是一档将「AI聊天记录」模拟为真人采访AI的播客，单期5-10分钟呈现对话原文中的收获时刻：新知，经验，建议及启发",
   "home.hero.submit": "立即投稿",
   "home.hero.ctaHint": "提交「AI聊天记录」，录制声音采样，秒变主播。",
   "home.hero.browse": "浏览节目",
@@ -293,7 +293,7 @@ export const zh = {
   // ---- 首页常见问题 ----
   "home.faq.title": "常见问题",
   "home.faq.q1": "dailog 是什么？",
-  "home.faq.a1": "dailog 是一档将「AI 聊天记录」模拟为真人采访 AI 的访谈式播客：单期 5-10 分钟，呈现原始对话里的收获时刻——认知、经验、建议与启发。",
+  "home.faq.a1": "dailog 是一档将「AI 聊天记录」模拟为真人采访 AI 的访谈式播客：单期 5-10 分钟，呈现原始对话里的收获时刻——新知、经验、建议与启发。",
   "home.faq.q2": "这些节目是真人录音吗？",
   "home.faq.a2": "不是。节目基于你与 AI 的真实聊天记录，经编辑与合成模拟出采访对话——AI 受访、人类提问，是「模拟真人采访 AI」，而非真实录制的访谈。",
   "home.faq.q3": "怎么投稿，我能成为主播吗？",

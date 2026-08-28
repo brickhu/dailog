@@ -15,6 +15,8 @@
 //   pnpm editor produce --ids <id1,id2> [--language zh] [--guest claude]
 //                                               制作流水线（tts→merge→cover，两个确认门）
 //   pnpm editor detail <submissionId>          投稿详情（URL/投稿人/采样 transcript）
+//   pnpm editor callname <submissionId> --name "飞"
+//                                               补录投稿主持人称呼（callName，持久化；缺称呼时用）
 //   pnpm editor fetch <submissionId>           采集 + 内容解码（拉取 URL → page.html/page.txt/dialogue.json）
 //   pnpm editor rule-test <submissionId> --user-selector "..." --assistant-selector "..." [--save]
 //                                               候选解码规则验证（草稿 page.html）→ 跑通入库 .dailog-editor/rules.json
@@ -26,6 +28,22 @@
 //   pnpm editor guest-set <guestId> --name "..." [--intro "..."]
 //                                               更新嘉宾称呼/简介（服务端 guests 表）
 //   pnpm editor progress <submissionId>          进度查看（中断恢复断点）
+//   pnpm editor feedback [--new] [--general] [--stage selection|script] [<submissionId>]
+//                                               编辑反馈日志（确认门修改意见落盘，自进化素材；
+//                                               两条轨道：选题=审美进化 / 脚本=创作能力进化）
+//   pnpm editor feedback add --submission <id> --stage selection|script --category <类>
+//                            --issue "<现象>" --reason "<原因>" --change "<修改>" [--general]
+//                                               落盘一条反馈（--general 标注「以后都要」）
+//   pnpm editor feedback confirm <id> [<id>...]  反馈标记已沉淀（new→confirmed）
+//   pnpm editor feedback archive <id> [<id>...]  反馈标记已归档（new→archived）
+//   pnpm editor evolve [--min-repeats N] [--stage selection|script]
+//                                               蒸馏准备：按环节/类别聚类去重 → evolve-proposal.md + 摘要
+//                                               （规则 diff 由会话起草、编辑审批后应用）
+//   pnpm editor learned-rules                     列出学习规则（L2 演进层，SC-STEP-1/2 附加输入）
+//   pnpm editor learned-rules add --stage selection|script "<规则>" [--from fb-xxx]
+//                                               追加一条学习规则（蒸馏审批后；每类上限 5 条）
+//   pnpm editor learned-rules remove <n> --stage <环节>   移除（被推翻/过时）
+//   pnpm editor check-script <submissionId>      脚本机器校验（SC-GATE-2 附加信息；硬性失败退出码 1）
 //   pnpm editor script-preview <submissionId>    脚本预览（人工确认门：确认后进 tts）
 //   pnpm editor tts <submissionId> --script <script.json> [--language zh|en]
 //                                              逐段合成语音（host 采样克隆 / guest 品牌声线资源文件）
@@ -118,9 +136,34 @@ async function main() {
       await detail(config, args);
       break;
     }
+    case "callname": {
+      const { callname } = await import("./callname.js");
+      await callname(config, args);
+      break;
+    }
     case "fetch": {
       const { fetchPage } = await import("./fetch.js");
       await fetchPage(config, args);
+      break;
+    }
+    case "feedback": {
+      const { feedback } = await import("./feedback.js");
+      await feedback(config, args);
+      break;
+    }
+    case "evolve": {
+      const { evolve } = await import("./evolve.js");
+      await evolve(config, args);
+      break;
+    }
+    case "learned-rules": {
+      const { learnedRules } = await import("./learned-rules.js");
+      await learnedRules(config, args);
+      break;
+    }
+    case "check-script": {
+      const { checkScript } = await import("./check-script.js");
+      await checkScript(config, args);
       break;
     }
     case "rule-test": {

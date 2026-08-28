@@ -34,14 +34,14 @@ function fakeRepo(overrides: Partial<Repos["playlists"]> = {}, episodesOverrides
     },
     guests: {
       getByPlatform: async () => null, getById: async () => null, list: async () => [],
-      voiceSampleByLanguage: async () => null, voiceSampleAny: async () => null, upsertVoiceSample: async () => {},
+      voiceSampleByLanguage: async () => null, voiceSampleAny: async () => null, anyVoiceSampleByLanguage: async () => null, upsertVoiceSample: async () => {},
       update: async () => {}, listVoiceSamples: async () => [],
     },
     submissions: {
       create: async () => ({ id: "sub-1" }), findByUrl: async () => null, findById: async () => null,
       countPendingByUser: async () => 0, hasReadyVoiceSample: async () => true, listByUser: async () => [],
       getPublicById: async () => null, getByUser: async () => null, listQueue: async () => [], getDetail: async () => null,
-      reject: async () => {}, markPublished: async () => {},
+      reject: async () => {}, markPublished: async () => {}, setCallName: async () => ({ id: "sub-1" }),
     },
     episodes: {
       createPublished: async () => ({ id: "ep-1", number: 1, slug: "abc12345" }),

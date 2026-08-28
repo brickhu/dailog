@@ -19,7 +19,7 @@ function makeApp(repo: Partial<Repos["submissions"]> = {}) {
       getById: async () => null,
       list: async () => [],
       voiceSampleByLanguage: async () => null,
-      voiceSampleAny: async () => null,
+      voiceSampleAny: async () => null, anyVoiceSampleByLanguage: async () => null,
       upsertVoiceSample: async () => {},
       update: async () => {},
       listVoiceSamples: async () => [],
@@ -78,7 +78,7 @@ function makeApp(repo: Partial<Repos["submissions"]> = {}) {
       listQueue: async () => [],
       getDetail: async () => null,
       reject: async () => {},
-      markPublished: async () => {},
+      markPublished: async () => {}, setCallName: async () => ({ id: "sub-1" }),
       ...repo,
     },
   } as Repos));
