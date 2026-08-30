@@ -48,6 +48,40 @@ async function envLoggedIn(name) { return false; }
 const cookieSessions = new Map();  // env → cookie 字符串
 export function getCookieSession(envName) { return cookieSessions.get(envName) || null; }
 
+/** 采集任务跟踪：正在采集的投稿（前端轮询用）+ 最近完成结果 */
+const fetchingSet = new Set();       // submissionId
+const fetchingInfo = new Map();      // submissionId → { url }
+const fetchResults = new Map();      // submissionId → { ok, detail, at }
+const FETCH_RESULT_TTL = 5 * 60_000; // 结果保留 5 分钟
+
+/** 异步执行单条采集（不阻塞响应；完成后写结果缓存 + 更新 R2 标记） */
+async function runSingleFetch(envName, token, id, url) {
+  fetchingSet.add(id);
+  if (url) fetchingInfo.set(id, { url });
+  try {
+    const fetchMod = await import(join(CLI_DIST, "fetch.js"));
+    const lib = await loadCliLib();
+    lib.setApiCookie(getCookieSession(envName) || null);
+    lib.setApiToken(token || null);
+    const r = await fetchMod.extractSubmission(await configFor(envName), id, token);
+    // 采集失败（detail 404 / 拉取失败 / 未提取到）→ 数据库标 error:fetch_failed（前端红✗）
+    if (!r.ok) {
+      try {
+        const lib2 = await loadCliLib();
+        await apiWithToken(envName, token, "/v1/editor/submissions/" + id + "/collected", { method: "PATCH", body: { collected: -1 } });
+      } catch { /* 标记失败不影响 */ }
+    }
+    fetchResults.set(id, { ok: r.ok, detail: r.error ? String(r.error).slice(0, 150) : (r.messages ? r.messages.length + " 条消息" : ""), at: Date.now() });
+    return r;
+  } catch (e) {
+    fetchResults.set(id, { ok: false, detail: String((e && e.message) || e).slice(0, 150), at: Date.now() });
+    return { ok: false, error: (e && e.message) || String(e) };
+  } finally {
+    fetchingSet.delete(id);
+    fetchingInfo.delete(id);
+  }
+}
+
 /** 调 API：cookie 会话优先（密码登录），其次 Bearer token（配对码登录）；401 抛错 */
 async function apiWithToken(envName, token, path, opts = {}) {
   const cfg = await configFor(envName);
@@ -170,6 +204,7 @@ async function handleApi(path, res, req) {
       sendJson(res, { ok: true, env: name });
       return;
     } catch (e) {
+      console.error("[auth/password] 登录异常:", e);
       sendJson(res, { ok: false, error: "登录请求失败: " + String((e && e.message) || e) }, 500);
       return;
     }
@@ -211,18 +246,21 @@ async function handleApi(path, res, req) {
       if (r.status === "published") stage = "已发布";
       else if (r.status === "rejected") stage = "拒稿";
       else {
-        // 采集状态权威判据：服务端 dialogueR2Key（有值=已采集，多端共享）；本地文件兜底
-        const hasDialogue = !!r.dialogueR2Key || existsSync(join(lib.draftDir(r.id), "dialogue.json"));
+        // 采集状态权威判据：服务端 collected（-1=失败 / 0=未采集 / 1=成功）；本地文件兜底
+        const collected = r.collected;
+        const hasDialogue = collected === 1 || existsSync(join(lib.draftDir(r.id), "dialogue.json"));
+        const fetchFailed = collected === -1;
         const progress = existsSync(join(lib.draftDir(r.id), "progress.json"))
           ? JSON.parse(readFileSync(join(lib.draftDir(r.id), "progress.json"), "utf-8"))
           : null;
         if (progress && progress.step === "rejected") stage = "拒稿";
+        else if (fetchFailed) stage = "采集失败";
         else if (progress && progress.step) stage = "制作中";
         else if (hasDialogue) stage = "制作中";
         else stage = "待采集";
       }
       return {
-        id: r.id, url: r.url, title: r.title, dialogueR2Key: r.dialogueR2Key,
+        id: r.id, url: r.url, title: r.title, collected: r.collected,
         displayName: r.displayName || r.userEmail || "?", userEmail: r.userEmail,
         createdAt: r.createdAt, hasVoiceSample: r.hasVoiceSample, stage,
       };
@@ -232,6 +270,39 @@ async function handleApi(path, res, req) {
     const pendingCount = rows.filter((r) => r.stage === "待采集").length;
     const paged = rows.slice((page - 1) * pageSize, page * pageSize);
     sendJson(res, { ok: true, env: e, rows: paged, total, pendingCount, page, pageSize });
+    return;
+  }
+
+  // POST /api/run/fetch → 单条采集（异步：立即返回，采集中状态由 /api/status/fetch 查询）
+  if (path === "/api/run/fetch" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const body = await readBody(req);
+    const id = (body && body.id) || null;
+    if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
+    if (fetchingSet.has(id)) { sendJson(res, { ok: true, state: "fetching", id }); return; }
+    // 已在本地有 dialogue 且已标记 → 无需采集
+    const lib = await loadCliLib();
+    if (existsSync(join(lib.draftDir(id), "dialogue.json"))) {
+      sendJson(res, { ok: true, state: "already_fetched", id });
+      return;
+    }
+    // 异步启动，不等待（带 url 供统计条展示"正在采集：<url>"）
+    const sub = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null);
+    runSingleFetch(e, token, id, (sub && sub.url) || null).catch(() => {});
+    sendJson(res, { ok: true, state: "fetching", id });
+    return;
+  }
+
+  // GET /api/status/fetch → 采集任务状态（正在采集的 ID + 最近完成结果）
+  if (path === "/api/status/fetch") {
+    const now = Date.now();
+    for (const [id, r] of fetchResults) {
+      if (now - r.at > FETCH_RESULT_TTL) fetchResults.delete(id);
+    }
+    const fetching = [...fetchingSet].map((id) => ({ id, url: (fetchingInfo.get(id) || {}).url || null }));
+    sendJson(res, { ok: true, fetching, results: Object.fromEntries(fetchResults) });
     return;
   }
 
@@ -355,7 +426,7 @@ const server = createServer((req, res) => {
   const url = new URL(req.url, "http://" + host);
   if (url.pathname.startsWith("/api/")) {
     handleApi(url.pathname + url.search, res, req).catch((e) => {
-      console.error(e);
+      console.error("[server] handleApi 异常:", e);
       sendJson(res, { ok: false, error: String((e && e.message) || e) }, 500);
     });
   } else {

@@ -16,6 +16,7 @@
   .tag.制作中 { color:#d29922; border-color:#d29922; }
   .tag.已发布 { color:#3fb950; border-color:#3fb950; }
   .tag.拒稿 { color:#f85149; border-color:#f85149; }
+  .tag.采集失败 { color:#f85149; border-color:#f85149; }
   .tag.已登录 { color:#3fb950; border-color:#3fb950; }
   .tag.未登录 { color:#8a91a0; border-color:#262b36; }
   a { color:#4f8cff; text-decoration:none; } a:hover{text-decoration:underline}
@@ -33,6 +34,17 @@
   .statbar button { background:#4f8cff; color:#fff; border:0; border-radius:6px; padding:7px 18px; font-size:13px; cursor:pointer; }
   .statbar button:disabled { opacity:.5; cursor:not-allowed; }
   .pg { background:#171a21; border:1px solid #262b36; color:#e6e8ee; border-radius:6px; padding:6px 14px; font-size:13px; cursor:pointer; margin-left:8px; }
+  /* 采集状态圆形图标 */
+  .cicon { width:16px; height:16px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:9px; flex-shrink:0; }
+  .cicon.done { background:#3fb950; color:#0f1115; }
+  .cicon.pending { background:transparent; border:1.5px solid #e6e8ee; color:#e6e8ee; cursor:pointer; }
+  .cicon.pending:hover { border-color:#4f8cff; color:#4f8cff; }
+  .cicon.fetching { background:#262b36; }
+  .cicon.failed { background:#f85149; color:#fff; cursor:pointer; }
+  .cicon .spin { width:10px; height:10px; border:1.5px solid #8a91a0; border-top-color:transparent; border-radius:50%; animation:spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .cicon-cell { width:32px; padding-right:4px; }
+  .mini-spin { width:12px; height:12px; border:2px solid #4f8cff; border-top-color:transparent; border-radius:50%; display:inline-block; vertical-align:middle; animation:spin 0.8s linear infinite; margin-right:6px; }
   .pg:disabled { opacity:.4; cursor:not-allowed; }
   .copy-btn { background:transparent; border:0; color:#4f8cff; cursor:pointer; padding:0 2px; font-size:13px; }
   .copy-btn:hover { color:#7aa8ff; }
@@ -88,13 +100,14 @@
     <div class='user'><span id='userEmail'>—</span><button class='logout-btn' onclick='logout()'>退出</button></div>
   </div>
   <div class='statbar' id='statbar'>
-    <div class='stat'><b id='pendingCount'>0</b> 条投稿待采集</div>
+    <div class='stat' id='statIdle'><b id='pendingCount'>0</b> 条投稿待采集</div>
+    <div class='stat' id='statFetching' style='display:none'><span class='mini-spin'></span> 正在采集：<span id='fetchingUrl' class='mono'></span></div>
     <button id='btnBatch' onclick='batchFetch()'>批量采集</button>
   </div>
   <div class='wrap' id='listWrap'>
     <div class='card' style='padding:0'>
       <table>
-        <thead><tr><th>ID</th><th>标题 / 原文地址</th><th>投稿人</th><th>投稿日期</th><th>状态</th><th>详情</th></tr></thead>
+        <thead><tr><th></th><th>ID</th><th>标题 / 原文地址</th><th>投稿人</th><th>投稿日期</th><th>状态</th><th>详情</th></tr></thead>
         <tbody id='rows'><tr><td colspan='5' class='muted'>加载中…</td></tr></tbody>
       </table>
     </div>
@@ -221,6 +234,8 @@ async function loadApp(){
     document.getElementById('userEmail').textContent=o.userEmail||'—';
     const d=await j('/api/submissions?page='+pageNo+'&pageSize=50');
     const rows=d.rows||[];
+    window._lastRows = rows;
+    fetchingIds.clear();
     pageTotal = Math.max(1, Math.ceil((d.total||rows.length)/50));
     document.getElementById('pendingCount').textContent=(d.pendingCount!==undefined?d.pendingCount:rows.filter(r=>r.stage==='待采集').length);
     document.getElementById('pendingCount').dataset.total=d.total||rows.length;
@@ -232,6 +247,7 @@ async function loadApp(){
     if(!rows.length){tb.innerHTML="<tr><td colspan='5' class='muted'>暂无投稿</td></tr>";return}
     tb.innerHTML=rows.map(r=>`
       <tr>
+        <td class='cicon-cell'>${fetchIcon(r)}</td>
         <td class='mono' style='white-space:nowrap'><span title='${r.id}'>${r.id.slice(0,8)}…</span><button class='copy-btn' data-id='${r.id}' title='复制完整 ID'>⧉</button></td>
         <td>
           ${r.title
@@ -241,7 +257,7 @@ async function loadApp(){
         <td>${esc(r.displayName||'?')} <span class='muted mono'>(${esc(r.userEmail||'')})</span></td>
         <td class='mono muted'>${fmtDate(r.createdAt)}</td>
         <td><span class='tag ${esc(r.stage)}'>${esc(r.stage)}</span></td>
-        <td><a class='detail-link' href='#${r.id}' onclick='event.preventDefault();location.hash="${r.id}"'>进入采编 →</a></td>
+        <td><a class='detail-link' href='#${r.id}' onclick='event.preventDefault();location.hash="${r.id}"'>进入 →</a></td>
       </tr>`).join('');
   }catch(e){
     document.getElementById('rows').innerHTML="<tr><td colspan='5' class='muted'>加载失败: "+esc(e.message)+"</td></tr>";
@@ -330,6 +346,76 @@ function routeInit(){ const id=location.hash.slice(1); if(id) openDetail(id); }
 
 let pageNo = 1, pageTotal = 1;
 function fmtDate(s){ if(!s) return '—'; const d=new Date(s); if(isNaN(d)) return String(s).slice(0,16); const p=n=>String(n).padStart(2,'0'); return d.getFullYear()+'/'+(d.getMonth()+1)+'/'+d.getDate()+' '+p(d.getHours())+':'+p(d.getMinutes()); }
+function fetchIcon(r){
+
+  const c = r.collected;
+
+  if (c === 1) return `<span class='cicon done' title='已采集'>✓</span>`;
+
+  if (fetchingIds.has(r.id)) return `<span class='cicon fetching' title='采集中'><span class='spin'></span></span>`;
+
+  if (c === -1) return `<span class='cicon failed' title='采集失败，点击重试' onclick='event.stopPropagation();singleFetch(\'${r.id}\')'>✗</span>`;
+
+  return `<span class='cicon pending' title='点击采集' onclick='event.stopPropagation();singleFetch(\'${r.id}\')'>⇩</span>`;
+
+}
+const fetchingIds = new Set();
+let fetchPollTimer = null;
+async function singleFetch(id){
+  try{
+    await j('/api/run/fetch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id})});
+    fetchingIds.add(id);
+    renderRows();
+    startFetchPoll();
+    // 立即显示采集状态条（url 等轮询补全）
+    const idle=document.getElementById('statIdle'); const busy=document.getElementById('statFetching');
+    if(idle&&busy){ idle.style.display='none'; busy.style.display='block'; }
+    const ue=document.getElementById('fetchingUrl'); if(ue) ue.textContent=id.slice(0,8)+'…';
+  }catch(e){alert(e.message)}
+}
+async function startFetchPoll(){
+  if (fetchPollTimer) return;
+  fetchPollTimer = setInterval(async () => {
+    try{
+      const d = await j('/api/status/fetch');
+      fetchingIds.clear();
+      const fetching = d.fetching||[];
+      fetching.forEach(f=>fetchingIds.add(f.id));
+      // 统计条切换：队列非空显示"正在采集：<url>"+spinner
+      const idle=document.getElementById('statIdle'); const busy=document.getElementById('statFetching');
+      const urlEl=document.getElementById('fetchingUrl');
+      if (fetching.length>0 && busy && idle){
+        idle.style.display='none'; busy.style.display='block';
+        if (urlEl) urlEl.textContent=((fetching[0].url)||'').slice(0,80);
+      } else if (busy && idle) {
+        idle.style.display='block'; busy.style.display='none';
+      }
+      // 采集完成 → 刷新列表
+      const results = d.results||{};
+      const doneIds = Object.keys(results);
+      if (doneIds.length>0){ clearInterval(fetchPollTimer); fetchPollTimer=null; loadApp(); return; }
+      renderRows();
+    }catch(e){ clearInterval(fetchPollTimer); fetchPollTimer=null; }
+  }, 2000);
+}
+function renderRows(){
+  // 仅重渲染图标列（简单方式：整表重渲染，保留 rows 数据）
+  if (window._rowsCache) { window._lastRows = window._rowsCache; }
+  if (window._lastRows) {
+    const tb=document.getElementById('rows');
+    tb.innerHTML=window._lastRows.map(r=>`<tr>
+      <td class='cicon-cell'>${fetchIcon(r)}</td>
+      <td class='mono' style='white-space:nowrap'><span title='${r.id}'>${r.id.slice(0,8)}…</span><button class='copy-btn' data-id='${r.id}' title='复制完整 ID'>⧉</button></td>
+      <td>${r.title
+        ? `<a href='${esc(r.url)}' target='_blank' rel='noopener' title='${esc(r.title)}' style='font-size:13px;display:inline-block;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>${esc(r.title)}</a>`
+        : (r.url ? `<a class='mono url' href='${esc(r.url)}' target='_blank' rel='noopener'>${esc(r.url)}</a>` : '—')}</td>
+      <td>${esc(r.displayName||'?')} <span class='muted mono'>(${esc(r.userEmail||'')})</span></td>
+      <td class='mono muted'>${fmtDate(r.createdAt)}</td>
+      <td><span class='tag ${esc(r.stage)}'>${esc(r.stage)}</span></td>
+      <td><a class='detail-link' href='#${r.id}' onclick='event.preventDefault();location.hash="${r.id}"'>进入 →</a></td>
+    </tr>`).join('');
+  }
+}
 function renderPager(){
   const el=document.getElementById('pager');
   if(!el) return;

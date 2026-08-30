@@ -458,11 +458,17 @@ function extractPageTitle(html: string): string | null {
   } catch { return null; }
 }
 
-async /** 采集标记回写数据库（submissions.dialogue_r2_key）：有值=已采集，NULL=未采集。失败不影响采集。 */
+/** 采集失败标记：collected=-1（列表显示红底✗） */
+async function markDialogueError(config: EditorConfig, submissionId: string, tokenOverride?: string | null): Promise<void> {
+  try {
+    await api(config, `/v1/editor/submissions/${submissionId}/collected`, { method: "PATCH", body: { collected: -1 } }, tokenOverride);
+  } catch { /* 失败标记写不上也不影响 */ }
+}
+
+/** 采集成功标记：collected=1（R2 key 由 URL 哈希推导，不存库） */
 async function markDialogueFetched(config: EditorConfig, submissionId: string, url: string, tokenOverride?: string | null): Promise<void> {
   try {
-    const key = dialogueR2Key(url);
-    await api(config, `/v1/editor/submissions/${submissionId}/dialogue`, { method: "PATCH", body: { r2Key: key } }, tokenOverride);
+    await api(config, `/v1/editor/submissions/${submissionId}/collected`, { method: "PATCH", body: { collected: 1 } }, tokenOverride);
   } catch { /* 回写失败不影响采集 */ }
 }
 
@@ -896,6 +902,7 @@ export async function extractSubmission(
     }
   }
   if (!html) {
+    await markDialogueError(config, submissionId, tokenOverride);
     return { ok: false, error: `${fetchError ?? "拉取失败"}（可用 console-script 浏览器兜底）` };
   }
   if (html.length > MAX_HTML_BYTES) html = html.slice(0, MAX_HTML_BYTES);
@@ -938,6 +945,7 @@ export async function extractSubmission(
     await markDialogueFetched(config, submissionId, url, tokenOverride);
     return { ok: true, messages };
   }
+  await markDialogueError(config, submissionId, tokenOverride);
   return { ok: false, error: "未提取到消息（无规则命中 + 通用嗅探未识别——可用 console-script 浏览器兜底，或沉淀规则）" };
 }
 
