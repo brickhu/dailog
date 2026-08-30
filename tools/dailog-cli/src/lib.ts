@@ -256,8 +256,7 @@ export async function api(config: EditorConfig, path: string, opts: ApiOptions =
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    console.error(`[api] ${opts.method ?? "GET"} ${path} → ${res.status}: ${text.slice(0, 300)}`);
-    process.exit(1);
+    throw new Error(`[api] ${opts.method ?? "GET"} ${path} → ${res.status}: ${text.slice(0, 300)}`);
   }
   if (opts.expectJson === false) return res;
   return res.json().catch(() => null);

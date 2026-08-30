@@ -66,15 +66,32 @@ export async function resolvePrompt(nameOrPath) {
     isAbsolute(path) || path.includes("/") ||
     path.endsWith(".md") || path.endsWith(".mjs") || path.endsWith(".js");
   if (!pathLike) {
-    const candJs = join(toolDir, "prompts", nameOrPath + ".mjs");
-    const candMd = join(toolDir, "prompts", nameOrPath + ".md");
+    // ① prompts.json（.dailog-editor）按名称取——权威存储（webui 编辑 + R2 同步）
+    const cfgJson = join(toolDir, "..", "..", ".dailog-editor", "prompts.json");
+    try {
+      const j = JSON.parse(readFileSync(cfgJson, "utf-8"));
+      if (typeof j[nameOrPath] === "string") {
+        return { path: cfgJson + "#" + nameOrPath, content: j[nameOrPath], moduleConfig: {} };
+      }
+    } catch { /* json 缺失走 fallback */ }
+    // ② .dailog-editor/prompts/*.mjs|.md（产物副本）
+    const cfgDir = join(toolDir, "..", "..", ".dailog-editor", "prompts");
+    const candJs = join(cfgDir, nameOrPath + ".mjs");
+    const candMd = join(cfgDir, nameOrPath + ".md");
     if (existsSync(candJs)) path = candJs;
     else if (existsSync(candMd)) path = candMd;
+    else {
+      // ③ 工程内保底稿
+      const legacyJs = join(toolDir, "prompts", nameOrPath + ".mjs");
+      const legacyMd = join(toolDir, "prompts", nameOrPath + ".md");
+      if (existsSync(legacyJs)) path = legacyJs;
+      else if (existsSync(legacyMd)) path = legacyMd;
+    }
   }
   if (!existsSync(path)) {
     throw new Error(
       "[script-lab] 提示词不存在：" + path + "\n" +
-      "  提示词放 tools/script-lab/prompts/ 下（如 selection.mjs / draft.mjs / meta.mjs），或传 .md/.mjs 文件路径"
+      "  提示词在 .dailog-editor/prompts.json（selection / polish / meta）或 .dailog-editor/prompts/ 下，或传 .md/.mjs 文件路径"
     );
   }
   if (path.endsWith(".mjs") || path.endsWith(".js")) return loadJsPrompt(path);

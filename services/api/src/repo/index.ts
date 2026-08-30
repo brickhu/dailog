@@ -23,7 +23,7 @@ export interface SubmissionsRepo {
    *  personaInfo：主持人档案快照（路由层从 getPersonaSnapshot 取，编辑侧免查库）；
    *  voiceSampleId：投稿时使用的采样（仅记录，TTS 仍按语言匹配）；
    *  suggestion：投稿人节目建议（可为 null；编辑生成脚本时仅供选题视角参考） */
-  create(id: string, userId: string, url: string, title: string | null, callNameInEpisode?: string | null, personaInfo?: PersonaSnapshot | null, voiceSampleId?: string | null, suggestion?: string | null): Promise<{ id: string }>;
+  create(id: string, userId: string, url: string, title: string | null, suggestion?: string | null, guest?: { id: string; name: string; intro?: string | null } | null, host?: { callName: string | null; personaInfo: PersonaSnapshot | null; voiceSampleId: string | null } | null): Promise<{ id: string }>;
   /** 重复投稿检测（URL 全局唯一：任何人提交过同一分享链接都算重复） */
   findByUrl(url: string): Promise<{ id: string; status: string } | null>;
   /** 按确定性投稿 ID 查（主键索引；同 URL 同 ID → 已存在即重复，含他人投稿） */
@@ -118,6 +118,7 @@ export interface SubmissionsRepo {
   setCallName(id: string, callName: string): Promise<{ id: string } | null>;
   /** 更新投稿标题（采集提取 / 审核生成；submissions.title 权威，投稿列表/详情展示） */
   setTitle(id: string, title: string | null): Promise<{ id: string } | null>;
+  setReview(id: string, review: { status: "approved" | "rejected"; score: number | null }): Promise<{ id: string } | null>;
   /** 采集状态：-1=采集失败 / 0=未采集 / 1=采集成功（R2 key 由 URL 哈希推导，不存库） */
   setCollected(id: string, collected: number): Promise<{ id: string } | null>;
   /** 采集统计写入（消息数/各角色轮数/字数） */
@@ -498,7 +499,7 @@ export interface GuestVoiceSampleRow {
 }
 
 export interface GuestsRepo {
-  getByPlatform(platform: string): Promise<{ id: string; name: string } | null>;
+  getByPlatform(platform: string): Promise<{ id: string; name: string; intro: string | null } | null>;
   list(): Promise<{ id: string; platform: string; name: string; avatar: string | null; intro: string | null; url: string | null }[]>;
   /** 嘉宾详情（按 id = platform 值，公开详情页用） */
   getById(id: string): Promise<{ id: string; platform: string; name: string; avatar: string | null; intro: string | null; url: string | null } | null>;
@@ -625,7 +626,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
     guests: {
       async getByPlatform(platform) {
         const rows = await db
-          .select({ id: schema.guests.id, name: schema.guests.name })
+          .select({ id: schema.guests.id, name: schema.guests.name, intro: schema.guests.intro })
           .from(schema.guests)
           .where(eq(schema.guests.platform, platform as typeof schema.guests.platform.enumValues[number]))
           .limit(1);
@@ -735,17 +736,16 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
 
     submissions: {
       /** 投稿入库（唯一约束 user×url 兜底；重复提交由路由层查 existing） */
-      async create(id, userId, url, title, callNameInEpisode, personaInfo, voiceSampleId, suggestion) {
+      async create(id, userId, url, title, suggestion, guest = null, host = null) {
         try {
           const rows = await db.insert(schema.submissions).values({
             id,
             userId,
             url,
             title: title ?? null,
-            callName: callNameInEpisode ?? null,
             suggestion: suggestion ?? null,
-            personaInfo: personaInfo ?? null,
-            voiceSampleId: voiceSampleId ?? null,
+            host: host ?? null,
+            guest: guest ?? null,
             status: "submitted",
           }).returning({ id: schema.submissions.id });
           return { id: rows[0].id };
@@ -797,7 +797,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             title: schema.submissions.title,
             collected: schema.submissions.collected,
             dialogueCount: schema.submissions.dialogueCount,
-            callName: schema.submissions.callName,
+            callName: sql<string>`${schema.submissions.host}->>'callName'`,
             status: schema.submissions.status,
             rejectedReason: schema.submissions.rejectedReason,
             createdAt: schema.submissions.createdAt,
@@ -871,7 +871,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             id: schema.submissions.id,
             url: schema.submissions.url,
             title: schema.submissions.title,
-            callName: schema.submissions.callName,
+            callName: sql<string>`${schema.submissions.host}->>'callName'`,
             status: schema.submissions.status,
             rejectedReason: schema.submissions.rejectedReason,
             createdAt: schema.submissions.createdAt,
@@ -939,15 +939,16 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             title: schema.submissions.title,
             collected: schema.submissions.collected,
             dialogueCount: schema.submissions.dialogueCount,
-            callName: schema.submissions.callName,
             suggestion: schema.submissions.suggestion,
-            personaInfo: schema.submissions.personaInfo,
-            voiceSampleId: schema.submissions.voiceSampleId,
             status: schema.submissions.status,
             rejectedReason: schema.submissions.rejectedReason,
             reviewedAt: schema.submissions.reviewedAt,
+            reviewStatus: schema.submissions.reviewStatus,
+            reviewScore: schema.submissions.reviewScore,
             createdAt: schema.submissions.createdAt,
             userEmail: schema.authUsers.email,
+            host: schema.submissions.host,
+            guest: schema.submissions.guest,
           })
           .from(schema.submissions)
           .innerJoin(schema.authUsers, eq(schema.submissions.userId, schema.authUsers.id))
@@ -976,13 +977,17 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           status: row.status,
           rejectedReason: row.rejectedReason,
           reviewedAt: row.reviewedAt,
+          reviewStatus: row.reviewStatus as "approved" | "rejected" | null,
+          reviewScore: row.reviewScore as number | null,
           createdAt: row.createdAt,
           userEmail: row.userEmail,
-          personaInfo: row.personaInfo as typeof row.personaInfo,
-          callName: row.callName,
+          personaInfo: (row.host && row.host.personaInfo) || null,
+          callName: (row.host && row.host.callName) || null,
           suggestion: row.suggestion,
-          voiceSampleId: row.voiceSampleId,
+          voiceSampleId: (row.host && row.host.voiceSampleId) || null,
           voiceSamples: sampleRows,
+          host: row.host as { callName: string | null; personaInfo: PersonaSnapshot | null } | null,
+          guest: row.guest as { id: string; name: string; intro?: string | null } | null,
         };
       },
       async reject(id, reason) {
@@ -999,7 +1004,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
        *  持久化到投稿，避免每次重新生成回退「主持人」（2026-08-28 实例：挂谷猜想一期 call_name 为空） */
       async setCallName(id: string, callName: string) {
         const rows = await db.update(schema.submissions)
-          .set({ callName, updatedAt: new Date() })
+          .set({ host: sql`jsonb_set(COALESCE(host, '{}'::jsonb), '{callName}', to_jsonb(${callName})::jsonb)`, updatedAt: new Date() })
           .where(eq(schema.submissions.id, id))
           .returning({ id: schema.submissions.id });
         return rows[0]?.id ? { id: rows[0].id } : null;
@@ -1024,6 +1029,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       async setTitle(id: string, title: string | null) {
         const rows = await db.update(schema.submissions)
           .set({ title, updatedAt: new Date() })
+          .where(eq(schema.submissions.id, id))
+          .returning({ id: schema.submissions.id });
+        return rows[0]?.id ? { id: rows[0].id } : null;
+      },
+      /** 创作审核决策写入（review_status/review_score） */
+      async setReview(id: string, review: { status: "approved" | "rejected"; score: number | null }) {
+        const rows = await db.update(schema.submissions)
+          .set({ reviewStatus: review.status, reviewScore: review.score, updatedAt: new Date() })
           .where(eq(schema.submissions.id, id))
           .returning({ id: schema.submissions.id });
         return rows[0]?.id ? { id: rows[0].id } : null;
@@ -1112,7 +1125,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           username: schema.authUsers.name,
           displayName: schema.profiles.displayName,
           hostAvatar: schema.authUsers.image,
-          callName: schema.submissions.callName,
+          callName: sql<string>`${schema.submissions.host}->>'callName'`,
           // 本期嘉宾（LEFT JOIN：无嘉宾 → 行内各列全 null，下方归一为 guest: null）
           guest: {
             id: schema.guests.id,
@@ -1240,7 +1253,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             isPicked: schema.episodes.isPicked,
             username: schema.authUsers.name,
             displayName: schema.profiles.displayName,
-            callName: schema.submissions.callName,
+            callName: sql<string>`${schema.submissions.host}->>'callName'`,
           })
           .from(schema.episodes)
           .innerJoin(schema.submissions, eq(schema.submissions.id, schema.episodes.submissionId))
@@ -1814,7 +1827,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           audioUrl: schema.episodes.audioUrl,
           username: schema.authUsers.name,
           displayName: schema.profiles.displayName,
-          callName: schema.submissions.callName,
+          callName: sql<string>`${schema.submissions.host}->>'callName'`,
           guestName: schema.guests.name,
           tags: schema.episodes.tags,
         })
@@ -1921,7 +1934,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           audioUrl: schema.episodes.audioUrl,
           username: schema.authUsers.name,
           displayName: schema.profiles.displayName,
-          callName: schema.submissions.callName,
+          callName: sql<string>`${schema.submissions.host}->>'callName'`,
         })
           .from(schema.playlistEpisodes)
           .innerJoin(schema.episodes, eq(schema.episodes.id, schema.playlistEpisodes.episodeId))

@@ -3,9 +3,11 @@
 // 用法：node tools/script-lab/server.mjs [--port 4173] [--env dev]
 // 安全：绑定 127.0.0.1 + Host 头校验（防 DNS rebinding）
 import { createServer } from "node:http";
-import { readFileSync, existsSync, statSync } from "node:fs";
+import { readFileSync, existsSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveLlmConfig } from "./lib/config.mjs";
+import { complete } from "./lib/llm.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const CLI_DIST = join(here, "..", "dailog-cli", "dist");
@@ -41,44 +43,216 @@ async function configFor(name) {
   return lib.loadConfig(["--env", name]);
 }
 
+/** 超时包装：防沙箱/网络异常导致请求挂死 */
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, rej) => setTimeout(() => rej(new Error(label + " 超时（" + ms + "ms）")), ms)),
+  ]);
+}
+
+// ===== R2 权威 + 进程内存缓存（提示词 / 制作产物 / 对话不依赖本地文件）=====
+let promptsCache = null;
+const productionCache = new Map();
+const dialogueCache = new Map();
+
+/** 经服务端统一 R2 存储（多端经 API 入库，避免不同步） */
+async function r2Get(envName, token, key) {
+  try {
+    const d = await withTimeout(apiWithToken(envName, token, "/v1/editor/storage/get", { method: "POST", body: { key } }), 30000, "R2 读取");
+    return d && typeof d.content === "string" ? d.content : null;
+  } catch { return null; }
+}
+async function r2Put(envName, token, key, content) {
+  await withTimeout(apiWithToken(envName, token, "/v1/editor/storage/put", { method: "POST", body: { key, content } }), 30000, "R2 写入");
+}
+async function r2Delete(envName, token, key) {
+  await withTimeout(apiWithToken(envName, token, "/v1/editor/storage/delete", { method: "POST", body: { key } }), 30000, "R2 删除");
+}
+
+/** 读对话：内存缓存 → 本地草稿工作副本（快）→ R2 兜底（按 URL 哈希） */
+async function loadDialogue(envName, token, id) {
+  const key = envName + ":" + id;
+  if (dialogueCache.has(key)) return dialogueCache.get(key);
+  // ① 本地草稿工作副本优先（采集时落盘，毫秒级）
+  try {
+    const lib = await loadCliLib();
+    const localPath = join(lib.draftDir(id), "dialogue.json");
+    if (existsSync(localPath)) {
+      const d = JSON.parse(readFileSync(localPath, "utf-8"));
+      dialogueCache.set(key, d);
+      return d;
+    }
+  } catch { /* 本地无 → R2 兜底 */ }
+  // ② R2 兜底（本地丢失/跨端时）
+  try {
+    const detail = await apiWithToken(envName, token, "/v1/editor/submissions/" + id).catch(() => null);
+    if (!detail || !detail.url) return null;
+    const { dialogueR2Key } = await import(join(CLI_DIST, "r2.js"));   // 纯哈希函数，无网络
+    const content = await r2Get(envName, token, dialogueR2Key(detail.url));
+    if (!content) return null;
+    const d = JSON.parse(content);
+    dialogueCache.set(key, d);
+    return d;
+  } catch (err) {
+    // 404（R2 上不存在）→ 缓存 null 避免重复拉取；其他错误不缓存以便重试
+    const msg = String((err && err.message) || err);
+    if (msg.includes("404") || msg.includes("NoSuchKey")) dialogueCache.set(key, null);
+    return null;
+  }
+}
+
+/** 读提示词：内存缓存 → R2 拉取 */
+async function getPrompts(envName, token) {
+  if (promptsCache) return promptsCache;
+  try {
+    const content = await r2Get(envName, token, "prompts/prompts.json");
+    promptsCache = content ? JSON.parse(content) : {};
+  } catch { promptsCache = {}; }
+  return promptsCache;
+}
+/** 保存提示词：更新内存 + 推 R2 */
+async function savePrompt(envName, token, name, content) {
+  const p = (await getPrompts(envName, token)) || {};
+  p[name] = content;
+  p.updatedAt = Date.now();
+  promptsCache = p;
+  try { await r2Put(envName, token, "prompts/prompts.json", JSON.stringify(p, null, 2)); return true; }
+  catch { return false; }
+}
+/** 读制作产物：内存缓存 → R2 workflows/{env}/{id}.json */
+async function loadProduction(envName, token, id) {
+  const key = envName + ":" + id;
+  if (productionCache.has(key)) return productionCache.get(key);
+  try {
+    const d = await withTimeout(apiWithToken(envName, token, "/v1/editor/submissions/" + id + "/workflow", { method: "GET" }), 30000, "R2 读取");
+    const p = (d && d.production) || null;
+    productionCache.set(key, p);
+    return p;
+  } catch (err) {
+    console.error("[loadProduction]", envName, id, String((err && err.message) || err));
+    productionCache.set(key, null);
+    return null;
+  }
+}
+/** 保存制作产物：合并更新内存 + 推 R2 */
+async function saveProduction(envName, token, id, patch) {
+  const key = envName + ":" + id;
+  try {
+    const d = await withTimeout(apiWithToken(envName, token, "/v1/editor/submissions/" + id + "/workflow", {
+      method: "POST", body: { patch },
+    }), 30000, "R2 写入");
+    const cur = (d && d.production) || { id, env: envName, ...patch };
+    productionCache.set(key, cur);
+    return cur;
+  } catch (err) {
+    console.error("[saveProduction]", envName, id, String((err && err.message) || err));
+    const cur = { ...((await loadProduction(envName, token, id)) || { id, env: envName }), ...patch, updatedAt: Date.now() };
+    productionCache.set(key, cur);
+    return cur;
+  }
+}
+
 /** 已废弃：webui 登录态完全在浏览器 localStorage（请求头携带），不再读 CLI session.json */
 async function envLoggedIn(name) { return false; }
 
-/** 密码登录的 cookie 会话（按 env 存内存；webui 登录后后续 API 调用带此 cookie） */
+/** 密码登录的 cookie 会话（按 env 存文件——重启不丢；webui 登录后后续 API 调用带此 cookie） */
+const COOKIE_FILE = join(here, ".lab-cookies.json");
 const cookieSessions = new Map();  // env → cookie 字符串
 export function getCookieSession(envName) { return cookieSessions.get(envName) || null; }
+function loadCookies() {
+  try {
+    if (existsSync(COOKIE_FILE)) {
+      const data = JSON.parse(readFileSync(COOKIE_FILE, "utf-8"));
+      for (const [k, v] of Object.entries(data)) if (v) cookieSessions.set(k, v);
+    }
+  } catch { /* 损坏忽略 */ }
+}
+function saveCookies() {
+  try { writeFileSync(COOKIE_FILE, JSON.stringify(Object.fromEntries(cookieSessions), null, 2)); } catch { /* 忽略 */ }
+}
+loadCookies();
 
-/** 采集任务跟踪：正在采集的投稿（前端轮询用）+ 最近完成结果 */
-const fetchingSet = new Set();       // submissionId
-const fetchingInfo = new Map();      // submissionId → { url }
-const fetchResults = new Map();      // submissionId → { ok, detail, at }
+/** 采集任务跟踪（按环境隔离——避免跨环境投稿串数据） */
+const fetchingSet = new Set();       // env:submissionId
+const fetchingInfo = new Map();      // env:submissionId → { url }
+const fetchResults = new Map();      // env:submissionId → { ok, detail, at }
 const FETCH_RESULT_TTL = 5 * 60_000; // 结果保留 5 分钟
 
-/** 异步执行单条采集（不阻塞响应；完成后写结果缓存 + 更新 R2 标记） */
-async function runSingleFetch(envName, token, id, url) {
-  fetchingSet.add(id);
-  if (url) fetchingInfo.set(id, { url });
+/** 读 R2 对话缓存（经服务端 API；lab 管内存缓存） */
+async function readDialogueR2(envName, token, url) {
   try {
+    const { dialogueR2Key } = await import(join(CLI_DIST, "r2.js"));   // 纯哈希函数
+    const content = await r2Get(envName, token, dialogueR2Key(url));
+    return content ? JSON.parse(content) : null;
+  } catch { return null; }
+}
+
+/** 服务端标记（lab 接管：collected=1 + dialogueCount + title 回写） */
+async function markCollected(envName, token, id, messages, title) {
+  const stats = {
+    messages: messages.length,
+    userTurns: messages.filter((m) => m.role === "user").length,
+    assistantTurns: messages.filter((m) => m.role === "assistant").length,
+    chars: messages.reduce((n, m) => n + (m.content || "").length, 0),
+  };
+  await apiWithToken(envName, token, "/v1/editor/submissions/" + id + "/collected", { method: "PATCH", body: { collected: 1, dialogueCount: stats } });
+  if (title) {
+    try { await apiWithToken(envName, token, "/v1/editor/submissions/" + id + "/title", { method: "PATCH", body: { title } }); } catch { /* title 回写失败不影响 */ }
+  }
+}
+
+/** 异步执行单条采集：CLI 纯功能提取 → lab 接管 R2 存储 + 服务端标记 */
+async function runSingleFetch(envName, token, id, url) {
+  const fkey = envName + ":" + id;
+  fetchingSet.add(fkey);
+  if (url) fetchingInfo.set(fkey, { url });
+  try {
+    // ① R2 缓存判断（lab 管缓存）：同一 URL 已采集 → 直接用，跳过抓取
+    if (url) {
+      const cached = await readDialogueR2(envName, token, url);
+      if (cached && Array.isArray(cached.messages) && cached.messages.length > 0) {
+        await markCollected(envName, token, id, cached.messages, cached.title || null);
+        dialogueCache.set(fkey, cached);
+        fetchResults.set(fkey, { ok: true, detail: cached.messages.length + " 条消息（R2 缓存）", at: Date.now() });
+        return { ok: true, messages: cached.messages };
+      }
+    }
+    // ② CLI 纯功能采集（不写文件、不标记，只返回数据）
     const fetchMod = await import(join(CLI_DIST, "fetch.js"));
     const lib = await loadCliLib();
     lib.setApiCookie(getCookieSession(envName) || null);
     lib.setApiToken(token || null);
     const r = await fetchMod.extractSubmission(await configFor(envName), id, token);
-    // 采集失败（detail 404 / 拉取失败 / 未提取到）→ 数据库标 error:fetch_failed（前端红✗）
-    if (!r.ok) {
+    // ③ lab 接管存储：R2 写入 + 服务端标记
+    if (r.ok && Array.isArray(r.messages) && r.messages.length > 0) {
+      const sourceUrl = r.sourceUrl || url;
+      const data = { sourceUrl, source: r.source || "", title: r.title || null, messages: r.messages };
+      // 写本地工作副本（review 等流程毫秒级读取）
       try {
         const lib2 = await loadCliLib();
-        await apiWithToken(envName, token, "/v1/editor/submissions/" + id + "/collected", { method: "PATCH", body: { collected: -1 } });
-      } catch { /* 标记失败不影响 */ }
+        mkdirSync(lib2.draftDir(id), { recursive: true });
+        writeFileSync(join(lib2.draftDir(id), "dialogue.json"), JSON.stringify(data, null, 2), "utf-8");
+      } catch { /* 本地写失败不阻塞 */ }
+      // R2 备份（多端同步）
+      try {
+        const { dialogueR2Key } = await import(join(CLI_DIST, "r2.js"));   // 纯哈希函数
+        await r2Put(envName, token, dialogueR2Key(sourceUrl), JSON.stringify(data));
+        dialogueCache.set(fkey, data);
+      } catch { /* R2 上传失败不阻塞标记 */ }
+      await markCollected(envName, token, id, r.messages, r.title || null);
+    } else {
+      try { await apiWithToken(envName, token, "/v1/editor/submissions/" + id + "/collected", { method: "PATCH", body: { collected: -1 } }); } catch { /* 标记失败不影响 */ }
     }
-    fetchResults.set(id, { ok: r.ok, detail: r.error ? String(r.error).slice(0, 150) : (r.messages ? r.messages.length + " 条消息" : ""), at: Date.now() });
+    fetchResults.set(fkey, { ok: r.ok, detail: r.error ? String(r.error).slice(0, 150) : (r.messages ? r.messages.length + " 条消息" : ""), at: Date.now() });
     return r;
   } catch (e) {
-    fetchResults.set(id, { ok: false, detail: String((e && e.message) || e).slice(0, 150), at: Date.now() });
+    console.error("[runSingleFetch] 采集异常:", (e && e.stack) || e);
+    fetchResults.set(fkey, { ok: false, detail: String((e && e.message) || e).slice(0, 150), at: Date.now() });
     return { ok: false, error: (e && e.message) || String(e) };
   } finally {
-    fetchingSet.delete(id);
-    fetchingInfo.delete(id);
+    fetchingSet.delete(fkey);
+    fetchingInfo.delete(fkey);
   }
 }
 
@@ -86,7 +260,7 @@ async function runSingleFetch(envName, token, id, url) {
 async function apiWithToken(envName, token, path, opts = {}) {
   const cfg = await configFor(envName);
   const lib = await loadCliLib();
-  const headers = {};
+  const headers = { "x-lab-env": envName };
   const cookie = getCookieSession(envName);
   if (cookie) {
     headers["cookie"] = cookie;
@@ -147,8 +321,9 @@ function serveStatic(path, res) {
   const safe = path === "/" ? "index.html" : path.replace(/^\/+/, "");
   const file = join(WEB_DIR, safe);
   if (!file.startsWith(WEB_DIR) || !existsSync(file) || !statSync(file).isFile()) {
-    res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
-    res.end("404 not found");
+    // SPA fallback：/settings、/<id> 等前端路由路径一律返回 index.html（前端按 pathname 渲染）
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.end(readFileSync(join(WEB_DIR, "index.html")));
     return;
   }
   res.writeHead(200, { "content-type": MIME[extname(file)] || "application/octet-stream" });
@@ -156,6 +331,7 @@ function serveStatic(path, res) {
 }
 
 async function handleApi(path, res, req) {
+  // 提示词权威存储（.dailog-editor/prompts.json）——置于顶部避免 TDZ
   // GET /api/envs → 可用环境列表
   if (path === "/api/envs") {
     const envs = await listEnvs();
@@ -201,6 +377,7 @@ async function handleApi(path, res, req) {
       if (!setCookie) { sendJson(res, { ok: false, error: "登录响应无会话 cookie" }, 400); return; }
       const cookie = setCookie.split(";")[0];
       cookieSessions.set(name, cookie);
+      saveCookies();
       sendJson(res, { ok: true, env: name });
       return;
     } catch (e) {
@@ -219,7 +396,13 @@ async function handleApi(path, res, req) {
       const me = await apiWithToken(e, token, "/v1/me/profile");
       sendJson(res, { ok: true, email: (me && (me.email || me.username)) || "", username: (me && me.username) || "" });
     } catch (err) {
-      sendJson(res, { ok: false, error: String((err && err.message) || err) }, 401);
+      // profile 404（无档案）→ 用 editor 接口验证登录态，邮箱从投稿列表回退
+      const subs = await apiWithToken(e, token, "/v1/editor/submissions").catch(() => null);
+      if (subs && Array.isArray(subs)) {
+        sendJson(res, { ok: true, email: (subs[0] && subs[0].userEmail) || "", username: "" });
+      } else {
+        sendJson(res, { ok: false, error: String((err && err.message) || err) }, 401);
+      }
     }
     return;
   }
@@ -246,21 +429,14 @@ async function handleApi(path, res, req) {
       if (r.status === "published") stage = "已发布";
       else if (r.status === "rejected") stage = "拒稿";
       else {
-        // 采集状态权威判据：服务端 collected（-1=失败 / 0=未采集 / 1=成功）；本地文件兜底
+        // 采集状态权威判据：服务端 collected（-1=失败 / 0=未采集 / 1=成功）——纯服务端字段，不依赖本地
         const collected = r.collected;
-        const hasDialogue = collected === 1 || existsSync(join(lib.draftDir(r.id), "dialogue.json"));
-        const fetchFailed = collected === -1;
-        const progress = existsSync(join(lib.draftDir(r.id), "progress.json"))
-          ? JSON.parse(readFileSync(join(lib.draftDir(r.id), "progress.json"), "utf-8"))
-          : null;
-        if (progress && progress.step === "rejected") stage = "拒稿";
-        else if (fetchFailed) stage = "采集失败";
-        else if (progress && progress.step) stage = "制作中";
-        else if (hasDialogue) stage = "制作中";
-        else stage = "待采集";
+        if (collected === 1) stage = "制作中";        // 采集成功 → 制作中
+        else if (collected === -1) stage = "采集失败";
+        else stage = "待采集";                              // collected=0 → 待采集
       }
       return {
-        id: r.id, url: r.url, title: r.title, collected: r.collected,
+        id: r.id, url: r.url, title: r.title, collected: r.collected, dialogueCount: r.dialogueCount,
         displayName: r.displayName || r.userEmail || "?", userEmail: r.userEmail,
         createdAt: r.createdAt, hasVoiceSample: r.hasVoiceSample, stage,
       };
@@ -281,15 +457,10 @@ async function handleApi(path, res, req) {
     const body = await readBody(req);
     const id = (body && body.id) || null;
     if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
-    if (fetchingSet.has(id)) { sendJson(res, { ok: true, state: "fetching", id }); return; }
-    // 已在本地有 dialogue 且已标记 → 无需采集
-    const lib = await loadCliLib();
-    if (existsSync(join(lib.draftDir(id), "dialogue.json"))) {
-      sendJson(res, { ok: true, state: "already_fetched", id });
-      return;
-    }
+    if (fetchingSet.has(e + ":" + id)) { sendJson(res, { ok: true, state: "fetching", id }); return; }
     // 异步启动，不等待（带 url 供统计条展示"正在采集：<url>"）
     const sub = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null);
+    if (sub && sub.collected === 1) { sendJson(res, { ok: true, state: "already_fetched", id }); return; }
     runSingleFetch(e, token, id, (sub && sub.url) || null).catch(() => {});
     sendJson(res, { ok: true, state: "fetching", id });
     return;
@@ -297,48 +468,254 @@ async function handleApi(path, res, req) {
 
   // GET /api/status/fetch → 采集任务状态（正在采集的 ID + 最近完成结果）
   if (path === "/api/status/fetch") {
+    const cred = reqCred(req);
+    const envPfx = cred.env ? cred.env + ":" : "";
     const now = Date.now();
-    for (const [id, r] of fetchResults) {
-      if (now - r.at > FETCH_RESULT_TTL) fetchResults.delete(id);
+    for (const [k, r] of fetchResults) {
+      if (now - r.at > FETCH_RESULT_TTL) fetchResults.delete(k);
     }
-    const fetching = [...fetchingSet].map((id) => ({ id, url: (fetchingInfo.get(id) || {}).url || null }));
-    sendJson(res, { ok: true, fetching, results: Object.fromEntries(fetchResults) });
+    const fetching = [...fetchingSet].filter((k) => k.startsWith(envPfx)).map((k) => ({ id: k.slice(envPfx.length), url: (fetchingInfo.get(k) || {}).url || null }));
+    const results = {};
+    for (const [k, v] of fetchResults) {
+      if (k.startsWith(envPfx)) results[k.slice(envPfx.length)] = v;
+    }
+    sendJson(res, { ok: true, fetching, results });
     return;
   }
 
-  // POST /api/run/batch → 批量采集 submitted 队列（复用 CLI fetch 逻辑，并发 4）
+  // POST /api/run/batch → 批量采集 submitted 队列（异步：逐个进 fetching 队列，前端轮询进度）
   if (path === "/api/run/batch" && req.method === "POST") {
     const cred = reqCred(req);
     if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
     const { env: e, token } = cred;
     const lib = await loadCliLib();
     const q = await apiWithToken(e, token, "/v1/editor/submissions").catch(() => []);
-    const fetchMod = await import(join(CLI_DIST, "fetch.js"));
-    // 把登录凭证注入 CLI 底座（cookie 或 token）——fetch 内部 api() 用注入值
-    const cliLib = await loadCliLib();
-    cliLib.setApiCookie(getCookieSession(e) || null);
-    cliLib.setApiToken(token || null);
-    const results = [];
-    const CONCURRENCY = 4;
+    // 未采集的投稿（服务端 collected !== 1 且不在 fetching）→ 异步逐个采集（并发 4）
+    const pending = q.filter((row) => row.collected !== 1 && !fetchingSet.has(e + ":" + row.id));
     let idx = 0;
-    async function worker() {
-      while (idx < q.length) {
-        const row = q[idx++];
-        const dir = lib.draftDir(row.id);
-        if (existsSync(join(dir, "dialogue.json"))) {
-          results.push({ id: row.id, ok: true, skipped: true });
-          continue;
-        }
-        try {
-          const r = await fetchMod.extractSubmission(await configFor(e), row.id, token);
-          results.push({ id: row.id, ok: r.ok, detail: r.error ? String(r.error).slice(0, 120) : (r.messages ? r.messages.length + " 条消息" : "") });
-        } catch (err) {
-          results.push({ id: row.id, ok: false, detail: String((err && err.message) || err).slice(0, 120) });
-        }
+    const worker = async () => {
+      while (idx < pending.length) {
+        const row = pending[idx++];
+        await runSingleFetch(e, token, row.id, row.url || null);
+      }
+    };
+    // 异步启动，不等待（返回已入队数量；进度由 /api/status/fetch 轮询）
+    Promise.all(Array.from({ length: Math.min(4, Math.max(pending.length, 1)) }, worker)).catch(() => {});
+    sendJson(res, { ok: true, queued: pending.length, total: q.length });
+    return;
+  }
+
+  /** 从 LLM 输出中提取 JSON（容忍 ```json 围栏与前后文字） */
+  function extractJson(text) {
+    const m = String(text).match(/\`\`\`(?:json)?\s*([\s\S]*?)\`\`\`/);
+    const s = m ? m[1] : String(text);
+    const start = s.indexOf("{"); const end = s.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      const candidate = s.slice(start, end + 1);
+      try { return JSON.parse(candidate); } catch (err) {
+        console.error("[extractJson] 解析失败，输出长度", String(text).length, "开头:", String(text).slice(0, 150));
+        throw new Error("LLM 输出不是合法 JSON（截断或格式错误）");
       }
     }
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, Math.max(q.length, 1)) }, worker));
-    sendJson(res, { ok: true, total: q.length, results });
+    console.error("[extractJson] 未找到 JSON 对象，输出长度", String(text).length, "开头:", String(text).slice(0, 200));
+    throw new Error("LLM 输出不是合法 JSON（未找到 JSON 对象）");
+  }
+  function llmConfig() {
+    const cfg = resolveLlmConfig(process.argv);
+    return cfg && cfg.apiKey ? cfg : null;
+  }
+  async function llmComplete(system, user, cfgOverride = {}) {
+    const cfg = llmConfig();
+    if (!cfg) throw new Error("未配置 LLM API key（DEEPSEEK_API_KEY）");
+    if (!cfg.maxTokens) cfg.maxTokens = 8192;   // 大输出（审题含脚本）设足够上限，防截断导致 JSON 不完整
+    Object.assign(cfg, cfgOverride);            // 前端状态0 可覆盖 temperature/seed
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 120000);   // 生成超时 120s，防挂起
+    let usage = null;
+    try {
+      const out = await complete(cfg, [
+        { role: "system", content: system },
+        { role: "user", content: typeof user === "string" ? user : JSON.stringify(user, null, 1) },
+      ], { stream: false, signal: ac.signal, onUsage: (u) => { usage = u; } });
+      return { content: out, usage };
+    } finally { clearTimeout(timer); }
+  }
+
+  // POST /api/run/review/preview → 状态0：LLM 调用输入预览（system/user 提示词 + 温度/seed，可编辑后发送）
+  if (path === "/api/run/review/preview" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const body = await readBody(req);
+    const id = (body && body.id) || null;
+    if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
+    try {
+      const dialogue = await loadDialogue(e, token, id);
+      if (!dialogue) { sendJson(res, { ok: false, error: "未采集——请先采集对话" }); return; }
+      const prompts = (await getPrompts(e, token)) || {};
+      if (!prompts.selection) { sendJson(res, { ok: false, error: "缺少 selection 提示词（设置页配置）" }); return; }
+      // 组装完整用户提示词：dialogue + suggestion + host/guest 快照（投稿时定格，直接取）
+      const detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null);
+      const hostSnap = (detail && detail.host) || null;
+      const guestSnap = (detail && detail.guest) || null;
+      const userPayload = {
+        dialogue,
+        suggestion: (detail && detail.suggestion) || undefined,
+        host: hostSnap ? { callName: hostSnap.callName || undefined, personaInfo: hostSnap.personaInfo || undefined } : undefined,
+        guests: guestSnap ? [{ name: guestSnap.name, platform: guestSnap.id, intro: guestSnap.intro || null }] : undefined,
+      };
+      const cfg = llmConfig();
+      sendJson(res, {
+        ok: true,
+        system: prompts.selection,
+        user: JSON.stringify(userPayload, null, 1),
+        temperature: cfg && cfg.temperature !== undefined ? cfg.temperature : 0.7,
+        seed: cfg && cfg.seed !== undefined ? cfg.seed : 42,   // 默认固定 seed，可复现
+      });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/run/review → 创作审题：dialogue + selection 提示词 → LLM 审核结果（暂存，不入库；前端确认后才落库）
+  if (path === "/api/run/review" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const body = await readBody(req);
+    const id = (body && body.id) || null;
+    if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
+    try {
+      const t0 = Date.now();
+      const dialogue = await loadDialogue(e, token, id);   // 共享 dialogueCache——详情页加载后直接命中内存，不走远程
+      console.log("[review-debug] loadDialogue", Date.now() - t0, "ms");
+      if (!dialogue) { sendJson(res, { ok: false, error: "未采集——请先采集对话" }); return; }
+      const t1 = Date.now();
+      const prompts = (await getPrompts(e, token)) || {};
+      console.log("[review-debug] getPrompts", Date.now() - t1, "ms");
+      if (!prompts.selection) { sendJson(res, { ok: false, error: "缺少 selection 提示词（设置页配置）" }); return; }
+      const t2 = Date.now();
+      // 状态0 可编辑覆盖：system/user/temperature/seed（前端传入则使用）
+      const sysMsg = (body && typeof body.system === "string" && body.system.trim()) ? body.system : prompts.selection;
+      const userMsg = (body && typeof body.user === "string" && body.user.trim()) ? body.user : { dialogue };
+      const cfgOverride = {};
+      if (body && body.temperature !== undefined && body.temperature !== "") cfgOverride.temperature = Number(body.temperature);
+      if (body && body.seed !== undefined && body.seed !== "") cfgOverride.seed = Number(body.seed);
+      // LLM 间歇性空响应/输出异常 → 自动重试一次
+      let result = null, usage = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const r = await llmComplete(sysMsg, userMsg, cfgOverride);
+          usage = r.usage;
+          result = extractJson(r.content);
+          break;
+        } catch (err) {
+          if (attempt === 0) console.error("[review] 审题失败，自动重试:", String((err && err.message) || err));
+          else throw err;
+        }
+      }
+      console.log("[review-debug] llmComplete", Date.now() - t2, "ms");
+      sendJson(res, {
+        ok: true, result,
+        usage: usage ? { input: usage.prompt_tokens ?? 0, output: usage.completion_tokens ?? 0 } : null,
+      });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/run/review/confirm → 确认入库：读取暂存的审核结果 → production.selection + script
+  if (path === "/api/run/review/confirm" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const body = await readBody(req);
+    const id = (body && body.id) || null;
+    // 审题结果由前端持有并随确认请求传回（不依赖 server 内存——重启/多实例不丢）
+    const result = (body && body.result && typeof body.result === "object") ? body.result : null;
+    if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
+    if (!result) { sendJson(res, { ok: false, error: "无审题结果——请先执行审题" }); return; }
+    try {
+      // 调服务端业务接口：服务端内部写 DB 决策 + R2 scripts + 拒稿联动 reject + 通知
+      const d = await apiWithToken(e, token, "/v1/editor/submissions/" + id + "/review", {
+        method: "POST",
+        body: { result },
+      });
+      // 服务端写入成功后，同步本地内存缓存（读 DB 决策状态）
+      const rejected = d.rejected === true;
+      const detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null);
+      productionCache.set(e + ":" + id, detail || null);
+      sendJson(res, { ok: true, rejected, message: d.message || (rejected ? "已标注审核不通过" : "审核通过") });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/run/script → 创作：dialogue + selection 提示词 → 脚本结构（写 production.json.selection + script）
+  if (path === "/api/run/script" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const body = await readBody(req);
+    const id = (body && body.id) || null;
+    if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
+    try {
+      const dialogue = await loadDialogue(e, token, id);
+      if (!dialogue) { sendJson(res, { ok: false, error: "未采集——请先采集对话" }); return; }
+      const prompts = (await getPrompts(e, token)) || {};
+      if (!prompts.selection) { sendJson(res, { ok: false, error: "缺少 selection 提示词（设置页配置）" }); return; }
+      const { content: out } = await llmComplete(prompts.selection, { dialogue });
+      const parsed = extractJson(out);
+      const prod = await saveProduction(e, token, id, {
+        selection: parsed,
+        script: Array.isArray(parsed.scripts) ? parsed.scripts[0] : null,
+        progress: { step: "script", updatedAt: new Date().toISOString() },
+      });
+      sendJson(res, { ok: true, message: "脚本生成完成" + (prod.script ? "" : "（未解析到 scripts，请查看 production.json）") });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/run/polish → 语感打磨：script + polish 提示词（body: {id, scope?, target?, revision?}）
+  if (path === "/api/run/polish" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const body = await readBody(req);
+    const id = (body && body.id) || null;
+    if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
+    try {
+      const prod = await loadProduction(e, token, id);
+      if (!prod || !prod.script) { sendJson(res, { ok: false, error: "尚无脚本——先执行创作（生成脚本）" }); return; }
+      const prompts = (await getPrompts(e, token)) || {};
+      if (!prompts.polish) { sendJson(res, { ok: false, error: "缺少 polish 提示词（设置页配置）" }); return; }
+      const scope = (body.scope) || "all";
+      const { content: out } = await llmComplete(prompts.polish, { scripts: prod.script, scope, target: body.target || null, revision: body.revision || null });
+      const parsed = extractJson(out);
+      let patch = { progress: { step: "polish", updatedAt: new Date().toISOString() } };
+      if (scope === "all" && parsed.parts) patch.script = parsed;
+      else patch.polishResult = parsed;   // one/line：结果暂存，前端定位回填
+      await saveProduction(e, token, id, patch);
+      sendJson(res, { ok: true, message: scope === "all" ? "语感打磨完成" : "打磨结果已生成" });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/run/publish → 发布元信息：script + meta 提示词（写 production.json.metadata）
+  if (path === "/api/run/publish" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const body = await readBody(req);
+    const id = (body && body.id) || null;
+    if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
+    try {
+      const prod = await loadProduction(e, token, id);
+      if (!prod || !prod.script) { sendJson(res, { ok: false, error: "尚无脚本——先执行创作" }); return; }
+      const prompts = (await getPrompts(e, token)) || {};
+      if (!prompts.meta) { sendJson(res, { ok: false, error: "缺少 meta 提示词（设置页配置）" }); return; }
+      const { content: out } = await llmComplete(prompts.meta, { script: prod.script, chosenIdea: prod.chosenIdea || prod.selection || null });
+      const parsed = extractJson(out);
+      await saveProduction(e, token, id, { metadata: parsed, progress: { step: "publish", updatedAt: new Date().toISOString() } });
+      sendJson(res, { ok: true, message: "发布元信息生成完成" });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
     return;
   }
 
@@ -356,6 +733,8 @@ async function handleApi(path, res, req) {
       const me = await apiWithToken(e, token, "/v1/me/profile");
       userEmail = (me && (me.email || me.username)) || "";
     } catch { /* 非关键 */ }
+    // profile 缺失（404）时回退到投稿列表中的邮箱
+    if (!userEmail && submissions.length && submissions[0].userEmail) userEmail = submissions[0].userEmail;
     sendJson(res, { ok: true, env: e, userEmail, submissions: submissions.length, episodes: episodes.length });
     return;
   }
@@ -380,30 +759,87 @@ async function handleApi(path, res, req) {
     const { env: e, token } = cred;
     const lib = await loadCliLib();
     const id = m[1];
-    const detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id);
-    const dir = lib.draftDir(id);
-    const draftFiles = ["dialogue.json", "selection.json", "chosen-idea.json", "script.json", "metadata.json", "info.json"]
-      .filter((f) => existsSync(join(dir, f)));
-    const progress = existsSync(join(dir, "progress.json"))
-      ? JSON.parse(readFileSync(join(dir, "progress.json"), "utf-8"))
-      : null;
-    sendJson(res, { ok: true, id, detail, draftFiles, progress });
+    let detail;
+    try {
+      detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id);
+    } catch (err) {
+      const msg = String((err && err.message) || err);
+      if (msg.includes("404") || msg.includes("not_found")) {
+        sendJson(res, { ok: false, error: "投稿不存在（可能已删除，或环境不对）" }, 404);
+        return;
+      }
+      throw err;
+    }
+    // 审核决策从服务端 detail 派生（DB：review_status/review_score + R2：reviewScripts）
+    const draftFiles = [];
+    const reviewStatus = (detail && detail.reviewStatus) || null;
+    const reviewScripts = (detail && detail.reviewScripts) || null;
+    const prodSummary = reviewStatus ? {
+      hasSelection: true,
+      reviewStatus,
+      reviewScore: detail.reviewScore ?? null,
+      rejection: detail.rejectedReason || null,
+      scriptList: reviewStatus === 'rejected' ? [] : (Array.isArray(reviewScripts) ? reviewScripts : []),
+    } : null;
+    // 对话随详情一次返回（本地工作副本，毫秒级）——前端直接渲染，不再单独请求 /api/draft
+    const dialogue = await loadDialogue(e, token, id);
+    sendJson(res, {
+      ok: true, id, detail, draftFiles, progress: null, prodSummary, dialogue,
+    });
     return;
   }
 
-  // GET /api/draft/<id>/<file> → 草稿目录文件（dialogue/script/selection 等）
+  // 提示词管理（R2 权威 + 进程内存缓存）
+  if (path === "/api/prompts" && req.method === "GET") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    try {
+      const p = (await getPrompts(cred.env, cred.token)) || { updatedAt: 0 };
+      const prompts = Object.entries(p)
+        .filter(([k, v]) => typeof v === "string" && k !== "updatedAt")
+        .map(([k, v]) => ({ name: k, content: v }));
+      sendJson(res, { ok: true, prompts, updatedAt: p.updatedAt || null });
+    } catch (e) { sendJson(res, { ok: false, error: String((e && e.message) || e) }); }
+    return;
+  }
+  const pm = path.match(/^\/api\/prompts\/([a-zA-Z0-9_-]+)$/);
+  if (pm && req.method === "PUT") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const name = pm[1];
+    const body = await readBody(req);
+    const content = (body && typeof body.content === "string") ? body.content : null;
+    if (content === null) { sendJson(res, { ok: false, error: "需 content 字段" }, 400); return; }
+    try {
+      const pushed = await savePrompt(cred.env, cred.token, name, content);
+      sendJson(res, { ok: true, message: "已保存" + (pushed ? "" : "（R2 推送失败，内存保留）") });
+    } catch (e) { sendJson(res, { ok: false, error: String((e && e.message) || e) }); }
+    return;
+  }
+
+  // GET /api/r2title/<id> → 投稿卡片标题：从 R2 对话 JSON 取 title（缓存化，不依赖本地）
+  const rt = path.match(/^\/api\/r2title\/([0-9a-f-]+)$/);
+  if (rt) {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const id = rt[1];
+    const d = await loadDialogue(e, token, id);
+    sendJson(res, { ok: true, title: (d && d.title) || null });
+    return;
+  }
+
+  // GET /api/draft/<id>/dialogue.json → 对话预览（缓存化：从 R2 读）；其他草稿文件不再提供（已 R2 化）
   const dm = path.match(/^\/api\/draft\/([0-9a-f-]+)\/([\w.-]+)$/);
   if (dm) {
-    const lib = await loadCliLib();
-    const dir = lib.draftDir(dm[1]);
-    const file = join(dir, dm[2]);
-    if (!file.startsWith(dir) || !existsSync(file)) {
-      sendJson(res, { ok: false, error: "草稿文件不存在" }, 404);
-      return;
-    }
-    const body = readFileSync(file, "utf-8");
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    if (dm[2] !== "dialogue.json") { sendJson(res, { ok: false, error: "该草稿文件已缓存化，不再从本地提供" }, 404); return; }
+    const d = await loadDialogue(e, token, dm[1]);
+    if (!d) { sendJson(res, { ok: false, error: "对话不存在（未采集或 R2 无备份）" }, 404); return; }
     res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-    res.end(body);
+    res.end(JSON.stringify(d));
     return;
   }
 

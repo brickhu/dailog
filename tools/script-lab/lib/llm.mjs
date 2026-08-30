@@ -2,7 +2,7 @@
 // 接口与 services/api 计划的 createLlmClient 对齐：complete(messages) → 全文
 
 /** 流式或一次性调用，返回完整回复文本；onDelta 收到增量（默认打印到 stdout） */
-export async function complete(config, messages, { stream = true, onDelta } = {}) {
+export async function complete(config, messages, { stream = true, onDelta, signal, onUsage } = {}) {
   const body = {
     model: config.model,
     messages,
@@ -21,6 +21,7 @@ export async function complete(config, messages, { stream = true, onDelta } = {}
         authorization: "Bearer " + config.apiKey,
       },
       body: JSON.stringify(body),
+      signal,
     });
   } catch (e) {
     throw new Error("[llm] 请求失败：" + e.message + "（base-url=" + config.baseUrl + "，检查网络/代理）");
@@ -33,6 +34,7 @@ export async function complete(config, messages, { stream = true, onDelta } = {}
 
   if (!stream) {
     const data = await res.json();
+    if (onUsage && data?.usage) onUsage(data.usage);
     return data?.choices?.[0]?.message?.content ?? "";
   }
 

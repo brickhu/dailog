@@ -3,85 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>dailog lab</title>
-<style>
-  body { font-family:-apple-system,'PingFang SC',sans-serif; margin:0; background:#0f1115; color:#e6e8ee; }
-  .muted{color:#8a91a0}
-  .card { background:#171a21; border:1px solid #262b36; border-radius:10px; padding:14px 16px; margin-bottom:12px; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th { text-align:left; color:#8a91a0; font-weight:600; padding:10px 12px; border-bottom:1px solid #262b36; white-space:nowrap; }
-  td { padding:10px 12px; border-bottom:1px solid #1c2029; vertical-align:middle; }
-  tr:hover td { background:#1b202a; }
-  .tag { font-size:11px; padding:2px 8px; border-radius:20px; border:1px solid #262b36; color:#8a91a0; white-space:nowrap; }
-  .tag.待采集 { color:#4f8cff; border-color:#4f8cff; }
-  .tag.制作中 { color:#d29922; border-color:#d29922; }
-  .tag.已发布 { color:#3fb950; border-color:#3fb950; }
-  .tag.拒稿 { color:#f85149; border-color:#f85149; }
-  .tag.采集失败 { color:#f85149; border-color:#f85149; }
-  .tag.已登录 { color:#3fb950; border-color:#3fb950; }
-  .tag.未登录 { color:#8a91a0; border-color:#262b36; }
-  a { color:#4f8cff; text-decoration:none; } a:hover{text-decoration:underline}
-  .mono { font-family:Menlo,monospace; font-size:12px; }
-  .url { max-width:380px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:bottom; }
-  .topbar { display:flex; justify-content:space-between; align-items:center; padding:16px 24px; }
-  .topbar .brand { font-size:20px; font-weight:700; }
-  .topbar .user { color:#8a91a0; font-size:13px; }
-  .topbar .brand-wrap { display:flex; align-items:center; gap:10px; }
-  .topbar .logout-btn { background:transparent; border:1px solid #262b36; color:#8a91a0; border-radius:6px; padding:3px 10px; font-size:12px; cursor:pointer; margin-left:10px; }
-  .topbar .logout-btn:hover { color:#f85149; border-color:#f85149; }
-  .topbar .user .env { color:#8a91a0; padding:1px 8px; border:1px solid #262b36; border-radius:12px; font-size:11px; }
-  .statbar { display:flex; justify-content:space-between; align-items:center; background:#171a21; border:1px solid #262b36; border-radius:10px; padding:12px 16px; margin:0 24px 12px; }
-  .statbar .stat { font-size:14px; } .statbar .stat b { color:#4f8cff; }
-  .statbar button { background:#4f8cff; color:#fff; border:0; border-radius:6px; padding:7px 18px; font-size:13px; cursor:pointer; }
-  .statbar button:disabled { opacity:.5; cursor:not-allowed; }
-  .pg { background:#171a21; border:1px solid #262b36; color:#e6e8ee; border-radius:6px; padding:6px 14px; font-size:13px; cursor:pointer; margin-left:8px; }
-  /* 采集状态圆形图标 */
-  .cicon { width:16px; height:16px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:9px; flex-shrink:0; }
-  .cicon.done { background:#3fb950; color:#0f1115; }
-  .cicon.pending { background:transparent; border:1.5px solid #e6e8ee; color:#e6e8ee; cursor:pointer; }
-  .cicon.pending:hover { border-color:#4f8cff; color:#4f8cff; }
-  .cicon.fetching { background:#262b36; }
-  .cicon.failed { background:#f85149; color:#fff; cursor:pointer; }
-  .cicon .spin { width:10px; height:10px; border:1.5px solid #8a91a0; border-top-color:transparent; border-radius:50%; animation:spin 0.8s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .cicon-cell { width:32px; padding-right:4px; }
-  .mini-spin { width:12px; height:12px; border:2px solid #4f8cff; border-top-color:transparent; border-radius:50%; display:inline-block; vertical-align:middle; animation:spin 0.8s linear infinite; margin-right:6px; }
-  .pg:disabled { opacity:.4; cursor:not-allowed; }
-  .copy-btn { background:transparent; border:0; color:#4f8cff; cursor:pointer; padding:0 2px; font-size:13px; }
-  .copy-btn:hover { color:#7aa8ff; }
-  .wrap { padding:0 24px 24px; }
-  /* 登录页：环境卡片列表 */
-  .login-wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
-  .login-box { width:380px; }
-  .login-box button { background:#4f8cff; color:#fff; border:0; border-radius:6px; padding:9px; font-size:14px; cursor:pointer; width:100%; }
-  .login-box button.ghost { background:transparent; border:1px solid #4f8cff; color:#4f8cff; }
-  .login-box button:disabled { opacity:.5; }
-  .login-box .auth-url { background:#0b0d11; border:1px solid #262b36; border-radius:6px; padding:10px; margin:8px 0; word-break:break-all; font-size:12px; }
-  .login-box input { width:100%; box-sizing:border-box; background:#0b0d11; border:1px solid #262b36; color:#e6e8ee; border-radius:6px; padding:8px 10px; font-size:13px; margin-bottom:8px; }
-  .login-box { width:520px; }
-  .login-box h1 { font-size:22px; margin:0 0 4px; }
-  .login-box .sub { color:#8a91a0; margin:0 0 20px; font-size:13px; }
-  .env-item { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border:1px solid #262b36; border-radius:8px; margin-bottom:10px; background:#14171f; }
-  .env-item .name { font-weight:600; }
-  .env-item .label { color:#8a91a0; font-size:12px; margin-top:2px; }
-  .env-item .actions { display:flex; gap:8px; align-items:center; }
-  .env-item button { background:#4f8cff; color:#fff; border:0; border-radius:6px; padding:6px 14px; font-size:13px; cursor:pointer; }
-  .env-item button.ghost { background:transparent; border:1px solid #4f8cff; color:#4f8cff; }
-  .env-item button:disabled { opacity:.5; }
-  .pair-box { display:none; margin-top:8px; padding:12px; border:1px dashed #262b36; border-radius:8px; }
-  .pair-box .auth-url { background:#0b0d11; border:1px solid #262b36; border-radius:6px; padding:10px; margin-bottom:10px; word-break:break-all; font-size:12px; }
-  .pair-box input { width:100%; box-sizing:border-box; background:#0b0d11; border:1px solid #262b36; color:#e6e8ee; border-radius:6px; padding:8px 10px; font-size:13px; margin-bottom:8px; }
-  .pair-box .row { display:flex; gap:8px; }
-  .err { color:#f85149; font-size:12px; margin-top:6px; }
-  .detail-wrap { padding:0 24px 24px; }
-  .back { cursor:pointer; color:#4f8cff; margin-bottom:12px; display:inline-block; font-size:13px; }
-  .steps { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
-  .steps button { background:#4f8cff; color:#fff; border:0; border-radius:6px; padding:8px 16px; font-size:13px; cursor:pointer; }
-  .steps button:disabled { opacity:.4; cursor:not-allowed; }
-  .seg { border-left:3px solid #4f8cff; padding:6px 10px; margin:6px 0; background:#0b0d11; border-radius:0 6px 6px 0; }
-  .seg .who { font-size:11px; color:#4f8cff; font-weight:600; }
-  .step-status { font-size:12px; color:#8a91a0; margin-top:8px; }
-  .ok { color:#3fb950; font-size:12px; margin-top:6px; }
-</style>
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
 <div class='login-wrap' id='loginView' style='display:none'>
@@ -97,13 +19,14 @@
 <div id='appView' style='display:none'>
   <div class='topbar'>
     <div class='brand-wrap'><span class='brand'>dailog lab</span><span class='env' id='envTag'>—</span></div>
-    <div class='user'><span id='userEmail'>—</span><button class='logout-btn' onclick='logout()'>退出</button></div>
+    <div class='user'><span id='userEmail'>—</span><button class='logout-btn' onclick='logout()'>退出</button><button class='icon-btn' onclick='openDesign()' title='提示词设置'>⚙</button></div>
   </div>
   <div class='statbar' id='statbar'>
     <div class='stat' id='statIdle'><b id='pendingCount'>0</b> 条投稿待采集</div>
     <div class='stat' id='statFetching' style='display:none'><span class='mini-spin'></span> 正在采集：<span id='fetchingUrl' class='mono'></span></div>
-    <button id='btnBatch' onclick='batchFetch()'>批量采集</button>
+    <button id='btnBatch' class='pg' onclick='batchFetch()'>批量采集</button>
   </div>
+  <div class='wrap' id='listLoading' style='display:none'><div class='card' style='padding:16px'><span class='muted'>加载中....</span></div></div>
   <div class='wrap' id='listWrap'>
     <div class='card' style='padding:0'>
       <table>
@@ -113,343 +36,44 @@
     </div>
   </div>
   <div id='pager' class='statbar' style='display:flex;justify-content:flex-end;border:0;background:none;margin:0 24px 12px'></div>
-  <div class='detail-wrap' id='detailWrap' style='display:none'></div>
+  <div class='wrap' id='detailWrap' style='display:none'></div>
+  <div class='wrap' id='designWrap' style='display:none'>
+    <span class='back' onclick='backToApp()'>← 返回列表</span>
+    <div class='design'>
+      <div class='prompt-list' id='promptList'></div>
+      <div class='prompt-edit'>
+        <div class='prompt-edit-head'>
+          <b id='promptName'>—</b>
+          <button class='pg' onclick='savePrompt()'>保存</button>
+          <span id='promptStatus' class='muted'></span>
+        </div>
+        <textarea id='promptEditor' spellcheck='false'></textarea>
+      </div>
+    </div>
+  </div>
 </div>
-<script>
-let labEnv = null;
-async function j(u, opts){
-  const h = (opts&&opts.headers)||{};
-  if (labEnv) h['X-Lab-Env'] = labEnv;
-  const tok = labEnv ? localStorage.getItem('dailog-lab-token-'+labEnv) : null;
-  if (tok) h['Authorization'] = 'Bearer '+tok;
-  opts = {...(opts||{}), headers:h};
-  const r=await fetch(u,opts);
-  const d=await r.json().catch(()=>({ok:false,error:'HTTP '+r.status}));
-  if(!r.ok||d.ok===false)throw new Error(d.error||'HTTP '+r.status);
-  return d;
-}
-async function boot(){
-  try {
-    const envsD = await j('/api/envs');
-    const envs = envsD.envs || [];
-    if (!envs.length) { showLogin('无可用环境——请配置 .dailog-editor/envs.json'); return; }
-    // 逐个探测登录态：cookie 会话（密码登录）或 Bearer token（配对码）皆可
-    const statuses = [];
-    for (const e of envs) {
-      const hasCookie = localStorage.getItem('dailog-lab-cookie-'+e.name) === '1';
-      const tok = localStorage.getItem('dailog-lab-token-'+e.name);
-      let loggedIn = false, userEmail = '';
-      if (hasCookie || tok) {
-        try {
-          labEnv = e.name;
-          const me = await j('/api/me');
-          loggedIn = true; userEmail = me.email || me.username || '';
-        } catch { /* 登录态失效 */ }
-        labEnv = null;
-      }
-      statuses.push({ ...e, loggedIn, userEmail });
-    }
-    const logged = statuses.filter(s=>s.loggedIn);
-    if (logged.length === 1) {
-      // 只有一个已登录环境 → 本地直进（不再调后端 select）
-      labEnv = logged[0].name;
-      enterApp(logged[0]);
-      return;
-    }
-    // 0 个或多个已登录 → 登录页选择
-    showLogin(null, statuses);
-  } catch(e) { showLogin(e.message); }
-}
-let labStatuses = [];
-function showLogin(err, statuses){
-  document.getElementById('loginView').style.display='flex';
-  document.getElementById('appView').style.display='none';
-  labStatuses = statuses || [];
-  const sel=document.getElementById('envSelect');
-  if (sel) sel.innerHTML=labStatuses.map(s=>`<option value='${s.name}'>${s.name}${s.label?' — '+s.label:''}</option>`).join('');
-  const main=document.getElementById('loginMain');
-  if (err) { if(main) main.innerHTML='<div class="err">'+esc(err)+'</div>'; return; }
-  if (labStatuses.length===0) { if(main) main.innerHTML='<div class="muted">无可用环境——请配置 .dailog-editor/envs.json</div>'; return; }
-  if (sel) { const first = labStatuses.find(s=>s.name===sel.value) || labStatuses[0]; renderLoginMain(first); }
-}
-function renderLoginMain(s){
-  if(!s) return;
-  const st=document.getElementById('envStatus');
-  if(st) st.textContent = s.loggedIn ? ('已登录'+(s.userEmail?' · '+s.userEmail:'')) : '未登录——需配对';
-  const main=document.getElementById('loginMain');
-  if(!main) return;
-  if (s.loggedIn){
-    main.innerHTML=`<button onclick='enterLogged()'>进入控制台</button>`;
-  } else {
-    main.innerHTML=`
-      <input id='loginEmail' type='email' placeholder='邮箱' autocomplete='username' style='margin-bottom:8px'>
-      <input id='loginPwd' type='password' placeholder='密码' autocomplete='current-password' style='margin-bottom:8px'>
-      <button onclick='passwordLogin()' id='btnPwdLogin'>登 录</button>
-      <div class='err' id='loginErr'></div>`;
-  }
-}
-function onEnvChange(){
-  const s=labStatuses.find(x=>x.name===document.getElementById('envSelect').value);
-  if (s) renderLoginMain(s);
-}
-function enterLogged(){
-  const name=document.getElementById('envSelect').value;
-  labEnv=name;
-  enterApp({name});
-}
-async function passwordLogin(){
-  const name=document.getElementById('envSelect').value;
-  const email=document.getElementById('loginEmail').value.trim();
-  const pwd=document.getElementById('loginPwd').value;
-  const err=document.getElementById('loginErr');
-  if(!email||!pwd){err.textContent='请输入邮箱和密码';return}
-  const btn=document.getElementById('btnPwdLogin'); if(btn)btn.disabled=true; btn.textContent='登录中…';
-  err.className='err';
-  try{
-    await j('/api/auth/password',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({env:name,email,password:pwd})});
-    err.className='ok';err.textContent='✅ 登录成功，进入控制台…';
-    localStorage.setItem('dailog-lab-cookie-'+name, '1');  // 标记该环境走 cookie 会话
-    setTimeout(()=>enterApp({name}), 600);
-  }catch(e){err.textContent=e.message; if(btn){btn.disabled=false;btn.textContent='登 录';}}
-}
-function logout(){
-  if (labEnv) { localStorage.removeItem('dailog-lab-token-'+labEnv); localStorage.removeItem('dailog-lab-cookie-'+labEnv); }
-  labEnv = null;
-  document.getElementById('appView').style.display='none';
-  document.getElementById('loginView').style.display='flex';
-  boot();
-}
-function enterApp(envObj){
-  labEnv = envObj.name;
-  document.getElementById('loginView').style.display='none';
-  document.getElementById('appView').style.display='block';
-  document.getElementById('envTag').textContent=envObj.name||'';
-  document.getElementById('userEmail').textContent=envObj.userEmail||'…';
-  loadApp();
-}
-async function loadApp(){
-  const bb0=document.getElementById('btnBatch'); if(bb0) bb0.textContent='批量采集';
-  try{
-    const o=await j('/api/overview');
-    document.getElementById('userEmail').textContent=o.userEmail||'—';
-    const d=await j('/api/submissions?page='+pageNo+'&pageSize=50');
-    const rows=d.rows||[];
-    window._lastRows = rows;
-    fetchingIds.clear();
-    pageTotal = Math.max(1, Math.ceil((d.total||rows.length)/50));
-    document.getElementById('pendingCount').textContent=(d.pendingCount!==undefined?d.pendingCount:rows.filter(r=>r.stage==='待采集').length);
-    document.getElementById('pendingCount').dataset.total=d.total||rows.length;
-    const bb=document.getElementById('btnBatch');
-    bb.disabled = Number(document.getElementById('pendingCount').textContent)===0;
-    if (Number(document.getElementById('pendingCount').textContent)===0) bb.textContent='批量采集';
-    renderPager();
-    const tb=document.getElementById('rows');
-    if(!rows.length){tb.innerHTML="<tr><td colspan='5' class='muted'>暂无投稿</td></tr>";return}
-    tb.innerHTML=rows.map(r=>`
-      <tr>
-        <td class='cicon-cell'>${fetchIcon(r)}</td>
-        <td class='mono' style='white-space:nowrap'><span title='${r.id}'>${r.id.slice(0,8)}…</span><button class='copy-btn' data-id='${r.id}' title='复制完整 ID'>⧉</button></td>
-        <td>
-          ${r.title
-            ? `<a href='${esc(r.url)}' target='_blank' rel='noopener' title='${esc(r.title)}' style='font-size:13px;display:inline-block;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>${esc(r.title)}</a>`
-            : (r.url ? `<a class='mono url' href='${esc(r.url)}' target='_blank' rel='noopener'>${esc(r.url)}</a>` : '—')}
-        </td>
-        <td>${esc(r.displayName||'?')} <span class='muted mono'>(${esc(r.userEmail||'')})</span></td>
-        <td class='mono muted'>${fmtDate(r.createdAt)}</td>
-        <td><span class='tag ${esc(r.stage)}'>${esc(r.stage)}</span></td>
-        <td><a class='detail-link' href='#${r.id}' onclick='event.preventDefault();location.hash="${r.id}"'>进入 →</a></td>
-      </tr>`).join('');
-  }catch(e){
-    document.getElementById('rows').innerHTML="<tr><td colspan='5' class='muted'>加载失败: "+esc(e.message)+"</td></tr>";
-  }
-  routeInit();
-}
-// ===== 详情页（采编控制台）=====
-async function openDetail(id){
-  const wrap=document.getElementById('detailWrap');
-  const list=document.getElementById('listWrap');
-  list.style.display='none';
-  const sb=document.getElementById('statbar'); if(sb) sb.style.display='none';
-  wrap.style.display='block';
-  wrap.innerHTML='<div class="muted">加载中…</div>';
-  try{
-    const d=await j('/api/detail/'+id);
-    const dt=d.detail||{};
-    const files=(d.draftFiles||[]).map(f=>`<span class='tag'>${f}</span>`).join(' ');
-    const hasDlg=(d.draftFiles||[]).includes('dialogue.json');
-    const hasScript=(d.draftFiles||[]).includes('script.json');
-    wrap.innerHTML=`
-      <span class='back' onclick='showList()'>← 返回列表</span>
-      <div class='card'>
-        <div class='topbar' style='padding:0 0 8px'>
-          <div class='brand-wrap'><span class='brand' style='font-size:16px'>${esc(dt.title||'(无标题)')}</span><span class='tag'>${esc(dt.status||'?')}</span></div>
-          <div class='muted mono'>${esc(d.id)}</div>
-        </div>
-        <div class='muted mono'>${dt.url?`<a href='${esc(dt.url)}' target='_blank' rel='noopener'>${esc(dt.url)}</a>`:'—'}</div>
-        <div class='muted'>投稿人：${esc(dt.personaInfo?.displayName||'?')} · 称呼：${esc(dt.callName||'（无）')}</div>
-        ${dt.suggestion?`<div class='muted'>建议：${esc(dt.suggestion)}</div>`:''}
-        <div style='margin-top:8px'>${files||'<span class="tag">未采集</span>'}</div>
-        <div class='steps'>
-          <button onclick='runStep("fetch","采集")' id='stFetch' ${hasDlg?'disabled':''}>① 采集</button>
-          <button onclick='runStep("script","审核+脚本")' id='stScript' ${hasDlg?'':'disabled'}>② 审核+脚本</button>
-          <button onclick='runStep("tts","语音")' id='stTts' ${hasScript?'':'disabled'}>③ 语音</button>
-          <button onclick='runStep("publish","发布")' id='stPub' ${dt.status==='published'?'disabled':''}>④ 发布</button>
-        </div>
-        <div class='step-status' id='stepStatus'></div>
-      </div>
-      <div class='card' id='scriptCard' style='display:${hasScript?'block':'none'}'>
-        <h3 style='margin:0 0 8px'>脚本</h3>
-        <div id='segments'></div>
-      </div>
-      <div class='card'><h3 style='margin:0 0 8px'>对话原文</h3><pre id='dlg' style='background:#0b0d11;border:1px solid #262b36;border-radius:8px;padding:12px;overflow:auto;max-height:400px;font-size:12px'></pre></div>`;
-    // 加载对话 + 脚本
-    loadDialogue(id);
-    if (hasScript) loadScript(id);
-  }catch(e){
-    wrap.innerHTML='<div class="err">加载失败: '+esc(e.message)+'</div>';
-  }
-}
-async function loadDialogue(id){
-  const el=document.getElementById('dlg');
-  if(!el)return;
-  const r=await fetch('/api/draft/'+id+'/dialogue.json',{headers:{'X-Lab-Env':labEnv,'Authorization':'Bearer '+(labEnv?localStorage.getItem('dailog-lab-token-'+labEnv):'')}});
-  if(r.ok){const t=await r.text();el.textContent=t.slice(0,6000)+(t.length>6000?'\n…(截断)':'')}
-  else el.textContent='（未采集）';
-}
-async function loadScript(id){
-  const r=await fetch('/api/draft/'+id+'/script.json',{headers:{'X-Lab-Env':labEnv,'Authorization':'Bearer '+(labEnv?localStorage.getItem('dailog-lab-token-'+labEnv):'')}});
-  if(!r.ok)return;
-  const s=await r.json();
-  const segs=s.segments||s.parts?.flatMap(p=>p.segments)||[];
-  document.getElementById('segments').innerHTML=segs.map(g=>`<div class='seg'><span class='who'>${esc(g.speaker)}</span><div>${esc(g.text)}</div></div>`).join('');
-}
-async function runStep(step,label){
-  const id=location.hash.slice(1);
-  const st=document.getElementById('stepStatus');
-  st.textContent=label+' 执行中…';
-  try{
-    const d=await j('/api/run/'+step,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id})});
-    st.textContent=(d.message||label+' 完成')+(d.detail?' — '+d.detail:'');
-    setTimeout(()=>openDetail(id), 800);
-  }catch(e){st.textContent='❌ '+e.message}
-}
-function showList(){
-  document.getElementById('detailWrap').style.display='none';
-  const sb=document.getElementById('statbar'); if(sb) sb.style.display='flex';
-  document.getElementById('listWrap').style.display='block';
-  history.replaceState(null,'',location.pathname);
-  loadApp();
-}
-// 锚点路由：hashchange + 初始 hash
-window.addEventListener('hashchange', ()=>{ const id=location.hash.slice(1); if(id) openDetail(id); });
-function routeInit(){ const id=location.hash.slice(1); if(id) openDetail(id); }
-
-let pageNo = 1, pageTotal = 1;
-function fmtDate(s){ if(!s) return '—'; const d=new Date(s); if(isNaN(d)) return String(s).slice(0,16); const p=n=>String(n).padStart(2,'0'); return d.getFullYear()+'/'+(d.getMonth()+1)+'/'+d.getDate()+' '+p(d.getHours())+':'+p(d.getMinutes()); }
-function fetchIcon(r){
-
-  const c = r.collected;
-
-  if (c === 1) return `<span class='cicon done' title='已采集'>✓</span>`;
-
-  if (fetchingIds.has(r.id)) return `<span class='cicon fetching' title='采集中'><span class='spin'></span></span>`;
-
-  if (c === -1) return `<span class='cicon failed' title='采集失败，点击重试' onclick='event.stopPropagation();singleFetch(\'${r.id}\')'>✗</span>`;
-
-  return `<span class='cicon pending' title='点击采集' onclick='event.stopPropagation();singleFetch(\'${r.id}\')'>⇩</span>`;
-
-}
-const fetchingIds = new Set();
-let fetchPollTimer = null;
-async function singleFetch(id){
-  try{
-    await j('/api/run/fetch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id})});
-    fetchingIds.add(id);
-    renderRows();
-    startFetchPoll();
-    // 立即显示采集状态条（url 等轮询补全）
-    const idle=document.getElementById('statIdle'); const busy=document.getElementById('statFetching');
-    if(idle&&busy){ idle.style.display='none'; busy.style.display='block'; }
-    const ue=document.getElementById('fetchingUrl'); if(ue) ue.textContent=id.slice(0,8)+'…';
-  }catch(e){alert(e.message)}
-}
-async function startFetchPoll(){
-  if (fetchPollTimer) return;
-  fetchPollTimer = setInterval(async () => {
-    try{
-      const d = await j('/api/status/fetch');
-      fetchingIds.clear();
-      const fetching = d.fetching||[];
-      fetching.forEach(f=>fetchingIds.add(f.id));
-      // 统计条切换：队列非空显示"正在采集：<url>"+spinner
-      const idle=document.getElementById('statIdle'); const busy=document.getElementById('statFetching');
-      const urlEl=document.getElementById('fetchingUrl');
-      if (fetching.length>0 && busy && idle){
-        idle.style.display='none'; busy.style.display='block';
-        if (urlEl) urlEl.textContent=((fetching[0].url)||'').slice(0,80);
-      } else if (busy && idle) {
-        idle.style.display='block'; busy.style.display='none';
-      }
-      // 采集完成 → 刷新列表
-      const results = d.results||{};
-      const doneIds = Object.keys(results);
-      if (doneIds.length>0){ clearInterval(fetchPollTimer); fetchPollTimer=null; loadApp(); return; }
-      renderRows();
-    }catch(e){ clearInterval(fetchPollTimer); fetchPollTimer=null; }
-  }, 2000);
-}
-function renderRows(){
-  // 仅重渲染图标列（简单方式：整表重渲染，保留 rows 数据）
-  if (window._rowsCache) { window._lastRows = window._rowsCache; }
-  if (window._lastRows) {
-    const tb=document.getElementById('rows');
-    tb.innerHTML=window._lastRows.map(r=>`<tr>
-      <td class='cicon-cell'>${fetchIcon(r)}</td>
-      <td class='mono' style='white-space:nowrap'><span title='${r.id}'>${r.id.slice(0,8)}…</span><button class='copy-btn' data-id='${r.id}' title='复制完整 ID'>⧉</button></td>
-      <td>${r.title
-        ? `<a href='${esc(r.url)}' target='_blank' rel='noopener' title='${esc(r.title)}' style='font-size:13px;display:inline-block;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>${esc(r.title)}</a>`
-        : (r.url ? `<a class='mono url' href='${esc(r.url)}' target='_blank' rel='noopener'>${esc(r.url)}</a>` : '—')}</td>
-      <td>${esc(r.displayName||'?')} <span class='muted mono'>(${esc(r.userEmail||'')})</span></td>
-      <td class='mono muted'>${fmtDate(r.createdAt)}</td>
-      <td><span class='tag ${esc(r.stage)}'>${esc(r.stage)}</span></td>
-      <td><a class='detail-link' href='#${r.id}' onclick='event.preventDefault();location.hash="${r.id}"'>进入 →</a></td>
-    </tr>`).join('');
-  }
-}
-function renderPager(){
-  const el=document.getElementById('pager');
-  if(!el) return;
-  el.innerHTML=`<span class='muted' style='margin-right:10px'>第 ${pageNo}/${pageTotal} 页 · 共 ${document.getElementById('pendingCount').dataset.total||'?'} 条</span>`+
-    `<button class='pg' onclick='goPage(${pageNo-1})' ${pageNo<=1?'disabled':''}>上一页</button>`+
-    `<button class='pg' onclick='goPage(${pageNo+1})' ${pageNo>=pageTotal?'disabled':''}>下一页</button>`;
-}
-async function goPage(n){ if(n<1||n>pageTotal) return; pageNo=n; await loadApp(); }
-async function batchFetch(){
-  const btn=document.getElementById('btnBatch');
-  btn.disabled=true;btn.textContent='采集中…';
-  try{
-    const d=await j('/api/run/batch',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
-    const res=d.results||[];const ok=res.filter(r=>r.ok).length,fail=res.length-ok;
-    btn.textContent='采集完成：'+ok+' 成功 / '+fail+' 失败';
-    setTimeout(()=>{btn.textContent='批量采集';btn.disabled=false;loadApp()},1500);
-  }catch(e){btn.textContent='❌ '+e.message;setTimeout(()=>{btn.textContent='批量采集';btn.disabled=false},2500)}
-}
-function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
-document.addEventListener('click', async (e) => {
-  const btn = e.target.closest('.copy-btn');
-  if (!btn) return;
-  const id = btn.getAttribute('data-id');
-  if (!id) return;
-  let ok = false;
-  try {
-    const ta = document.createElement('textarea'); ta.value = id; ta.style.position='fixed'; ta.style.opacity='0';
-    document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length);
-    ok = document.execCommand('copy'); ta.remove();
-  } catch { ok = false; }
-  if (!ok) { try { await navigator.clipboard.writeText(id); ok = true; } catch {} }
-  const old = btn.textContent; btn.textContent = ok ? '✓' : '✗'; setTimeout(() => { btn.textContent = old; }, 1200);
-});
-boot();
-</script>
+<!-- 创作审核结果 drawer -->
+<div class='drawer-overlay' id='drawerOverlay' onclick='closeReviewDrawer()'></div>
+<div class='drawer' id='drawer'>
+  <div class='drawer-head'>
+    <span class='title'>创作审核结果</span>
+    <button class='drawer-close' id='drawerClose' onclick='closeReviewDrawer()'>✕</button>
+  </div>
+  <div class='drawer-body' id='drawerBody'><div class='muted'>加载中…</div></div>
+  <div class='drawer-foot'>
+    <span id='drawerUsage' class='muted' style='font-size:12px;align-self:center'></span>
+    <span style='display:flex;gap:10px'>
+      <button class='pg' id='btnSend' onclick='sendReview()' style='display:none;background:#4f8cff;color:#fff;border:0'>发送</button>
+      <button class='pg' id='btnRetry' onclick='retryReview()'>重试</button>
+      <button class='pg' id='btnConfirm' onclick='confirmReview()' style='background:#4f8cff;color:#fff;border:0'>确认</button>
+    </span>
+  </div>
+</div>
+<script src="/js/common.js"></script>
+<script src="/js/login.js"></script>
+<script src="/js/home.js"></script>
+<script src="/js/detail.js"></script>
+<script src="/js/settings.js"></script>
+<script>boot();</script>
 </body>
 </html>

@@ -330,6 +330,48 @@
       "when": 1788300000000,
       "tag": "0048_submissions_dialogue_count",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1788400000000,
+      "tag": "0049_submissions_review_decision",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1788500000000,
+      "tag": "0050_submissions_guest_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1788600000000,
+      "tag": "0051_submissions_guest_snapshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1788700000000,
+      "tag": "0052_submissions_host_guest_json",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1788800000000,
+      "tag": "0053_drop_legacy_guest_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1788900000000,
+      "tag": "0054_merge_host_json",
+      "breakpoints": true
     }
   ]
 }

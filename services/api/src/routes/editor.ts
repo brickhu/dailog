@@ -147,7 +147,14 @@ export function editorRoutes(deps: EditorDeps) {
     const detail = await deps.repo.submissions.getDetail(c.req.param("id")!);
     if (!detail) return c.json({ error: "not_found" }, 404);
     const episodes = await deps.repo.episodes.listBySubmission(detail.id);
-    return c.json({ ...detail, episodes });
+    // 编辑恢复：读 R2 scripts（key 按请求 Host 推导实例，部署稳定）
+    let reviewScripts = null;
+    try {
+      const instance = (c.req.header("host") || "default").replace(/[.:]/g, "-");
+      const bytes = await deps.storage.get(`workflows/${instance}/${detail.id}.json`).then((r) => r.data).catch(() => null);
+      if (bytes) reviewScripts = (JSON.parse(Buffer.from(bytes).toString("utf-8")).scripts) || null;
+    } catch { /* 无 scripts */ }
+    return c.json({ ...detail, episodes, reviewScripts });
   }) as unknown as RouteHandler<typeof r2, AuthEnv>);
 
   /** 补录主持人称呼（callName）：投稿缺称呼（detail 显示「主持人称呼：无」）时编辑确认后写入——
@@ -707,6 +714,111 @@ export function editorRoutes(deps: EditorDeps) {
       headers: { "Content-Type": "audio/webm", "Cache-Control": "private, max-age=300" },
     });
   }) as unknown as RouteHandler<typeof r12, AuthEnv>);
+
+  // ===== 创作审核确认（LLM 审核结果经业务接口入库：服务端内部写 R2 workflow + 拒稿联动 reject + 通知）=====
+  const rReviewPost = createRoute({
+    method: "post",
+    path: "/v1/editor/submissions/:id/review",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "审核结果入库（body { result }，服务端写 R2 workflow + 拒稿联动）" },
+      400: { content: { "application/json": { schema: Err } }, description: "result 缺失" },
+    },
+  });
+  app.openapi(rReviewPost, (async (c: Context) => {
+    const id = c.req.param("id")!;
+    const body = (await c.req.json().catch(() => null)) as { result?: unknown } | null;
+    const result = (body && body.result && typeof body.result === "object" ? body.result : null) as Record<string, unknown> | null;
+    if (!result) return c.json({ error: "result_required" }, 400);
+    const rejected = result.rejected === true;
+    // ① 审核决策存数据库（review_status / review_score——决策结果，直接呈现用户）
+    await deps.repo.submissions.setReview(id, { status: rejected ? "rejected" : "approved", score: typeof result.score === "number" ? result.score : null });
+    // ② 拒稿 → 联动 submissions 拒审 + 通知；通过 → title 回写
+    if (rejected) {
+      const detail = await deps.repo.submissions.getDetail(id);
+      if (detail && detail.status === "submitted") {
+        const reason = String(result.rejection || "对话不满足创作要求").slice(0, 500);
+        await deps.repo.submissions.reject(id, reason);
+        await deps.repo.notifications.create({
+          userId: detail.userId, type: "rejected", title: "投稿未通过", body: reason, link: "/me/submits",
+        }).catch(() => {});
+        await sendEmail(deps.env, {
+          to: detail.userEmail,
+          subject: "dailog：你的投稿未通过",
+          html: `<p>你好 ${detail.personaInfo?.displayName ?? detail.userEmail}，</p><p>很遗憾，你的投稿未能通过创作审核：</p><blockquote>${escapeHtml(reason)}</blockquote><p>你可以在 <a href="${deps.siteBaseUrl ?? ""}/me/submits">投稿状态页</a> 查看。</p>`,
+        }).catch(() => {});
+      }
+    } else if (typeof result.title === "string" && result.title.trim()) {
+      await deps.repo.submissions.setTitle(id, result.title.trim()).catch(() => {});
+    }
+    // ③ scripts（创作产物，编辑恢复用）写 R2——key 用请求 Host 推导实例（部署稳定，不受 lab 配置名影响）
+    if (!rejected && Array.isArray(result.scripts) && result.scripts.length > 0) {
+      try {
+        const instance = (c.req.header("host") || "default").replace(/[.:]/g, "-");
+        const key = `workflows/${instance}/${id}.json`;
+        await deps.storage.put(key, new Uint8Array(Buffer.from(JSON.stringify({
+          id, instance,
+          scripts: result.scripts,
+          title: typeof result.title === "string" ? result.title : null,
+          updatedAt: Date.now(),
+        }), "utf-8")));
+      } catch { /* R2 写入失败不阻塞审核 */ }
+    }
+    return c.json({ ok: true, rejected, message: rejected ? "已标注审核不通过并通知投稿人" : "创作审核通过，脚本已入库" });
+  }) as unknown as RouteHandler<typeof rReviewPost, AuthEnv>);
+
+  // ===== 编辑 R2 存储读写（workflows/prompts/dialogues——多端经服务端统一入库，避免不同步）=====
+  // key 前缀白名单，防越权覆盖音频/封面等对象
+  const STORAGE_PREFIXES = ["workflows/", "prompts/", "dialogues/"];
+  const storageKeyOk = (key: string) => typeof key === "string" && STORAGE_PREFIXES.some((p) => key.startsWith(p)) && !key.includes("..");
+  const stGet = createRoute({
+    method: "post",
+    path: "/v1/editor/storage/get",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "读 R2 对象（body { key }）" },
+      400: { content: { "application/json": { schema: Err } }, description: "key 非法" },
+    },
+  });
+  app.openapi(stGet, (async (c: Context) => {
+    const body = (await c.req.json().catch(() => null)) as { key?: unknown } | null;
+    const key = typeof body?.key === "string" ? body.key : "";
+    if (!storageKeyOk(key)) return c.json({ error: "invalid_key" }, 400);
+    const bytes = await deps.storage.get(key).then((r) => r.data).catch(() => null);
+    if (!bytes) return c.json({ ok: true, content: null });
+    return c.json({ ok: true, content: Buffer.from(bytes).toString("utf-8") });
+  }) as unknown as RouteHandler<typeof stGet, AuthEnv>);
+
+  const stPut = createRoute({
+    method: "post",
+    path: "/v1/editor/storage/put",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "写 R2 对象（body { key, content }）" },
+      400: { content: { "application/json": { schema: Err } }, description: "key 非法" },
+    },
+  });
+  app.openapi(stPut, (async (c: Context) => {
+    const body = (await c.req.json().catch(() => null)) as { key?: unknown; content?: unknown } | null;
+    const key = typeof body?.key === "string" ? body.key : "";
+    const content = typeof body?.content === "string" ? body.content : "";
+    if (!storageKeyOk(key)) return c.json({ error: "invalid_key" }, 400);
+    await deps.storage.put(key, new Uint8Array(Buffer.from(content, "utf-8")));
+    return c.json({ ok: true });
+  }) as unknown as RouteHandler<typeof stPut, AuthEnv>);
+
+  const stDel = createRoute({
+    method: "post",
+    path: "/v1/editor/storage/delete",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "删 R2 对象（body { key }）" },
+      400: { content: { "application/json": { schema: Err } }, description: "key 非法" },
+    },
+  });
+  app.openapi(stDel, (async (c: Context) => {
+    const body = (await c.req.json().catch(() => null)) as { key?: unknown } | null;
+    const key = typeof body?.key === "string" ? body.key : "";
+    if (!storageKeyOk(key)) return c.json({ error: "invalid_key" }, 400);
+    await deps.storage.delete(key).catch(() => {});
+    return c.json({ ok: true });
+  }) as unknown as RouteHandler<typeof stDel, AuthEnv>);
 
   return app;
 }

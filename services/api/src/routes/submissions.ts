@@ -16,6 +16,21 @@ const PENDING_LIMIT = 5;
 /** 触达性探活超时（ms）：网络层失败/超时 → 不可达 */
 const REACH_TIMEOUT_MS = 8_000;
 
+/** 从分享 URL 猜平台（匹配 guests 表 guest_id 用） */
+function guessPlatform(url: string): string | null {
+  const u = String(url || "").toLowerCase();
+  if (u.includes("chatgpt") || u.includes("openai") || u.includes("chat.openai")) return "chatgpt";
+  if (u.includes("claude")) return "claude";
+  if (u.includes("kimi")) return "kimi";
+  if (u.includes("doubao")) return "doubao";
+  if (u.includes("gemini")) return "gemini";
+  if (u.includes("deepseek")) return "deepseek";
+  if (u.includes("grok") || u.includes("x.com") || u.includes("twitter")) return "grok";
+  if (u.includes("tongyi") || u.includes("qwen")) return "tongyi";
+  if (u.includes("perplexity")) return "perplexity";
+  return null;
+}
+
 /** URL 基本合法性：http/https 协议 + 有 host；拒绝其它协议（javascript:/file: 等） */
 export function isValidUrl(input: string): boolean {
   let url: URL;
@@ -266,7 +281,17 @@ export function submissionsRoutes(repo: Repos) {
       : null;
     // 主持人档案快照（编辑 getDetail 免查库；脚本生成注入画像）
     const personaInfo = await repo.episodes.getPersonaSnapshot(userId).catch(() => null);
-    const created = await repo.submissions.create(submissionIdFromUrl(url), userId, canonicalUrl2, title, callNameInEpisode, personaInfo, voiceSampleId, suggestion);
+    // 嘉宾快照：按 URL 猜平台 → guests 表匹配（guest jsonb 定格，preview/脚本直接取）
+    let guest = null;
+    try {
+      const platform = guessPlatform(canonicalUrl2);
+      if (platform) {
+        const g = await repo.guests.getByPlatform(platform);
+        if (g) guest = { id: g.id, name: g.name, intro: g.intro ?? null };
+      }
+    } catch { /* 嘉宾匹配失败不影响投稿 */ }
+    const host = { callName: callNameInEpisode ?? null, personaInfo: personaInfo ?? null, voiceSampleId: voiceSampleId ?? null };
+    const created = await repo.submissions.create(submissionIdFromUrl(url), userId, canonicalUrl2, title, suggestion, guest, host);
     if (!created.id) {
       return c.json({ error: "already_submitted", detail: "该链接已提交过投稿" }, 409);
     }

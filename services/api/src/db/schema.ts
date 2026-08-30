@@ -1,5 +1,5 @@
 import {
-  boolean, index, integer, jsonb, pgTable, smallint, text, timestamp, uniqueIndex, uuid,
+  boolean, index, integer, jsonb, pgTable, real, smallint, text, timestamp, uniqueIndex, uuid,
 } from "drizzle-orm/pg-core";
 
 // ---------------------------------------------------------------------------
@@ -132,14 +132,12 @@ export const submissions = pgTable(
     userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
     /** 用户提交的对话分享链接（仅做合法性 + 触达性检查，不做内容采集） */
     url: text("url").notNull(),
-    /** 本次节目的主持人自称（≤20 字；脚本生成时按脚本语言改写） */
-    callName: text("call_name"),
     /** 投稿人节目建议（可选；编辑脚本生成时仅供选题视角参考，无参考价值可忽略） */
     suggestion: text("suggestion"),
-    /** 主持人档案快照（投稿时写入；编辑脚本生成注入画像用） */
-    personaInfo: jsonb("persona_info").$type<PersonaSnapshot>(),
-    /** 投稿时使用的采样（仅记录；TTS 按 脚本语言→en→兜底 重新匹配） */
-    voiceSampleId: uuid("voice_sample_id").references(() => voiceSamples.id, { onDelete: "set null" }),
+    /** 主持人快照（投稿时定格：callName 称呼 + personaInfo 画像 + voiceSampleId 采样——preview/脚本直接取） */
+    host: jsonb("host").$type<{ callName: string | null; personaInfo: PersonaSnapshot | null; voiceSampleId: string | null } | null>(),
+    /** 嘉宾快照（投稿时从 guests 定格：id(平台) + name + intro——preview/脚本直接取） */
+    guest: jsonb("guest").$type<{ id: string; name: string; intro?: string | null } | null>(),
     title: text("title"),
     /** 采集状态：-1=采集失败 / 0=未采集 / 1=采集成功。
      *  R2 key 不存库（由 URL 哈希推导：dialogues/<sha256(url)前32>.json），拒绝删 R2 后无废弃地址。 */
@@ -151,6 +149,10 @@ export const submissions = pgTable(
       assistantTurns: number;
       chars: number;
     } | null>(),
+    /** 创作审核状态（决策结果，直接呈现用户）：approved / rejected / null（未审核） */
+    reviewStatus: text("review_status", { enum: ["approved", "rejected"] }),
+    /** 创作审核得分（LLM 决策依据提取，0-10） */
+    reviewScore: real("review_score"),
     status: text("status", { enum: ["submitted", "rejected", "published"] }).notNull().default("submitted"),
     /** 拒审原因（rejected 时必填，投稿人 /me/submits 可见） */
     rejectedReason: text("rejected_reason"),
