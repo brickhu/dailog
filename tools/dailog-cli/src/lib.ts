@@ -32,13 +32,27 @@ export const feedbackDir = join(configDir, "feedback");
 export const feedbackFile = join(feedbackDir, "feedback.jsonl");
 /** 学习规则文件（L2 演进层）：编辑反馈蒸馏沉淀的通用规则——SC-STEP-1/2 作为附加输入注入 */
 export const learnedRulesFile = join(configDir, "learned-rules.md");
-const sessionFile = join(configDir, "session.json");
 const envsFile = join(configDir, "envs.json");
 
 /** 解码规则库（本地自进化主文件）：.dailog-editor/rules.json——运行时直接读写进化，
  *  无需 build；首次使用从工程种子（assets/rules.json）自动初始化复制 */
 export function rulesPath(): string {
   return join(configDir, "rules.json");
+}
+
+/** 注入式 token：CLI 不管理 token 存储——由调用方（skill 读自己的 session / lab 读 localStorage）注入。
+ *  setApiToken(token) 设置全局；api()/tryApi() 优先用 tokenOverride，其次用此注入值。 */
+let injectedApiToken: string | null = null;
+export function setApiToken(token: string | null): void { injectedApiToken = token; }
+export function getApiToken(): string | null { return injectedApiToken; }
+/** cookie 会话注入（lab 密码登录用）：api() 优先用 cookie，其次 Bearer token */
+let injectedApiCookie: string | null = null;
+export function setApiCookie(cookie: string | null): void { injectedApiCookie = cookie; }
+export function getApiCookie(): string | null { return injectedApiCookie; }
+
+/** 默认资产目录（intro/outro 片头片尾 + rules.json 种子）：源码 src/ 与产物 scripts/ 的上一级都是 assets/ */
+export function defaultAssetsDir(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), "..", "assets");
 }
 
 export interface EditorConfig {
@@ -50,6 +64,8 @@ export interface EditorConfig {
   /** 环境名（--env/DAILOG_ENV 指定；null = 默认/未命名） */
   envName: string | null;
   pexelsApiKey?: string;
+  /** .dailog-editor/.env 全量密钥（Fish API key / R2 凭证 / Pexels 等，环境无关） */
+  secrets: Record<string, string>;
 }
 
 export interface EnvironmentEntry {
@@ -95,8 +111,8 @@ function parseEnvFlag(argv: string[]): { envName: string | null; apiBase: string
   return { envName, apiBase };
 }
 
-/** 从 .env 读环境无关密钥（Fish/Pexels/Assets） */
-function loadSecrets(): Record<string, string> {
+/** 从 .env 读环境无关密钥（Fish/Pexels/R2/Assets） */
+export function loadSecrets(): Record<string, string> {
   const envFile = join(configDir, ".env");
   const env: Record<string, string> = {};
   if (existsSync(envFile)) {
@@ -148,74 +164,8 @@ export function loadConfig(argv: string[] = process.argv): EditorConfig {
     apiBase,
     envName: resolvedEnvName,
     siteUrl,
+    secrets,
   };
-}
-
-interface SessionData {
-  /** token 绑定的环境 API 基址（跨环境不通用） */
-  apiBase?: string;
-  token?: string;
-  createdAt?: string;
-}
-
-/** 读取本地缓存的 bearer token（配对码登录产物）；无 → null */
-function readSession(): SessionData | null {
-  try {
-    return JSON.parse(readFileSync(sessionFile, "utf-8")) as SessionData;
-  } catch {
-    return null;
-  }
-}
-
-/** 写入会话缓存（配对成功）；权限 600——token 等同密码；apiBase 记录环境绑定 */
-export function saveSession(token: string, apiBase: string): void {
-  writeFileSync(sessionFile, JSON.stringify({ apiBase, token, createdAt: new Date().toISOString() }), { mode: 0o600 });
-  chmodSync(sessionFile, 0o600);
-  console.log(`[auth] token 已缓存到 ${sessionFile}（chmod 600；绑定环境 ${apiBase}；过期重跑 pnpm editor login）`);
-}
-
-/** 清除会话缓存（token 失效 / 登出） */
-export function clearSession(): void {
-  try { unlinkSync(sessionFile); } catch { /* 无文件 */ }
-}
-
-/** 本地是否已有**当前环境**的有效登录态（session 存在且 token 绑定环境一致） */
-export function hasValidSession(config: EditorConfig): boolean {
-  const session = readSession();
-  return !!session?.token && session.apiBase === config.apiBase;
-}
-
-/** 会话缓存文件路径（登录/登出提示用） */
-export function sessionPath(): string {
-  return sessionFile;
-}
-
-/** 待配对授权缓存路径（配对码登录：--code 复用同一授权的中间态；随登录态绑定环境） */
-export function pendingDevicePath(): string {
-  return join(configDir, "pending-device.json");
-}
-
-/** 默认资产目录（intro/outro 片头片尾，按语言命名：assets/audio/intro.{lang}.mp3） */
-/** 资源目录（intro/outro/guest 品牌声线，按语言命名：{kind}.{lang}.mp3）。
- *  资源文件随子工程管理（tools/dailog-editor/assets/），构建时复制到产物
- *  .agents/skills/dailog-editor/assets/——这里基于入口位置定位（源码 src/ 与产物 scripts/
- *  的上一级恰好都是 assets/，两种运行方式一致）。 */
-export function defaultAssetsDir(): string {
-  return join(dirname(fileURLToPath(import.meta.url)), "..", "assets");
-}
-
-/** 编辑认证 token：优先本地缓存（须绑定当前环境）；无/环境不符 → 引导配对登录 */
-export function getToken(config: EditorConfig): string {
-  const session = readSession();
-  if (session?.token && session.apiBase === config.apiBase) return session.token;
-  if (session?.token && session.apiBase !== config.apiBase) {
-    console.error(`[auth] 本地 token 绑定的是 ${session.apiBase}，当前操作环境是 ${config.apiBase}——跨环境不通用（防止误操作）`);
-    console.error(`[auth] 请先执行：pnpm editor login ${config.envName ? `--env ${config.envName}` : ""}`);
-    process.exit(1);
-  }
-  console.error("[auth] 未登录。请先执行：pnpm editor login" + (config.envName ? ` --env ${config.envName}` : ""));
-  console.error("[auth] 浏览器配对后 token 会缓存到本地（密码不落盘）");
-  process.exit(1);
 }
 
 /** multipart 序列化：undici dispatcher 路径下 FormData body 会失效（服务端收到空表单，
@@ -278,9 +228,14 @@ export interface ApiOptions {
 }
 
 /** 带鉴权的 API 请求（JSON 或 multipart）；非 2xx 打印错误并退出；401 → 清会话引导重新配对 */
-export async function api(config: EditorConfig, path: string, opts: ApiOptions = {}): Promise<unknown> {
-  const token = getToken(config);
-  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+export async function api(config: EditorConfig, path: string, opts: ApiOptions = {}, tokenOverride?: string | null): Promise<unknown> {
+  // 鉴权：cookie（lab 密码登录）优先，其次 token（tokenOverride > setApiToken）
+  const token = tokenOverride ?? injectedApiToken;
+  const cookie = injectedApiCookie;
+  const headers: Record<string, string> = {};
+  if (cookie) headers["cookie"] = cookie;
+  else if (token) headers["Authorization"] = `Bearer ${token}`;
+  else throw new Error("[auth] 未提供登录凭证——调用方需注入（skill: pnpm editor login；lab: 登录）");
   let body: BodyInit | undefined;
   if (opts.formData) {
     // undici dispatcher 路径下原生 FormData 会失效（服务端收到空表单）——自行编码 multipart
@@ -297,9 +252,7 @@ export async function api(config: EditorConfig, path: string, opts: ApiOptions =
     body,
   });
   if (res.status === 401) {
-    clearSession();
-    console.error("[api] token 已失效（401）。请重新执行：pnpm editor login" + (config.envName ? ` --env ${config.envName}` : ""));
-    process.exit(1);
+    throw new Error("[api] token 已失效（401）——调用方重新注入（skill: pnpm editor login；lab: 重新配对）");
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -312,10 +265,10 @@ export async function api(config: EditorConfig, path: string, opts: ApiOptions =
 
 /** 尽力而为的 API 请求：失败（未登录/token 环境不符/网络/非 2xx）返回 null，不退出进程——
  *  用于封面文字等非关键增强：拿不到称呼就无文字，不影响主流程（与 api() 的区别仅是不退出） */
-export async function tryApi(config: EditorConfig, path: string, opts: ApiOptions = {}): Promise<unknown | null> {
-  const session = readSession();
-  if (!session?.token || session.apiBase !== config.apiBase) return null;
-  const headers: Record<string, string> = { Authorization: `Bearer ${session.token}` };
+export async function tryApi(config: EditorConfig, path: string, opts: ApiOptions = {}, tokenOverride?: string | null): Promise<unknown | null> {
+  const token = tokenOverride ?? injectedApiToken;
+  if (!token) return null;
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
   let body: BodyInit | undefined;
   if (opts.formData) {
     const { body: formBody, contentType } = await serializeFormData(opts.formData);

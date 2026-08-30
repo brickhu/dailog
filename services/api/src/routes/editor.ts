@@ -172,6 +172,48 @@ export function editorRoutes(deps: EditorDeps) {
     return c.json({ ok: true, callName: name });
   }) as unknown as RouteHandler<typeof rCallname, AuthEnv>);
 
+  /** 更新投稿标题（采集提取 / 审核生成；submissions.title 权威） */
+  const rTitle = createRoute({
+    method: "patch",
+    path: "/v1/editor/submissions/:id/title",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/submissions/:id/title" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(rTitle, (async (c: Context) => {
+    const id = c.req.param("id")!;
+    const detail = await deps.repo.submissions.getDetail(id);
+    if (!detail) return c.json({ error: "not_found" }, 404);
+    const body = (await c.req.json().catch(() => null)) as { title?: unknown } | null;
+    const title = typeof body?.title === "string" ? body.title.trim() : "";
+    if (!title || title.length > 200) return c.json({ error: "invalid_title", detail: "标题必填且 ≤200 字" }, 400);
+    const res = await deps.repo.submissions.setTitle(id, title);
+    if (!res) return c.json({ error: "not_found" }, 404);
+    return c.json({ ok: true, title });
+  }) as unknown as RouteHandler<typeof rTitle, AuthEnv>);
+
+  /** 采集标记写入：r2Key（有值=已采集）；CLI 采集成功（含 R2 缓存命中）后调用 */
+  const rDlg = createRoute({
+    method: "patch",
+    path: "/v1/editor/submissions/:id/dialogue",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/submissions/:id/dialogue" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(rDlg, (async (c: Context) => {
+    const id = c.req.param("id")!;
+    const detail = await deps.repo.submissions.getDetail(id);
+    if (!detail) return c.json({ error: "not_found" }, 404);
+    const body = (await c.req.json().catch(() => null)) as { r2Key?: unknown } | null;
+    const r2Key = typeof body?.r2Key === "string" ? body.r2Key.trim() : "";
+    if (!r2Key) return c.json({ error: "invalid_r2_key", detail: "r2Key 必填" }, 400);
+    const res = await deps.repo.submissions.setDialogueR2Key(id, r2Key);
+    if (!res) return c.json({ error: "not_found" }, 404);
+    return c.json({ ok: true, dialogueR2Key: r2Key });
+  }) as unknown as RouteHandler<typeof rDlg, AuthEnv>);
+
   // ---- 拒审 ----
 
   /** 人工拒审（reason 必填）→ rejected + 站内通知 + 邮件 */

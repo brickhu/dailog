@@ -10,7 +10,13 @@
     "test": "pnpm -r test",
     "dev:orb": "bash scripts/dev-orb.sh",
     "otp": "bash scripts/otp.sh",
-    "editor": "node .agents/skills/dailog-editor/scripts/run.js"
+    "editor": "node .agents/skills/dailog-editor/scripts/run.js",
+    "sctest": "node tools/script-lab/run.mjs",
+    "selection": "node tools/script-lab/run.mjs selection",
+    "draft": "node tools/script-lab/run.mjs draft",
+    "meta": "node tools/script-lab/run.mjs meta",
+    "lab": "node tools/script-lab/server.mjs",
+    "lab:dev": "node tools/script-lab/server.mjs --env dev"
   },
   "devDependencies": {
     "@msgpack/msgpack": "^3.1.3",

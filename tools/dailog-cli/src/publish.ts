@@ -1,7 +1,7 @@
 // 一次性上传发布（编辑本地制作成品 → dailog）：
 //   multipart：audio（必填）+ cover（可选）+ meta JSON（title/description/summary/references/highlights/tags/language/guestId/durationSeconds）
 //   --summary 短简介（PUB-STEP-2 元数据）；--references-file <json> 名词术语条目数组（PUB-STEP-2 references 落盘）；
-//   description/highlights/category 自动读草稿 metadata.json（PUB-STEP-2 生成；旧草稿 fallback script.json）
+//   description/highlights/category/summary/references/tags 自动读草稿 metadata.json（PUB-STEP-2 生成；旧草稿 fallback script.json）
 // 成功后 episode 直接 published + 投稿人收到通知（「dailog 第 N 期」）
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -128,6 +128,7 @@ export async function publish(config: EditorConfig, args: string[]): Promise<voi
       } catch { /* 可选，忽略 */ }
     }
   }
+  // references（PUB-STEP-2 metadata.json 自动读取；--references-file 可覆盖）
   if (p.referencesFile) {
     try {
       const refs = JSON.parse(readFileSync(p.referencesFile, "utf8"));
@@ -136,8 +137,16 @@ export async function publish(config: EditorConfig, args: string[]): Promise<voi
     } catch {
       console.warn(`[publish] ⚠️ references-file 读取/解析失败，忽略（${p.referencesFile}）`);
     }
+  } else {
+    const md = loadMetadata(p.submissionId);
+    if (md && Array.isArray(md.references) && md.references.length > 0) meta.references = md.references;
   }
+  // tags（PUB-STEP-2 metadata.json 自动读取；--tags 可覆盖）
   if (p.tags?.length) meta.tags = p.tags;
+  else {
+    const md = loadMetadata(p.submissionId);
+    if (md && Array.isArray(md.tags) && md.tags.length > 0) meta.tags = md.tags.filter((t): t is string => typeof t === "string");
+  }
   if (p.guestId) meta.guestId = p.guestId;
   // 金句（PUB-STEP-2 metadata.json 自动读取；旧草稿 fallback script.json；可选——缺省/解析失败忽略）
   let highlights: unknown = null;

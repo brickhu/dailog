@@ -1,7 +1,8 @@
-// dailog-editor 子工程构建：源码 + SKILL + 模板 → 打包产物 .agents/skills/dailog-editor/
-//   · scripts/*.js：src/*.ts 逐文件 esbuild 编译（ESM，保留相对 import 的 .js 后缀；
-//     @msgpack/msgpack 等依赖运行时从仓库根 node_modules 解析——monorepo 自洽，无需产物内安装）
-//   · SKILL.md / envs.example.json / env.example：复制到产物（skill 加载与配置模板即用）
+// dailog-editor 子工程构建（skill 壳）：CLI 能力（tools/dailog-cli）+ skill 专属（src/）+ SKILL 文档 → 产物
+//   · scripts/*.js：CLI 底座提供能力命令（list/fetch/tts/merge/cover/publish 等，不管理 token）；
+//     skill 专属（src/：run.ts 入口 / session.ts token 管理 / login / auth-status）同样编译进产物——
+//     token 管理归 skill（session.json 读写），CLI 底座仅接受 setApiToken 注入
+//   · SKILL.md / docs / prompts / reference / templates / assets：复制到产物
 // 用法：pnpm --filter @dailogues/dailog-editor build
 import { build } from "esbuild";
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
@@ -9,7 +10,8 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const srcDir = join(here, "src");
+const cliSrcDir = join(here, "..", "dailog-cli", "src");
+const skillSrcDir = join(here, "src");
 const outDir = join(here, "..", "..", ".agents", "skills", "dailog-editor");
 const scriptsDir = join(outDir, "scripts");
 
@@ -17,16 +19,28 @@ const scriptsDir = join(outDir, "scripts");
 rmSync(scriptsDir, { recursive: true, force: true });
 mkdirSync(scriptsDir, { recursive: true });
 
-// 1. 编译 src/*.ts → 产物 scripts/*.js（逐文件，不 bundle；依赖从仓库根 node_modules 解析）
-const entries = readdirSync(srcDir).filter((f) => f.endsWith(".ts")).map((f) => join(srcDir, f));
+// 1. 编译 CLI 能力 src + skill 专属 src → 产物 scripts/*.js（逐文件，不 bundle）
+//    run.ts 只在 skill src（CLI 无 run）；同名文件 skill 优先（后编译覆盖）
+const cliEntries = readdirSync(cliSrcDir).filter((f) => f.endsWith(".ts")).map((f) => join(cliSrcDir, f));
+const skillEntries = readdirSync(skillSrcDir).filter((f) => f.endsWith(".ts")).map((f) => join(skillSrcDir, f));
+// 先编译 CLI（能力），再编译 skill（专属 + 覆盖 run 等）——esbuild 同名输出后写覆盖
 await build({
-  entryPoints: entries,
+  entryPoints: cliEntries,
   outdir: scriptsDir,
   bundle: false,
   platform: "node",
   format: "esm",
   target: "node22",
-  logLevel: "info",
+  logLevel: "warning",
+});
+await build({
+  entryPoints: skillEntries,
+  outdir: scriptsDir,
+  bundle: false,
+  platform: "node",
+  format: "esm",
+  target: "node22",
+  logLevel: "warning",
 });
 
 // 2. 产物脚本入口说明（shebang 提示 + 构建产物标记 + ESM 类型声明）
@@ -35,10 +49,11 @@ writeFileSync(join(scriptsDir, "package.json"), JSON.stringify({ name: "dailog-e
 writeFileSync(join(scriptsDir, "README.md"), [
   "# dailog-editor 产物脚本（构建生成，勿手改）",
   "",
-  "源码在 `tools/dailog-editor/src/`；重新构建：`pnpm --filter @dailogues/dailog-editor build`",
+  "源码（共享底座）在 `tools/dailog-cli/src/`；重新构建：`pnpm --filter @dailogues/dailog-editor build`",
   "运行：`node .agents/skills/dailog-editor/scripts/run.js <cmd>`（根命令 `pnpm editor`）",
   "",
 ].join("\n"));
+writeFileSync(join(scriptsDir, "package.json"), JSON.stringify({ name: "dailog-editor-scripts", private: true, type: "module" }, null, 2) + "\n");
 
 // 3. skill 文档与配置模板
 cpSync(join(here, "skill", "SKILL.md"), join(outDir, "SKILL.md"));
@@ -81,5 +96,5 @@ if (existsSync(assetsSrc)) {
 }
 
 console.log(`[build] 产物已生成：${outDir}/`);
-console.log(`[build]   scripts/*.js（${entries.length} 个）、SKILL.md、envs.example.json、env.example`);
+console.log(`[build]   scripts/*.js（${cliEntries.length + skillEntries.length} 个）、SKILL.md、envs.example.json、env.example`);
 console.log(`[build] 根命令：pnpm editor <cmd>（node .agents/skills/dailog-editor/scripts/run.js）`);

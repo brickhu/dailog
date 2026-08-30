@@ -1,7 +1,8 @@
 // 环境状态检查（会话初始化用）：① 先 /health 检查端点可用性 → ② 再检查配对/授权有效性
 // 新对话开始先跑这个：端点不可达 → 换环境/查网络；未配对 → 引导 login
 import type { EditorConfig } from "./lib.js";
-import { apiFetch, getToken, hasValidSession, listEnvironments } from "./lib.js";
+import { apiFetch, listEnvironments } from "./lib.js";
+import { getToken, hasValidSession } from "./session.js";
 
 export async function authStatus(config: EditorConfig, _args: string[]): Promise<void> {
   console.log(`[env] 环境：${config.envName ?? "（默认）"} → ${config.apiBase}`);
@@ -28,13 +29,13 @@ export async function authStatus(config: EditorConfig, _args: string[]): Promise
   if (!healthOk) process.exit(1);
 
   // ② 配对/授权有效性
-  if (!hasValidSession(config)) {
+  if (!hasValidSession(config.apiBase)) {
     console.log("[auth] 未配对——执行配对码登录：pnpm editor login" + (config.envName ? ` --env ${config.envName}` : ""));
     process.exit(1);
   }
   try {
     const res = await apiFetch(`${config.apiBase}/v1/me/profile`, {
-      headers: { Authorization: `Bearer ${getToken(config)}` },
+      headers: { Authorization: `Bearer ${getToken(config.apiBase)}` },
     });
     if (res.status === 401) {
       console.log("[auth] ❌ 本地 token 已失效——请重新配对：pnpm editor login" + (config.envName ? ` --env ${config.envName}` : ""));

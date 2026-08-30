@@ -13,7 +13,8 @@ import { execFile } from "node:child_process";
 import { createInterface } from "node:readline";
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import type { EditorConfig } from "./lib.js";
-import { apiFetch, clearSession, hasValidSession, saveSession, pendingDevicePath } from "./lib.js";
+import { apiFetch } from "./lib.js";
+import { clearSession, hasValidSession, saveSession, pendingDevicePath } from "./session.js";
 
 /** 待配对授权缓存：记录已创建的 deviceCode（供 `--code` 复用同一授权）；与登录态一样绑定环境 */
 interface PendingDevice {
@@ -129,7 +130,7 @@ export async function login(config: EditorConfig, args: string[]): Promise<void>
     clearSession();
     clearPendingDevice();
   }
-  if (hasValidSession(config)) {
+  if (hasValidSession(config.apiBase)) {
     console.log(`[auth] 当前环境（${config.envName ?? config.apiBase}）已有有效登录态。如需重新配对：pnpm editor login --force`);
     return;
   }

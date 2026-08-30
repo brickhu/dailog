@@ -1,0 +1,12 @@
+{
+  "name": "@dailogues/script-lab",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "dailog 采编 lab：可视化采编发布一条龙（共享 CLI 底座 tools/dailog-cli）",
+  "scripts": {
+    "run": "node run.mjs",
+    "lab": "node server.mjs",
+    "lab:dev": "node server.mjs --env dev"
+  }
+}

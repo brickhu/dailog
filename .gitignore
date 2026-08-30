@@ -35,6 +35,10 @@ poc-profile/
 # dailog-editor 子工程打包产物（构建生成；构建命令见 tools/dailog-editor）
 .agents/skills/dailog-editor/
 
+# script-lab 测试台输出（LLM 原始输出/解析 JSON）与本地 .env
+tools/script-lab/out/
+tools/script-lab/.env
+
 # vinxi 运行时生成的配置临时文件
 apps/site/app.config.timestamp_*.js
 

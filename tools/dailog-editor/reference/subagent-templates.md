@@ -20,7 +20,7 @@
     无则跳过；冲突以 selection.md 为准；这是编辑反馈蒸馏沉淀的学习规则，须遵守）
 2. 用 read 工具读取对话原文：<drafts>/<id>/dialogue.json（[{role, content}] 逐条；content 可能含
    未转义换行，严格 JSON.parse 失败时基于 read 逐行内容容错解析）
-3. 投稿人节目建议（可选，角度锚点，有则作为角度约束）：<suggestion>
+3. 投稿人节目建议（**首要考虑的角度——优先在建议路径上找时刻、贴合优先推荐；偏离须标注理由，编辑在确认门对照建议原文裁决**）：<suggestion>（无则填"无"）
 3a. 嘉宾信息（guests 表，主会话注入，有则给）：嘉宾名/平台/简介——标题拟人化代称用（见 selection.md「产出要点·标题草稿」）
 4. 按提示词执行，生成**一个合法 JSON**：原文内容概括（content_summary）+ verdict +
    pass.ideas[]（1-N 个候选选题思路，门槛高、不设上限，各带 dimension/选题逻辑/听众价值/score/创作建议/

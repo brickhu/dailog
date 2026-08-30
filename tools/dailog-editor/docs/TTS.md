@@ -8,9 +8,9 @@
 ```
 TTS-STEP-1 生成语音：pnpm editor tts <id> --script script.json [--language zh|en] [--guest <platform>]
   · **--parts 三段独立合成（必需）**——片头要插在点题与对谈之间，merge 需要 part1/2/3 分段（单段更稳、可 --part n 单段重跑）。merge 最终顺序：part1（点题）→ intro 片头 → part2（对谈）→ part3（落点+收束）→ outro
-  · 统一走服务端端点——编辑本地不直连 Fish Audio，Fish key 只配在服务端
+  · 本地直连 Fish Audio（标准路径）——host/guest 采样从 R2 直取（detail voiceSamples / voice-samples 的 key + 转录），FISH_API_KEY 与 R2 凭证在 .dailog-editor/.env；不再走服务端 /v1/editor/tts
   · host=投稿人采样，guest=服务端嘉宾声线（guest_voice_samples，见 CFG-STEP-2）；产物 full.mp3
-  · **音色替换（guest 无声线兜底）**：目标嘉宾无对应语种声线 → 服务端自动用**系统内其他嘉宾的同语种音色**替换合成
+  · **音色替换（guest 无声线兜底）**：目标嘉宾无对应语种声线 → CLI 本地决策，用**系统内其他嘉宾的同语种音色**替换合成
     ——**替换音色、不替换嘉宾名字**（脚本里的 guest 称呼不变）；CLI 打印 `⚠️ 音色替换：X 无声线，使用 Y（zh）音色`
     提示编辑；仍可用 `guest-voice <platform> --audio f.mp3` 上传专属声线后重跑该段（--part n）
 TTS-STEP-2 合成：pnpm editor merge <id> [--language zh|en]
@@ -22,9 +22,9 @@ TTS-STEP-3 语音确认门（TTS-GATE-1）：试听通过后才进入发布
 
 **TTS-IN 输入规范与依赖**
 - 输入：`script.json`（终稿，SC-STEP-2 产物）+ submissionId；`--guest` 目标嘉宾
-- 依赖：服务端 Fish key、嘉宾声线（`pnpm editor guests` 查看）、本地 ffmpeg/ffprobe
+- 依赖：`.dailog-editor/.env` 的 FISH_API_KEY + R2 凭证、嘉宾声线（`pnpm editor guests` 查看）、本地 ffmpeg/ffprobe
 - **guest 无声线不再阻塞**：自动用系统内其他嘉宾音色替换（TTS-FLOW 音色替换）；系统内完全无音色才 422
-- 采样匹配（服务端自动）：按脚本语言取采样 → 无则英文 → 无则最近一条兜底
+- 采样匹配（本地决策）：按脚本语言取采样 → 无则英文 → 无则最近一条兜底
 
 **TTS-GATE 确认门选项与输出模板**
 语音确认门（TTS-GATE-1）交互（统一选号格式，见 RULES-10，一项一行）：

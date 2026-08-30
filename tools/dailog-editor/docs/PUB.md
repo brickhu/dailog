@@ -24,7 +24,7 @@ references 外链不编造（链接安全红线）；发布/拒稿是外发动�
 
 **PUB-IN 输入规范与依赖**
 - 输入：`final.m4a`（TTS-STEP-2 产物）、`script.json`（终稿）、`chosen-idea.json`（含 role_block；PUB-STEP-2 从终稿 segments 识别新概念生成 references，不读对话原文）
-- 产物 metadata.json：publish 自动读取（description/highlights/category/summary；旧草稿 fallback script.json）
+- 产物 metadata.json：publish 自动读取（description/highlights/category/summary/references/tags；旧草稿 fallback script.json）
 - 依赖：语音确认门通过；--description/--tags 可覆盖，与最终 title/category 不匹配则重生成一版再确认
 
 **PUB-GATE 确认门选项与输出模板**

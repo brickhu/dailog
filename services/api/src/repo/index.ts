@@ -83,6 +83,8 @@ export interface SubmissionsRepo {
     userId: string;
     url: string;
     title: string | null;
+    /** 采集标记（R2 key；有值=已采集） */
+    dialogueR2Key: string | null;
     status: string;
     rejectedReason: string | null;
     reviewedAt: Date | null;
@@ -112,6 +114,10 @@ export interface SubmissionsRepo {
   markPublished(id: string): Promise<void>;
   /** 补录主持人称呼（callName）：投稿缺称呼时编辑确认后写入；不存在返回 null */
   setCallName(id: string, callName: string): Promise<{ id: string } | null>;
+  /** 更新投稿标题（采集提取 / 审核生成；submissions.title 权威，投稿列表/详情展示） */
+  setTitle(id: string, title: string): Promise<{ id: string } | null>;
+  /** 采集标记：采集成功（含 R2 缓存命中）后写入 dialogue 的 R2 key；有值=已采集，NULL=未采集 */
+  setDialogueR2Key(id: string, r2Key: string): Promise<{ id: string } | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -785,6 +791,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             id: schema.submissions.id,
             url: schema.submissions.url,
             title: schema.submissions.title,
+            dialogueR2Key: schema.submissions.dialogueR2Key,
             callName: schema.submissions.callName,
             status: schema.submissions.status,
             rejectedReason: schema.submissions.rejectedReason,
@@ -820,6 +827,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             id: schema.submissions.id,
             url: schema.submissions.url,
             title: schema.submissions.title,
+            dialogueR2Key: schema.submissions.dialogueR2Key,
             status: schema.submissions.status,
             createdAt: schema.submissions.createdAt,
           })
@@ -921,6 +929,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             userId: schema.submissions.userId,
             url: schema.submissions.url,
             title: schema.submissions.title,
+            dialogueR2Key: schema.submissions.dialogueR2Key,
             callName: schema.submissions.callName,
             suggestion: schema.submissions.suggestion,
             personaInfo: schema.submissions.personaInfo,
@@ -953,6 +962,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           userId: row.userId,
           url: row.url,
           title: row.title,
+          dialogueR2Key: row.dialogueR2Key,
           status: row.status,
           rejectedReason: row.rejectedReason,
           reviewedAt: row.reviewedAt,
@@ -980,6 +990,22 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       async setCallName(id: string, callName: string) {
         const rows = await db.update(schema.submissions)
           .set({ callName, updatedAt: new Date() })
+          .where(eq(schema.submissions.id, id))
+          .returning({ id: schema.submissions.id });
+        return rows[0]?.id ? { id: rows[0].id } : null;
+      },
+      /** 采集标记写入（R2 key；有值=已采集，NULL=未采集） */
+      async setDialogueR2Key(id: string, r2Key: string) {
+        const rows = await db.update(schema.submissions)
+          .set({ dialogueR2Key: r2Key, updatedAt: new Date() })
+          .where(eq(schema.submissions.id, id))
+          .returning({ id: schema.submissions.id });
+        return rows[0]?.id ? { id: rows[0].id } : null;
+      },
+      /** 更新投稿标题（≤200 字） */
+      async setTitle(id: string, title: string) {
+        const rows = await db.update(schema.submissions)
+          .set({ title, updatedAt: new Date() })
           .where(eq(schema.submissions.id, id))
           .returning({ id: schema.submissions.id });
         return rows[0]?.id ? { id: rows[0].id } : null;

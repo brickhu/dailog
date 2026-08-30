@@ -20,6 +20,7 @@ import { join } from "node:path";
 import { load as loadHtml } from "cheerio";
 import type { EditorConfig } from "./lib.js";
 import { api, defaultAssetsDir, draftDir, rulesPath, writeProgress } from "./lib.js";
+import { putR2Object, deleteR2Object, getR2Object, dialogueR2Key } from "./r2.js";
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 const FETCH_TIMEOUT_MS = 30_000;
@@ -36,7 +37,20 @@ export function isTooShort(users: number, words: number): boolean {
 
 /** 过短投稿：删除已落盘 dialogue.json（不保留草稿）+ 直接拒审（reason 统一）——单条 fetch / 批量采集共用 */
 export async function rejectShort(config: EditorConfig, submissionId: string, users: number, words: number): Promise<void> {
-  rmSync(join(draftDir(submissionId), "dialogue.json"), { force: true });
+  // 过短投稿：删本地对话 + R2 对话（URL 哈希 key）
+  const localDlg = join(draftDir(submissionId), "dialogue.json");
+  let url: string | null = null;
+  try {
+    if (existsSync(localDlg)) {
+      const d = JSON.parse(readFileSync(localDlg, "utf-8"));
+      url = d?.sourceUrl || null;
+    }
+  } catch { /* 忽略 */ }
+  rmSync(localDlg, { force: true });
+  if (url) {
+    try { await deleteR2Object(config, dialogueR2Key(url)); }
+    catch (e) { console.warn(`[fetch] R2 对话删除失败：${(e as Error).message?.slice(0, 120)}`); }
+  }
   try {
     await api(config, `/v1/editor/submissions/${submissionId}/reject`, { method: "POST", body: { reason: SHORT_REASON } });
     writeProgress(submissionId, "rejected");
@@ -431,8 +445,36 @@ function fetchViaProxy(url: string, proxy: string): string {
 }
 
 /** 落盘 dialogue.json（来源标注：api:<平台> / ssr:<平台> / rule:<平台> / sniff） */
-function writeDialogue(dir: string, url: string, source: string, messages: { role: string; content: string }[]): void {
-  writeFileSync(join(dir, "dialogue.json"), JSON.stringify({ sourceUrl: url, source, messages }, null, 2));
+/** 提取页面标题：<title> 或 og:title；清洗空白与平台后缀；无则 null */
+function extractPageTitle(html: string): string | null {
+  try {
+    const $ = loadHtml(html);
+    let title = $("meta[property='og:title']").attr("content") || $("title").first().text() || "";
+    title = title.trim();
+    if (!title) return null;
+    // 去掉常见平台后缀（“ - ChatGPT”等）
+    title = title.replace(/\s*[|\-—–]\s*(ChatGPT|Claude|DeepSeek|Gemini|豆包|Grok|Doubao|OpenAI|Anthropic|Google)\s*$/i, "").trim();
+    return title.length > 200 ? title.slice(0, 200) : title || null;
+  } catch { return null; }
+}
+
+async /** 采集标记回写数据库（submissions.dialogue_r2_key）：有值=已采集，NULL=未采集。失败不影响采集。 */
+async function markDialogueFetched(config: EditorConfig, submissionId: string, url: string, tokenOverride?: string | null): Promise<void> {
+  try {
+    const key = dialogueR2Key(url);
+    await api(config, `/v1/editor/submissions/${submissionId}/dialogue`, { method: "PATCH", body: { r2Key: key } }, tokenOverride);
+  } catch { /* 回写失败不影响采集 */ }
+}
+
+async function writeDialogue(config: EditorConfig, dir: string, url: string, source: string, messages: { role: string; content: string }[], title: string | null = null): Promise<void> {
+  const data = { sourceUrl: url, source, title, messages };
+  writeFileSync(join(dir, "dialogue.json"), JSON.stringify(data, null, 2));
+  // 同步上传 R2（URL 哈希确定性 key——多端共享；失败不阻塞采集，仅告警）
+  try {
+    await putR2Object(config, dialogueR2Key(url), JSON.stringify(data));
+  } catch (e) {
+    console.warn(`[fetch] R2 对话上传失败（${(e as Error).message?.slice(0, 120)}）——对话仅存本地`);
+  }
 }
 
 /** 共享提取：平台直取 + 拉取 + 解码 + 落盘（fetch 命令与 batch 批量处理共用）。
@@ -583,7 +625,8 @@ async function extractGemini(config: EditorConfig, submissionId: string, url: st
   const rule = matchRule(rules, target) ?? matchRule(rules, url);
   const messages = extractGeminiByRule($);
   if (messages) {
-    writeDialogue(dir, target, rule ? `rule:${rule.platform}` : "rule:gemini", messages);
+    await writeDialogue(config, dir, target, rule ? `rule:${rule.platform}` : "rule:gemini", messages, detail.title);
+    await markDialogueFetched(config, submissionId, url, tokenOverride);
     if (rule) bumpHits(rule);
     return { ok: true, handled: true, messages };
   }
@@ -658,7 +701,8 @@ async function extractGrok(config: EditorConfig, submissionId: string, url: stri
   const rule = matchRule(rules, url);
   const messages = rule ? extractByRule($, rule) : extractGrokByRule($);
   if (messages && messages.length > 0) {
-    writeDialogue(dir, url, rule ? "rule:" + rule.platform : "rule:grok", messages);
+    await writeDialogue(config, dir, url, rule ? "rule:" + rule.platform : "rule:grok", messages, detail.title);
+    await markDialogueFetched(config, submissionId, url, tokenOverride);
     if (rule) bumpHits(rule);
     return { ok: true, handled: true, messages };
   }
@@ -666,20 +710,130 @@ async function extractGrok(config: EditorConfig, submissionId: string, url: stri
 }
 
 
+/** 平台名（url → guests 表 platform 字段：api/ssr 直取平台名，gemini/grok 用品牌名） */
+function platformOfUrl(url: string): string | null {
+  const p = detectPlatform(url);
+  if (!p) return null;
+  if (p.api) return p.api;
+  if (p.ssr) return p.ssr;
+  if (p.gemini) return "gemini";
+  if (p.grok) return "grok";
+  return null;
+}
+
+/** 投稿信息落盘 info.json（script-lab 测试注入用：suggestion/host/guests 即信封 key；
+ *  与 detail.ts 字段对齐；guests 按平台从 guests 表匹配，无则仅 platform 兜底） */
+async function writeSubmissionInfo(
+  config: EditorConfig,
+  dir: string,
+  submissionId: string,
+  detail: {
+    url: string;
+    title: string | null;
+    userEmail: string;
+    personaInfo: {
+      displayName: string;
+      gender: string | null;
+      profession: string | null;
+      age: string | null;
+      bio: string | null;
+      nationality: string | null;
+    } | null;
+    callName: string | null;
+    suggestion: string | null;
+  },
+  tokenOverride?: string | null,
+): Promise<void> {
+  const platform = platformOfUrl(detail.url);
+  let guests: { name: string; platform: string; intro: string | null }[] = [];
+  try {
+    const list = (await api(config, "/v1/editor/guests", {}, tokenOverride)) as
+      | Array<{ platform: string; name: string; intro: string | null }>
+      | null;
+    const hit = Array.isArray(list) ? list.find((g) => g.platform === platform) : null;
+    if (hit) guests = [{ name: hit.name, platform: hit.platform, intro: hit.intro ?? null }];
+  } catch { /* guests 表不可用 → 仅 platform 兜底 */ }
+  if (guests.length === 0 && platform) {
+    guests = [{ name: platform, platform, intro: null }];
+  }
+  writeFileSync(
+    join(dir, "info.json"),
+    JSON.stringify(
+      {
+        submissionId,
+        title: detail.title ?? null,
+        url: detail.url,
+        platform,
+        suggestion: detail.suggestion ?? null,
+        host: {
+          callName: detail.callName ?? null,
+          personaInfo: detail.personaInfo ?? null,
+        },
+        guests,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 export async function extractSubmission(
   config: EditorConfig,
   submissionId: string,
+  tokenOverride?: string | null,
 ): Promise<{ ok: boolean; messages?: { role: string; content: string }[]; error?: string }> {
   const dir = draftDir(submissionId);
-  const detail = (await api(config, `/v1/editor/submissions/${submissionId}`)) as { url: string };
+  const detail = (await api(config, `/v1/editor/submissions/${submissionId}`, {}, tokenOverride)) as {
+    url: string;
+    title: string | null;
+    userEmail: string;
+    personaInfo: {
+      displayName: string;
+      gender: string | null;
+      profession: string | null;
+      age: string | null;
+      bio: string | null;
+      nationality: string | null;
+    } | null;
+    callName: string | null;
+    suggestion: string | null;
+  };
   const url = detail.url;
   const platform = detectPlatform(url);
+  // 投稿信息落盘（suggestion/host/guests）——fetch 时信息最全，script-lab 测试直接 --input info.json
+  await writeSubmissionInfo(config, dir, submissionId, detail, tokenOverride);
+
+  // ⓪ R2 缓存优先：同一 URL 已采集过（多端共享）→ 直接落盘本地，跳过抓取
+  try {
+    const cached = await getR2Object(config, dialogueR2Key(url));
+    const cachedJson = JSON.parse(Buffer.from(cached).toString("utf8"));
+    if (cachedJson && Array.isArray(cachedJson.messages) && cachedJson.messages.length > 0) {
+      writeFileSync(join(dir, "dialogue.json"), JSON.stringify(cachedJson, null, 2));
+      console.log(`[fetch] R2 缓存命中（${dialogueR2Key(url).slice(0, 40)}…）——直接使用已有对话，跳过采集`);
+      await markDialogueFetched(config, submissionId, url, tokenOverride);
+      return { ok: true, messages: cachedJson.messages };
+    }
+  } catch { /* R2 无此 URL（或网络失败）→ 走正常采集流 */ }
+
+  // 标题回写数据库（submissions.title 权威）：有效标题（非通用文案）且非缓存命中时同步
+  if (url) {
+    try {
+      const cur = await api(config, `/v1/editor/submissions/${submissionId}`, {}, tokenOverride) as { title?: string | null };
+      const extracted = detail.title;
+      const generic = /^(来自分享的对话|来看看这段聊天|查看对话|分享的对话)$/i;
+      if (extracted && !generic.test(extracted.trim()) && cur?.title !== extracted) {
+        await api(config, `/v1/editor/submissions/${submissionId}/title`, { method: "PATCH", body: { title: extracted } }, tokenOverride);
+        console.log(`[fetch] 已回写投稿标题：${extracted.slice(0, 50)}`);
+      }
+    } catch { /* 回写失败不影响采集 */ }
+  }
 
   // ① 平台 API 直取（deepseek/doubao——SSR 壳无内容的平台首选，结构化命中直接用）
   if (platform?.api) {
     const apiMsgs = platform.api === "deepseek" ? await extractDeepseekApi(url) : await extractDoubaoApi(url);
     if (apiMsgs && apiMsgs.length > 0) {
-      writeDialogue(dir, url, `api:${platform.api}`, apiMsgs);
+      await writeDialogue(config, dir, url, `api:${platform.api}`, apiMsgs, detail.title);
+    await markDialogueFetched(config, submissionId, url, tokenOverride);
       return { ok: true, messages: apiMsgs };
     }
     console.log(`[fetch] ${platform.api} 分享 API 未命中 → 回退 HTML 提取`);
@@ -754,11 +908,15 @@ export async function extractSubmission(
   const bodyText = normalizeText($("body").text());
   writeFileSync(join(dir, "page.txt"), bodyText);
 
+  // 页面标题（分享页 <title>/og:title）——作为原始对话标题；无则用 detail.title
+  const pageTitle = extractPageTitle(html) || detail.title;
+
   // ③ chatgpt：SSR 流解码优先（对话完整在流数据里，不依赖 DOM 渲染）
   if (platform?.ssr) {
     const ssrMsgs = messagesFromChatgptStream(html);
     if (ssrMsgs && ssrMsgs.length > 0) {
-      writeDialogue(dir, url, "ssr:chatgpt", ssrMsgs);
+      await writeDialogue(config, dir, url, "ssr:chatgpt", ssrMsgs, pageTitle);
+    await markDialogueFetched(config, submissionId, url, tokenOverride);
       return { ok: true, messages: ssrMsgs };
     }
     console.log("[fetch] chatgpt SSR 流解码未命中 → 回退规则/嗅探");
@@ -776,7 +934,8 @@ export async function extractSubmission(
     messages = sniffMessages($);
   }
   if (messages && messages.length > 0) {
-    writeDialogue(dir, url, rule ? `rule:${rule.platform}` : "sniff", messages);
+    await writeDialogue(config, dir, url, rule ? `rule:${rule.platform}` : "sniff", messages, pageTitle);
+    await markDialogueFetched(config, submissionId, url, tokenOverride);
     return { ok: true, messages };
   }
   return { ok: false, error: "未提取到消息（无规则命中 + 通用嗅探未识别——可用 console-script 浏览器兜底，或沉淀规则）" };

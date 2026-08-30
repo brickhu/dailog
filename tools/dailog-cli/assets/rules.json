@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "note": "dailog 编辑解码规则库（自进化）——fetch 按 URL 匹配规则提取对话消息；规则基于真实 DOM 采样沉淀（SKILL ③），不凭猜测。更新规则：改本文件 → pnpm --filter @dailogues/dailog-editor build → 重新 fetch 验证命中。",
+  "rules": [
+    {
+      "platform": "chatgpt",
+      "host": "chatgpt.com",
+      "pathPrefix": "/share/",
+      "userSelector": "[data-message-author-role='user']",
+      "assistantSelector": "[data-message-author-role='assistant']",
+      "contentSelector": ".markdown",
+      "note": "2026-08-13 实测校准（div 不是 article；正文在 .markdown）",
+      "hits": 0
+    },
+    {
+      "platform": "doubao",
+      "host": "www.doubao.com",
+      "pathPrefix": "/share/",
+      "userSelector": "[data-message-author-role='user']",
+      "assistantSelector": "[data-message-author-role='assistant']",
+      "contentSelector": null,
+      "note": "2026-08-13 占位规则（data-message-author-role 系，待实测校准）",
+      "hits": 0
+    },
+    {
+      "platform": "gemini",
+      "host": "share.gemini.google",
+      "pathPrefix": "/",
+      "userSelector": "share-turn-viewer user-query",
+      "assistantSelector": "share-turn-viewer response-container",
+      "userContentSelector": ".query-text-line",
+      "assistantContentSelector": "message-content .markdown",
+      "note": "2026-08-25 真实 DOM 采样校准（分享页重定向到 gemini.google.com/share/<id>；user 正文 .query-text-line，assistant 正文 message-content .markdown）",
+      "hits": 0
+    },
+    {
+      "platform": "gemini",
+      "host": "gemini.google.com",
+      "pathPrefix": "/share/",
+      "userSelector": "share-turn-viewer user-query",
+      "assistantSelector": "share-turn-viewer response-container",
+      "userContentSelector": ".query-text-line",
+      "assistantContentSelector": "message-content .markdown",
+      "note": "2026-08-25 真实 DOM 采样校准（规范页；同短链规则，host 差异双保险）",
+      "hits": 0
+    },
+    {
+      "platform": "grok",
+      "host": "x.com",
+      "pathPrefix": "/i/grok/share/",
+      "userSelector": "div.r-obd0qt.r-1cmwbt1 > div.r-1habvwh",
+      "assistantSelector": "div.r-1awozwy.r-16lk18l",
+      "userContentSelector": ".r-1kt6imw",
+      "assistantContentSelector": ".r-rjixqe.r-16dba41.r-imh66m",
+      "note": "2026-08-26 真实 DOM 采样校准（Chromium 无头渲染后提取；turn 容器 div.r-obd0qt.r-1cmwbt1 内 user 段 .r-1habvwh + assistant 段 .r-1awozwy.r-16lk18l；实测 20 轮 40 条双全）",
+      "hits": 0
+    },
+    {
+      "platform": "grok",
+      "host": "twitter.com",
+      "pathPrefix": "/i/grok/share/",
+      "userSelector": "div.r-obd0qt.r-1cmwbt1 > div.r-1habvwh",
+      "assistantSelector": "div.r-1awozwy.r-16lk18l",
+      "userContentSelector": ".r-1kt6imw",
+      "assistantContentSelector": ".r-rjixqe.r-16dba41.r-imh66m",
+      "note": "2026-08-26 真实 DOM 采样校准（twitter.com 域名同构；与 x.com 规则双保险）",
+      "hits": 0
+    }
+  ]
+}

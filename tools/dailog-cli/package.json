@@ -1,0 +1,20 @@
+{
+  "name": "@dailogues/dailog-cli",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "dailog 编辑 CLI 共享底座（skill 与 script-lab 共用）：采编发布一条龙命令",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "editor": "node dist/run.js"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  }
+}

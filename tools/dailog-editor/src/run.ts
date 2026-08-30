@@ -1,4 +1,5 @@
-// 编辑本地 Agent CLI（本质版）：登录/状态/列表/详情/下载采样/TTS/合成/封面/发布/拒审
+// 编辑本地 Agent CLI（skill 入口）：登录/状态/列表/详情/下载采样/TTS/合成/封面/发布/拒审
+//   本入口归 skill 所有（token 管理在 session.ts）；CLI 底座不管理 token，能力命令经 setApiToken 注入
 // 用法（根目录）——环境是**会话级选择**，每次命令显式指定：
 //   pnpm editor --env <环境名> <cmd> ...       环境清单见 .dailog-editor/envs.json
 //   pnpm editor --api-base <url> <cmd> ...     临时直连指定地址
@@ -62,7 +63,8 @@
 //                                               节目下线申请队列（用户申请 → 编辑审批）
 //   pnpm editor playlist <list|create|episodes|add|remove|reorder|pick|unpick|public|private|delete|cover> [args]
 //                                               平台播放列表管理（策展/加节目/重排/封面）
-import { loadConfig } from "./lib.js";
+import { loadConfig, setApiToken } from "./lib.js";
+import { readSession } from "./session.js";
 
 // 全局参数（环境选择）在分发前剥离，避免混入子命令参数；命令名 = 第一个非全局参数
 const GLOBAL_FLAGS = new Set(["--env", "--api-base"]);
@@ -90,6 +92,11 @@ const args = rest;
 
 async function main() {
   const config = loadConfig(globalArgs);
+  // skill 的 token 注入：除 login/auth-status（它们管理登录态）外，其余命令从 session 读 token 注入底座
+  if (cmd !== "login" && cmd !== "auth-status") {
+    const s = readSession();
+    if (s?.token && s.apiBase === config.apiBase) setApiToken(s.token);
+  }
   switch (cmd) {
     case "login": {
       const { login } = await import("./login.js");
