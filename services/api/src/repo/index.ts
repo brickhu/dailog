@@ -115,9 +115,9 @@ export interface SubmissionsRepo {
   /** 补录主持人称呼（callName）：投稿缺称呼时编辑确认后写入；不存在返回 null */
   setCallName(id: string, callName: string): Promise<{ id: string } | null>;
   /** 更新投稿标题（采集提取 / 审核生成；submissions.title 权威，投稿列表/详情展示） */
-  setTitle(id: string, title: string): Promise<{ id: string } | null>;
+  setTitle(id: string, title: string | null): Promise<{ id: string } | null>;
   /** 采集标记：采集成功（含 R2 缓存命中）后写入 dialogue 的 R2 key；有值=已采集，NULL=未采集 */
-  setDialogueR2Key(id: string, r2Key: string): Promise<{ id: string } | null>;
+  setDialogueR2Key(id: string, r2Key: string | null): Promise<{ id: string } | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -995,7 +995,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return rows[0]?.id ? { id: rows[0].id } : null;
       },
       /** 采集标记写入（R2 key；有值=已采集，NULL=未采集） */
-      async setDialogueR2Key(id: string, r2Key: string) {
+      async setDialogueR2Key(id: string, r2Key: string | null) {
         const rows = await db.update(schema.submissions)
           .set({ dialogueR2Key: r2Key, updatedAt: new Date() })
           .where(eq(schema.submissions.id, id))
@@ -1003,7 +1003,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return rows[0]?.id ? { id: rows[0].id } : null;
       },
       /** 更新投稿标题（≤200 字） */
-      async setTitle(id: string, title: string) {
+      async setTitle(id: string, title: string | null) {
         const rows = await db.update(schema.submissions)
           .set({ title, updatedAt: new Date() })
           .where(eq(schema.submissions.id, id))

@@ -186,9 +186,11 @@ export function editorRoutes(deps: EditorDeps) {
     const detail = await deps.repo.submissions.getDetail(id);
     if (!detail) return c.json({ error: "not_found" }, 404);
     const body = (await c.req.json().catch(() => null)) as { title?: unknown } | null;
-    const title = typeof body?.title === "string" ? body.title.trim() : "";
-    if (!title || title.length > 200) return c.json({ error: "invalid_title", detail: "标题必填且 ≤200 字" }, 400);
-    const res = await deps.repo.submissions.setTitle(id, title);
+    // 允许显式置 null 清空（body.title === null 或空串）；非空时校验 ≤200 字
+    if (body === null) return c.json({ error: "invalid_body" }, 400);
+    const title = body.title === null || body.title === "" ? null : (typeof body.title === "string" ? body.title.trim().slice(0, 200) : null);
+    if (title === null && body.title !== null && body.title !== "") return c.json({ error: "invalid_title", detail: "标题需为字符串且 ≤200 字" }, 400);
+    const res = await deps.repo.submissions.setTitle(id, title ?? "");
     if (!res) return c.json({ error: "not_found" }, 404);
     return c.json({ ok: true, title });
   }) as unknown as RouteHandler<typeof rTitle, AuthEnv>);
@@ -207,9 +209,11 @@ export function editorRoutes(deps: EditorDeps) {
     const detail = await deps.repo.submissions.getDetail(id);
     if (!detail) return c.json({ error: "not_found" }, 404);
     const body = (await c.req.json().catch(() => null)) as { r2Key?: unknown } | null;
-    const r2Key = typeof body?.r2Key === "string" ? body.r2Key.trim() : "";
-    if (!r2Key) return c.json({ error: "invalid_r2_key", detail: "r2Key 必填" }, 400);
-    const res = await deps.repo.submissions.setDialogueR2Key(id, r2Key);
+    if (body === null) return c.json({ error: "invalid_body" }, 400);
+    // 允许置 null 清空采集标记；非空时校验格式
+    const r2Key = body.r2Key === null || body.r2Key === "" ? null : (typeof body.r2Key === "string" ? body.r2Key.trim() : null);
+    if (r2Key === null && body.r2Key !== null && body.r2Key !== "") return c.json({ error: "invalid_r2_key", detail: "r2Key 需为字符串" }, 400);
+    const res = await deps.repo.submissions.setDialogueR2Key(id, r2Key ?? "");
     if (!res) return c.json({ error: "not_found" }, 404);
     return c.json({ ok: true, dialogueR2Key: r2Key });
   }) as unknown as RouteHandler<typeof rDlg, AuthEnv>);
