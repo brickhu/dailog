@@ -1,5 +1,5 @@
 import {
-  boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
+  boolean, index, integer, jsonb, pgTable, smallint, text, timestamp, uniqueIndex, uuid,
 } from "drizzle-orm/pg-core";
 
 // ---------------------------------------------------------------------------
@@ -141,9 +141,9 @@ export const submissions = pgTable(
     /** 投稿时使用的采样（仅记录；TTS 按 脚本语言→en→兜底 重新匹配） */
     voiceSampleId: uuid("voice_sample_id").references(() => voiceSamples.id, { onDelete: "set null" }),
     title: text("title"),
-    /** 采集标记：采集成功（含 R2 缓存命中）后写入 dialogue 的 R2 key（dialogues/<sha256(url)前32>.json）；
-     *  有值 = 已采集（可从 R2 按 key 取回对话）；NULL = 未采集。多端共享的权威采集状态。 */
-    dialogueR2Key: text("dialogue_r2_key"),
+    /** 采集状态：-1=采集失败 / 0=未采集 / 1=采集成功。
+     *  R2 key 不存库（由 URL 哈希推导：dialogues/<sha256(url)前32>.json），拒绝删 R2 后无废弃地址。 */
+    collected: smallint("collected").notNull().default(0),
     status: text("status", { enum: ["submitted", "rejected", "published"] }).notNull().default("submitted"),
     /** 拒审原因（rejected 时必填，投稿人 /me/submits 可见） */
     rejectedReason: text("rejected_reason"),

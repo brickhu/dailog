@@ -195,28 +195,27 @@ export function editorRoutes(deps: EditorDeps) {
     return c.json({ ok: true, title });
   }) as unknown as RouteHandler<typeof rTitle, AuthEnv>);
 
-  /** 采集标记写入：r2Key（有值=已采集）；CLI 采集成功（含 R2 缓存命中）后调用 */
-  const rDlg = createRoute({
+  /** 采集状态写入：collected（-1 失败 / 0 未采集 / 1 成功）；CLI 采集成功/失败后调用 */
+  const rCol = createRoute({
     method: "patch",
-    path: "/v1/editor/submissions/:id/dialogue",
+    path: "/v1/editor/submissions/:id/collected",
     responses: {
-      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/submissions/:id/dialogue" },
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/submissions/:id/collected" },
       404: { content: { "application/json": { schema: Err } }, description: "不存在" },
     },
   });
-  app.openapi(rDlg, (async (c: Context) => {
+  app.openapi(rCol, (async (c: Context) => {
     const id = c.req.param("id")!;
     const detail = await deps.repo.submissions.getDetail(id);
     if (!detail) return c.json({ error: "not_found" }, 404);
-    const body = (await c.req.json().catch(() => null)) as { r2Key?: unknown } | null;
-    if (body === null) return c.json({ error: "invalid_body" }, 400);
-    // 允许置 null 清空采集标记；非空时校验格式
-    const r2Key = body.r2Key === null || body.r2Key === "" ? null : (typeof body.r2Key === "string" ? body.r2Key.trim() : null);
-    if (r2Key === null && body.r2Key !== null && body.r2Key !== "") return c.json({ error: "invalid_r2_key", detail: "r2Key 需为字符串" }, 400);
-    const res = await deps.repo.submissions.setDialogueR2Key(id, r2Key ?? "");
+    const body = (await c.req.json().catch(() => null)) as { collected?: unknown } | null;
+    if (body === null || typeof body.collected !== "number" || ![ -1, 0, 1 ].includes(body.collected)) {
+      return c.json({ error: "invalid_collected", detail: "collected 需为 -1 / 0 / 1" }, 400);
+    }
+    const res = await deps.repo.submissions.setCollected(id, body.collected);
     if (!res) return c.json({ error: "not_found" }, 404);
-    return c.json({ ok: true, dialogueR2Key: r2Key });
-  }) as unknown as RouteHandler<typeof rDlg, AuthEnv>);
+    return c.json({ ok: true, collected: body.collected });
+  }) as unknown as RouteHandler<typeof rCol, AuthEnv>);
 
   // ---- 拒审 ----
 
