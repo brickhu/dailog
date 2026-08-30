@@ -906,6 +906,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             id: schema.submissions.id,
             url: schema.submissions.url,
             title: schema.submissions.title,
+            dialogueR2Key: schema.submissions.dialogueR2Key,
             status: schema.submissions.status,
             createdAt: schema.submissions.createdAt,
             userEmail: schema.authUsers.email,
