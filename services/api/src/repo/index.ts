@@ -913,6 +913,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             url: schema.submissions.url,
             title: schema.submissions.title,
             collected: schema.submissions.collected,
+            dialogueCount: schema.submissions.dialogueCount,
             status: schema.submissions.status,
             createdAt: schema.submissions.createdAt,
             userEmail: schema.authUsers.email,
