@@ -208,9 +208,21 @@ export function editorRoutes(deps: EditorDeps) {
     const id = c.req.param("id")!;
     const detail = await deps.repo.submissions.getDetail(id);
     if (!detail) return c.json({ error: "not_found" }, 404);
-    const body = (await c.req.json().catch(() => null)) as { collected?: unknown } | null;
+    const body = (await c.req.json().catch(() => null)) as { collected?: unknown; dialogueCount?: unknown } | null;
     if (body === null || typeof body.collected !== "number" || ![ -1, 0, 1 ].includes(body.collected)) {
       return c.json({ error: "invalid_collected", detail: "collected 需为 -1 / 0 / 1" }, 400);
+    }
+    // 采集成功时可选携带统计（dialogueCount：{messages, userTurns, assistantTurns, chars}）
+    const dc = body.dialogueCount;
+    if (dc !== undefined && dc !== null) {
+      const valid =
+        typeof dc === "object" &&
+        typeof (dc as Record<string, unknown>).messages === "number" &&
+        typeof (dc as Record<string, unknown>).userTurns === "number" &&
+        typeof (dc as Record<string, unknown>).assistantTurns === "number" &&
+        typeof (dc as Record<string, unknown>).chars === "number";
+      if (!valid) return c.json({ error: "invalid_dialogue_count", detail: "dialogueCount 需含 messages/userTurns/assistantTurns/chars" }, 400);
+      await deps.repo.submissions.setDialogueCount(id, dc as { messages: number; userTurns: number; assistantTurns: number; chars: number });
     }
     const res = await deps.repo.submissions.setCollected(id, body.collected);
     if (!res) return c.json({ error: "not_found" }, 404);

@@ -144,6 +144,13 @@ export const submissions = pgTable(
     /** 采集状态：-1=采集失败 / 0=未采集 / 1=采集成功。
      *  R2 key 不存库（由 URL 哈希推导：dialogues/<sha256(url)前32>.json），拒绝删 R2 后无废弃地址。 */
     collected: smallint("collected").notNull().default(0),
+    /** 采集统计（jsonb）：{ messages, userTurns, assistantTurns, chars }——采集完成时写入 */
+    dialogueCount: jsonb("dialogue_count").$type<{
+      messages: number;
+      userTurns: number;
+      assistantTurns: number;
+      chars: number;
+    } | null>(),
     status: text("status", { enum: ["submitted", "rejected", "published"] }).notNull().default("submitted"),
     /** 拒审原因（rejected 时必填，投稿人 /me/submits 可见） */
     rejectedReason: text("rejected_reason"),

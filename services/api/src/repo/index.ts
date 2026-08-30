@@ -85,6 +85,8 @@ export interface SubmissionsRepo {
     title: string | null;
     /** 采集状态：-1 失败 / 0 未采集 / 1 成功 */
     collected: number;
+    /** 采集统计（消息数/各角色轮数/字数） */
+    dialogueCount: { messages: number; userTurns: number; assistantTurns: number; chars: number } | null;
     status: string;
     rejectedReason: string | null;
     reviewedAt: Date | null;
@@ -118,6 +120,8 @@ export interface SubmissionsRepo {
   setTitle(id: string, title: string | null): Promise<{ id: string } | null>;
   /** 采集状态：-1=采集失败 / 0=未采集 / 1=采集成功（R2 key 由 URL 哈希推导，不存库） */
   setCollected(id: string, collected: number): Promise<{ id: string } | null>;
+  /** 采集统计写入（消息数/各角色轮数/字数） */
+  setDialogueCount(id: string, stats: { messages: number; userTurns: number; assistantTurns: number; chars: number }): Promise<{ id: string } | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -792,6 +796,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             url: schema.submissions.url,
             title: schema.submissions.title,
             collected: schema.submissions.collected,
+            dialogueCount: schema.submissions.dialogueCount,
             callName: schema.submissions.callName,
             status: schema.submissions.status,
             rejectedReason: schema.submissions.rejectedReason,
@@ -828,6 +833,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             url: schema.submissions.url,
             title: schema.submissions.title,
             collected: schema.submissions.collected,
+            dialogueCount: schema.submissions.dialogueCount,
             status: schema.submissions.status,
             createdAt: schema.submissions.createdAt,
           })
@@ -931,6 +937,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             url: schema.submissions.url,
             title: schema.submissions.title,
             collected: schema.submissions.collected,
+            dialogueCount: schema.submissions.dialogueCount,
             callName: schema.submissions.callName,
             suggestion: schema.submissions.suggestion,
             personaInfo: schema.submissions.personaInfo,
@@ -964,6 +971,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           url: row.url,
           title: row.title,
           collected: row.collected,
+          dialogueCount: row.dialogueCount,
           status: row.status,
           rejectedReason: row.rejectedReason,
           reviewedAt: row.reviewedAt,
@@ -999,6 +1007,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       async setCollected(id: string, collected: number) {
         const rows = await db.update(schema.submissions)
           .set({ collected, updatedAt: new Date() })
+          .where(eq(schema.submissions.id, id))
+          .returning({ id: schema.submissions.id });
+        return rows[0]?.id ? { id: rows[0].id } : null;
+      },
+      /** 采集统计写入 */
+      async setDialogueCount(id: string, stats: { messages: number; userTurns: number; assistantTurns: number; chars: number }) {
+        const rows = await db.update(schema.submissions)
+          .set({ dialogueCount: stats, updatedAt: new Date() })
           .where(eq(schema.submissions.id, id))
           .returning({ id: schema.submissions.id });
         return rows[0]?.id ? { id: rows[0].id } : null;
