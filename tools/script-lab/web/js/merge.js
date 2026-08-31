@@ -373,6 +373,10 @@ async function runMergeConcat(){
     if (!audios[i]) throw new Error('第 ' + (i + 1) + ' 段尚无语音，请先生成');
   }
   const gapList = loadGapExprs(id, segs.length);
+  // 无跨域隔离（SAB 不可用）→ 自动降级服务端 ffmpeg 合并（不依赖浏览器 Wasm）
+  if (!sabAvailable()) {
+    return runServerMerge(id, si, script, audios, gapList);
+  }
   const inputs = [];
   const seq = [];
   for (let i = 0; i < segs.length; i++) {
@@ -486,3 +490,44 @@ async function closeMergeModal(skipCleanup, force){
   mergeCtx = null;
 }
 
+
+
+// SAB 可用性检测（跨域隔离）：true = 浏览器 Wasm 路径；false = 服务端合并兜底
+function sabAvailable(){
+  try { return typeof SharedArrayBuffer !== 'undefined' && !!new SharedArrayBuffer(4); } catch { return false; }
+}
+
+// 构造服务端拼接序列（与 Wasm 路径同语义：段 → 间隔/intro 交替）
+function buildMergeSeq(segCount, gapList){
+  const seq = [];
+  for (let i = 0; i < segCount; i++) {
+    seq.push({ t: 'seg', i: i });
+    if (i < segCount - 1) {
+      const ops = parseGapExpr(gapList[i]);
+      ops.forEach(op => {
+        if (op.t === 'gap') seq.push({ t: 'gap', sec: op.sec });
+        else seq.push({ t: 'intro', url: op.url });
+      });
+    }
+  }
+  return seq;
+}
+
+// 服务端 ffmpeg 合并（SAB 不可用时）：段 base64 + 序列 → /api/run/full-merge → m4a base64
+async function runServerMerge(id, si, script, audios, gapList){
+  const segs = script.segments;
+  setMergeStep(15, '上传片段到服务端…');
+  const seq = buildMergeSeq(segs.length, gapList);
+  const body = { id, si, segs: audios.map(a => a && a.audio), seq };
+  const d = await j('/api/run/full-merge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  if (!(d && d.ok && d.audio)) throw new Error((d && d.error) || '服务端合成失败');
+  setMergeStep(85, '服务端拼接完成，接收中…');
+  const bytes = base64ToBytes(d.audio);
+  const blob = new Blob([bytes.buffer], { type: d.mime || 'audio/mp4' });
+  await fullAudioSave(id, blob);
+  saveFullMeta(id, { at: Date.now(), size: blob.size, scriptIndex: si, segCount: segs.length, gaps: gapList, scriptName: script.title || null });
+  const player = document.getElementById('mergePlayer');
+  if (player) player.src = URL.createObjectURL(blob);
+  setMergeStep(100, '完成');
+  return blob;
+}

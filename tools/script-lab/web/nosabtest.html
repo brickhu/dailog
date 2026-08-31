@@ -1,0 +1,41 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>
+<script src="/js/common.js"></script>
+<script src="/vendor/ffmpeg-0.11.js"></script>
+<script src="/js/merge.js"></script>
+<script src="/js/detail.js"></script>
+<script>
+(async () => {
+  const out = [];
+  const finish = (rows) => { const pre = document.createElement('pre'); pre.id = 'result'; pre.textContent = rows.join('\n'); document.body.appendChild(pre); };
+  try {
+    document.body.insertAdjacentHTML('beforeend', `<div id='mergeModal'><div id='mergeTitle'></div><div id='mergeLoading'><div id='mergeStepText'></div><div id='mergeBar'></div></div><div id='mergePreview'><audio id='mergePlayer'></audio></div></div>`);
+    out.push('0 SAB 可用=' + sabAvailable() + '（期望 false，非隔离页面）');
+    const id = 'nofallback-id';
+    const scriptObj = { segments: [ {speaker:'host',text:'段一'}, {speaker:'guest',text:'段二'} ] };
+    let mergeCalled = false;
+    window.j = async (u, opts) => {
+      if (u === '/api/detail/' + id) return { ok: true, prodSummary: { reviewStatus: 'approved', scriptList: [scriptObj] } };
+      if (u === '/api/run/full-merge') {
+        mergeCalled = true;
+        const b = JSON.parse(opts.body);
+        out.push('  full-merge body: segs=' + b.segs.length + ' seq=' + JSON.stringify(b.seq.map(x => x.t)));
+        return { ok: true, audio: 'dGVzdC1tZXJnZWQtYXVkaW8=', mime: 'audio/mp4', size: 18 };
+      }
+      throw new Error('unexpected: ' + u);
+    };
+    const ffmpeg = await loadFFmpeg().catch(() => null);   // 无 SAB 时 loadFFmpeg 应抛
+    const sabErr = !ffmpeg;
+    out.push('1 loadFFmpeg 在无 SAB 下失败=' + sabErr + '（期望 true，走兜底）');
+    const b64 = (u8) => { let bin=''; for (let i=0;i<u8.length;i++) bin+=String.fromCharCode(u8[i]); return btoa(bin); };
+    await ffmpeg.run('-y','-f','lavfi','-i','sine=frequency=440:duration=0.3','-c:a','libmp3lame','-q:a','9','t.mp3');
+    const audio = b64(ffmpeg.FS('readFile','t.mp3'));
+    for (let i=0;i<2;i++) await segAudioSet(segKey(id, scriptObj.segments[i]), { audio, mime:'audio/mpeg', at: Date.now() });
+    await openMergeDialog(id, 0);
+    out.push('2 合成后 mode=' + mergeMode + '（期望 preview）| 走服务端=' + mergeCalled + '（期望 true）');
+    const meta = loadFullMeta(id);
+    out.push('3 fullmeta.size=' + meta.size + '（期望 18）| player 有源=' + (document.getElementById('mergePlayer').src.length > 0));
+    out.push(mergeMode === 'preview' && mergeCalled ? '✓ 无 SAB 自动降级成功' : '✗ 降级失败');
+  } catch (e) { out.push('ERROR: ' + (e && e.stack || e)); }
+  finish(out);
+})();
+</script></body></html>
