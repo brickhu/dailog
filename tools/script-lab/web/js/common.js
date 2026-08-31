@@ -15,6 +15,22 @@ async function j(u, opts){
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
+// 全局通知（右上角 toast，自动消失）
+let noticeTimer = null;
+function notice(msg, type){
+  let el = document.getElementById('appNotice');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'appNotice';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.className = 'app-notice ' + (type || 'info');
+  el.style.display = 'block';
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { el.style.display = 'none'; }, 3500);
+}
+
 function fmtDate(s){ if(!s) return '—'; const d=new Date(s); if(isNaN(d)) return String(s).slice(0,16); const p=n=>String(n).padStart(2,'0'); return d.getFullYear()+'/'+(d.getMonth()+1)+'/'+d.getDate()+' '+p(d.getHours())+':'+p(d.getMinutes()); }
 
 // 路径路由：/ → 列表；/login → 登录；/settings → 设置；/<id> → 投稿详情

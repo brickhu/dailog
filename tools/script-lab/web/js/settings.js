@@ -1,6 +1,5 @@
-// 设置页：提示词配置（prompts.json，本地 + R2 同步）
-let currentPrompt = null;
-
+// 设置页：提示词是工程文件（tools/script-lab/prompts/，VSCode 编辑 + git 备份 + lab 热更新）
+// 本页仅保留：字典文件清单展示 + LLM 配置说明
 function openDesign(){
   if (location.pathname !== '/settings') history.pushState(null, '', '/settings');
   document.getElementById('listWrap').style.display='none';
@@ -9,7 +8,7 @@ function openDesign(){
   const pg=document.getElementById('pager'); if(pg) pg.style.display='none';
   const ld=document.getElementById('listLoading'); if(ld) ld.style.display='none';
   document.getElementById('designWrap').style.display='block';
-  loadPrompts();
+  listPromptFiles();
 }
 
 function backToApp(){
@@ -17,39 +16,23 @@ function backToApp(){
   showList();
 }
 
-async function loadPrompts(){
-  const listEl=document.getElementById('promptList');
-  try{
-    const d=await j('/api/prompts');
-    currentPrompt = d.prompts[0] ? d.prompts[0].name : null;
-    listEl.innerHTML=d.prompts.map(p=>`<button class='item' data-name='${esc(p.name)}' onclick='selectPrompt("${esc(p.name)}")'>${esc(p.name)}</button>`).join('')||'<div class="muted">无提示词</div>';
-    if (currentPrompt) await selectPrompt(currentPrompt);
-    const st=document.getElementById('promptStatus'); if(st) st.textContent='';
-  }catch(e){
-    listEl.innerHTML='<div class="err">加载失败: '+esc(e.message)+'</div>';
+function switchSettingsTab(tab){
+  document.querySelectorAll('.prompt-list .item').forEach(b => b.classList.toggle('active', b.dataset.nav === tab));
+  document.getElementById('panel-prompts').style.display = tab === 'prompts' ? 'block' : 'none';
+  document.getElementById('panel-llm').style.display = tab === 'llm' ? 'block' : 'none';
+}
+
+// 展示字典文件清单（读 /api/prompts/list —— lab 从工程目录列出）
+async function listPromptFiles(){
+  const el = document.getElementById('promptFiles');
+  if (!el) return;
+  try {
+    const d = await j('/api/prompts/list');
+    const files = (d && d.files) || [];
+    el.textContent = files.length ? files.join('  ') : '（无字典文件）';
+  } catch(e) {
+    el.textContent = '（读取失败: ' + e.message + '）';
   }
 }
 
-async function selectPrompt(name){
-  currentPrompt = name;
-  document.querySelectorAll('#promptList .item').forEach(b=>b.classList.toggle('active', b.dataset.name===name));
-  document.getElementById('promptName').textContent=name;
-  try{
-    const d=await j('/api/prompts');
-    const p=d.prompts.find(x=>x.name===name);
-    document.getElementById('promptEditor').value = p ? p.content : '';
-    const st=document.getElementById('promptStatus'); if(st) st.textContent='';
-  }catch(e){
-    const st=document.getElementById('promptStatus'); if(st) st.textContent='❌ '+e.message;
-  }
-}
 
-async function savePrompt(){
-  if (!currentPrompt) return;
-  const st=document.getElementById('promptStatus');
-  st.textContent='保存中…';
-  try{
-    const d=await j('/api/prompts/'+currentPrompt,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({content:document.getElementById('promptEditor').value})});
-    st.textContent='✓ '+(d.message||'已保存');
-  }catch(e){ st.textContent='❌ '+e.message; }
-}

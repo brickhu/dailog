@@ -1,0 +1,106 @@
+{
+  "review.score": {
+    "version": 1,
+    "description": "审题第1轮：对话评分/选题（S1-S3），输出检测 JSON（scripts 留空）",
+    "config": {
+      "temperature": 0.4,
+      "maxTokens": 8192,
+      "thinking": "disabled"
+    },
+    "params": {
+      "dialogue": "对话 JSON 字符串（必填）",
+      "suggestion": "投稿建议（可空）",
+      "host": "主持人信息（可空）",
+      "guests": "嘉宾信息（可空）"
+    },
+    "messages": [
+      {
+        "role": "system",
+        "file": "review.score.system.md"
+      },
+      {
+        "role": "user",
+        "file": "review.score.user.md"
+      }
+    ],
+    "name": "话题质量审核"
+  },
+  "review.script": {
+    "version": 1,
+    "description": "审题第2轮：基于检测结果创作对谈脚本（score≥6.5 才调用）",
+    "config": {
+      "temperature": 0.4,
+      "maxTokens": 8192,
+      "thinking": "disabled",
+      "seed" : 49
+    },
+    "params": {
+      "score": "第1轮评分（数字）",
+      "scriptRule": "脚本创作规则文本",
+      "suggestion": "投稿建议（可空）",
+      "host": "主持人信息（可空）",
+      "guests": "嘉宾信息（可空）"
+    },
+    "messages": [
+      {
+        "role": "assistant",
+        "file": "review.script.assistant.md"
+      },
+      {
+        "role": "user",
+        "file": "review.script.user.md"
+      }
+    ],
+    "name": "review.script"
+  },
+  "polish.all": {
+    "version": 1,
+    "description": "脚本语感打磨（内容 + 听感）",
+    "config": {
+      "temperature": 0.4,
+      "maxTokens": 8192,
+      "thinking": "disabled"
+    },
+    "params": {
+      "scripts": "脚本 JSON",
+      "scope": "all|one|line",
+      "target": "定位目标（可空）",
+      "revision": "修改意见（可空）"
+    },
+    "messages": [
+      {
+        "role": "system",
+        "file": "polish.all.system.md"
+      },
+      {
+        "role": "user",
+        "file": "polish.all.user.md"
+      }
+    ],
+    "name": "polish.all"
+  },
+  "meta": {
+    "version": 1,
+    "description": "发布元信息（标题/描述/封面提示等）",
+    "config": {
+      "temperature": 0.4,
+      "maxTokens": 8192,
+      "thinking": "disabled"
+    },
+    "params": {
+      "script": "脚本 JSON",
+      "chosenIdea": "选题信息（可空）"
+    },
+    "messages": [
+      {
+        "role": "system",
+        "file": "meta.system.md"
+      },
+      {
+        "role": "user",
+        "file": "meta.user.md"
+      }
+    ],
+    "name": "meta"
+  }
+}

@@ -119,6 +119,8 @@ export interface SubmissionsRepo {
   /** 更新投稿标题（采集提取 / 审核生成；submissions.title 权威，投稿列表/详情展示） */
   setTitle(id: string, title: string | null): Promise<{ id: string } | null>;
   setReview(id: string, review: { status: "approved" | "rejected"; score: number | null }): Promise<{ id: string } | null>;
+  /** 设置投稿主状态（crafted = 节目音频已生成上传，未发布） */
+  setStatus(id: string, status: "submitted" | "rejected" | "published" | "crafted"): Promise<{ id: string } | null>;
   /** 采集状态：-1=采集失败 / 0=未采集 / 1=采集成功（R2 key 由 URL 哈希推导，不存库） */
   setCollected(id: string, collected: number): Promise<{ id: string } | null>;
   /** 采集统计写入（消息数/各角色轮数/字数） */
@@ -1037,6 +1039,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       async setReview(id: string, review: { status: "approved" | "rejected"; score: number | null }) {
         const rows = await db.update(schema.submissions)
           .set({ reviewStatus: review.status, reviewScore: review.score, updatedAt: new Date() })
+          .where(eq(schema.submissions.id, id))
+          .returning({ id: schema.submissions.id });
+        return rows[0]?.id ? { id: rows[0].id } : null;
+      },
+      /** 设置投稿主状态（crafted：节目音频已生成并上传 R2，未发布） */
+      async setStatus(id: string, status: "submitted" | "rejected" | "published" | "crafted") {
+        const rows = await db.update(schema.submissions)
+          .set({ status, updatedAt: new Date() })
           .where(eq(schema.submissions.id, id))
           .returning({ id: schema.submissions.id });
         return rows[0]?.id ? { id: rows[0].id } : null;

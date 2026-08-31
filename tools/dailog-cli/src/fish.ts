@@ -142,6 +142,8 @@ export async function synthesizeMultiSpeaker(
     references: [[{ audio: hostRef.audio, text: hostRef.text }], [{ audio: guestRef.audio, text: guestRef.text }]],
     format: "mp3",
     mp3_bitrate: 128,
+    // 基于已生成 chunk 条件生成，保证长段内音色/语调连贯
+    condition_on_previous_chunks: true,
   });
   return fishPost(config.secrets, "/v1/tts", body as unknown as Buffer, timeoutMs);
 }
@@ -158,6 +160,8 @@ export async function synthesizeSingle(
     references: [{ audio: hostRef.audio, text: hostRef.text ?? REF_TRANSCRIPT }],
     format: "mp3",
     mp3_bitrate: 128,
+    // 基于已生成 chunk 条件生成，保证长段内音色/语调连贯
+    condition_on_previous_chunks: true,
   });
   return fishPost(config.secrets, "/v1/tts", body as unknown as Buffer, timeoutMs);
 }

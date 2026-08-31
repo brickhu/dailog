@@ -8,6 +8,7 @@ import { join, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveLlmConfig } from "./lib/config.mjs";
 import { complete } from "./lib/llm.mjs";
+import { getPrompt, renderPrompt, promptConfig } from "./lib/prompt.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const CLI_DIST = join(here, "..", "dailog-cli", "dist");
@@ -43,6 +44,12 @@ async function configFor(name) {
   return lib.loadConfig(["--env", name]);
 }
 
+/** LLM 审题实时状态（诊断用：前端 footer 轮询显示注入/生成/解码各阶段） */
+const reviewState = new Map();   // env:id → { phase, detail, at }
+function setReviewState(envName, id, phase, detail) {
+  reviewState.set(envName + ":" + id, { phase, detail: detail || null, at: Date.now() });
+}
+
 /** 超时包装：防沙箱/网络异常导致请求挂死 */
 function withTimeout(promise, ms, label) {
   return Promise.race([
@@ -51,8 +58,7 @@ function withTimeout(promise, ms, label) {
   ]);
 }
 
-// ===== R2 权威 + 进程内存缓存（提示词 / 制作产物 / 对话不依赖本地文件）=====
-let promptsCache = null;
+// ===== R2 权威 + 进程内存缓存（制作产物 / 对话不依赖本地文件）=====
 const productionCache = new Map();
 const dialogueCache = new Map();
 
@@ -70,21 +76,10 @@ async function r2Delete(envName, token, key) {
   await withTimeout(apiWithToken(envName, token, "/v1/editor/storage/delete", { method: "POST", body: { key } }), 30000, "R2 删除");
 }
 
-/** 读对话：内存缓存 → 本地草稿工作副本（快）→ R2 兜底（按 URL 哈希） */
+/** 读对话：内存缓存 → 服务端/R2（按 URL 哈希）——不读本地草稿目录（彻底解耦） */
 async function loadDialogue(envName, token, id) {
   const key = envName + ":" + id;
   if (dialogueCache.has(key)) return dialogueCache.get(key);
-  // ① 本地草稿工作副本优先（采集时落盘，毫秒级）
-  try {
-    const lib = await loadCliLib();
-    const localPath = join(lib.draftDir(id), "dialogue.json");
-    if (existsSync(localPath)) {
-      const d = JSON.parse(readFileSync(localPath, "utf-8"));
-      dialogueCache.set(key, d);
-      return d;
-    }
-  } catch { /* 本地无 → R2 兜底 */ }
-  // ② R2 兜底（本地丢失/跨端时）
   try {
     const detail = await apiWithToken(envName, token, "/v1/editor/submissions/" + id).catch(() => null);
     if (!detail || !detail.url) return null;
@@ -102,24 +97,6 @@ async function loadDialogue(envName, token, id) {
   }
 }
 
-/** 读提示词：内存缓存 → R2 拉取 */
-async function getPrompts(envName, token) {
-  if (promptsCache) return promptsCache;
-  try {
-    const content = await r2Get(envName, token, "prompts/prompts.json");
-    promptsCache = content ? JSON.parse(content) : {};
-  } catch { promptsCache = {}; }
-  return promptsCache;
-}
-/** 保存提示词：更新内存 + 推 R2 */
-async function savePrompt(envName, token, name, content) {
-  const p = (await getPrompts(envName, token)) || {};
-  p[name] = content;
-  p.updatedAt = Date.now();
-  promptsCache = p;
-  try { await r2Put(envName, token, "prompts/prompts.json", JSON.stringify(p, null, 2)); return true; }
-  catch { return false; }
-}
 /** 读制作产物：内存缓存 → R2 workflows/{env}/{id}.json */
 async function loadProduction(envName, token, id) {
   const key = envName + ":" + id;
@@ -228,13 +205,7 @@ async function runSingleFetch(envName, token, id, url) {
     if (r.ok && Array.isArray(r.messages) && r.messages.length > 0) {
       const sourceUrl = r.sourceUrl || url;
       const data = { sourceUrl, source: r.source || "", title: r.title || null, messages: r.messages };
-      // 写本地工作副本（review 等流程毫秒级读取）
-      try {
-        const lib2 = await loadCliLib();
-        mkdirSync(lib2.draftDir(id), { recursive: true });
-        writeFileSync(join(lib2.draftDir(id), "dialogue.json"), JSON.stringify(data, null, 2), "utf-8");
-      } catch { /* 本地写失败不阻塞 */ }
-      // R2 备份（多端同步）
+      // R2 备份（多端同步）——不写本地（彻底解耦）
       try {
         const { dialogueR2Key } = await import(join(CLI_DIST, "r2.js"));   // 纯哈希函数
         await r2Put(envName, token, dialogueR2Key(sourceUrl), JSON.stringify(data));
@@ -326,12 +297,18 @@ function serveStatic(path, res) {
     res.end(readFileSync(join(WEB_DIR, "index.html")));
     return;
   }
-  res.writeHead(200, { "content-type": MIME[extname(file)] || "application/octet-stream" });
+  res.writeHead(200, {
+    "content-type": MIME[extname(file)] || "application/octet-stream",
+    // lab 静态文件禁止浏览器缓存：改 JS/HTML 即时生效（避免旧版脚本导致行为异常）
+    "cache-control": "no-cache",
+    // 跨域隔离：ffmpeg.wasm 多线程 core 需要 SharedArrayBuffer
+    "cross-origin-opener-policy": "same-origin",
+    "cross-origin-embedder-policy": "require-corp",
+  });
   res.end(readFileSync(file));
 }
 
 async function handleApi(path, res, req) {
-  // 提示词权威存储（.dailog-editor/prompts.json）——置于顶部避免 TDZ
   // GET /api/envs → 可用环境列表
   if (path === "/api/envs") {
     const envs = await listEnvs();
@@ -505,43 +482,256 @@ async function handleApi(path, res, req) {
     return;
   }
 
-  /** 从 LLM 输出中提取 JSON（容忍 ```json 围栏与前后文字） */
+  /** 从 LLM 输出中提取 JSON（容忍 ```json 围栏、前后文字、字符串内真实换行） */
   function extractJson(text) {
-    const m = String(text).match(/\`\`\`(?:json)?\s*([\s\S]*?)\`\`\`/);
-    const s = m ? m[1] : String(text);
-    const start = s.indexOf("{"); const end = s.lastIndexOf("}");
-    if (start >= 0 && end > start) {
-      const candidate = s.slice(start, end + 1);
-      try { return JSON.parse(candidate); } catch (err) {
-        console.error("[extractJson] 解析失败，输出长度", String(text).length, "开头:", String(text).slice(0, 150));
-        throw new Error("LLM 输出不是合法 JSON（截断或格式错误）");
-      }
+    const raw = String(text);
+    const m = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+    let s = m ? m[1] : raw;
+    const start = s.indexOf("{");
+    if (start < 0) {
+      console.error("[extractJson] 未找到 JSON 对象，输出长度", raw.length, "开头:", raw.slice(0, 200));
+      throw new Error("LLM 输出不是合法 JSON（未找到 JSON 对象）");
     }
-    console.error("[extractJson] 未找到 JSON 对象，输出长度", String(text).length, "开头:", String(text).slice(0, 200));
-    throw new Error("LLM 输出不是合法 JSON（未找到 JSON 对象）");
+    // 括号深度匹配找到与首个 { 配对的 }（容忍嵌套），不用 lastIndexOf（防尾随文字/截断误判）
+    let depth = 0, inStr = false, esc = false;
+    let end = -1;
+    for (let i = start; i < s.length; i++) {
+      const ch = s[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === "\\") esc = true;
+        else if (ch === "\"") inStr = false;
+        continue;
+      }
+      if (ch === "\"") { inStr = true; continue; }
+      if (ch === "{") depth++;
+      else if (ch === "}") { depth--; if (depth === 0) { end = i; break; } }
+    }
+    let candidate = end > start ? s.slice(start, end + 1) : s.slice(start);
+    // 清洗字符串值内的真实换行（LLM 偶发在 JSON 字符串里输出裸换行 → 非法）——转成 \n
+    candidate = candidate.replace(/("(?:[^"\\]|\\.)*")/g, (m2) => m2.replace(/\n/g, "\\n"));
+    try { return JSON.parse(candidate); } catch (err) {
+      console.error("[extractJson] 解析失败，输出长度", raw.length, "开头:", raw.slice(0, 150));
+      throw new Error("LLM 输出不是合法 JSON（截断或格式错误）");
+    }
   }
   function llmConfig() {
     const cfg = resolveLlmConfig(process.argv);
     return cfg && cfg.apiKey ? cfg : null;
   }
-  async function llmComplete(system, user, cfgOverride = {}) {
+  async function llmComplete(system, user, cfgOverride = {}, messages = null) {
     const cfg = llmConfig();
     if (!cfg) throw new Error("未配置 LLM API key（DEEPSEEK_API_KEY）");
     if (!cfg.maxTokens) cfg.maxTokens = 8192;   // 大输出（审题含脚本）设足够上限，防截断导致 JSON 不完整
+    if (!cfg.thinking) cfg.thinking = { type: "disabled" };   // v4 默认思考模式 high effort——结构化 JSON 任务关闭，防推理耗尽致空 content
     Object.assign(cfg, cfgOverride);            // 前端状态0 可覆盖 temperature/seed
+    // 归一化 thinking：字符串简写（"disabled"/"enabled"）→ {type} 对象（deepseek API 期望）
+    if (typeof cfg.thinking === "string") cfg.thinking = { type: cfg.thinking };
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 120000);   // 生成超时 120s，防挂起
     let usage = null;
     try {
-      const out = await complete(cfg, [
+      // messages 传入则直接使用（多轮对话：第2轮带上第1轮完整历史 + assistant 回传 → system+user 前缀命中缓存）
+      const msgs = messages || [
         { role: "system", content: system },
         { role: "user", content: typeof user === "string" ? user : JSON.stringify(user, null, 1) },
-      ], { stream: false, signal: ac.signal, onUsage: (u) => { usage = u; } });
+      ];
+      const out = await complete(cfg, msgs, { stream: false, signal: ac.signal, onUsage: (u) => { usage = u; } });
       return { content: out, usage };
     } finally { clearTimeout(timer); }
   }
 
-  // POST /api/run/review/preview → 状态0：LLM 调用输入预览（system/user 提示词 + 温度/seed，可编辑后发送）
+  // GET /api/status/review?id= → LLM 审题实时状态（诊断：前端 footer 轮询）
+  if (path.startsWith("/api/status/review")) {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const qs = new URL(path, "http://x").searchParams.get("id") || "";
+    const st = reviewState.get(cred.env + ":" + qs) || null;
+    sendJson(res, { ok: true, state: st });
+    return;
+  }
+
+  // POST /api/run/script/save → 保存手工修改的脚本（body {id, scripts} → 服务端写 R2 + 清缓存）
+  if (path === "/api/run/script/save" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const body = await readBody(req);
+    const id = (body && body.id) || null;
+    const scripts = (body && Array.isArray(body.scripts)) ? body.scripts : null;
+    if (!id || !scripts) { sendJson(res, { ok: false, error: "需 id + scripts" }, 400); return; }
+    try {
+      const d = await apiWithToken(cred.env, cred.token, "/v1/editor/submissions/" + id + "/scripts", { method: "PUT", body: { scripts } });
+      productionCache.delete(cred.env + ":" + id);   // 清 lab 缓存（detail 重新拉）
+      sendJson(res, { ok: true, message: "脚本已保存（" + scripts.length + " 个）", count: d && d.scripts });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/run/full-upload → 上传合成好的 full audio（m4a）到 R2（body { id, audio: base64, mime } → key full/{id}.m4a）
+  if (path === "/api/run/full-upload" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    // 大 body 专用读取（base64 音频可达几十 MB；readBody 的 1MB 限制不适用）
+    const chunks = [];
+    let size = 0;
+    for await (const c2 of req) {
+      chunks.push(c2); size += c2.length;
+      if (size > 100 * 1024 * 1024) { sendJson(res, { ok: false, error: "音频过大（>100MB）" }, 413); return; }
+    }
+    let body;
+    try { body = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { body = {}; }
+    const id = (body && body.id) || null;
+    const audio = (body && body.audio) || null;
+    if (!id || !audio) { sendJson(res, { ok: false, error: "需 id + audio(base64)" }, 400); return; }
+    try {
+      const key = "full/" + id + ".m4a";
+      await apiWithToken(e, token, "/v1/editor/storage/put", { method: "POST", body: { key, content: "b64:" + audio } });
+      // 上传成功 → 标记投稿为 crafted（节目音频已生成未发布；标记失败不阻断上传成功）
+      let crafted = false;
+      try { const cr = await apiWithToken(e, token, "/v1/editor/submissions/" + id + "/crafted", { method: "POST", body: {} }); crafted = !!(cr && cr.ok); } catch {}
+      sendJson(res, { ok: true, key, crafted });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/run/full-merge → 服务端 ffmpeg 拼接（浏览器 Wasm 不可用/无跨域隔离时的兜底）
+  //   body { id, si, segs: [base64...], seq: [{t:'seg',i}|{t:'gap',sec}|{t:'intro',url}] }
+  //   → 逐项写文件/生成静音/拉 intro → concat → aac 128k m4a → 返回 base64
+  if (path === "/api/run/full-merge" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const chunks = [];
+    let msize = 0;
+    for await (const c2 of req) {
+      chunks.push(c2); msize += c2.length;
+      if (msize > 150 * 1024 * 1024) { sendJson(res, { ok: false, error: "数据过大（>150MB）" }, 413); return; }
+    }
+    let body;
+    try { body = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { body = {}; }
+    const segs = Array.isArray(body && body.segs) ? body.segs : null;
+    const seq = Array.isArray(body && body.seq) ? body.seq : null;
+    if (!segs || !seq || !seq.length) { sendJson(res, { ok: false, error: "需 segs + seq" }, 400); return; }
+    const { execFileSync } = await import("node:child_process");
+    const { mkdtempSync, writeFileSync, readFileSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join: jn } = await import("node:path");
+    const dir = mkdtempSync(jn(tmpdir(), "dailog-merge-"));
+    try {
+      const list = [];
+      let n = 0;
+      for (const item of seq) {
+        if (item && item.t === "seg") {
+          const b64 = segs[item.i];
+          if (typeof b64 !== "string" || !b64) { sendJson(res, { ok: false, error: "段 " + item.i + " 音频缺失" }, 400); return; }
+          const nm = "seg" + n + ".mp3";
+          writeFileSync(jn(dir, nm), Buffer.from(b64, "base64"));
+          list.push("file '" + nm + "'");
+        } else if (item && item.t === "gap") {
+          const sec = Math.max(0, Math.min(10, Number(item.sec) || 0));
+          const nm = "sil" + n + ".mp3";
+          execFileSync("ffmpeg", ["-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", String(sec), "-c:a", "libmp3lame", "-q:a", "9", jn(dir, nm)], { stdio: "ignore" });
+          list.push("file '" + nm + "'");
+        } else if (item && item.t === "intro") {
+          const resp = await fetch(String(item.url || "")).catch(() => null);
+          if (!resp || !resp.ok) { sendJson(res, { ok: false, error: "intro 下载失败: " + (item.url || "") }, 400); return; }
+          const nm = "intro" + n + ".mp3";
+          writeFileSync(jn(dir, nm), Buffer.from(await resp.arrayBuffer()));
+          list.push("file '" + nm + "'");
+        } else { sendJson(res, { ok: false, error: "未知序列项" }, 400); return; }
+        n++;
+      }
+      writeFileSync(jn(dir, "list.txt"), list.join("\n"));
+      execFileSync("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", jn(dir, "list.txt"), "-c:a", "aac", "-b:a", "128k", jn(dir, "final.m4a")], { stdio: "ignore" });
+      const out = readFileSync(jn(dir, "final.m4a"));
+      sendJson(res, { ok: true, audio: Buffer.from(out).toString("base64"), mime: "audio/mp4", size: out.length });
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+    return;
+  }
+
+  // POST /api/run/tts-seg → 单段语音生成（body {id, scriptIndex, segIndex}）
+  //   读该 seg（speaker/text）→ 取对应采样（host voiceSamples / guest 声线）→ ffmpeg 转 wav → fish 单说话人合成 → 返回 base64 mp3
+  if (path === "/api/run/tts-seg" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const body = await readBody(req);
+    const id = (body && body.id) || null;
+    const scriptIndex = (body && body.scriptIndex !== undefined) ? Number(body.scriptIndex) : 0;
+    const segIndex = (body && body.segIndex !== undefined) ? Number(body.segIndex) : 0;
+    if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
+    try {
+      const detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id);
+      const scripts = (detail && Array.isArray(detail.reviewScripts)) ? detail.reviewScripts : [];
+      const target = scripts[scriptIndex];
+      const seg = target && target.segments && target.segments[segIndex];
+      if (!seg || typeof seg.text !== "string" || !seg.text.trim()) { sendJson(res, { ok: false, error: "片段不存在" }, 404); return; }
+      const config = await configFor(e);
+      const { getR2Object } = await import(join(CLI_DIST, "r2.js"));
+      const { synthesizeSingle } = await import(join(CLI_DIST, "fish.js"));
+      // 参考音频：host = voiceSamples（R2 直取 + 转 wav）；guest = guests 声线（R2 audioKey + 转 wav）
+      let ref;
+      if (seg.speaker === "guest") {
+        const samples = await apiWithToken(e, token, "/v1/editor/guests/voice-samples").catch(() => []);
+        const guestId = (detail && detail.guest && detail.guest.id) || null;
+        const mine = (Array.isArray(samples) ? samples : []).filter((x) => x.guestId === guestId);
+        const row = mine.find((x) => x.language === "zh") || mine[0];
+        if (!row || !row.audioKey) { sendJson(res, { ok: false, error: "嘉宾 " + (guestId || "?") + " 无声线（guest-voice 上传）" }); return; }
+        const bytes = await getR2Object(config, row.audioKey);
+        ref = { audio: bytes, text: row.transcript || null };
+      } else {
+        const samples = (detail && detail.voiceSamples) || [];
+        const sample = samples.find((x) => x.status === "ready") || samples[0];
+        if (!sample || !sample.audioUrl) { sendJson(res, { ok: false, error: "主持人无声样" }); return; }
+        const bytes = await getR2Object(config, sample.audioUrl);
+        ref = { audio: bytes, text: sample.transcript || null };
+      }
+      // ffmpeg 转 44100Hz 单声道 wav（Fish 参考格式）
+      const { execFileSync } = await import("node:child_process");
+      const { mkdtempSync, writeFileSync, readFileSync, rmSync } = await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join: jn } = await import("node:path");
+      const dir = mkdtempSync(jn(tmpdir(), "dailog-seg-"));
+      let wav;
+      try {
+        writeFileSync(jn(dir, "in.bin"), Buffer.from(ref.audio));
+        execFileSync("ffmpeg", ["-y", "-i", jn(dir, "in.bin"), "-ar", "44100", "-ac", "1", jn(dir, "out.wav")], { stdio: "ignore" });
+        wav = new Uint8Array(readFileSync(jn(dir, "out.wav")));
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+      const audio = await synthesizeSingle(config, seg.text, { audio: wav, text: ref.text || null });
+      sendJson(res, { ok: true, audio: Buffer.from(audio).toString("base64"), mime: "audio/mpeg", speaker: seg.speaker, text: seg.text.slice(0, 50) });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/run/llm → 通用 LLM 调用（llm-box 组件后端）：
+  //   接收 { messages: [{role, content}], config?: {temperature, seed, maxTokens, thinking} }
+  //   → 调 LLM → 返回 { result(解析后JSON), usage }
+  if (path === "/api/run/llm" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const body = await readBody(req);
+    const messages = (body && Array.isArray(body.messages)) ? body.messages : null;
+    if (!messages || messages.length === 0) { sendJson(res, { ok: false, error: "需 messages 数组" }, 400); return; }
+    try {
+      const cfgOverride = {};
+      const cfg = (body && body.config) || {};
+      if (cfg.temperature !== undefined && cfg.temperature !== "") cfgOverride.temperature = Number(cfg.temperature);
+      if (cfg.seed !== undefined && cfg.seed !== "") cfgOverride.seed = Number(cfg.seed);
+      if (cfg.maxTokens !== undefined && cfg.maxTokens !== "") cfgOverride.maxTokens = Number(cfg.maxTokens);
+      if (cfg.thinking !== undefined) cfgOverride.thinking = cfg.thinking;
+      const r = await llmComplete(null, null, cfgOverride, messages);
+      const usage = r.usage;
+      let result = null;
+      try { result = extractJson(r.content); }
+      catch (err) { result = { raw: r.content }; }
+      sendJson(res, { ok: true, result, usage: usage ? { input: usage.prompt_tokens ?? 0, output: usage.completion_tokens ?? 0 } : null });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/run/review/preview → 状态0：两轮 LLM 调用输入预览（可编辑后发送）
+  //   第1轮 system=打分规则 + user=仅对话；第2轮 追加 assistant=脚本规则 + user=参数（suggestion/host/guests）
   if (path === "/api/run/review/preview" && req.method === "POST") {
     const cred = reqCred(req);
     if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
@@ -552,23 +742,30 @@ async function handleApi(path, res, req) {
     try {
       const dialogue = await loadDialogue(e, token, id);
       if (!dialogue) { sendJson(res, { ok: false, error: "未采集——请先采集对话" }); return; }
-      const prompts = (await getPrompts(e, token)) || {};
-      if (!prompts.selection) { sendJson(res, { ok: false, error: "缺少 selection 提示词（设置页配置）" }); return; }
-      // 组装完整用户提示词：dialogue + suggestion + host/guest 快照（投稿时定格，直接取）
+      // 字典消费（工程文件，热更新）
+      const pScore = getPrompt("review.score");
+      const pScript = getPrompt("review.script");
+      // 快照（投稿时定格，直接取）
       const detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null);
       const hostSnap = (detail && detail.host) || null;
       const guestSnap = (detail && detail.guest) || null;
-      const userPayload = {
-        dialogue,
-        suggestion: (detail && detail.suggestion) || undefined,
-        host: hostSnap ? { callName: hostSnap.callName || undefined, personaInfo: hostSnap.personaInfo || undefined } : undefined,
-        guests: guestSnap ? [{ name: guestSnap.name, platform: guestSnap.id, intro: guestSnap.intro || null }] : undefined,
-      };
       const cfg = llmConfig();
+      // 第1轮：system=打分规则文本（字典静态部分），user1=仅对话 json
+      const scoreSystem = (pScore.messages.find(m => m.role === "system") || {}).content || "";
+      // 第2轮：scriptRule = 字典 assistant 内容剥离「评分结论前缀」后的规则本体（评分由 review 运行时注入）
+      const scriptAssistant = (pScript.messages.find(m => m.role === "assistant") || {}).content || "";
+      const scriptRule = scriptAssistant.replace(/^评分=\{\{score\}\}，≥6\.5，输出脚本，参照如下规则：\n/, "");
       sendJson(res, {
         ok: true,
-        system: prompts.selection,
-        user: JSON.stringify(userPayload, null, 1),
+        system: scoreSystem,
+        user1: JSON.stringify({ dialogue }, null, 1),
+        // 第2轮 assistant 模板（{{score}}/{{scriptRule}} 运行时注入）；scriptRule 本体即 pScript 的 assistant 内容
+        scriptRule,
+        user2: JSON.stringify({
+          suggestion: (detail && detail.suggestion) || undefined,
+          host: hostSnap ? { callName: hostSnap.callName || undefined, personaInfo: hostSnap.personaInfo || undefined } : undefined,
+          guests: guestSnap ? [{ name: guestSnap.name, platform: guestSnap.id, intro: guestSnap.intro || null }] : undefined,
+        }, null, 1),
         temperature: cfg && cfg.temperature !== undefined ? cfg.temperature : 0.7,
         seed: cfg && cfg.seed !== undefined ? cfg.seed : 42,   // 默认固定 seed，可复现
       });
@@ -576,8 +773,9 @@ async function handleApi(path, res, req) {
     return;
   }
 
-  // POST /api/run/review → 创作审题：dialogue + selection 提示词 → LLM 审核结果（暂存，不入库；前端确认后才落库）
-  if (path === "/api/run/review" && req.method === "POST") {
+  // POST /api/run/review/round1 → 审题第1轮：评分（llm-box 组件1）
+  //   接收 {id, messages?, config?, preview?}——messages/config 覆盖（预览可编辑传回）；preview=true 返回渲染预览不执行
+  if (path === "/api/run/review/round1" && req.method === "POST") {
     const cred = reqCred(req);
     if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
     const { env: e, token } = cred;
@@ -585,39 +783,86 @@ async function handleApi(path, res, req) {
     const id = (body && body.id) || null;
     if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
     try {
-      const t0 = Date.now();
-      const dialogue = await loadDialogue(e, token, id);   // 共享 dialogueCache——详情页加载后直接命中内存，不走远程
-      console.log("[review-debug] loadDialogue", Date.now() - t0, "ms");
+      const dialogue = await loadDialogue(e, token, id);
       if (!dialogue) { sendJson(res, { ok: false, error: "未采集——请先采集对话" }); return; }
-      const t1 = Date.now();
-      const prompts = (await getPrompts(e, token)) || {};
-      console.log("[review-debug] getPrompts", Date.now() - t1, "ms");
-      if (!prompts.selection) { sendJson(res, { ok: false, error: "缺少 selection 提示词（设置页配置）" }); return; }
-      const t2 = Date.now();
-      // 状态0 可编辑覆盖：system/user/temperature/seed（前端传入则使用）
-      const sysMsg = (body && typeof body.system === "string" && body.system.trim()) ? body.system : prompts.selection;
-      const userMsg = (body && typeof body.user === "string" && body.user.trim()) ? body.user : { dialogue };
+      const p = getPrompt("review.score");
+      const defaultMsgs = renderPrompt(p, { dialogue: JSON.stringify(dialogue), suggestion: "" });
       const cfgOverride = {};
-      if (body && body.temperature !== undefined && body.temperature !== "") cfgOverride.temperature = Number(body.temperature);
-      if (body && body.seed !== undefined && body.seed !== "") cfgOverride.seed = Number(body.seed);
-      // LLM 间歇性空响应/输出异常 → 自动重试一次
-      let result = null, usage = null;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          const r = await llmComplete(sysMsg, userMsg, cfgOverride);
-          usage = r.usage;
-          result = extractJson(r.content);
-          break;
-        } catch (err) {
-          if (attempt === 0) console.error("[review] 审题失败，自动重试:", String((err && err.message) || err));
-          else throw err;
-        }
+      if (body && Array.isArray(body.messages) && body.messages.length) {
+        const cfg = (body && body.config) || {};
+        if (cfg.temperature !== undefined && cfg.temperature !== "") cfgOverride.temperature = Number(cfg.temperature);
+        if (cfg.seed !== undefined && cfg.seed !== "") cfgOverride.seed = Number(cfg.seed);
+        if (cfg.maxTokens !== undefined && cfg.maxTokens !== "") cfgOverride.maxTokens = Number(cfg.maxTokens);
+        if (cfg.thinking !== undefined) cfgOverride.thinking = cfg.thinking;
       }
-      console.log("[review-debug] llmComplete", Date.now() - t2, "ms");
-      sendJson(res, {
-        ok: true, result,
-        usage: usage ? { input: usage.prompt_tokens ?? 0, output: usage.completion_tokens ?? 0 } : null,
-      });
+      if (body && body.preview) {
+        sendJson(res, { ok: true, preview: { messages: defaultMsgs, config: p.config || {}, name: p.name || key, description: p.description || "" } });
+        return;
+      }
+      const msgs = (body && Array.isArray(body.messages) && body.messages.length) ? body.messages : defaultMsgs;
+      const r = await llmComplete(null, null, cfgOverride, msgs);
+      const result = extractJson(r.content);
+      console.log("[review-debug] round1 score:", result.score);
+      sendJson(res, { ok: true, result, usage: r.usage ? { input: r.usage.prompt_tokens ?? 0, output: r.usage.completion_tokens ?? 0 } : null });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/run/review/round2 → 审题第2轮：脚本创作（llm-box 组件2；依赖 round1 的 score）
+  if (path === "/api/run/review/round2" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const body = await readBody(req);
+    const id = (body && body.id) || null;
+    const score = (body && body.score !== undefined) ? Number(body.score) : null;
+    if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
+    try {
+      const dialogue = await loadDialogue(e, token, id);
+      if (!dialogue) { sendJson(res, { ok: false, error: "未采集——请先采集对话" }); return; }
+      const detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null);
+      const hostSnap = (detail && detail.host) || null;
+      const guestSnap = (detail && detail.guest) || null;
+      const pScore = getPrompt("review.score");
+      const pScript = getPrompt("review.script");
+      const msgs1 = renderPrompt(pScore, { dialogue: JSON.stringify(dialogue), suggestion: "" });
+      const scriptAssistant = (pScript.messages.find(m => m.role === "assistant") || {}).content || "";
+      const scriptRule = scriptAssistant.replace(/^评分=\{\{score\}\}，≥6\.5，输出脚本，参照如下规则：\n/, "");
+      const params = JSON.stringify({
+        suggestion: (detail && detail.suggestion) || undefined,
+        host: hostSnap ? { callName: hostSnap.callName || undefined, personaInfo: hostSnap.personaInfo || undefined } : undefined,
+        guests: guestSnap ? [{ name: guestSnap.name, platform: guestSnap.id, intro: guestSnap.intro || null }] : undefined,
+      }, null, 1);
+      const defaultMsgs = [
+        { role: "system", content: msgs1[0].content },
+        { role: "user", content: msgs1[1].content },
+        { role: "assistant", content: "评分=" + score + "，≥6.5，输出脚本，参照如下规则：\n" + scriptRule },
+        { role: "user", content: params },
+      ];
+      const cfgOverride = {};
+      if (body && Array.isArray(body.messages) && body.messages.length) {
+        const cfg = (body && body.config) || {};
+        if (cfg.temperature !== undefined && cfg.temperature !== "") cfgOverride.temperature = Number(cfg.temperature);
+        if (cfg.seed !== undefined && cfg.seed !== "") cfgOverride.seed = Number(cfg.seed);
+        if (cfg.maxTokens !== undefined && cfg.maxTokens !== "") cfgOverride.maxTokens = Number(cfg.maxTokens);
+        if (cfg.thinking !== undefined) cfgOverride.thinking = cfg.thinking;
+      }
+      if (body && body.preview) {
+        sendJson(res, { ok: true, preview: { messages: defaultMsgs, config: pScript.config || {}, name: pScript.name || key, description: pScript.description || "" } });
+        return;
+      }
+      const msgs = (body && Array.isArray(body.messages) && body.messages.length) ? body.messages : defaultMsgs;
+      const r = await llmComplete(null, null, cfgOverride, msgs);
+      let scripts = [];
+      try {
+        const p2 = extractJson(r.content);
+        if (Array.isArray(p2)) scripts = p2;
+        else if (Array.isArray(p2.scripts)) scripts = p2.scripts;
+        else if (p2 && Array.isArray(p2.segments)) scripts = [p2];
+        else console.error("[review-debug] round2 无 segments:", String(r.content).slice(0, 120));
+      } catch (err) { console.error("[review-debug] round2 解析失败:", err.message); }
+      console.log("[review-debug] round2 scripts:", scripts.length);
+      sendJson(res, { ok: true, result: { scripts }, usage: r.usage ? { input: r.usage.prompt_tokens ?? 0, output: r.usage.completion_tokens ?? 0 } : null });
     } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
     return;
   }
@@ -659,9 +904,9 @@ async function handleApi(path, res, req) {
     try {
       const dialogue = await loadDialogue(e, token, id);
       if (!dialogue) { sendJson(res, { ok: false, error: "未采集——请先采集对话" }); return; }
-      const prompts = (await getPrompts(e, token)) || {};
-      if (!prompts.selection) { sendJson(res, { ok: false, error: "缺少 selection 提示词（设置页配置）" }); return; }
-      const { content: out } = await llmComplete(prompts.selection, { dialogue });
+      const p = getPrompt("review.score");
+      const msgs = renderPrompt(p, { dialogue: JSON.stringify(dialogue) });
+      const { content: out } = await llmComplete(msgs[0].content, msgs[1].content);
       const parsed = extractJson(out);
       const prod = await saveProduction(e, token, id, {
         selection: parsed,
@@ -673,27 +918,65 @@ async function handleApi(path, res, req) {
     return;
   }
 
-  // POST /api/run/polish → 语感打磨：script + polish 提示词（body: {id, scope?, target?, revision?}）
+  // POST /api/run/polish → 语感打磨（批量，llm-box 契约）：body {id, scriptIndex, messages?, config?, preview?}
+  //   读 R2 scripts[scriptIndex] → 渲染 polish.all（scope=all）→ LLM → 结果 segments 写回 R2
   if (path === "/api/run/polish" && req.method === "POST") {
     const cred = reqCred(req);
     if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
     const { env: e, token } = cred;
     const body = await readBody(req);
     const id = (body && body.id) || null;
+    const scriptIndex = (body && body.scriptIndex !== undefined) ? Number(body.scriptIndex) : 0;
     if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
     try {
-      const prod = await loadProduction(e, token, id);
-      if (!prod || !prod.script) { sendJson(res, { ok: false, error: "尚无脚本——先执行创作（生成脚本）" }); return; }
-      const prompts = (await getPrompts(e, token)) || {};
-      if (!prompts.polish) { sendJson(res, { ok: false, error: "缺少 polish 提示词（设置页配置）" }); return; }
-      const scope = (body.scope) || "all";
-      const { content: out } = await llmComplete(prompts.polish, { scripts: prod.script, scope, target: body.target || null, revision: body.revision || null });
-      const parsed = extractJson(out);
-      let patch = { progress: { step: "polish", updatedAt: new Date().toISOString() } };
-      if (scope === "all" && parsed.parts) patch.script = parsed;
-      else patch.polishResult = parsed;   // one/line：结果暂存，前端定位回填
-      await saveProduction(e, token, id, patch);
-      sendJson(res, { ok: true, message: scope === "all" ? "语感打磨完成" : "打磨结果已生成" });
+      // 读当前 scripts（R2 权威）
+      const detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id);
+      const scripts = (detail && Array.isArray(detail.reviewScripts)) ? detail.reviewScripts : [];
+      const target = scripts[scriptIndex];
+      if (!target || !Array.isArray(target.segments)) { sendJson(res, { ok: false, error: "脚本不存在（index " + scriptIndex + "）" }, 404); return; }
+      const p = getPrompt("polish.all");
+      const defaultMsgs = renderPrompt(p, { scripts: JSON.stringify(target, null, 1), scope: "all", target: "", revision: "" });
+      const cfgOverride = {};
+      if (body && Array.isArray(body.messages) && body.messages.length) {
+        const cfg = (body && body.config) || {};
+        if (cfg.temperature !== undefined && cfg.temperature !== "") cfgOverride.temperature = Number(cfg.temperature);
+        if (cfg.seed !== undefined && cfg.seed !== "") cfgOverride.seed = Number(cfg.seed);
+        if (cfg.maxTokens !== undefined && cfg.maxTokens !== "") cfgOverride.maxTokens = Number(cfg.maxTokens);
+        if (cfg.thinking !== undefined) cfgOverride.thinking = cfg.thinking;
+      }
+      if (body && body.preview) {
+        sendJson(res, { ok: true, preview: { messages: defaultMsgs, config: p.config || {}, name: p.name || "polish.all", description: p.description || "" } });
+        return;
+      }
+      const msgs = (body && Array.isArray(body.messages) && body.messages.length) ? body.messages : defaultMsgs;
+      // 防回显：LLM 偶发把输入 segments 原样复制（creationNote 却声称已打磨）——检测逐字一致则带修正指示自动重试一次
+      const segsIdentical = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length
+        && a.every((s, i) => (s && s.text || '') === ((b[i] && b[i].text) || ''));
+      let r = await llmComplete(null, null, cfgOverride, msgs);
+      let parsed = extractJson(r.content);
+      let segs = Array.isArray(parsed) ? parsed : (parsed.segments || null);
+      let retried = false;
+      if (Array.isArray(segs) && segsIdentical(segs, target.segments)) {
+        retried = true;
+        const retryMsgs = msgs.concat([
+          { role: "assistant", content: r.content },
+          { role: "user", content: "检测到上述输出与输入脚本逐字相同，未执行任何打磨。请重新打磨：按准则实际修改（口语化/听感/情绪标签/停顿至少落实其一，全脚本通常 3 项都动），禁止原样复制输入；同时禁止新增对话原文之外的内容。" },
+        ]);
+        r = await llmComplete(null, null, cfgOverride, retryMsgs);
+        parsed = extractJson(r.content);
+        segs = Array.isArray(parsed) ? parsed : (parsed.segments || null);
+      }
+      // 结果：segments 数组（新结构）——校验并写回 R2
+      if (!Array.isArray(segs)) { sendJson(res, { ok: false, error: "打磨结果缺少 segments 数组" }); return; }
+      const polished = { ...target, segments: segs };
+      scripts[scriptIndex] = polished;
+      await apiWithToken(e, token, "/v1/editor/submissions/" + id + "/scripts", { method: "PUT", body: { scripts } });
+      productionCache.delete(e + ":" + id);
+      sendJson(res, {
+        ok: true, message: "语感打磨完成（" + segs.length + " 段）" + (retried ? "（首次输出未改动，已自动重试）" : ""), result: polished,
+        retried,
+        usage: r.usage ? { input: r.usage.prompt_tokens ?? 0, output: r.usage.completion_tokens ?? 0 } : null,
+      });
     } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
     return;
   }
@@ -709,12 +992,33 @@ async function handleApi(path, res, req) {
     try {
       const prod = await loadProduction(e, token, id);
       if (!prod || !prod.script) { sendJson(res, { ok: false, error: "尚无脚本——先执行创作" }); return; }
-      const prompts = (await getPrompts(e, token)) || {};
-      if (!prompts.meta) { sendJson(res, { ok: false, error: "缺少 meta 提示词（设置页配置）" }); return; }
-      const { content: out } = await llmComplete(prompts.meta, { script: prod.script, chosenIdea: prod.chosenIdea || prod.selection || null });
-      const parsed = extractJson(out);
+      // preview 模式：返回渲染后的 messages+config（llm-box 填入可编辑输入框），不执行
+      if (body && body.preview) {
+        const p = getPrompt("meta");
+        const msgs = renderPrompt(p, { script: prod.script, chosenIdea: prod.chosenIdea || prod.selection || null });
+        sendJson(res, { ok: true, preview: { messages: msgs, config: p.config || {}, name: p.name || "meta", description: p.description || "" } });
+        return;
+      }
+      // llm-box 契约：body.messages/config 覆盖（预览可编辑后传回）；否则字典默认渲染
+      let msgs, cfgOverride = {};
+      if (body && Array.isArray(body.messages) && body.messages.length) {
+        msgs = body.messages;
+        const cfg = (body && body.config) || {};
+        if (cfg.temperature !== undefined && cfg.temperature !== "") cfgOverride.temperature = Number(cfg.temperature);
+        if (cfg.seed !== undefined && cfg.seed !== "") cfgOverride.seed = Number(cfg.seed);
+        if (cfg.maxTokens !== undefined && cfg.maxTokens !== "") cfgOverride.maxTokens = Number(cfg.maxTokens);
+        if (cfg.thinking !== undefined) cfgOverride.thinking = cfg.thinking;
+      } else {
+        const p = getPrompt("meta");
+        msgs = renderPrompt(p, { script: prod.script, chosenIdea: prod.chosenIdea || prod.selection || null });
+      }
+      const r = await llmComplete(null, null, cfgOverride, msgs);
+      const parsed = extractJson(r.content);
       await saveProduction(e, token, id, { metadata: parsed, progress: { step: "publish", updatedAt: new Date().toISOString() } });
-      sendJson(res, { ok: true, message: "发布元信息生成完成" });
+      sendJson(res, {
+        ok: true, message: "发布元信息生成完成", result: parsed,
+        usage: r.usage ? { input: r.usage.prompt_tokens ?? 0, output: r.usage.completion_tokens ?? 0 } : null,
+      });
     } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
     return;
   }
@@ -789,30 +1093,90 @@ async function handleApi(path, res, req) {
     return;
   }
 
-  // 提示词管理（R2 权威 + 进程内存缓存）
-  if (path === "/api/prompts" && req.method === "GET") {
+  // POST /api/audio/guest-voice → 上传嘉宾声线（multipart 转发服务端 guests/:id/voice-sample）
+  //   body: FormData { audio: file, language, transcript }; guestId 从 query 取（path 含 query）
+  if (path.split("?")[0] === "/api/audio/guest-voice" && req.method === "POST") {
     const cred = reqCred(req);
     if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    // 读原始请求体（multipart）
+    const chunks = [];
+    let size = 0;
+    for await (const c2 of req) { chunks.push(c2); size += c2.length; if (size > 25 * 1024 * 1024) { sendJson(res, { ok: false, error: "文件过大（>25MB）" }, 413); return; } }
+    const rawBody = Buffer.concat(chunks);
+    const contentType = req.headers["content-type"] || "";
+    const qs = new URL(path, "http://x").searchParams;
+    const guestId = qs.get("guestId");
+    if (!guestId) { sendJson(res, { ok: false, error: "需 guestId" }, 400); return; }
     try {
-      const p = (await getPrompts(cred.env, cred.token)) || { updatedAt: 0 };
-      const prompts = Object.entries(p)
-        .filter(([k, v]) => typeof v === "string" && k !== "updatedAt")
-        .map(([k, v]) => ({ name: k, content: v }));
-      sendJson(res, { ok: true, prompts, updatedAt: p.updatedAt || null });
-    } catch (e) { sendJson(res, { ok: false, error: String((e && e.message) || e) }); }
+      const cfg = await configFor(e);
+      const lib = await loadCliLib();
+      const headers = { "x-lab-env": e, "content-type": contentType };
+      const cookie = getCookieSession(e);
+      if (cookie) headers["cookie"] = cookie;
+      else if (token) headers["authorization"] = "Bearer " + token;
+      const up = await lib.apiFetch(cfg.apiBase + "/v1/editor/guests/" + encodeURIComponent(guestId) + "/voice-sample", {
+        method: "POST", headers, body: rawBody,
+      });
+      const txt = await up.text().catch(() => "");
+      let d = null; try { d = JSON.parse(txt); } catch {}
+      if (!up.ok) { sendJson(res, { ok: false, error: (d && d.error) || ("上传失败 " + up.status + ": " + txt.slice(0, 150)) }, 502); return; }
+      sendJson(res, { ok: true, message: "嘉宾声线已保存", guestId });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
     return;
   }
-  const pm = path.match(/^\/api\/prompts\/([a-zA-Z0-9_-]+)$/);
-  if (pm && req.method === "PUT") {
+
+  // GET /api/audio/host?userId= → 主持人采样音频（转发服务端 samples/host/:userId/audio）
+  // GET /api/audio/guest?platform= → 嘉宾声线音频（转发服务端 samples/guest/:guestId/audio）
+  // 参数均来自投稿数据（detail.userId / detail.guest.id）；服务端读 R2 返回音频流
+  if (path.startsWith("/api/audio/")) {
+    // audio 标签无法带 X-Lab-Env 头——env 从 query 取，会话用服务端 cookie/token
+    const qs = new URL(path, "http://x").searchParams;
+    const env = qs.get("env") || req.headers["x-lab-env"] || null;
+    const auth = req.headers.authorization || "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+    const hasCookie = env ? !!getCookieSession(env) : false;
+    if (!env || (!hasCookie && !token)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const kind = path.replace("/api/audio/", "").split("?")[0];
+    try {
+      let fwd;
+      if (kind === "host") {
+        const userId = qs.get("userId");
+        if (!userId) { sendJson(res, { ok: false, error: "需 userId" }, 400); return; }
+        fwd = "/v1/editor/samples/host/" + encodeURIComponent(userId) + "/audio";
+      } else if (kind === "guest") {
+        const platform = qs.get("platform");
+        if (!platform) { sendJson(res, { ok: false, error: "需 platform" }, 400); return; }
+        fwd = "/v1/editor/samples/guest/" + encodeURIComponent(platform) + "/audio";
+      } else if (kind === "full") {
+        const fid = qs.get("id");
+        if (!fid) { sendJson(res, { ok: false, error: "需 id" }, 400); return; }
+        fwd = "/v1/editor/full/" + encodeURIComponent(fid) + "/audio";
+      } else { sendJson(res, { ok: false, error: "未知音频类型" }, 400); return; }
+      const cfg = await configFor(env);
+      const lib = await loadCliLib();
+      const headers = { "x-lab-env": env };
+      const cookie = getCookieSession(env);
+      if (cookie) headers["cookie"] = cookie;
+      else if (token) headers["authorization"] = "Bearer " + token;
+      else throw new Error("未登录");
+      const up = await lib.apiFetch(cfg.apiBase + fwd, { method: "GET", headers });
+      if (!up.ok) { sendJson(res, { ok: false, error: "音频获取失败 " + up.status }, 502); return; }
+      const buf = Buffer.from(await up.arrayBuffer());
+      const ctype = up.headers.get("content-type") || (kind === "host" ? "audio/webm" : "audio/mpeg");
+      res.writeHead(200, { "content-type": ctype, "cache-control": "private, max-age=300" });
+      res.end(buf);
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // GET /api/prompts/list → 工程提示词字典文件清单（只读展示；编辑在 VSCode，lab 热更新）
+  if (path === "/api/prompts/list") {
     const cred = reqCred(req);
     if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
-    const name = pm[1];
-    const body = await readBody(req);
-    const content = (body && typeof body.content === "string") ? body.content : null;
-    if (content === null) { sendJson(res, { ok: false, error: "需 content 字段" }, 400); return; }
     try {
-      const pushed = await savePrompt(cred.env, cred.token, name, content);
-      sendJson(res, { ok: true, message: "已保存" + (pushed ? "" : "（R2 推送失败，内存保留）") });
+      const { listPrompts } = await import("./lib/prompt.mjs");
+      sendJson(res, { ok: true, files: listPrompts() });
     } catch (e) { sendJson(res, { ok: false, error: String((e && e.message) || e) }); }
     return;
   }

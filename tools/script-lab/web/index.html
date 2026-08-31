@@ -40,14 +40,23 @@
   <div class='wrap' id='designWrap' style='display:none'>
     <span class='back' onclick='backToApp()'>← 返回列表</span>
     <div class='design'>
-      <div class='prompt-list' id='promptList'></div>
+      <div class='prompt-list'>
+        <button class='item active' data-nav='prompts' onclick='switchSettingsTab("prompts")'>提示词</button>
+        <button class='item' data-nav='llm' onclick='switchSettingsTab("llm")'>LLM 配置</button>
+      </div>
       <div class='prompt-edit'>
-        <div class='prompt-edit-head'>
-          <b id='promptName'>—</b>
-          <button class='pg' onclick='savePrompt()'>保存</button>
-          <span id='promptStatus' class='muted'></span>
+        <div class='settings-panel' id='panel-prompts'>
+          <div class='card' style='padding:16px'>
+            <div class='muted' style='font-size:12px;margin-bottom:10px'>提示词是工程文件，直接在 VSCode 中编辑 <span class='mono'>tools/script-lab/prompts/*.json</span>，保存后 git commit 随源码备份；lab 热更新（改文件即生效，无需重启）。</div>
+            <div class='muted mono' style='font-size:12px' id='promptFiles'></div>
+          </div>
         </div>
-        <textarea id='promptEditor' spellcheck='false'></textarea>
+        <div class='settings-panel' id='panel-llm' style='display:none'>
+          <div class='card' style='padding:16px'>
+            <div class='muted' style='font-size:12px;margin-bottom:10px'>LLM 配置在 tools/script-lab/.env（模型 / 温度 / seed），修改后重启 lab server 生效。</div>
+            <div id='llmStatus' class='muted' style='font-size:12px'></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -69,10 +78,53 @@
     </span>
   </div>
 </div>
+<!-- 嘉宾声线上传弹窗 -->
+<div class='modal-overlay' id='guestVoiceModal' style='display:none' onclick='if(event.target===this)closeGuestVoiceModal()'>
+  <div class='modal' style='width:420px'>
+    <div class='modal-head'><b>嘉宾声线</b><button class='modal-close' onclick='closeGuestVoiceModal()'>✕</button></div>
+    <div class='modal-body'>
+      <div class='muted' style='font-size:12px;margin-bottom:8px' id='guestVoiceGuestLabel'>—</div>
+      <label style='display:block;font-size:12px;color:#8a91a0;margin-bottom:4px'>朗读文本（用于声线克隆参考）</label>
+      <textarea id='guestVoiceTranscript' spellcheck='false' style='width:100%;box-sizing:border-box;height:80px;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;padding:8px 10px;font-size:12px;resize:vertical;font-family:ui-monospace,Menlo,monospace' placeholder='输入该声线朗读的参考文本…'></textarea>
+      <label style='display:block;font-size:12px;color:#8a91a0;margin:10px 0 4px'>声音文件（mp3）</label>
+      <input type='file' id='guestVoiceFile' accept='audio/mpeg,audio/mp3' style='font-size:12px;color:#e6e8ee'>
+      <div class='muted' style='font-size:11px;margin-top:4px'>20MB 以内；上传后 TTS 的 guest 段将使用此声线</div>
+    </div>
+    <div class='modal-foot'>
+      <span id='guestVoiceStatus' class='muted' style='font-size:12px'></span>
+      <button class='pg' style='background:#4f8cff;color:#fff;border:0' onclick='submitGuestVoice()'>保存声线</button>
+    </div>
+  </div>
+</div>
+<!-- 音频合成对话框（loading → preview → uploading 状态机） -->
+<div class='modal-overlay' id='mergeModal' style='display:none'>
+  <div class='modal' style='width:540px'>
+    <div class='modal-head'><b id='mergeTitle'>音频合成中…</b><button class='modal-close' id='mergeCloseBtn' onclick='closeMergeModal()' style='display:none'>✕</button></div>
+    <div class='modal-body'>
+      <div id='mergeLoading'>
+        <div class='muted' style='font-size:12px;margin-bottom:8px' id='mergeStepText'>准备中…</div>
+        <div style='background:#151a23;border-radius:6px;height:10px;overflow:hidden'>
+          <div id='mergeBar' style='width:0%;height:100%;background:#4f8cff;transition:width .3s'></div>
+        </div>
+      </div>
+      <div id='mergePreview' style='display:none'>
+        <audio controls style='width:100%;margin-bottom:10px' id='mergePlayer'></audio>
+        <div style='display:flex;justify-content:flex-end;gap:10px'>
+          <button class='pg' onclick='remergeAudio()' id='mergeRemergeBtn'>重新合成</button>
+          <button class='pg' style='background:#4f8cff;color:#fff;border:0' onclick='confirmMergeUpload()' id='mergeConfirmBtn'>确认</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="/js/common.js"></script>
 <script src="/js/login.js"></script>
 <script src="/js/home.js"></script>
+<script src="/vendor/ffmpeg-0.11.js"></script>
+<script src="/js/merge.js"></script>
 <script src="/js/detail.js"></script>
+<script src="/js/llm-box.js"></script>
 <script src="/js/settings.js"></script>
 <script>boot();</script>
 </body>

@@ -11,6 +11,9 @@ import type { AudioStorage } from "../storage";
 import { sendEmail } from "../email/resend";
 import type { Env } from "../config/env";
 
+/** R2 scripts 读取缓存（detail 编辑恢复用；review 写入后清缓存）——避免每次打 R2 */
+const workflowScriptsCache = new Map();
+
 export interface EditorDeps {
   repo: Repos;
   env: Env;
@@ -147,13 +150,18 @@ export function editorRoutes(deps: EditorDeps) {
     const detail = await deps.repo.submissions.getDetail(c.req.param("id")!);
     if (!detail) return c.json({ error: "not_found" }, 404);
     const episodes = await deps.repo.episodes.listBySubmission(detail.id);
-    // 编辑恢复：读 R2 scripts（key 按请求 Host 推导实例，部署稳定）
+    // 编辑恢复：读 R2 scripts（key 按请求 Host 推导实例；内存缓存含 404——避免每次打 R2）
     let reviewScripts = null;
-    try {
-      const instance = (c.req.header("host") || "default").replace(/[.:]/g, "-");
-      const bytes = await deps.storage.get(`workflows/${instance}/${detail.id}.json`).then((r) => r.data).catch(() => null);
-      if (bytes) reviewScripts = (JSON.parse(Buffer.from(bytes).toString("utf-8")).scripts) || null;
-    } catch { /* 无 scripts */ }
+    if (workflowScriptsCache.has(detail.id)) {
+      reviewScripts = workflowScriptsCache.get(detail.id);
+    } else {
+      try {
+        const instance = (c.req.header("host") || "default").replace(/[.:]/g, "-");
+        const bytes = await deps.storage.get(`workflows/${instance}/${detail.id}.json`).then((r) => r.data).catch(() => null);
+        reviewScripts = bytes ? ((JSON.parse(Buffer.from(bytes).toString("utf-8")).scripts) || null) : null;
+        workflowScriptsCache.set(detail.id, reviewScripts);
+      } catch { reviewScripts = null; }
+    }
     return c.json({ ...detail, episodes, reviewScripts });
   }) as unknown as RouteHandler<typeof r2, AuthEnv>);
 
@@ -387,6 +395,45 @@ export function editorRoutes(deps: EditorDeps) {
 
     return c.json({ episodeId: created.id, slug: created.slug, number: created.number, status: "published" }, 201);
   }) as unknown as RouteHandler<typeof r4, AuthEnv>);
+
+  /** 标记投稿为 crafted：节目音频已生成并上传 R2（未发布）。
+   *  状态流：submitted（审核通过）→ crafted（音频就绪）→ published；幂等（已 crafted 可重标） */
+  const rCrafted = createRoute({
+    method: "post",
+    path: "/v1/editor/submissions/:id/crafted",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/submissions/:id/crafted" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(rCrafted, (async (c: Context) => {
+    const id = c.req.param("id")!;
+    const detail = await deps.repo.submissions.getDetail(id);
+    if (!detail) return c.json({ error: "not_found" }, 404);
+    if (detail.status !== "submitted" && detail.status !== "crafted") {
+      return c.json({ error: "invalid_state", detail: "当前状态 " + detail.status + " 无法标记 crafted" }, 409);
+    }
+    await deps.repo.submissions.setStatus(id, "crafted");
+    return c.json({ ok: true, status: "crafted" });
+  }) as unknown as RouteHandler<typeof rCrafted, AuthEnv>);
+
+  /** 成品音频（R2 full/{id}.m4a，播放流）——创作完成后编辑工作台/发布流程直接加载 */
+  const rFullAudio = createRoute({
+    method: "get",
+    path: "/v1/editor/full/:id/audio",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "full audio 流" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(rFullAudio, (async (c: Context) => {
+    const key = "full/" + c.req.param("id") + ".m4a";
+    const bytes = await deps.storage.get(key).then((r) => r.data).catch(() => null);
+    if (!bytes) return c.json({ error: "not_found" }, 404);
+    return new Response(bytes as unknown as BodyInit, {
+      headers: { "Content-Type": "audio/mp4", "Cache-Control": "private, max-age=3600" },
+    });
+  }) as unknown as RouteHandler<typeof rFullAudio, AuthEnv>);
 
   // ---- 已发布节目（编辑本地查看/微调） ----
 
@@ -761,14 +808,45 @@ export function editorRoutes(deps: EditorDeps) {
           title: typeof result.title === "string" ? result.title : null,
           updatedAt: Date.now(),
         }), "utf-8")));
+        workflowScriptsCache.delete(id);   // 清 detail 的 scripts 缓存
       } catch { /* R2 写入失败不阻塞审核 */ }
     }
     return c.json({ ok: true, rejected, message: rejected ? "已标注审核不通过并通知投稿人" : "创作审核通过，脚本已入库" });
   }) as unknown as RouteHandler<typeof rReviewPost, AuthEnv>);
 
+  // ===== 保存手工修改的 scripts（编辑在创作面板改脚本 → 更新 R2 workflow + 清缓存）=====
+  const rScriptsPut = createRoute({
+    method: "put",
+    path: "/v1/editor/submissions/:id/scripts",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "保存脚本（body { scripts: [...] }）" },
+      400: { content: { "application/json": { schema: Err } }, description: "scripts 缺失" },
+    },
+  });
+  app.openapi(rScriptsPut, (async (c: Context) => {
+    const id = c.req.param("id")!;
+    const body = (await c.req.json().catch(() => null)) as { scripts?: unknown } | null;
+    const scripts = body && Array.isArray(body.scripts) ? body.scripts : null;
+    if (!scripts) return c.json({ error: "scripts_required" }, 400);
+    const instance = (c.req.header("host") || "default").replace(/[.:]/g, "-");
+    const key = `workflows/${instance}/${id}.json`;
+    // 保留原 title，只更新 scripts
+    let title = null;
+    try {
+      const old = await deps.storage.get(key).then((r) => r.data).catch(() => null);
+      if (old) title = JSON.parse(Buffer.from(old).toString("utf-8")).title ?? null;
+    } catch {}
+    await deps.storage.put(key, new Uint8Array(Buffer.from(JSON.stringify({
+      id, instance, scripts, title, updatedAt: Date.now(),
+    }), "utf-8")));
+    workflowScriptsCache.delete(id);   // 清 detail 的 scripts 缓存
+    return c.json({ ok: true, scripts: scripts.length });
+  }) as unknown as RouteHandler<typeof rScriptsPut, AuthEnv>);
+
+
   // ===== 编辑 R2 存储读写（workflows/prompts/dialogues——多端经服务端统一入库，避免不同步）=====
   // key 前缀白名单，防越权覆盖音频/封面等对象
-  const STORAGE_PREFIXES = ["workflows/", "prompts/", "dialogues/"];
+  const STORAGE_PREFIXES = ["workflows/", "prompts/", "dialogues/", "full/"];
   const storageKeyOk = (key: string) => typeof key === "string" && STORAGE_PREFIXES.some((p) => key.startsWith(p)) && !key.includes("..");
   const stGet = createRoute({
     method: "post",
@@ -800,7 +878,11 @@ export function editorRoutes(deps: EditorDeps) {
     const key = typeof body?.key === "string" ? body.key : "";
     const content = typeof body?.content === "string" ? body.content : "";
     if (!storageKeyOk(key)) return c.json({ error: "invalid_key" }, 400);
-    await deps.storage.put(key, new Uint8Array(Buffer.from(content, "utf-8")));
+    // content 支持 "b64:" 前缀 → base64 解码存二进制（full audio 等音频对象）
+    const bytes = content.startsWith("b64:")
+      ? new Uint8Array(Buffer.from(content.slice(4), "base64"))
+      : new Uint8Array(Buffer.from(content, "utf-8"));
+    await deps.storage.put(key, bytes);
     return c.json({ ok: true });
   }) as unknown as RouteHandler<typeof stPut, AuthEnv>);
 

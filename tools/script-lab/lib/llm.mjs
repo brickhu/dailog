@@ -11,6 +11,7 @@ export async function complete(config, messages, { stream = true, onDelta, signa
   };
   if (config.maxTokens) body.max_tokens = config.maxTokens;
   if (config.seed !== undefined) body.seed = config.seed; // 可复现性（provider 支持时生效；不支持会忽略或报错，去掉即可）
+  if (config.thinking !== undefined) body.thinking = config.thinking; // deepseek-v4 思考模式开关（{type:'disabled'} 直出，防推理耗尽致空响应）
 
   let res;
   try {

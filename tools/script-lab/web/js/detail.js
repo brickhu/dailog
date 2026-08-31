@@ -10,6 +10,12 @@ async function openDetail(id){
   try{
     const d=await j('/api/detail/'+id);
     const dt=d.detail||{};
+    // 音色采样（投稿卡展示）：主持人采样（detail.userId）+ 嘉宾声线（guest.id）
+    const hostSampleV = (dt && dt.voiceSamples && dt.voiceSamples[0]) || null;
+    const hostUserIdV = (dt && dt.userId) || null;
+    const guestIdV = (dt && dt.guest && dt.guest.id) || null;
+    const hostNameV = (dt && dt.host && (dt.host.callName || (dt.host.personaInfo && dt.host.personaInfo.displayName))) || '主持人';
+    const guestNameV = (dt && dt.guest && dt.guest.name) || '嘉宾';
     const dc=dt.dialogueCount||null;
     const collected=dt.collected;
     const rawStatus = dt.status || '?';
@@ -33,19 +39,43 @@ async function openDetail(id){
     if (reviewStatus === 'rejected') {
       createStatus = `<span style='color:#f85149'>审核被拒，对话不满足创作要求</span>`;
       createBody = `<div class='muted' style='white-space:pre-line'>拒审原因：${esc(ps.rejection || '（无）')}</div>`;
+    } else if (rawStatus === 'crafted') {
+      // 节目音频已生成并上传 R2（未发布）——创作完成态
+      createStatus = `<span style='color:#3fb950'>✅ 创作完成</span>`;
+      createBody = renderCraftedBody(id, (ps && ps.scriptList) || []);
     } else if (reviewStatus === 'approved') {
       createStatus = `<span style='color:#d29922'>创作中</span>`;
       const scripts = (ps && ps.scriptList) || [];
-      createBody = scripts.length
-        ? scripts.map((s, si) => `<div style='margin-bottom:10px'><div class='who' style='font-size:11px;color:#d29922;margin-bottom:4px'>脚本 ${si + 1}（${(s.segments||[]).length} 段）</div>${(s.segments||[]).map(seg => `<div class='seg'><span class='who'>${esc(seg.speaker)}</span><div>${esc(seg.text)}</div></div>`).join('')}</div>`).join('')
-        : `<div class='muted'>已创作，脚本列表为空</div>`;
+      // 渲染前预加载该投稿全部 seg 语音缓存（IndexedDB → 内存）——必须在 scriptCardsHtml/renderSegsHtml 构造之前，否则缓存判断落空显示 🔊
+      if (typeof preloadSegAudioCache === 'function') await preloadSegAudioCache(id, scripts);
+      const scriptCardsHtml = scripts.length
+        ? scripts.map((s, si) => {
+            const segsAllAudio = (s.segments || []).length > 0 && (s.segments || []).every(seg => !!segAudioGet(segKey(id, seg)));
+            return `<div style='margin-bottom:10px'>`
+              + `<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:4px'>`
+              +   `<div style='display:flex;align-items:center;gap:8px'><span class='who' style='font-size:11px;color:#d29922'>脚本 ${si + 1}（${(s.segments||[]).length} 段）</span><button class='pg polish-btn' onclick='polishScript("${id}", ${si})' data-si='${si}'>打磨语感</button></div>`
+              +   `<span style='display:flex;align-items:center;gap:8px'>`
+              +     `<label class='muted' style='font-size:11px;display:flex;align-items:center;gap:3px;cursor:pointer'><input type='checkbox' class='seg-select-all' data-si='${si}' onchange='toggleSelectAllSegs(${si}, this.checked)'>全选</label>`
+              +     `<button class='pg seg-batch-tts' onclick='batchGenSegAudio("${id}", ${si})' data-si='${si}' disabled>批量生成语音</button>`
+              +   `</span>`
+              + `</div>`
+              + `<div class='script-segs' data-si='${si}'>${renderSegsHtml(s, id, si)}</div>`
+              + `<div style='display:flex;justify-content:flex-end;margin-top:8px'><button class='pg seg-merge-btn' data-si='${si}' onclick='openMergeDialog("${id}", ${si})' ${segsAllAudio ? '' : 'disabled'} title='${segsAllAudio ? '拼接全部段为完整 m4a' : '需全部段生成语音后才可合成'}' style='font-size:12px'>🎬 语音合成</button></div>`
+              + `</div>`;
+          }).join('')
+        : '';
+      const fullMeta = (typeof loadFullMeta === 'function') ? loadFullMeta(id) : null;
+      // 确认上传成功（done）→ 创作完成态（R2 播放）；未确认 → 正常创作态（合成按钮可用）
+      createBody = (fullMeta && fullMeta.done)
+        ? renderCraftedBody(id, scripts)
+        : (scriptCardsHtml ? scriptCardsHtml : `<div class='muted'>已创作，脚本列表为空</div>`);
     } else if (rawStatus === 'published') {
       // 已发布节目不再创作
       createStatus = `<span class='muted'>已发布</span>`;
       createBody = `<div class='muted'>节目已发布</div>`;
     } else {
-      createStatus = `<button class='ac-act' id='btnReview' onclick='openReviewPreview("${id}")'>开始创作</button>`;
-      createBody = `<div class='muted'>尚未创作——点击「开始创作」审题</div>`;
+      createStatus = `<button class='ac-act' id='btnReview' onclick='openReviewDrawer("${id}")'>开始创作</button>`;
+      createBody = '';   // 未审核：单行卡片（仅头部按钮，无 body）
     }
     wrap.innerHTML=`
       <span class='back' onclick='showList()'>← 返回列表</span>
@@ -60,6 +90,7 @@ async function openDetail(id){
               <div class='detail-row'><span class='k'>投稿人</span><span class='v'>${esc(dt.host?.personaInfo?.displayName||'?')} · ${esc(dt.userEmail||'')}</span></div>
               <div class='detail-row'><span class='k'>称呼</span><span class='v'>${esc(dt.host?.callName||'（无，用「主持人」）')}</span></div>
               <div class='detail-row'><span class='k'>建议</span><span class='v'>${esc(dt.suggestion||'—')}</span></div>
+              <div class='detail-row'><span class='k'>音色采样</span><span class='v'>${hostSampleV && hostUserIdV ? `<button class='sample-play' data-src="/api/audio/host?env=${encodeURIComponent(labEnv||'')}&userId=${encodeURIComponent(hostUserIdV)}" onclick='toggleSampleAudio(this)'>▶</button><span style='font-size:12px'>${esc(hostNameV)}</span>` : `<span class='muted' style='font-size:12px'>主持人无声样</span>`}&nbsp;&nbsp;&nbsp;${guestIdV ? `<button class='sample-play' data-src="/api/audio/guest?env=${encodeURIComponent(labEnv||'')}&platform=${encodeURIComponent(guestIdV)}" onclick='toggleSampleAudio(this)'>▶</button><span style='font-size:12px'>${esc(guestNameV)}</span> <button class='gv-icon-btn' title='管理声线' onclick='openGuestVoiceModal("${guestIdV}", "${esc(guestNameV)}")'>⚙</button>` : `<span class='muted' style='font-size:12px'>嘉宾无声线</span> <button class='gv-icon-btn' title='配置声线' onclick='openGuestVoiceModal("${guestIdV || ''}", "${esc(guestNameV)}")'>🎙</button>`}</span></div>
             </div>
           </div>
         </div>
@@ -67,18 +98,23 @@ async function openDetail(id){
           <div class='ac-head ${collectedOK?'':'muted'}' ${collectHeadClick}><h3 style='margin:0;font-size:14px'>采集</h3><span class='ac-status'>${collectStatus}</span>${collectArrow}</div>
           ${collectBodyHtml}
         </div>
-        ${collectedOK?`<div class='ac-card'>
+        ${collectedOK?`<div class='ac-card ${reviewStatus?'':'open'}'>
           <div class='ac-head ${reviewStatus?'':'muted'}' ${reviewStatus?"onclick='toggleCard(this)'":''}><h3 style='margin:0;font-size:14px'>创作</h3><span class='ac-status'>${createStatus}</span>${reviewStatus?'<span class=\'ac-arrow\'>▾</span>':''}</div>
-          <div class='ac-body'>${createBody}</div>
+          ${createBody?`<div class='ac-body'>${createBody}</div>`:''}
         </div>`:''}
-        ${showPublish?`<div class='ac-card'>
+        ${reviewStatus==='approved'?`<div class='ac-card'>
           <div class='ac-head' onclick='toggleCard(this)'><h3 style='margin:0;font-size:14px'>发布</h3><span class='ac-status muted'>—</span><span class='ac-arrow'>▾</span></div>
-          <div class="ac-body"><button class="ac-act" onclick='runStep("publish","生成元信息")'>生成元信息</button></div>
+          <div class="ac-body"><div id="metaBox"></div></div>
         </div>`:''}
       </div>
       ${d.progress?`<div class='card' style='margin-top:12px'><div class='muted' style='font-size:12px'>进度：${esc(d.progress.step)} · ${esc(new Date(d.progress.updatedAt).toLocaleString())}</div></div>`:''}`;
+    // dialogue 存浏览器缓存（sessionStorage）——本页数据源，不再依赖本地/重复请求
+    if (d.dialogue) { try { sessionStorage.setItem('dlg-'+id, JSON.stringify(d.dialogue)); } catch {} }
     if (collectedOK) loadCollectBody(id, dt.status==='rejected', d.dialogue);
     if (!dt.title) loadR2Title(id);
+    // 发布卡：挂载通用 LLM 调用组件（预览 messages+config 可编辑 → 发送 → 收缩结果）
+    if (reviewStatus === 'approved' && document.getElementById('metaBox')) mountMetaBox(id);
+    if (reviewStatus === 'approved' && typeof fillFullPlayer === 'function') fillFullPlayer(id);
   }catch(e){
     wrap.innerHTML='<div class="err">加载失败: '+esc(e.message)+'</div>';
   }
@@ -151,6 +187,16 @@ function restoreDrawerState(){
   else if (drawerState === 'error') setDrawerButtons({ close: false, retry: true, confirm: false, send: false });
   else if (drawerState === 'result') setDrawerButtons({ close: false, retry: true, confirm: true, confirmText: '确认', send: false });
 }
+// 打开审题 drawer：内嵌两个 llm-box（评分 → 脚本），审题逻辑（round1/round2/confirm）不变
+function openReviewDrawer(id){
+  if (location.pathname.slice(1) !== id) history.pushState(null, '', '/' + id);
+  const body = document.getElementById('drawerBody');
+  body.innerHTML = '<div style="padding:4px 2px;display:flex;flex-direction:column;gap:8px"><div id="scoreBox"></div><div id="scriptBox"></div></div>';
+  openDrawerOverlay();
+  setDrawerButtons({ close: false, retry: false, confirm: false, send: false });
+  mountReviewBoxes(id);
+}
+
 async function openReviewPreview(id){
   if (reviewing) return;
   // 同投稿且已加载过 → 直接重开，恢复原状态（不重新 fetch，保留编辑内容/审核结果）
@@ -177,14 +223,19 @@ async function openReviewPreview(id){
 function showReviewPreview(p){
   drawerState = 'preview';
   const body = document.getElementById('drawerBody');
-  const ta = 'width:100%;box-sizing:border-box;height:130px;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;padding:8px 10px;font-size:12px;font-family:ui-monospace,Menlo,monospace;resize:vertical';
+  const ta = 'width:100%;box-sizing:border-box;height:110px;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;padding:8px 10px;font-size:12px;font-family:ui-monospace,Menlo,monospace;resize:vertical';
+  const taS = 'width:100%;box-sizing:border-box;height:140px;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;padding:8px 10px;font-size:12px;font-family:ui-monospace,Menlo,monospace;resize:vertical';
   const inp = 'width:80px;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:4px;padding:4px 6px;font-size:12px';
   body.innerHTML = `
-    <div style='font-size:13px;font-weight:600;margin-bottom:10px'>LLM 调用预览（可修改后发送）</div>
-    <div class='muted' style='font-size:12px;margin-bottom:4px'>系统提示词</div>
-    <textarea id='previewSystem' spellcheck='false' style='${ta}'>${esc(p.system)}</textarea>
-    <div class='muted' style='font-size:12px;margin:10px 0 4px'>用户提示词</div>
-    <textarea id='previewUser' spellcheck='false' style='${ta}'>${esc(p.user)}</textarea>
+    <div style='font-size:13px;font-weight:600;margin-bottom:10px'>LLM 调用预览（两轮对话，可修改后发送）</div>
+    <div class='muted' style='font-size:12px;margin-bottom:4px'>① 第1轮 系统提示词（打分规则）</div>
+    <textarea id='previewSystem' spellcheck='false' style='${taS}'>${esc(p.system)}</textarea>
+    <div class='muted' style='font-size:12px;margin:10px 0 4px'>① 第1轮 用户提示词（仅对话 json）</div>
+    <textarea id='previewUser1' spellcheck='false' style='${ta}'>${esc(p.user1)}</textarea>
+    <div class='muted' style='font-size:12px;margin:10px 0 4px'>② 第2轮 脚本规则（assistant 层，score≥6.5 才用）</div>
+    <textarea id='previewScriptRule' spellcheck='false' style='${taS}'>${esc(p.scriptRule)}</textarea>
+    <div class='muted' style='font-size:12px;margin:10px 0 4px'>② 第2轮 用户参数（suggestion / host / guests）</div>
+    <textarea id='previewUser2' spellcheck='false' style='${ta}'>${esc(p.user2)}</textarea>
     <div style='display:flex;gap:24px;margin-top:12px;align-items:center'>
       <span class='muted' style='font-size:12px'>温度 <input id='previewTemp' type='number' step='0.1' min='0' max='2' value='${p.temperature}' style='${inp}'></span>
       <span class='muted' style='font-size:12px'>seed <input id='previewSeed' type='number' value='${p.seed ?? ''}' style='width:110px;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:4px;padding:4px 6px;font-size:12px'></span>
@@ -196,10 +247,12 @@ function sendReview(){
   if (!currentReview) return;
   const id = currentReview.id;
   const system = document.getElementById('previewSystem').value;
-  const user = document.getElementById('previewUser').value;
+  const user1 = document.getElementById('previewUser1').value;
+  const scriptRule = document.getElementById('previewScriptRule').value;
+  const user2 = document.getElementById('previewUser2').value;
   const temperature = document.getElementById('previewTemp').value;
   const seed = document.getElementById('previewSeed').value;
-  startReview(id, { system, user, temperature, seed });
+  startReview(id, { system, user1, scriptRule, user2, temperature, seed });
 }
 async function startReview(id, opts = {}){
   if (reviewing) return;
@@ -212,6 +265,14 @@ async function startReview(id, opts = {}){
   setDrawerButtons({ close: true, retry: false, confirm: false, send: false });
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), 100000);   // LLM 审题超时兜底（100s）→ 状态2
+  // footer 实时轮询 LLM 状态（诊断：注入/生成/解析各阶段）
+  const pollTimer = setInterval(async () => {
+    try {
+      const st = await j('/api/status/review?id=' + encodeURIComponent(id));
+      const u = document.getElementById('drawerUsage');
+      if (u && st && st.state) u.textContent = (st.state.phase === 'done' ? '' : st.state.phase + ': ') + (st.state.detail || '');
+    } catch {}
+  }, 600);
   try{
     const d = await j('/api/run/review', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({id, ...opts}), signal: ac.signal});
     currentReview = { id, result: d.result, usage: d.usage || null, opts };
@@ -221,6 +282,7 @@ async function startReview(id, opts = {}){
     else showReviewError(e.message);   // 状态2：错误原因 + 重试
   }finally{
     clearTimeout(timer);
+    clearInterval(pollTimer);
     reviewing = false;
   }
 }
@@ -303,6 +365,581 @@ function retryReview(){
   if (!currentReview) return;
   // 不关 drawer，用原输入重新审题（进入状态1）
   startReview(currentReview.id, currentReview.opts || {});
+}
+
+// 批量生成语音：多选/全选 → 逐段生成；生成期间禁用所有播放/重新生成按钮
+let batchTtsRunning = false;
+function toggleSelectAllSegs(si, checked){
+  document.querySelectorAll('.seg-check[data-si="' + si + '"]').forEach(c => { c.checked = checked; });
+  updateBatchTtsBtn(si);
+}
+// 批量生成按钮可用态：有勾选才可点
+function updateBatchTtsBtn(si){
+  const btn = document.querySelector('.seg-batch-tts[data-si="' + si + '"]');
+  if (!btn) return;
+  const anyChecked = document.querySelectorAll('.seg-check[data-si="' + si + '"]:checked').length > 0;
+  btn.disabled = !anyChecked || batchTtsRunning;
+}
+function batchGenSegAudio(id, si){
+  // 惰性清理：批量生成开始时清一次过期缓存（避免循环内重复遍历）
+  if (typeof clearExpiredSegAudio === 'function') clearExpiredSegAudio();
+  const checks = [...document.querySelectorAll('.seg-check[data-si="' + si + '"]')].filter(c => c.checked);
+  if (!checks.length) { notice('请先勾选要生成的片段', 'error'); return; }
+  if (batchTtsRunning) return;
+  batchTtsRunning = true;
+  // 生成期间：禁用所有播放/重新生成按钮 + 打磨语感按钮
+  document.querySelectorAll('.seg-tts-btn').forEach(b => { b.disabled = true; });
+  document.querySelectorAll('.polish-btn').forEach(b => { b.disabled = true; });
+  const btn = document.querySelector('.seg-batch-tts[data-si="' + si + '"]');
+  if (btn) { btn.disabled = true; btn.textContent = '生成中 ' + 0 + '/' + checks.length + '...'; }
+  const indices = checks.map(c => Number(c.dataset.segi));
+  let done = 0;
+  (async () => {
+    for (const segi of indices) {
+      // 待生成条目：side 整体替换为单个 ⌛（无 ▶↻）
+      renderSegBusy(id, si, segi);
+      try {
+        const d = await j('/api/run/tts-seg', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, scriptIndex: si, segIndex: segi }) });
+        const k = segRowKey(id, si, segi);
+        const saved = k ? await segAudioSet(k, { audio: d.audio, mime: d.mime || 'audio/mpeg', at: Date.now() }) : false;
+        // 完成：持久化成功 → ▶↻；失败 → ✗ + 重试（刷新会丢）
+        if (saved) renderSegAudioBtn(id, si, segi);
+        else { renderSegAudioFail(id, si, segi); notice('片段 ' + (segi + 1) + ' 已生成但未保存（存储失败）', 'error'); }
+      } catch (e) {
+        notice('片段 ' + (segi+1) + ' 生成失败: ' + e.message, 'error');
+        renderSegAudioBtn(id, si, segi);   // 失败：恢复为 🔊 生成（无缓存时）
+      }
+      done++;
+      if (btn) btn.textContent = '生成中 ' + done + '/' + checks.length + '...';
+    }
+    batchTtsRunning = false;
+    document.querySelectorAll('.seg-tts-btn').forEach(b => { b.disabled = false; });
+    document.querySelectorAll('.polish-btn').forEach(b => { b.disabled = false; });
+    // 恢复批量按钮（无勾选则禁用）
+    if (btn) { btn.textContent = '批量生成语音'; updateBatchTtsBtn(si); }
+    if (typeof updateMergeBtn === 'function') updateMergeBtn(id, si);
+    // 清除勾选
+    document.querySelectorAll('.seg-check[data-si="' + si + '"]').forEach(c => { c.checked = false; });
+    updateBatchTtsBtn(si);
+    notice('✓ 批量生成完成 ' + done + '/' + checks.length + ' 段', 'success');
+  })();
+}
+
+// 单段语音：生成/播放/重新生成（音频缓存：内存 Map + localStorage，跨会话持久）
+// 缓存 key 与段内容 1:1 绑定：hash(speaker|text) —— 内容不变则命中（段落增删/下标变化不影响），内容改动自动失效
+const segAudioCache = {};   // segKey → { audio: base64, mime, at }
+function segHash(speaker, text){
+  const s = (speaker || '') + '|' + (text || '');
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+function segKey(id, seg){ return id + '-' + segHash(seg.speaker, seg.text); }
+// 从 DOM row 取该段 segKey（渲染时已算好存 data-segkey）
+function segRowKey(id, si, segi){
+  const row = document.querySelector('.seg-row[data-si="' + si + '"][data-segi="' + segi + '"]');
+  return row ? row.dataset.segkey : null;
+}
+function segAudioGet(key){
+  // 只查内存缓存（写入在 IndexedDB；渲染前由 preloadSegAudioCache 批量读入内存——同步 API 无法直接读 IDB，localStorage 已不再写入）
+  return segAudioCache[key] || null;
+}
+function segAudioSet(key, data){
+  segAudioCache[key] = data;   // 内存先写（本页可播放）
+  // IndexedDB 持久化（localStorage 5MB 上限，长段 TTS 单段就超——seg 缓存存 IndexedDB）
+  // 返回是否持久化成功：失败时 UI 显示 ✗ + 重试（刷新后会丢，不显示可播放态）
+  return idbOpen().then(db => new Promise((res) => {
+    const tx = db.transaction('audios', 'readwrite');
+    tx.objectStore('audios').put(data, 'seg-audio-' + key);
+    tx.oncomplete = () => res(true);
+    tx.onerror = () => res(false);
+    tx.onabort = () => res(false);
+  })).catch(() => false);
+}
+// 节目发布后批量清除该节目语音缓存（localStorage + 内存 Map）
+function clearSegAudioCache(id){
+  const prefix = 'seg-audio-' + id + '-';
+  try {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf(prefix) === 0) keys.push(k);
+    }
+    keys.forEach(k => localStorage.removeItem(k));
+  } catch {}
+  // IndexedDB：删除该投稿全部 seg 缓存（seg-audio-{id}- 前缀）
+  try {
+    idbOpen().then(db => {
+      const tx = db.transaction('audios', 'readwrite');
+      const store = tx.objectStore('audios');
+      const rq = store.getAllKeys();
+      rq.onsuccess = () => {
+        (rq.result || []).filter(k => typeof k === 'string' && k.indexOf(prefix) === 0).forEach(k => store.delete(k));
+      };
+    }).catch(() => {});
+  } catch {}
+  Object.keys(segAudioCache).forEach(k => { if (k.indexOf(id + '-') === 0) delete segAudioCache[k]; });
+}
+// 生成语音：调用 /api/run/tts-seg → 缓存 → 按钮变「播放 + 重新生成」
+async function genSegAudio(id, si, segi){
+  if (batchTtsRunning) return;
+  // 惰性清理：生成时顺带清除过期的 IndexedDB 语音缓存（不阻塞生成）
+  if (typeof clearExpiredSegAudio === 'function') clearExpiredSegAudio();
+  const btn = document.querySelector('.seg-tts-btn[data-si="' + si + '"][data-segi="' + segi + '"]');
+  if (btn && btn.dataset.generating) return;
+  if (btn) { btn.dataset.generating = '1'; btn.textContent = '⏳'; btn.disabled = true; }
+  try {
+    const d = await j('/api/run/tts-seg', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, scriptIndex: si, segIndex: segi }) });
+    const k = segRowKey(id, si, segi);
+    const saved = k ? await segAudioSet(k, { audio: d.audio, mime: d.mime || 'audio/mpeg', at: Date.now() }) : false;
+    if (saved) {
+      renderSegAudioBtn(id, si, segi);
+      if (typeof updateMergeBtn === 'function') updateMergeBtn(id, si);
+    } else {
+      // 已生成但未持久化：✗ + 重试（刷新会丢，不显示可播放态）
+      renderSegAudioFail(id, si, segi);
+      notice('⚠ 语音已生成但未保存（存储失败），请点 ✗ 重试', 'error');
+    }
+  } catch (e) {
+    if (btn) { btn.textContent = '🔊'; btn.disabled = false; btn.title = '生成失败: ' + e.message; }
+    notice('✗ 语音生成失败: ' + e.message, 'error');
+  } finally {
+    if (btn) delete btn.dataset.generating;
+  }
+}
+// 生成成功但未持久化（IndexedDB 写入失败）：按钮显示 ✗ + 重试，不显示可播放态（刷新后会丢）
+function renderSegAudioFail(id, si, segi){
+  const side = document.querySelector('.seg-row[data-si="' + si + '"][data-segi="' + segi + '"] .seg-tts-side');
+  if (!side) return;
+  const btn = side.querySelector('.seg-tts-btn');
+  if (btn) { btn.textContent = '✗'; btn.disabled = false; btn.title = '未保存（存储失败），点击重试'; btn.onclick = () => genSegAudio(id, si, segi); }
+}
+
+// 渲染语音按钮状态：无缓存 → 🔊生成；有缓存 → ▶播放 + ↻重新生成
+// 生成中：side 整体替换为单个 ⌛（无 ▶↻）
+function renderSegBusy(id, si, segi){
+  const side = document.querySelector('.seg-row[data-si="' + si + '"][data-segi="' + segi + '"] .seg-tts-side');
+  if (!side) return;
+  side.innerHTML = '<button class="seg-tts-btn" title="生成中" disabled>⌛</button>';
+}
+
+function renderSegAudioBtn(id, si, segi){
+  const side = document.querySelector('.seg-row[data-si="' + si + '"][data-segi="' + segi + '"] .seg-tts-side');
+  if (!side) return;
+  const btn = side.querySelector('.seg-tts-btn');
+  if (!btn) return;
+  const key = segRowKey(id, si, segi);
+  const cached = segAudioGet(key);
+  if (cached) {
+    // 播放 + 重新生成（并排小按钮）
+    const playingThis = playingSegKey === key;
+    btn.outerHTML = `<span class='seg-tts-group'>`
+      + `<button class='seg-tts-btn' onclick='playSegAudio("${id}", ${si}, ${segi})' title='${playingThis ? '暂停' : '播放'}'>${playingThis ? '⏸' : '▶'}</button>`
+      + `<button class='seg-tts-btn' onclick='regenSegAudio("${id}", ${si}, ${segi})' title='重新生成'>↻</button>`
+      + `</span>`;
+    return;
+  } else {
+    btn.textContent = '🔊'; btn.title = '生成语音'; btn.disabled = false;
+    btn.onclick = () => genSegAudio(id, si, segi);
+  }
+}
+// 播放/暂停切换（单例 audio；播放中该段图标 ⏸，再点暂停回 ▶）
+let segAudioEl = null;
+let playingSegKey = null;
+function playSegAudio(id, si, segi){
+  if (batchTtsRunning) return;
+  const key = segRowKey(id, si, segi);
+  if (!key) return;
+  const cached = segAudioGet(key);
+  if (!cached) return;
+  if (!segAudioEl) segAudioEl = new Audio();
+  // 若正在播放该段 → 暂停
+  if (playingSegKey === key && !segAudioEl.paused) {
+    segAudioEl.pause();
+    playingSegKey = null;
+    updateSegPlayIcon(si, segi, false);
+    return;
+  }
+  // 切换新段（停止上一个，DOM 反查其 si/segi 恢复图标）
+  if (playingSegKey && playingSegKey !== key) {
+    const prevRow = document.querySelector('.seg-row[data-segkey="' + playingSegKey + '"]');
+    if (prevRow) updateSegPlayIcon(prevRow.dataset.si, prevRow.dataset.segi, false);
+  }
+  segAudioEl.src = 'data:' + (cached.mime || 'audio/mpeg') + ';base64,' + cached.audio;
+  segAudioEl.onended = () => { if (playingSegKey === key) { playingSegKey = null; updateSegPlayIcon(si, segi, false); } };
+  segAudioEl.onerror = () => { if (playingSegKey === key) { playingSegKey = null; updateSegPlayIcon(si, segi, false); } };
+  segAudioEl.play().catch(() => {});
+  playingSegKey = key;
+  updateSegPlayIcon(si, segi, true);
+}
+// 更新该段播放按钮图标（▶播放 / ⏸暂停）
+function updateSegPlayIcon(si, segi, playing){
+  const grp = document.querySelector('.seg-row[data-si="' + si + '"][data-segi="' + segi + '"] .seg-tts-group');
+  if (grp) {
+    const playBtn = grp.querySelector('button:first-child');
+    if (playBtn) { playBtn.textContent = playing ? '⏸' : '▶'; playBtn.title = playing ? '暂停' : '播放'; }
+  }
+}
+// 重新生成（清缓存再生成）
+function regenSegAudio(id, si, segi){
+  const k = segRowKey(id, si, segi);
+  if (!k) return;
+  delete segAudioCache[k];
+  try { localStorage.removeItem('seg-audio-' + k); } catch {}
+  try {
+    idbOpen().then(db => {
+      const tx = db.transaction('audios', 'readwrite');
+      tx.objectStore('audios').delete('seg-audio-' + k);
+    }).catch(() => {});
+  } catch {}
+  genSegAudio(id, si, segi);
+}
+
+// 渲染单个脚本的 segs HTML（openDetail 与打磨局部刷新共用）
+function renderSegsHtml(script, id, si){
+  const segs = (script && script.segments) || [];
+  const gapExprs = (typeof loadGapExprs === 'function') ? loadGapExprs(id, segs.length) : [];
+  return segs.map((seg, segi) => `<div class='seg-row' data-si='${si}' data-segi='${segi}' data-segkey='${segKey(id, seg)}'>`
+    + `<input type='checkbox' class='seg-check' data-si='${si}' data-segi='${segi}' onchange='updateBatchTtsBtn(${si})' style='align-self:center;flex-shrink:0'>`
+    + `<div class='script-seg seg-${seg.speaker === 'guest' ? 'guest' : 'host'}'>`
+      + `<div class='script-seg-head'><span class='who who-${seg.speaker === 'guest' ? 'guest' : 'host'}'>${esc(seg.speaker)}</span><span>`
+      + `<button class='seg-edit-btn' onclick='toggleSegEdit("${id}", ${si}, ${segi})'>编辑</button></span></div>`
+      + `<div class='script-seg-view' id='sgsv-${id}-${si}-${segi}'>${esc(seg.text)}</div>`
+      + `<div class='script-seg-edit' id='sgse-${id}-${si}-${segi}' style='display:none'>`
+        + `<textarea class='seg-ta' spellcheck='false'>${esc(seg.text)}</textarea>`
+        + `<div style='margin-top:6px;display:flex;gap:8px;justify-content:flex-end'>`
+          + `<button class='pg seg-save-btn' data-si='${si}' data-segi='${segi}' onclick='saveSegEdit("${id}", ${si}, ${segi})'>保存</button>`
+          + `<button class='pg seg-cancel-btn' data-si='${si}' data-segi='${segi}' onclick='cancelSegEdit("${id}", ${si}, ${segi})'>取消</button>`
+        + `</div>`
+      + `</div>`
+    + `</div>`
+    + `<div class='seg-tts-side'>`
+      + (segAudioGet(segKey(id, seg))
+          ? `<span class='seg-tts-group'><button class='seg-tts-btn' onclick='playSegAudio("${id}", ${si}, ${segi})' title='播放'>▶</button><button class='seg-tts-btn' onclick='regenSegAudio("${id}", ${si}, ${segi})' title='重新生成'>↻</button></span>`
+          : `<button class='seg-tts-btn' data-si='${si}' data-segi='${segi}' onclick='genSegAudio("${id}", ${si}, ${segi})' title='生成语音'>🔊</button>`)
+    + `</div>`
+    + `</div>`
+    + (segi < segs.length - 1 ? gapBubbleHtml(id, si, segi, gapExprs[segi] || defaultGapExpr()) : '')).join('');
+}
+
+// 创作成功预览态：仅显示 segs + full audio 播放器（合成后配置锁定）
+function renderPreviewBody(id, scripts, fullMeta){
+  const script = scripts[fullMeta.scriptIndex] || scripts[0] || { segments: [] };
+  const segs = script.segments || [];
+  const rows = segs.map((seg, i) => `<div class='script-seg seg-${seg.speaker === 'guest' ? 'guest' : 'host'}' style='margin-bottom:6px;padding:8px 10px'><span class='who who-${seg.speaker === 'guest' ? 'guest' : 'host'}'>${esc(seg.speaker)}</span> <span style='font-size:13px'>${esc(seg.text)}</span></div>`).join('');
+  return `<div style='margin-bottom:8px'><span style='color:#3fb950'>✓ 语音合成完成</span><span class='muted' style='font-size:12px'>（${segs.length} 段 · ${(fullMeta.size / 1024 / 1024).toFixed(1)}MB · 间隔配置已锁定）</span></div>`
+    + `<div style='margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap'>`
+    + `<button class='pg' onclick='retryFullUpload(\"${id}\")' style='font-size:12px' ${fullMeta.r2Key ? "disabled title='已上传 R2'" : "title='R2 上传失败或未上传，重试'"}'>⬆ 重新上传 R2</button>`
+    + `<button class='pg' onclick='resetFullAudio(\"${id}\")' style='font-size:12px'>🔄 重新合成</button>`
+    + `</div>`
+    + `<audio controls style='width:100%;margin-bottom:10px' id='fullPlayer-${id}'></audio>`
+    + rows;
+}
+// 创作完成态：segs 只读 + R2 音频播放器（✅ 创作完成；播放源 full/{id}.m4a）
+function renderCraftedBody(id, scripts){
+  const script = scripts[0] || { segments: [] };
+  const segs = script.segments || [];
+  const rows = segs.map((seg, i) => `<div class='script-seg seg-${seg.speaker === 'guest' ? 'guest' : 'host'}' style='margin-bottom:6px;padding:8px 10px'><span class='who who-${seg.speaker === 'guest' ? 'guest' : 'host'}'>${esc(seg.speaker)}</span> <span style='font-size:13px'>${esc(seg.text)}</span></div>`).join('');
+  const env = (typeof labEnv !== 'undefined' && labEnv) ? encodeURIComponent(labEnv) : '';
+  return `<div style='margin-bottom:8px'><span style='color:#3fb950'>✅ 创作完成</span><span class='muted' style='font-size:12px'>（节目音频已生成并上传 R2，播放源 R2）</span></div>`
+    + `<audio controls style='width:100%;margin-bottom:10px' src='/api/audio/full?env=${env}&id=${encodeURIComponent(id)}'></audio>`
+    + rows;
+}
+// 确认上传成功回调：刷新详情 → 创作卡片切创作完成态
+function onMergeDone(id){ openDetail(id); }
+
+// 异步填充 full audio 播放器（IndexedDB → Blob URL）
+function fillFullPlayer(id){
+  const el = document.getElementById('fullPlayer-' + id);
+  if (!el || el.dataset.src) return;
+  fullAudioLoad(id).then(blob => {
+    if (blob) { el.src = URL.createObjectURL(blob); el.dataset.src = '1'; }
+  }).catch(() => {});
+}
+
+// 脚本批量打磨：一键直发（不走 llm-box 预览流程）——点「批量打磨」直接执行 → 局部刷新 segs
+async function polishScript(id, si){
+  const btn = document.querySelector('.polish-btn[data-si="' + si + '"]');
+  if (btn) { btn.disabled = true; btn.textContent = '打磨中...'; }
+  // 打磨期间隐藏该脚本所有段落编辑按钮
+  document.querySelectorAll('.script-seg[data-si="' + si + '"] .seg-edit-btn').forEach(b => { b.style.display = 'none'; });
+  try {
+    const d = await j('/api/run/polish', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, scriptIndex: si }) });
+    const result = d.result || {};
+    const segs = (result && result.segments) || [];
+    // 局部刷新：用打磨结果替换该脚本的 segs 展示（不整页 reload）
+    const segsEl = document.querySelector('.script-segs[data-si="' + si + '"]') || document.querySelector('.script-segs');
+    if (segsEl) segsEl.innerHTML = renderSegsHtml(result, id, si);
+    if (typeof updateMergeBtn === 'function') updateMergeBtn(id, si);
+    notice('✓ 打磨完成 ' + segs.length + ' 段' + (d.retried ? '（首次输出未改动，已自动重试）' : '') + (d.usage ? '（⚡ 输入 ' + d.usage.input + ' / 输出 ' + d.usage.output + ' toks）' : ''), d.retried ? 'error' : 'success');
+  } catch (e) {
+    notice('✗ 打磨失败: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '批量打磨'; }
+    // 恢复段落编辑按钮显示
+    document.querySelectorAll('.script-seg[data-si="' + si + '"] .seg-edit-btn').forEach(b => { b.style.display = ''; });
+  }
+}
+
+// 脚本段落级手工修改：hover 显示编辑按钮，点编辑改该段文字（保存更新 R2 scripts 对应段）
+function toggleSegEdit(id, si, segi){
+  const view = document.getElementById('sgsv-' + id + '-' + si + '-' + segi);
+  const edit = document.getElementById('sgse-' + id + '-' + si + '-' + segi);
+  if (!view || !edit) return;
+  const showing = edit.style.display !== 'none';
+  const polishBtn = document.querySelector('.polish-btn[data-si="' + si + '"]');
+  if (showing) {
+    // 关闭编辑 → 恢复批量打磨
+    edit.style.display = 'none'; view.style.display = '';
+    if (polishBtn) polishBtn.disabled = false;
+  } else {
+    // 进入编辑 → 禁用批量打磨（避免编辑中被打磨覆盖）
+    view.style.display = 'none'; edit.style.display = '';
+    if (polishBtn) { polishBtn.disabled = true; polishBtn.title = '编辑中不可打磨'; }
+  }
+}
+async function saveSegEdit(id, si, segi){
+  const edit = document.getElementById('sgse-' + id + '-' + si + '-' + segi);
+  const ta = edit ? edit.querySelector('.seg-ta') : null;
+  const text = ta ? ta.value : '';
+  // 保存中：局部锁定保存/取消/编辑按钮
+  const saveBtn = document.querySelector('.seg-save-btn[data-si="' + si + '"][data-segi="' + segi + '"]');
+  const cancelBtn = document.querySelector('.seg-cancel-btn[data-si="' + si + '"][data-segi="' + segi + '"]');
+  const editBtn = document.querySelector('.script-seg[data-si="' + si + '"][data-segi="' + segi + '"] .seg-edit-btn');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '保存中...'; }
+  if (cancelBtn) cancelBtn.disabled = true;
+  if (editBtn) { editBtn.disabled = true; editBtn.textContent = '保存中...'; }
+  try {
+    // 读当前 scripts（服务端 R2 权威），替换对应段后整体保存
+    const d = await j('/api/detail/' + id);
+    const current = ((d.prodSummary && d.prodSummary.scriptList) || []).slice();
+    if (current[si] && current[si].segments && current[si].segments[segi]) {
+      current[si].segments[segi].text = text;
+    }
+    await j('/api/run/script/save', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, scripts: current }) });
+    // 局部刷新：重绘该脚本 segs 区域（不整页 reload）；语音按钮按内容 key 自动命中/失效
+    const segsEl = document.querySelector('.script-segs[data-si="' + si + '"]') || document.querySelector('.script-segs');
+    if (segsEl) segsEl.innerHTML = renderSegsHtml(current[si], id, si);
+    if (typeof updateMergeBtn === 'function') updateMergeBtn(id, si);
+    // 恢复批量打磨可用（编辑态由 toggleSegEdit 禁用）
+    const polishBtn = document.querySelector('.polish-btn[data-si="' + si + '"]');
+    if (polishBtn) { polishBtn.disabled = false; polishBtn.title = ''; }
+    notice('✓ 已保存该段', 'success');
+  } catch (e) {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '保存'; }
+    if (cancelBtn) cancelBtn.disabled = false;
+    if (editBtn) { editBtn.disabled = false; editBtn.textContent = '编辑'; }
+    // 保存失败：恢复批量打磨可用
+    const polishBtn = document.querySelector('.polish-btn[data-si="' + si + '"]');
+    if (polishBtn) { polishBtn.disabled = false; polishBtn.title = ''; }
+    alert('保存失败: ' + e.message);
+  }
+}
+function cancelSegEdit(id, si, segi){
+  const view = document.getElementById('sgsv-' + id + '-' + si + '-' + segi);
+  const edit = document.getElementById('sgse-' + id + '-' + si + '-' + segi);
+  if (view) view.style.display = '';
+  if (edit) edit.style.display = 'none';
+  // 恢复批量打磨可用
+  const polishBtn = document.querySelector('.polish-btn[data-si="' + si + '"]');
+  if (polishBtn) { polishBtn.disabled = false; polishBtn.title = ''; }
+}
+// （旧整 JSON 编辑已由段落级替代）
+
+// 创作卡：审题两步 → 两个 llm-box 组件（评分 → 脚本，脚本依赖评分结果启用）
+function mountReviewBoxes(id){
+  const scoreMount = document.getElementById('scoreBox');
+  const scriptMount = document.getElementById('scriptBox');
+  if (!scoreMount || scoreMount.dataset.mounted) return;
+  scoreMount.dataset.mounted = '1';
+  // 累积审题结果（round1 检测 + round2 脚本），确认入库时合并提交
+  const reviewAcc = { result: null, scripts: null, score: null, rejected: false };
+  window.__confirmReview = confirmReviewBoxes;   // 供 llm-box 内联确认按钮调用
+  // 确认入库：合并 round1+round2 结果 → /api/run/review/confirm（服务端写 DB 决策 + R2 scripts + 拒稿通知）
+  async function confirmReviewBoxes(){
+    const merged = { ...(reviewAcc.result || {}) };
+    if (reviewAcc.scripts) merged.scripts = reviewAcc.scripts;
+    const btn = document.querySelector('#drawerBody .llm-box-confirm');
+    if (btn) { btn.disabled = true; btn.textContent = '确认中...'; }
+    try {
+      await j('/api/run/review/confirm', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, result: merged }) });
+      closeReviewDrawer();
+      openDetail(id);
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = '确认入库'; }
+      alert('确认失败: ' + e.message);
+    }
+  }
+  // 组件2（脚本）：初始禁用；round1 完成且 score>=6.5 时启用 + 注入预览
+  let scriptBox = null;
+  if (scriptMount && !scriptMount.dataset.mounted) {
+    scriptMount.dataset.mounted = '1';
+    scriptBox = createLlmBox({
+      mount: scriptMount,
+      title: '加载中...',
+      key: 'review.script',
+      url: '/api/run/review/round2',
+      buildRequest: () => ({ id, score: scriptBox.__score }),
+      onDone: (result, usage) => {
+        const scripts = (result && result.scripts) || [];
+        reviewAcc.scripts = scripts;
+        return '<div style="margin-bottom:6px"><span style="color:#3fb950">✓ 脚本已生成</span> <span class="muted">' + scripts.length + ' 个</span></div>'
+          + scripts.map((s, si) => '<div class="muted" style="font-size:12px;margin-top:4px">脚本 ' + (si+1) + '：' + esc(JSON.stringify(s).slice(0, 120)) + '…</div>').join('')
+          + '<div class="llm-box-confirm-wrap"><button class="pg llm-box-confirm" type="button" onclick="window.__confirmReview&&window.__confirmReview()">确认入库</button></div>';
+      },
+    });
+    // 初始禁用（等 round1 结果）
+    scriptMount.style.display = 'none';
+    scriptMount.dataset.disabled = '1';
+  }
+  // 组件1（评分）
+  const box1 = createLlmBox({
+    mount: scoreMount,
+    title: '加载中...',
+    key: 'review.score',
+    url: '/api/run/review/round1',
+    buildRequest: () => ({ id }),
+    onDone: (result, usage) => {
+      const rejected = result && result.rejected;
+      const score = result ? result.score : null;
+      const passed = !rejected && Number(score) >= 6.5;
+      reviewAcc.result = result;
+      reviewAcc.score = score;
+      reviewAcc.rejected = !!rejected;
+      const html = rejected
+        ? '<span style="color:#f85149">✗ 审核不通过（得分 ' + (score ?? '?') + '）</span>'
+        : '<span style="color:#3fb950">✓ 评分 ' + (score ?? '?') + (passed ? '（可进入脚本创作）' : '（<6.5 不满足创作）') + '</span>';
+      // 启用/禁用组件2
+      if (scriptBox && scriptMount) {
+        if (passed) {
+          scriptMount.style.display = '';
+          scriptMount.dataset.disabled = '';
+          scriptBox.__score = score;
+          // 预取 round2 预览（注入 score）
+          j('/api/run/review/round2', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, score, preview: true }) })
+            .then(d => {
+              if (d && d.preview) {
+                scriptBox.setPreviewJson(JSON.stringify(d.preview, null, 2));
+                if (d.preview.name) scriptBox.setTitle(d.preview.name);
+                if (d.preview.description) scriptBox.setDescription(d.preview.description);
+              }
+            })
+            .catch(() => {});
+        } else {
+          scriptMount.style.display = 'none';
+          scriptMount.dataset.disabled = '1';
+        }
+      }
+      // 拒稿（rejected 或 score<6.5）：无脚本步骤，直接可确认入库
+      if (rejected || !passed) {
+        return html + '<div class="llm-box-confirm-wrap"><button class="pg llm-box-confirm" type="button" onclick="window.__confirmReview&&window.__confirmReview()">确认入库</button></div>';
+      }
+      return html;
+    },
+  });
+  // 预取 round1 预览
+  j('/api/run/review/round1', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, preview: true }) })
+    .then(d => {
+      if (d && d.preview) {
+        box1.setPreviewJson(JSON.stringify(d.preview, null, 2));
+        if (d.preview.name) box1.setTitle(d.preview.name);
+        if (d.preview.description) box1.setDescription(d.preview.description);
+      }
+    })
+    .catch(() => {});
+}
+
+
+// 嘉宾声线弹窗：新增/修改（上传 mp3 + 朗读文本）
+let guestVoiceCtx = { guestId: null, guestName: null };
+function openGuestVoiceModal(guestId, guestName){
+  guestVoiceCtx = { guestId, guestName };
+  const label = document.getElementById('guestVoiceGuestLabel');
+  if (label) label.textContent = '嘉宾：' + (guestName || guestId || '?');
+  document.getElementById('guestVoiceTranscript').value = '';
+  document.getElementById('guestVoiceFile').value = '';
+  const st = document.getElementById('guestVoiceStatus');
+  if (st) st.textContent = '';
+  document.getElementById('guestVoiceModal').style.display = 'flex';
+}
+function closeGuestVoiceModal(){
+  document.getElementById('guestVoiceModal').style.display = 'none';
+}
+async function submitGuestVoice(){
+  const file = document.getElementById('guestVoiceFile').files[0];
+  const transcript = document.getElementById('guestVoiceTranscript').value.trim();
+  const st = document.getElementById('guestVoiceStatus');
+  if (!guestVoiceCtx.guestId) { if (st) st.textContent = '❌ 未知嘉宾'; return; }
+  if (!file) { if (st) st.textContent = '❌ 请选择 mp3 文件'; return; }
+  if (file.size > 20 * 1024 * 1024) { if (st) st.textContent = '❌ 文件超过 20MB'; return; }
+  const fd = new FormData();
+  fd.append('audio', file);
+  fd.append('language', 'zh');
+  if (transcript) fd.append('transcript', transcript);
+  if (st) st.textContent = '上传中...';
+  try {
+    await j('/api/audio/guest-voice?guestId=' + encodeURIComponent(guestVoiceCtx.guestId), { method:'POST', body: fd });
+    if (st) st.textContent = '✅ 声线已保存';
+    notice('嘉宾声线已保存', 'success');
+    // 刷新当前投稿（播放可用）
+    const id = location.pathname.slice(1);
+    if (id) openDetail(id);
+  } catch (e) {
+    if (st) st.textContent = '❌ ' + e.message;
+  }
+}
+
+// 采样试听：单例 audio，点击播放/暂停，播放完图标复位
+let sampleAudio = null;
+function toggleSampleAudio(btn){
+  const src = btn.dataset.src;
+  if (sampleAudio && sampleAudio.src === new URL(src, location.href).href && !sampleAudio.paused) {
+    sampleAudio.pause();
+    btn.textContent = '▶';
+    return;
+  }
+  if (sampleAudio) { sampleAudio.pause(); const prev = document.querySelector('.sample-play[data-src="' + sampleAudio.src + '"]'); if (prev) prev.textContent = '▶'; }
+  const a = new Audio(src);
+  a.onended = () => { btn.textContent = '▶'; };
+  a.onerror = () => { btn.textContent = '✕'; btn.disabled = true; btn.title = '采样音频不存在'; };   // 地址不存在 → disabled
+  a.play().catch(() => { btn.textContent = '▶'; });
+  sampleAudio = a;
+  btn.textContent = '⏸';
+}
+
+// 发布卡：通用 LLM 调用组件实例（meta 元信息生成；预览 messages+config 可编辑）
+function mountMetaBox(id){
+  const mount = document.getElementById('metaBox');
+  if (!mount || mount.dataset.mounted) return;
+  mount.dataset.mounted = '1';
+  const box = createLlmBox({
+    mount,
+    title: '加载中...',
+    key: 'meta',
+    url: '/api/run/publish',
+    buildRequest: () => ({ id }),
+    onDone: (result, usage) => {
+      clearSegAudioCache(id);   // 发布完成：批量清除该节目语音缓存
+      const r = result || {};
+      const rows = [];
+      if (r.title) rows.push('<div class="detail-row"><span class="k">标题</span><span class="v">' + esc(r.title) + '</span></div>');
+      if (r.description) rows.push('<div class="detail-row"><span class="k">描述</span><span class="v">' + esc(r.description) + '</span></div>');
+      if (r.category) rows.push('<div class="detail-row"><span class="k">分类</span><span class="v">' + esc(r.category) + '</span></div>');
+      if (r.tags && Array.isArray(r.tags)) rows.push('<div class="detail-row"><span class="k">标签</span><span class="v">' + esc(r.tags.join(', ')) + '</span></div>');
+      return '<div style="margin-bottom:6px"><span style="color:#3fb950">✓ 元信息已生成</span></div>' + rows.join('')
+        + '<div class="muted" style="font-size:12px;margin-top:6px">' + esc(JSON.stringify(r).slice(0, 200)) + '…</div>';
+    },
+  });
+  // 预取默认预览 JSON（渲染后的 messages+config）
+  j('/api/run/publish', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, preview: true }) })
+    .then(d => {
+      if (d && d.preview) {
+        box.setPreviewJson(JSON.stringify(d.preview, null, 2));
+        if (d.preview.name) box.setTitle(d.preview.name);
+        if (d.preview.description) box.setDescription(d.preview.description);
+      }
+    })
+    .catch(() => {});
 }
 
 async function runStep(step,label){
