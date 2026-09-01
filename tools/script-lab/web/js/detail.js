@@ -8,8 +8,12 @@ async function openDetail(id){
   wrap.style.display='block';
   wrap.innerHTML='<div class="muted">加载中…</div>';
   try{
+    // 详情页工作流统一状态：创作（full audio）→ 发布（meta/封面）各步骤共享同一份数据
+    window.workflowState = { id: id, audioKey: null, meta: null, cover: null };
     const d=await j('/api/detail/'+id);
     const dt=d.detail||{};
+    // 原则②：进入投稿详情先初始化生产素材 store（3 个 R2 产出物初始化进 store）
+    if (typeof initAssets === 'function') { try { initAssets(id, dt, d.dialogue || null); } catch {} }
     // 音色采样（投稿卡展示）：主持人采样（detail.userId）+ 嘉宾声线（guest.id）
     const hostSampleV = (dt && dt.voiceSamples && dt.voiceSamples[0]) || null;
     const hostUserIdV = (dt && dt.userId) || null;
@@ -17,39 +21,41 @@ async function openDetail(id){
     const hostNameV = (dt && dt.host && (dt.host.callName || (dt.host.personaInfo && dt.host.personaInfo.displayName))) || '主持人';
     const guestNameV = (dt && dt.guest && dt.guest.name) || '嘉宾';
     const dc=dt.dialogueCount||null;
-    const collected=dt.collected;
     const rawStatus = dt.status || '?';
-    const statusHtml = rawStatus==='rejected' ? `<span style='color:#f85149'>${esc(rawStatus)}</span>`
-      : rawStatus==='published' ? `<span style='color:#3fb950'>${esc(rawStatus)}</span>`
-      : `<span class='muted'>${esc(rawStatus)}</span>`;
+    // 状态机：submitted 待采集 → collected 制作中 → crafted 待发布 → published 已发布；rejected 拒稿贯穿
+    const statusHtml = rawStatus==='rejected' ? `<span style='color:#f85149'>拒稿</span>`
+      : rawStatus==='published' ? `<span style='color:#3fb950'>已发布</span>`
+      : rawStatus==='crafted' ? `<span style='color:#d29922'>待发布</span>`
+      : rawStatus==='collected' ? `<span style='color:#4f8cff'>制作中</span>`
+      : `<span class='muted'>待采集</span>`;
+    // 采集卡：status 驱动（submitted=未采集；其余状态均视为已采集）
+    const collectedOK = rawStatus !== 'submitted';
     let collectStatus;
     if (fetchingIds.has(id)) collectStatus = `<span style='color:#4f8cff'><span class='spin' style='display:inline-block'></span> 采集中</span>`;
-    else if (collected===1) collectStatus = dc ? `<span style='color:#3fb950'>✓ ${dc.messages} 条消息 · 共计 ${dc.chars} 字</span>` : `<span style='color:#3fb950'>✓ 已采集</span>`;
-    else if (collected===-1) collectStatus = `<span style='color:#f85149'>采集失败</span>`;
+    else if (rawStatus === 'rejected') collectStatus = `<span style='color:#f85149'>已拒稿</span>`;
+    else if (collectedOK) collectStatus = dc ? `<span style='color:#3fb950'>✓ ${dc.messages} 条消息 · 共计 ${dc.chars} 字</span>` : `<span style='color:#3fb950'>✓ 已采集</span>`;
     else collectStatus = `<button class='ac-act' data-fetch-id='${id}'>采集</button>`;
-    const collectedOK = collected===1;
     const collectHeadClick = collectedOK ? "onclick='toggleCard(this)'" : '';
     const collectArrow = collectedOK ? `<span class='ac-arrow'>▾</span>` : '';
     const collectBodyHtml = collectedOK ? `<div class='ac-body' id='collectBody'><div class='muted'>加载中…</div></div>` : '';
-    // 创作卡：仅采集成功后显示；状态与展开内容由入库的 selection 审核结果驱动
-    const showPublish = rawStatus === 'published';
+    // 创作卡：仅采集成功后显示；状态由 status + 脚本数据驱动（无 approved 概念）
     const ps = d.prodSummary || null;
-    const reviewStatus = ps ? ps.reviewStatus : null;
     let createStatus, createBody;
-    if (reviewStatus === 'rejected') {
-      createStatus = `<span style='color:#f85149'>审核被拒，对话不满足创作要求</span>`;
-      createBody = `<div class='muted' style='white-space:pre-line'>拒审原因：${esc(ps.rejection || '（无）')}</div>`;
+    if (rawStatus === 'rejected') {
+      createStatus = `<span style='color:#f85149'>已拒稿</span>`;
+      createBody = `<div class='muted' style='white-space:pre-line'>拒审原因：${esc((ps && ps.rejection) || dt.rejectedReason || '（无）')}</div>`;
     } else if (rawStatus === 'crafted') {
       // 节目音频已生成并上传 R2（未发布）——创作完成态
       createStatus = `<span style='color:#3fb950'>✅ 创作完成</span>`;
       createBody = renderCraftedBody(id, (ps && ps.scriptList) || []);
-    } else if (reviewStatus === 'approved') {
-      createStatus = `<span style='color:#d29922'>创作中</span>`;
+    } else if (rawStatus === 'collected') {
+      // 制作中：有脚本 → 脚本工作区（打磨/TTS/合成）；无脚本 → 开始创作（审题入口）
       const scripts = (ps && ps.scriptList) || [];
-      // 渲染前预加载该投稿全部 seg 语音缓存（IndexedDB → 内存）——必须在 scriptCardsHtml/renderSegsHtml 构造之前，否则缓存判断落空显示 🔊
-      if (typeof preloadSegAudioCache === 'function') await preloadSegAudioCache(id, scripts);
-      const scriptCardsHtml = scripts.length
-        ? scripts.map((s, si) => {
+      if (scripts.length) {
+        createStatus = `<span style='color:#d29922'>创作中</span>`;
+        // 渲染前预加载该投稿全部 seg 语音缓存（IndexedDB → 内存）——必须在 scriptCardsHtml/renderSegsHtml 构造之前，否则缓存判断落空显示 🔊
+        if (typeof preloadSegAudioCache === 'function') await preloadSegAudioCache(id, scripts);
+        const scriptCardsHtml = scripts.map((s, si) => {
             const segsAllAudio = (s.segments || []).length > 0 && (s.segments || []).every(seg => !!segAudioGet(segKey(id, seg)));
             return `<div style='margin-bottom:10px'>`
               + `<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:4px'>`
@@ -62,26 +68,35 @@ async function openDetail(id){
               + `<div class='script-segs' data-si='${si}'>${renderSegsHtml(s, id, si)}</div>`
               + `<div style='display:flex;justify-content:flex-end;margin-top:8px'><button class='pg seg-merge-btn' data-si='${si}' onclick='openMergeDialog("${id}", ${si})' ${segsAllAudio ? '' : 'disabled'} title='${segsAllAudio ? '拼接全部段为完整 m4a' : '需全部段生成语音后才可合成'}' style='font-size:12px'>🎬 语音合成</button></div>`
               + `</div>`;
-          }).join('')
-        : '';
-      const fullMeta = (typeof loadFullMeta === 'function') ? loadFullMeta(id) : null;
-      // 确认上传成功（done）→ 创作完成态（R2 播放）；未确认 → 正常创作态（合成按钮可用）
-      createBody = (fullMeta && fullMeta.done)
-        ? renderCraftedBody(id, scripts)
-        : (scriptCardsHtml ? scriptCardsHtml : `<div class='muted'>已创作，脚本列表为空</div>`);
+        }).join('');
+        createBody = scriptCardsHtml ? scriptCardsHtml : `<div class='muted'>已创作，脚本列表为空</div>`;
+      } else {
+        createStatus = `<button class='ac-act' id='btnReview' onclick='openReviewDrawer("${id}")'>开始创作</button>`;
+        createBody = '';   // 未审核：单行卡片（仅头部按钮，无 body）
+      }
     } else if (rawStatus === 'published') {
       // 已发布节目不再创作
       createStatus = `<span class='muted'>已发布</span>`;
       createBody = `<div class='muted'>节目已发布</div>`;
     } else {
-      createStatus = `<button class='ac-act' id='btnReview' onclick='openReviewDrawer("${id}")'>开始创作</button>`;
+      createStatus = '';
+      createBody = '';   // submitted：未采集，创作卡不展开
       createBody = '';   // 未审核：单行卡片（仅头部按钮，无 body）
     }
+    let publishCardBody = '';
+    if (rawStatus === 'crafted' || rawStatus === 'published') {
+      window.currentPubId = id;   // 发布卡表单/封面/发布共用
+      window.workflowState = { id: id, audioKey: null, meta: null, cover: null };   // 发布步也持有同一工作流状态
+      publishCardBody = (typeof renderPublishCard === 'function') ? renderPublishCard(id, dt, rawStatus, labEnv, (ps && ps.scriptList) || []) : '';
+    }
+    // 创作卡展开状态：脚本数据驱动（无 approved 概念）
+    const scriptsExist = !!(ps && Array.isArray(ps.scriptList) && ps.scriptList.length);
+    // dialogue 存浏览器缓存（sessionStorage）——本页数据源，不再依赖本地/重复请求
     wrap.innerHTML=`
       <span class='back' onclick='showList()'>← 返回列表</span>
       <div class='ac'>
         <div class='ac-card open'>
-          <div class='ac-head' onclick='toggleCard(this)'><h3 style='margin:0;font-size:14px'>投稿</h3><span class='muted mono' style='font-size:11px'>${esc(d.id)}</span><span class='ac-status'>${statusHtml}</span><span class='ac-arrow'>▾</span></div>
+          <div class='ac-head' onclick='toggleCard(this)'><h3 style='margin:0;font-size:14px'>投稿</h3><span class='muted mono' style='font-size:11px'>${esc(d.id)}</span><span class='ac-status'>${statusHtml}</span>${rawStatus!=='published'?`<button class='pg' style='font-size:11px;padding:2px 8px;margin-left:8px;color:#f85149;border-color:#f85149' onclick='event.stopPropagation();rejectSubmission("${id}")'>拒稿</button>`:''}<span class='ac-arrow'>▾</span></div>
           <div class='ac-body'>
             <div class='detail-info'>
               <div class='detail-row'><span class='k'>标题</span><span class='v' id='subTitle'>${dt.title?esc(dt.title):'<span class="muted">加载中...</span>'}</span></div>
@@ -98,26 +113,38 @@ async function openDetail(id){
           <div class='ac-head ${collectedOK?'':'muted'}' ${collectHeadClick}><h3 style='margin:0;font-size:14px'>采集</h3><span class='ac-status'>${collectStatus}</span>${collectArrow}</div>
           ${collectBodyHtml}
         </div>
-        ${collectedOK?`<div class='ac-card ${reviewStatus?'':'open'}'>
-          <div class='ac-head ${reviewStatus?'':'muted'}' ${reviewStatus?"onclick='toggleCard(this)'":''}><h3 style='margin:0;font-size:14px'>创作</h3><span class='ac-status'>${createStatus}</span>${reviewStatus?'<span class=\'ac-arrow\'>▾</span>':''}</div>
+        ${collectedOK?`<div class='ac-card ${scriptsExist?'':'open'}'>
+          <div class='ac-head ${scriptsExist?'':'muted'}' ${scriptsExist?"onclick='toggleCard(this)'":''}><h3 style='margin:0;font-size:14px'>创作</h3><span class='ac-status'>${createStatus}</span>${scriptsExist?'<span class=\'ac-arrow\'>▾</span>':''}</div>
           ${createBody?`<div class='ac-body'>${createBody}</div>`:''}
         </div>`:''}
-        ${reviewStatus==='approved'?`<div class='ac-card'>
-          <div class='ac-head' onclick='toggleCard(this)'><h3 style='margin:0;font-size:14px'>发布</h3><span class='ac-status muted'>—</span><span class='ac-arrow'>▾</span></div>
-          <div class="ac-body"><div id="metaBox"></div></div>
+        ${(rawStatus==='crafted'||rawStatus==='published')?`<div class='ac-card'>
+          <div class='ac-head' onclick='toggleCard(this)'><h3 style='margin:0;font-size:14px'>发布</h3><span class='ac-status'>${rawStatus==='published'?'<span style="color:#3fb950">已发布</span>':'<span style="color:#d29922">待发布</span>'}</span><span class='ac-arrow'>▾</span></div>
+          <div class="ac-body">${publishCardBody}</div>
         </div>`:''}
       </div>
       ${d.progress?`<div class='card' style='margin-top:12px'><div class='muted' style='font-size:12px'>进度：${esc(d.progress.step)} · ${esc(new Date(d.progress.updatedAt).toLocaleString())}</div></div>`:''}`;
-    // dialogue 存浏览器缓存（sessionStorage）——本页数据源，不再依赖本地/重复请求
+    // 发布卡：仅 crafted/published 显示；表单/已发布态由 publish.js 渲染
     if (d.dialogue) { try { sessionStorage.setItem('dlg-'+id, JSON.stringify(d.dialogue)); } catch {} }
+    // 发布卡：时长确定性数据自动检测（full audio loadedmetadata），发布时随 meta 携带
+    if (rawStatus === 'crafted' && typeof initPubDur === 'function') { try { initPubDur(id, labEnv); } catch {} }
     if (collectedOK) loadCollectBody(id, dt.status==='rejected', d.dialogue);
     if (!dt.title) loadR2Title(id);
     // 发布卡：挂载通用 LLM 调用组件（预览 messages+config 可编辑 → 发送 → 收缩结果）
-    if (reviewStatus === 'approved' && document.getElementById('metaBox')) mountMetaBox(id);
-    if (reviewStatus === 'approved' && typeof fillFullPlayer === 'function') fillFullPlayer(id);
   }catch(e){
     wrap.innerHTML='<div class="err">加载失败: '+esc(e.message)+'</div>';
   }
+}
+
+// 手工拒绝投稿（未 published 前任意状态可拒；原因投稿人可见）
+async function rejectSubmission(id){
+  const reason = prompt('填写拒稿原因（投稿人可见）:');
+  if (reason === null) return;   // 取消
+  if (!reason.trim()) { notice('请填写拒稿原因', 'error'); return; }
+  try {
+    await j('/api/run/reject', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, reason: reason.trim() }) });
+    notice('✓ 已拒稿', 'success');
+    if (typeof openDetail === 'function') openDetail(id);
+  } catch (err) { notice('✗ 拒稿失败: ' + err.message, 'error'); }
 }
 
 async function loadR2Title(id){
@@ -671,6 +698,14 @@ async function polishScript(id, si){
     const segsEl = document.querySelector('.script-segs[data-si="' + si + '"]') || document.querySelector('.script-segs');
     if (segsEl) segsEl.innerHTML = renderSegsHtml(result, id, si);
     if (typeof updateMergeBtn === 'function') updateMergeBtn(id, si);
+    // 原则①：打磨结果同步素材 store（工作流输入源）——替换对应脚本，meta 生成读到最新版
+    if (typeof getWorkflowInput === 'function' && typeof setWorkflowInput === 'function') {
+      try {
+        const cur = getWorkflowInput(id, 'scripts');
+        if (Array.isArray(cur)) { cur[si] = result; setWorkflowInput(id, 'scripts', cur); }
+        else setWorkflowInput(id, 'scripts', [result]);
+      } catch {}
+    }
     notice('✓ 打磨完成 ' + segs.length + ' 段' + (d.retried ? '（首次输出未改动，已自动重试）' : '') + (d.usage ? '（⚡ 输入 ' + d.usage.input + ' / 输出 ' + d.usage.output + ' toks）' : ''), d.retried ? 'error' : 'success');
   } catch (e) {
     notice('✗ 打磨失败: ' + e.message, 'error');
@@ -721,6 +756,8 @@ async function saveSegEdit(id, si, segi){
     const segsEl = document.querySelector('.script-segs[data-si="' + si + '"]') || document.querySelector('.script-segs');
     if (segsEl) segsEl.innerHTML = renderSegsHtml(current[si], id, si);
     if (typeof updateMergeBtn === 'function') updateMergeBtn(id, si);
+    // 原则①：手工编辑保存后同步素材 store（工作流输入源——meta 生成读到最新脚本）
+    if (typeof setWorkflowInput === 'function') { try { setWorkflowInput(id, 'scripts', current); } catch {} }
     // 恢复批量打磨可用（编辑态由 toggleSegEdit 禁用）
     const polishBtn = document.querySelector('.polish-btn[data-si="' + si + '"]');
     if (polishBtn) { polishBtn.disabled = false; polishBtn.title = ''; }
@@ -779,10 +816,17 @@ function mountReviewBoxes(id){
       title: '加载中...',
       key: 'review.script',
       url: '/api/run/review/round2',
-      buildRequest: () => ({ id, score: scriptBox.__score }),
+      buildRequest: () => {
+        // 原则①：round2 输入从 store 取——round1 选题（advice/main_topic/category）随请求传给 lab
+        let selection = null;
+        if (typeof getWorkflowInput === 'function') { try { selection = getWorkflowInput(id, 'selection'); } catch {} }
+        return { id, score: scriptBox.__score, selection };
+      },
       onDone: (result, usage) => {
         const scripts = (result && result.scripts) || [];
         reviewAcc.scripts = scripts;
+        // 原则①：草稿脚本（round2 输出原样）写入素材 store——打磨/meta 的工作流输入
+        if (typeof setWorkflowInput === 'function') { try { setWorkflowInput(id, 'scripts', scripts); } catch {} }
         return '<div style="margin-bottom:6px"><span style="color:#3fb950">✓ 脚本已生成</span> <span class="muted">' + scripts.length + ' 个</span></div>'
           + scripts.map((s, si) => '<div class="muted" style="font-size:12px;margin-top:4px">脚本 ' + (si+1) + '：' + esc(JSON.stringify(s).slice(0, 120)) + '…</div>').join('')
           + '<div class="llm-box-confirm-wrap"><button class="pg llm-box-confirm" type="button" onclick="window.__confirmReview&&window.__confirmReview()">确认入库</button></div>';
@@ -806,6 +850,8 @@ function mountReviewBoxes(id){
       reviewAcc.result = result;
       reviewAcc.score = score;
       reviewAcc.rejected = !!rejected;
+      // 原则①：审题产物（round1 输出原样）写入素材 store——round2/meta 的工作流输入源
+      if (typeof setWorkflowInput === 'function') { try { setWorkflowInput(id, 'selection', result); } catch {} }
       const html = rejected
         ? '<span style="color:#f85149">✗ 审核不通过（得分 ' + (score ?? '?') + '）</span>'
         : '<span style="color:#3fb950">✓ 评分 ' + (score ?? '?') + (passed ? '（可进入脚本创作）' : '（<6.5 不满足创作）') + '</span>';

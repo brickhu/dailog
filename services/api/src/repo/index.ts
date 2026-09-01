@@ -67,7 +67,7 @@ export interface SubmissionsRepo {
   } | null>;
   /** 编辑队列：按状态筛选（缺省 submitted），submitted 按提交时间升序（inbox 先到先审）。
    *  附带投稿人信息与采样就绪标记（无采样 = 无法制作主持人克隆音色，先标注） */
-  listQueue(status?: "submitted" | "rejected" | "published"): Promise<Array<{
+  listQueue(status?: "submitted" | "collected" | "rejected" | "published" | "crafted"): Promise<Array<{
     id: string;
     url: string;
     title: string | null;
@@ -118,11 +118,13 @@ export interface SubmissionsRepo {
   setCallName(id: string, callName: string): Promise<{ id: string } | null>;
   /** 更新投稿标题（采集提取 / 审核生成；submissions.title 权威，投稿列表/详情展示） */
   setTitle(id: string, title: string | null): Promise<{ id: string } | null>;
-  setReview(id: string, review: { status: "approved" | "rejected"; score: number | null }): Promise<{ id: string } | null>;
+  /** 创作审核决策（rejected=true → review_status=rejected；通过 → 不写 approved，仅记 score） */
+  setReview(id: string, review: { rejected: boolean; score: number | null }): Promise<{ id: string } | null>;
   /** 设置投稿主状态（crafted = 节目音频已生成上传，未发布） */
-  setStatus(id: string, status: "submitted" | "rejected" | "published" | "crafted"): Promise<{ id: string } | null>;
+  setStatus(id: string, status: "submitted" | "collected" | "rejected" | "published" | "crafted"): Promise<{ id: string } | null>;
   /** 采集状态：-1=采集失败 / 0=未采集 / 1=采集成功（R2 key 由 URL 哈希推导，不存库） */
-  setCollected(id: string, collected: number): Promise<{ id: string } | null>;
+  /** 采集状态写入（-1 失败 / 0 未采集 / 1 成功）——联动投稿主状态：1→collected、-1→rejected（附原因）、0→submitted */
+  setCollected(id: string, collected: number, reason?: string | null): Promise<{ id: string } | null>;
   /** 采集统计写入（消息数/各角色轮数/字数） */
   setDialogueCount(id: string, stats: { messages: number; userTurns: number; assistantTurns: number; chars: number }): Promise<{ id: string } | null>;
 }
@@ -1011,10 +1013,15 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .returning({ id: schema.submissions.id });
         return rows[0]?.id ? { id: rows[0].id } : null;
       },
-      /** 采集状态写入（-1 失败 / 0 未采集 / 1 成功） */
-      async setCollected(id: string, collected: number) {
+      /** 采集状态写入（-1 失败 / 0 未采集 / 1 成功）——联动投稿主状态：1→collected、-1→rejected（附原因）、0→submitted */
+      async setCollected(id: string, collected: number, reason?: string | null) {
         const rows = await db.update(schema.submissions)
-          .set({ collected, updatedAt: new Date() })
+          .set({
+            collected,
+            status: collected === 1 ? "collected" : collected === -1 ? "rejected" : "submitted",
+            ...(collected === -1 ? { rejectedReason: reason || "采集失败" } : {}),
+            updatedAt: new Date(),
+          })
           .where(eq(schema.submissions.id, id))
           .returning({ id: schema.submissions.id });
         return rows[0]?.id ? { id: rows[0].id } : null;
@@ -1035,16 +1042,16 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .returning({ id: schema.submissions.id });
         return rows[0]?.id ? { id: rows[0].id } : null;
       },
-      /** 创作审核决策写入（review_status/review_score） */
-      async setReview(id: string, review: { status: "approved" | "rejected"; score: number | null }) {
+      /** 创作审核决策写入（rejected=true → review_status=rejected；通过 → 不写 approved，仅记 score） */
+      async setReview(id: string, review: { rejected: boolean; score: number | null }) {
         const rows = await db.update(schema.submissions)
-          .set({ reviewStatus: review.status, reviewScore: review.score, updatedAt: new Date() })
+          .set({ reviewStatus: review.rejected ? "rejected" : null, reviewScore: review.score, updatedAt: new Date() })
           .where(eq(schema.submissions.id, id))
           .returning({ id: schema.submissions.id });
         return rows[0]?.id ? { id: rows[0].id } : null;
       },
       /** 设置投稿主状态（crafted：节目音频已生成并上传 R2，未发布） */
-      async setStatus(id: string, status: "submitted" | "rejected" | "published" | "crafted") {
+      async setStatus(id: string, status: "submitted" | "collected" | "rejected" | "published" | "crafted") {
         const rows = await db.update(schema.submissions)
           .set({ status, updatedAt: new Date() })
           .where(eq(schema.submissions.id, id))

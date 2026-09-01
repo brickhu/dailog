@@ -77,9 +77,11 @@ async function r2Delete(envName, token, key) {
 }
 
 /** 读对话：内存缓存 → 服务端/R2（按 URL 哈希）——不读本地草稿目录（彻底解耦） */
+const DIALOGUE_CACHE_TTL = 5 * 60 * 1000;   // 对话缓存 TTL：R2 外部更新后内存缓存自动失效
 async function loadDialogue(envName, token, id) {
   const key = envName + ":" + id;
-  if (dialogueCache.has(key)) return dialogueCache.get(key);
+  const hit = dialogueCache.get(key);
+  if (hit && (Date.now() - hit.at < DIALOGUE_CACHE_TTL)) return hit.data;
   try {
     const detail = await apiWithToken(envName, token, "/v1/editor/submissions/" + id).catch(() => null);
     if (!detail || !detail.url) return null;
@@ -87,12 +89,12 @@ async function loadDialogue(envName, token, id) {
     const content = await r2Get(envName, token, dialogueR2Key(detail.url));
     if (!content) return null;
     const d = JSON.parse(content);
-    dialogueCache.set(key, d);
+    dialogueCache.set(key, { at: Date.now(), data: d });
     return d;
   } catch (err) {
     // 404（R2 上不存在）→ 缓存 null 避免重复拉取；其他错误不缓存以便重试
     const msg = String((err && err.message) || err);
-    if (msg.includes("404") || msg.includes("NoSuchKey")) dialogueCache.set(key, null);
+    if (msg.includes("404") || msg.includes("NoSuchKey")) dialogueCache.set(key, { at: Date.now(), data: null });
     return null;
   }
 }
@@ -190,7 +192,7 @@ async function runSingleFetch(envName, token, id, url) {
       const cached = await readDialogueR2(envName, token, url);
       if (cached && Array.isArray(cached.messages) && cached.messages.length > 0) {
         await markCollected(envName, token, id, cached.messages, cached.title || null);
-        dialogueCache.set(fkey, cached);
+        dialogueCache.set(fkey, { at: Date.now(), data: cached });
         fetchResults.set(fkey, { ok: true, detail: cached.messages.length + " 条消息（R2 缓存）", at: Date.now() });
         return { ok: true, messages: cached.messages };
       }
@@ -209,10 +211,11 @@ async function runSingleFetch(envName, token, id, url) {
       try {
         const { dialogueR2Key } = await import(join(CLI_DIST, "r2.js"));   // 纯哈希函数
         await r2Put(envName, token, dialogueR2Key(sourceUrl), JSON.stringify(data));
-        dialogueCache.set(fkey, data);
+        dialogueCache.set(fkey, { at: Date.now(), data });
       } catch { /* R2 上传失败不阻塞标记 */ }
       await markCollected(envName, token, id, r.messages, r.title || null);
     } else {
+      dialogueCache.delete(fkey);   // 采集失败：清缓存，避免残留旧对话
       try { await apiWithToken(envName, token, "/v1/editor/submissions/" + id + "/collected", { method: "PATCH", body: { collected: -1 } }); } catch { /* 标记失败不影响 */ }
     }
     fetchResults.set(fkey, { ok: r.ok, detail: r.error ? String(r.error).slice(0, 150) : (r.messages ? r.messages.length + " 条消息" : ""), at: Date.now() });
@@ -395,23 +398,20 @@ async function handleApi(path, res, req) {
     const page = Math.max(1, Number(qs2.get("page") || 1));
     const pageSize = Math.min(100, Math.max(1, Number(qs2.get("pageSize") || 50)));
     const lib = await loadCliLib();
-    const [pub, rej] = await Promise.all([
+    const [pub, rej, crafted] = await Promise.all([
       apiWithToken(e, token, "/v1/editor/submissions?status=published").catch(() => []),
       apiWithToken(e, token, "/v1/editor/submissions?status=rejected").catch(() => []),
+      apiWithToken(e, token, "/v1/editor/submissions?status=crafted").catch(() => []),
     ]);
     const sub = await apiWithToken(e, token, "/v1/editor/submissions").catch(() => []);
-    const all = [...sub, ...pub, ...rej];
+    const all = [...sub, ...pub, ...rej, ...crafted];
     const rows = all.map((r) => {
       let stage = "待采集";
       if (r.status === "published") stage = "已发布";
       else if (r.status === "rejected") stage = "拒稿";
-      else {
-        // 采集状态权威判据：服务端 collected（-1=失败 / 0=未采集 / 1=成功）——纯服务端字段，不依赖本地
-        const collected = r.collected;
-        if (collected === 1) stage = "制作中";        // 采集成功 → 制作中
-        else if (collected === -1) stage = "采集失败";
-        else stage = "待采集";                              // collected=0 → 待采集
-      }
+      else if (r.status === "crafted") stage = "待发布";   // 节目音频已生成上传，未发布
+      else if (r.status === "collected") stage = "制作中"; // 采集成功 → 创作中
+      else stage = "待采集";                               // submitted → 未采集/采集失败已归 rejected
       return {
         id: r.id, url: r.url, title: r.title, collected: r.collected, dialogueCount: r.dialogueCount,
         displayName: r.displayName || r.userEmail || "?", userEmail: r.userEmail,
@@ -591,6 +591,55 @@ async function handleApi(path, res, req) {
       let crafted = false;
       try { const cr = await apiWithToken(e, token, "/v1/editor/submissions/" + id + "/crafted", { method: "POST", body: {} }); crafted = !!(cr && cr.ok); } catch {}
       sendJson(res, { ok: true, key, crafted });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/run/mark-crafted → 标记投稿为 crafted（确认上传后前端双保险；幂等）
+  if (path === "/api/run/mark-crafted" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const body = await readBody(req);
+    const id = (body && body.id) || null;
+    if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
+    try {
+      const r = await apiWithToken(e, token, "/v1/editor/submissions/" + id + "/crafted", { method: "POST", body: {} });
+      sendJson(res, { ok: true, crafted: !!(r && r.ok) });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/run/reject → 手工拒绝投稿（详情页未 published 前任意状态可拒；reason 必填）
+  if (path === "/api/run/reject" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const body = await readBody(req);
+    const id = (body && body.id) || null;
+    const reason = (body && body.reason) ? String(body.reason).trim() : "";
+    if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
+    if (!reason) { sendJson(res, { ok: false, error: "请填写拒稿原因" }, 400); return; }
+    try {
+      const r = await apiWithToken(e, token, "/v1/editor/submissions/" + id + "/reject", { method: "POST", body: { reason } });
+      sendJson(res, { ok: true, status: "rejected" });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/run/episode-meta-update → 编辑已发布节目的 meta（published 预览态编辑；不影响投稿状态与关联）
+  if (path === "/api/run/episode-meta-update" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const body = await readBody(req);
+    const episodeId = (body && body.episodeId) || null;
+    const meta = (body && body.meta && typeof body.meta === "object") ? body.meta : null;
+    if (!episodeId) { sendJson(res, { ok: false, error: "需 episodeId" }, 400); return; }
+    if (!meta) { sendJson(res, { ok: false, error: "需 meta（节目字段对象）" }, 400); return; }
+    try {
+      await apiWithToken(e, token, "/v1/editor/episodes/" + encodeURIComponent(episodeId), { method: "PATCH", body: { meta: JSON.stringify(meta) } });
+      sendJson(res, { ok: true });
     } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
     return;
   }
@@ -828,6 +877,15 @@ async function handleApi(path, res, req) {
       const msgs1 = renderPrompt(pScore, { dialogue: JSON.stringify(dialogue), suggestion: "" });
       const scriptAssistant = (pScript.messages.find(m => m.role === "assistant") || {}).content || "";
       const scriptRule = scriptAssistant.replace(/^评分=\{\{score\}\}，≥6\.5，输出脚本，参照如下规则：\n/, "");
+      // 原则①：round2 输入从 store 取（前端随请求带 round1 审题产物）——基于 round1 的 advice 写命题作文
+      const selection = (body && body.selection && typeof body.selection === "object") ? body.selection : null;
+      const selBlock = selection
+        ? "\n\n# 选题依据（round1 审题产物，脚本创作直接遵循，不得偏离）\n"
+          + (selection.main_topic ? "- 主线话题：" + String(selection.main_topic).slice(0, 300) + "\n" : "")
+          + (selection.category ? "- 选题分类：" + String(selection.category) + "\n" : "")
+          + (selection.advice ? "- 制作建议：" + String(selection.advice).slice(0, 800) + "\n" : "")
+          + (selection.content_summary ? "- 内容摘要：" + String(selection.content_summary).slice(0, 400) + "\n" : "")
+        : "";
       const params = JSON.stringify({
         suggestion: (detail && detail.suggestion) || undefined,
         host: hostSnap ? { callName: hostSnap.callName || undefined, personaInfo: hostSnap.personaInfo || undefined } : undefined,
@@ -836,7 +894,7 @@ async function handleApi(path, res, req) {
       const defaultMsgs = [
         { role: "system", content: msgs1[0].content },
         { role: "user", content: msgs1[1].content },
-        { role: "assistant", content: "评分=" + score + "，≥6.5，输出脚本，参照如下规则：\n" + scriptRule },
+        { role: "assistant", content: "评分=" + score + "，≥6.5，输出脚本，参照如下规则：\n" + selBlock + scriptRule },
         { role: "user", content: params },
       ];
       const cfgOverride = {};
@@ -990,12 +1048,20 @@ async function handleApi(path, res, req) {
     const id = (body && body.id) || null;
     if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
     try {
-      const prod = await loadProduction(e, token, id);
-      if (!prod || !prod.script) { sendJson(res, { ok: false, error: "尚无脚本——先执行创作" }); return; }
+      // 原则①：meta 工作流输入从 store 取（前端随请求带 selection + script）；回退 R2 reviewScripts
+      const inScript = (body && body.script && typeof body.script === "object") ? body.script : null;
+      const inSel = (body && body.selection && typeof body.selection === "object") ? body.selection : null;
+      let script = inScript;
+      if (!script) {
+        const detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null);
+        const rs = (detail && Array.isArray(detail.reviewScripts)) ? detail.reviewScripts : [];
+        script = rs[0] || null;
+      }
+      if (!script || !Array.isArray(script.segments)) { sendJson(res, { ok: false, error: "尚无脚本——先执行创作" }); return; }
       // preview 模式：返回渲染后的 messages+config（llm-box 填入可编辑输入框），不执行
       if (body && body.preview) {
         const p = getPrompt("meta");
-        const msgs = renderPrompt(p, { script: prod.script, chosenIdea: prod.chosenIdea || prod.selection || null });
+        const msgs = renderPrompt(p, { script, chosenIdea: inSel });
         sendJson(res, { ok: true, preview: { messages: msgs, config: p.config || {}, name: p.name || "meta", description: p.description || "" } });
         return;
       }
@@ -1010,15 +1076,52 @@ async function handleApi(path, res, req) {
         if (cfg.thinking !== undefined) cfgOverride.thinking = cfg.thinking;
       } else {
         const p = getPrompt("meta");
-        msgs = renderPrompt(p, { script: prod.script, chosenIdea: prod.chosenIdea || prod.selection || null });
+        msgs = renderPrompt(p, { script, chosenIdea: inSel });
       }
       const r = await llmComplete(null, null, cfgOverride, msgs);
       const parsed = extractJson(r.content);
+      // 自动填充：只生成 meta 返回（表单回填），不写 production
+      if (body && body.fillOnly) {
+        sendJson(res, { ok: true, fillOnly: true, result: parsed, usage: r.usage ? { input: r.usage.prompt_tokens ?? 0, output: r.usage.completion_tokens ?? 0 } : null });
+        return;
+      }
       await saveProduction(e, token, id, { metadata: parsed, progress: { step: "publish", updatedAt: new Date().toISOString() } });
       sendJson(res, {
         ok: true, message: "发布元信息生成完成", result: parsed,
         usage: r.usage ? { input: r.usage.prompt_tokens ?? 0, output: r.usage.completion_tokens ?? 0 } : null,
       });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/run/publish-submit?id= → 发布（multipart：cover 文件 + meta JSON 含 audioKey）
+  //   转发服务端 /v1/editor/submissions/:id/publish（audio 复用 R2 full/{id}.m4a，免重新上传）
+  if (path.split("?")[0] === "/api/run/publish-submit" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const qs = new URL(path, "http://x").searchParams;
+    const id = qs.get("id");
+    if (!id) { sendJson(res, { ok: false, error: "需 id（query）" }, 400); return; }
+    const chunks = [];
+    let psize = 0;
+    for await (const c2 of req) { chunks.push(c2); psize += c2.length; if (psize > 30 * 1024 * 1024) { sendJson(res, { ok: false, error: "数据过大（>30MB）" }, 413); return; } }
+    const rawBody = Buffer.concat(chunks);
+    const contentType = req.headers["content-type"] || "";
+    try {
+      const cfg = await configFor(e);
+      const lib = await loadCliLib();
+      const headers = { "x-lab-env": e, "content-type": contentType };
+      const cookie = getCookieSession(e);
+      if (cookie) headers["cookie"] = cookie;
+      else if (token) headers["authorization"] = "Bearer " + token;
+      const up = await lib.apiFetch(cfg.apiBase + "/v1/editor/submissions/" + encodeURIComponent(id) + "/publish", { method: "POST", headers, body: rawBody });
+      if (!up.ok) {
+        const txt = await up.text().catch(() => "");
+        throw new Error(up.status + ": " + txt.slice(0, 200));
+      }
+      const d = await up.json().catch(() => ({}));
+      sendJson(res, { ok: true, episodeId: d.episodeId || null, slug: d.slug || null, number: d.number || null });
     } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
     return;
   }

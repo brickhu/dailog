@@ -429,6 +429,9 @@ async function runMergeConcat(){
 async function openMergeDialog(id, si){
   if (mergeMode !== 'closed') return;
   mergeCtx = { id, si };
+  // 停止预览音频播放并释放资源
+  const player = document.getElementById('mergePlayer');
+  if (player) { try { player.pause(); } catch {} player.src = ''; player.load(); }
   const overlay = document.getElementById('mergeModal');
   if (overlay) overlay.style.display = 'flex';
   setMergeMode('loading');
@@ -463,13 +466,18 @@ async function confirmMergeUpload(){
     const b64 = await blobToBase64(blob);
     const up = await j('/api/run/full-upload', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, audio: b64 }) });
     if (!(up && up.ok)) throw new Error('R2 上传失败');
+    // 服务端 crafted 标记双保险：full-upload 已尝试，失败则前端再补一次
+    if (!(up && up.crafted)) {
+      try { await j('/api/run/mark-crafted', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id }) }); } catch {}
+    }
     // 成功：记录 r2Key + done，清浏览器缓存（seg 片段 + full——播放走 R2）
     const meta = loadFullMeta(id) || {};
     meta.r2Key = up.key || ('full/' + id + '.m4a');
     meta.done = true;
     saveFullMeta(id, meta);
-    clearSegAudioCache(id);
-    try { await fullAudioDelete(id); } catch {}
+    // 共享工作流状态：发布步直接复用该 audioKey（免重传音频）
+    try { if (window.workflowState) window.workflowState.audioKey = meta.r2Key; } catch {}
+    // 素材清除时机 = 节目发布后（published）——crafted 后可能改脚本/重新生成 meta，素材保留
     closeMergeModal(true, true);   // 确认成功：强制关闭
     if (typeof onMergeDone === 'function') onMergeDone(id);
   } catch (e) {
@@ -484,6 +492,9 @@ async function closeMergeModal(skipCleanup, force){
     try { await fullAudioDelete(mergeCtx.id); } catch {}
     try { localStorage.removeItem('fullmeta-' + mergeCtx.id); } catch {}
   }
+  // 停止预览音频播放并释放资源
+  const player = document.getElementById('mergePlayer');
+  if (player) { try { player.pause(); } catch {} player.src = ''; player.load(); }
   const overlay = document.getElementById('mergeModal');
   if (overlay) overlay.style.display = 'none';
   mergeMode = 'closed';

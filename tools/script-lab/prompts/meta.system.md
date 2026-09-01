@@ -5,7 +5,7 @@
 
 # 输入
 - **最终脚本（script.json）**：segments（终稿台词，含情绪标签）+ language + creationNote。
-- **已确认选题（chosen-idea.json）**：dimension（→ category）/ 听众价值（summary/description 钩子取材）/ 创作建议（含核心时刻与角度，不剧透依据）/ role_block（称呼与嘉宾名）。
+- **round1 审题产物（selection）**：main_topic（主线话题）/ category（选题分类，审题已按价值锚点确定）/ content_summary（内容摘要）/ advice（制作建议——含核心时刻与角度，不剧透依据）。
 - references 取材源：从**终稿台词**中识别新概念/专名（不读对话原文、不依赖脚本阶段预提取）。
 
 # 铁律
@@ -19,7 +19,7 @@
 - **summary**：1-2 句话（约 30-60 字），对标题的补充钩子，用于列表/分享场景，不剧透时刻。
 - **description**：本期节目的**导读**——目的是吸引听众点开收听：说清这期聊什么、听众能收获什么，有钩子但不剧透时刻（铁律 2）；**≤200 字**；措辞自然、按内容组织；语气收敛不打包票（"你会……"是断言，改"也许你会……"的邀请式）。
 - **tags**：3-5 个话题标签；**coverKeywords**：2-4 个英文图片搜索词。
-- **category**：由 chosen-idea.dimension 映射——认知→insight、经验→experience、建议→advice、启发→inspiration。
+- **category**：直接用输入 selection.category（审题已按价值锚点匹配：insight 新知 / experience 经验 / advice 建议 / inspiration 启发），不得另选。
 - **references**：从终稿台词识别本期出现的新概念/专名（听众可能想查的专有名词——工具/项目/平台/协议/关键概念；不提取已充分解释的常识概念；同一术语一条；≤8 条）：
   每条 {term 术语原名, type 类型（开源项目/工具/平台/协议/概念…）, explanation 一句面向听众的阐述（使用节目语言）, links 外链数组}；链接安全见铁律 3。
 - **highlights**：本期金句**只 1 条**——脚本中**最有价值含量**的一句话，供详情页「本期金句」展示：
@@ -42,7 +42,7 @@
 
 # 重生成模式（元信息不满意 → 重新生成）
 当输入额外包含 **feedback**（对既有元信息的不满意点/修改方向）与既有 **metadata** 时，进入重生成模式：
-- 输入 = 最终脚本（script.json）+ 已确认选题（chosen-idea.json）+ 既有元信息（metadata.json）+ feedback；
+- 输入 = 最终脚本（script.json）+ round1 审题产物（selection）+ 既有元信息（metadata.json）+ feedback；
 - **逐条落实 feedback**；未提及的字段保持原值（不整体重写、不无中生有）；
 - 铁律不变（金句逐字/不剧透/链接安全/不动脚本）；
 - 输出与正常模式相同的元信息 JSON。

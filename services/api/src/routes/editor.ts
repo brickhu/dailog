@@ -41,6 +41,8 @@ interface PublishMeta {
   category?: string;
   /** 无情绪标签的完整台本（节目页展示用；可选） */
   transcript?: string;
+  /** 复用创作步已上传 R2 的成品音频 key（如 full/{id}.m4a）——免重新上传；与 multipart audio 二选一 */
+  audioKey?: string;
 }
 
 // 成品音频大小上限（100MB——单期 5-10 分钟 MP3 远小于此，纯防滥用）
@@ -96,6 +98,9 @@ function parsePublishMeta(raw: string | null): PublishMeta | null {
           .map((h) => ({ text: h.text.trim().slice(0, 200) }))
           .slice(0, 5)
       : undefined,
+    audioKey: typeof m.audioKey === "string" && m.audioKey.trim() && !m.audioKey.includes("..")
+      ? m.audioKey.trim().slice(0, 300)
+      : undefined,
   };
 }
 
@@ -132,7 +137,7 @@ export function editorRoutes(deps: EditorDeps) {
   });
   app.openapi(r1, (async (c: Context) => {
     const raw = c.req.query("status");
-    const status = raw === "rejected" || raw === "published" ? raw : "submitted";
+    const status = raw === "rejected" || raw === "published" || raw === "crafted" || raw === "collected" ? raw : "submitted";
     const list = await deps.repo.submissions.listQueue(status);
     return c.json(list);
   }) as unknown as RouteHandler<typeof r1, AuthEnv>);
@@ -150,14 +155,18 @@ export function editorRoutes(deps: EditorDeps) {
     const detail = await deps.repo.submissions.getDetail(c.req.param("id")!);
     if (!detail) return c.json({ error: "not_found" }, 404);
     const episodes = await deps.repo.episodes.listBySubmission(detail.id);
-    // 编辑恢复：读 R2 scripts（key 按请求 Host 推导实例；内存缓存含 404——避免每次打 R2）
+    // 编辑恢复：读 R2 scripts（产出物② key = scripts/{id}.json，稳定以投稿 ID 标注；旧 workflows/{instance}/{id}.json 回退兼容）
     let reviewScripts = null;
     if (workflowScriptsCache.has(detail.id)) {
       reviewScripts = workflowScriptsCache.get(detail.id);
     } else {
       try {
-        const instance = (c.req.header("host") || "default").replace(/[.:]/g, "-");
-        const bytes = await deps.storage.get(`workflows/${instance}/${detail.id}.json`).then((r) => r.data).catch(() => null);
+        let bytes = await deps.storage.get(`scripts/${detail.id}.json`).then((r) => r.data).catch(() => null);
+        if (!bytes) {
+          // 兼容旧 key（workflows/{instance}/{id}.json）——旧数据未迁移，回退读取
+          const instance = (c.req.header("host") || "default").replace(/[.:]/g, "-");
+          bytes = await deps.storage.get(`workflows/${instance}/${detail.id}.json`).then((r) => r.data).catch(() => null);
+        }
         reviewScripts = bytes ? ((JSON.parse(Buffer.from(bytes).toString("utf-8")).scripts) || null) : null;
         workflowScriptsCache.set(detail.id, reviewScripts);
       } catch { reviewScripts = null; }
@@ -259,8 +268,8 @@ export function editorRoutes(deps: EditorDeps) {
     const id = c.req.param("id")!;
     const detail = await deps.repo.submissions.getDetail(id);
     if (!detail) return c.json({ error: "not_found" }, 404);
-    if (detail.status !== "submitted") {
-      return c.json({ error: "invalid_state", detail: "仅待审核投稿可拒审" }, 409);
+    if (detail.status === "published") {
+      return c.json({ error: "invalid_state", detail: "已发布投稿不可拒审" }, 409);
     }
     const body = (await c.req.json().catch(() => null)) as { reason?: unknown } | null;
     const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
@@ -301,22 +310,43 @@ export function editorRoutes(deps: EditorDeps) {
     const id = c.req.param("id")!;
     const detail = await deps.repo.submissions.getDetail(id);
     if (!detail) return c.json({ error: "not_found" }, 404);
-    if (detail.status !== "submitted") {
+    // 发布起点：submitted（审核通过）或 crafted（音频就绪，发布卡发布）——published/rejected 不可再发
+    if (detail.status !== "submitted" && detail.status !== "crafted") {
       return c.json({ error: "invalid_state", detail: `该投稿当前状态为 ${detail.status}，无法发布` }, 409);
     }
 
     const form = await c.req.formData().catch(() => null);
-    const audioFile = form?.get("audio");
-    if (!(audioFile instanceof File) || audioFile.size === 0) {
-      return c.json({ error: "audio_required", detail: "缺少成品音频文件（multipart 字段 audio）" }, 400);
-    }
-    if (audioFile.size > MAX_AUDIO_BYTES) {
-      return c.json({ error: "audio_too_large", detail: "音频超过 100MB 上限" }, 400);
-    }
     const rawMeta = typeof form?.get("meta") === "string" ? (form.get("meta") as string) : null;
     const meta = parsePublishMeta(rawMeta);
     if (!meta) {
       return c.json({ error: "invalid_meta", detail: "meta 字段不是合法 JSON" }, 400);
+    }
+    // 音频二选一：① multipart audio 文件上传；② meta.audioKey 复用创作步已传 R2 的成品（full/{id}.m4a），免重传
+    let audioKey: string | null = null;
+    let audioSize = 0;
+    const audioFile = form?.get("audio");
+    if (audioFile instanceof File && audioFile.size > 0) {
+      if (audioFile.size > MAX_AUDIO_BYTES) {
+        return c.json({ error: "audio_too_large", detail: "音频超过 100MB 上限" }, 400);
+      }
+      const ext = /\.(mp3|m4a)$/i.test(audioFile.name) ? audioFile.name.toLowerCase().split(".").pop() : "mp3";
+      audioKey = `episodes/${detail.userId}/${id}.` + ext;
+      await deps.storage.put(audioKey, new Uint8Array(await audioFile.arrayBuffer()));
+      audioSize = audioFile.size;
+    } else if (meta.audioKey) {
+      const src = meta.audioKey;
+      let obj: { data: Uint8Array; total: number };
+      try {
+        obj = await deps.storage.get(src);
+      } catch {
+        return c.json({ error: "audio_key_missing", detail: `R2 不存在音频 ${src}——请先合成并上传 full audio` }, 400);
+      }
+      const ext = src.toLowerCase().endsWith(".m4a") ? "m4a" : src.toLowerCase().endsWith(".mp3") ? "mp3" : "mp3";
+      audioKey = `episodes/${detail.userId}/${id}.` + ext;
+      await deps.storage.put(audioKey, obj.data);
+      audioSize = obj.total;
+    } else {
+      return c.json({ error: "audio_required", detail: "缺少成品音频：multipart 字段 audio 或 meta.audioKey（R2 已上传的成品）" }, 400);
     }
     const title = meta.title ?? null;
     const description = meta.description ?? null;
@@ -332,12 +362,6 @@ export function editorRoutes(deps: EditorDeps) {
     const references = meta.references ?? null;
     // Step B 配套产物：highlights（金句——纯文本，不依赖时间戳；上限 5 条）
     const highlights = meta.highlights ?? null;
-
-    // 音频落 R2（R2 目录规划：episodes/{userId}/{submissionId}.{ext}——ext 按上传格式 mp3/m4a，
-    // 决定 Content-Type 与 RSS enclosure type）
-    const ext = /\.(mp3|m4a)$/i.test(audioFile.name) ? audioFile.name.toLowerCase().split(".").pop() : "mp3";
-    const audioKey = `episodes/${detail.userId}/${id}.${ext}`;
-    await deps.storage.put(audioKey, new Uint8Array(await audioFile.arrayBuffer()));
 
     // 封面可选：cover 文件 → covers/{submissionId}.jpg（无封面 → null，播放页自适应）。
     // 兜底统一 1400×1400 居中裁方 JPEG：编辑端 cover 命令已裁（--image-url 下载 → ffmpeg 裁），
@@ -367,7 +391,7 @@ export function editorRoutes(deps: EditorDeps) {
       highlights,
       coverUrl,
       audioUrl: audioKey,
-      audioSize: audioFile.size,
+      audioSize,
       durationSeconds,
       language,
       tags,
@@ -467,8 +491,29 @@ export function editorRoutes(deps: EditorDeps) {
     if (!ep) return c.json({ error: "not_found" }, 404);
     const body = (await c.req.json().catch(() => null)) as {
       tags?: unknown; isPicked?: unknown; title?: unknown; description?: unknown; coverUrl?: unknown; isPublic?: unknown;
+      meta?: unknown;
     } | null;
     if (!body) return c.json({ error: "invalid_body" }, 400);
+    // 发布卡编辑：body.meta（JSON 字符串）→ 复用 publish 清洗规则，更新已发布节目的一个/多个 meta 字段
+    //   （未提供的字段保留旧值；不动音频/封面/投稿状态与关联——published 预览态编辑不影响投稿）
+    const rawMeta = typeof body.meta === "string" ? body.meta : null;
+    if (rawMeta !== null) {
+      const meta = parsePublishMeta(rawMeta);
+      if (!meta) return c.json({ error: "invalid_meta", detail: "meta 字段不是合法 JSON" }, 400);
+      await deps.repo.episodes.updateEpisodeContent(ep.id, {
+        title: meta.title ?? undefined,
+        description: meta.description ?? undefined,
+        summary: meta.summary ?? undefined,
+        references: meta.references ?? undefined,
+        highlights: meta.highlights ?? undefined,
+        durationSeconds: meta.durationSeconds ?? undefined,
+        language: meta.language ?? undefined,
+        tags: meta.tags ?? undefined,
+        category: meta.category ?? undefined,
+        transcript: meta.transcript ?? undefined,
+        guestId: meta.guestId ?? undefined,
+      });
+    }
     const patch: { tags?: string[] | null; isPicked?: boolean; title?: string | null; description?: string | null; coverUrl?: string | null; isPublic?: boolean } = {};
     if (Array.isArray(body.tags)) patch.tags = body.tags.filter((t): t is string => typeof t === "string");
     if (typeof body.isPicked === "boolean") patch.isPicked = body.isPicked;
@@ -777,8 +822,8 @@ export function editorRoutes(deps: EditorDeps) {
     const result = (body && body.result && typeof body.result === "object" ? body.result : null) as Record<string, unknown> | null;
     if (!result) return c.json({ error: "result_required" }, 400);
     const rejected = result.rejected === true;
-    // ① 审核决策存数据库（review_status / review_score——决策结果，直接呈现用户）
-    await deps.repo.submissions.setReview(id, { status: rejected ? "rejected" : "approved", score: typeof result.score === "number" ? result.score : null });
+    // ① 审核决策存数据库（review_status 仅 rejected 时写，通过不写 approved——状态机无 approved；score 始终记录）
+    await deps.repo.submissions.setReview(id, { rejected, score: typeof result.score === "number" ? result.score : null });
     // ② 拒稿 → 联动 submissions 拒审 + 通知；通过 → title 回写
     if (rejected) {
       const detail = await deps.repo.submissions.getDetail(id);
@@ -797,13 +842,12 @@ export function editorRoutes(deps: EditorDeps) {
     } else if (typeof result.title === "string" && result.title.trim()) {
       await deps.repo.submissions.setTitle(id, result.title.trim()).catch(() => {});
     }
-    // ③ scripts（创作产物，编辑恢复用）写 R2——key 用请求 Host 推导实例（部署稳定，不受 lab 配置名影响）
+    // ③ scripts（产出物②）写 R2——key = scripts/{id}.json（以投稿 ID 标注，稳定跨环境）
     if (!rejected && Array.isArray(result.scripts) && result.scripts.length > 0) {
       try {
-        const instance = (c.req.header("host") || "default").replace(/[.:]/g, "-");
-        const key = `workflows/${instance}/${id}.json`;
+        const key = `scripts/${id}.json`;
         await deps.storage.put(key, new Uint8Array(Buffer.from(JSON.stringify({
-          id, instance,
+          id,
           scripts: result.scripts,
           title: typeof result.title === "string" ? result.title : null,
           updatedAt: Date.now(),
@@ -828,8 +872,8 @@ export function editorRoutes(deps: EditorDeps) {
     const body = (await c.req.json().catch(() => null)) as { scripts?: unknown } | null;
     const scripts = body && Array.isArray(body.scripts) ? body.scripts : null;
     if (!scripts) return c.json({ error: "scripts_required" }, 400);
-    const instance = (c.req.header("host") || "default").replace(/[.:]/g, "-");
-    const key = `workflows/${instance}/${id}.json`;
+    // 产出物② key = scripts/{id}.json（稳定以投稿 ID 标注）
+    const key = `scripts/${id}.json`;
     // 保留原 title，只更新 scripts
     let title = null;
     try {
@@ -837,7 +881,7 @@ export function editorRoutes(deps: EditorDeps) {
       if (old) title = JSON.parse(Buffer.from(old).toString("utf-8")).title ?? null;
     } catch {}
     await deps.storage.put(key, new Uint8Array(Buffer.from(JSON.stringify({
-      id, instance, scripts, title, updatedAt: Date.now(),
+      id, scripts, title, updatedAt: Date.now(),
     }), "utf-8")));
     workflowScriptsCache.delete(id);   // 清 detail 的 scripts 缓存
     return c.json({ ok: true, scripts: scripts.length });
@@ -846,7 +890,7 @@ export function editorRoutes(deps: EditorDeps) {
 
   // ===== 编辑 R2 存储读写（workflows/prompts/dialogues——多端经服务端统一入库，避免不同步）=====
   // key 前缀白名单，防越权覆盖音频/封面等对象
-  const STORAGE_PREFIXES = ["workflows/", "prompts/", "dialogues/", "full/"];
+  const STORAGE_PREFIXES = ["scripts/", "workflows/", "prompts/", "dialogues/", "full/"];
   const storageKeyOk = (key: string) => typeof key === "string" && STORAGE_PREFIXES.some((p) => key.startsWith(p)) && !key.includes("..");
   const stGet = createRoute({
     method: "post",
