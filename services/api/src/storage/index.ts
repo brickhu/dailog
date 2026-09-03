@@ -5,6 +5,15 @@ export interface AudioStorage {
   /** 读取对象；range 可选（R2 原生分片读取——音频流式播放只拉需要的区间）。
    *  返回 { data, total }：total = 对象完整长度（分片请求也能拿到） */
   get(key: string, range?: { start: number; end: number }): Promise<{ data: Uint8Array; total: number }>;
+  /** 命中本地缓存时的流式读取（可选能力——只有磁盘缓存层实现）：按 range 直接从磁盘读流，
+   *  不把整个对象读进内存。返回 null = 未命中/区间越界，调用方回退 get()。 */
+  getStream?(key: string, range?: { start: number; end: number }): Promise<{
+    body: ReadableStream<Uint8Array>;
+    total: number;
+    /** 实际下发区间（已按文件长度裁剪，含首尾） */
+    start: number;
+    end: number;
+  } | null>;
   /** 删除对象（导入失败补偿/测试清理）；对象不存在不报错 */
   delete(key: string): Promise<void>;
 }
@@ -29,13 +38,68 @@ export function createStorage(opts: StorageOptions): AudioStorage {
   return createDiskCached(inner, opts.cacheDir ?? "./data/cache");
 }
 
-/** 磁盘缓存包装：get 先查本地缓存，未命中从远端拉（小分片先快速响应 + 后台全量落盘） */
-function createDiskCached(inner: AudioStorage, cacheDir: string): AudioStorage {
+/** 磁盘缓存包装：get 先查本地缓存，未命中从远端拉（分片先快速响应 + 后台「单飞」整文件原子落盘）。
+ *
+ *  两条曾经把播放打断的坑（修复要点，勿回退）：
+ *   1. 整文件下载必须**单飞**：一集音频分片播放会连发 N 个 range 请求，若每个未命中都各自
+ *      拉一遍整文件（8MB × N），彼此抢带宽 → 后面的分片请求排队超时 → 浏览器停在分片边界
+ *      （症状：进度条显示 5:23、播到 5:05 卡住不动，且不报错）。
+ *   2. 落盘必须**原子**（tmp + rename）：writeFile 直写目标路径时，并发读方会 stat 到
+ *      "已存在且 mtime 新鲜"的半截文件 → readFile 读到截断内容 → total 缩水 →
+ *      206 的 Content-Range 告诉浏览器"文件就这么长"→ 播放器提前停播（同样不报错）。 */
+export function createDiskCached(inner: AudioStorage, cacheDir: string): AudioStorage {
   const fileOf = (key: string) => {
     // key 形如 voices/{userId}/{lang}.webm / episodes/{userId}/{id}.mp3——路径安全（无 ..）
     return join(cacheDir, key);
   };
   const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+  // 冷缓存首个分片的取数上限：未命中时若按调用方的大区间（一路到文件尾）向远端要，
+  // 得等整集下完才有第一个字节（本地走代理实测 12s 才出声）。先取够开播的一段（≈87s 的
+  // 192kbps 音频），后台单飞落盘完成后，后续请求直接走本地缓存一次回完——既快又不碎片化。
+  const MISS_FIRST_SPAN = 2 * 1024 * 1024;
+  // 整文件下载单飞表：key → 进行中的下载 Promise（并发分片请求共享同一次下载）
+  const inflight = new Map<string, Promise<void>>();
+
+  /** 原子落盘：先写临时文件再 rename（同目录 rename 原子）——读方要么看不到文件、
+   *  要么看到完整文件，绝不会读到"写了一半"的缓存 */
+  const persist = async (key: string, data: Uint8Array) => {
+    const { mkdir, writeFile, rename, unlink } = await import("node:fs/promises");
+    const file = fileOf(key);
+    const tmp = `${file}.${process.pid}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.tmp`;
+    await mkdir(join(file, ".."), { recursive: true });
+    try {
+      await writeFile(tmp, data);
+      await rename(tmp, file);
+    } catch (e) {
+      await unlink(tmp).catch(() => {});
+      throw e;
+    }
+  };
+
+  /** 后台整文件落盘（单飞 + 失败静默）：同一 key 并发只下载一次 */
+  const fillCache = (key: string): Promise<void> => {
+    const running = inflight.get(key);
+    if (running) return running;
+    const task = (async () => {
+      const full = await inner.get(key);
+      await persist(key, full.data);
+    })()
+      .catch(() => { /* 缓存失败静默：不影响本次响应 */ })
+      .finally(() => { inflight.delete(key); });
+    inflight.set(key, task);
+    return task;
+  };
+
+  /** 缓存命中检查：TTL 内返回 stat（含 size），否则 null */
+  const freshStat = async (key: string) => {
+    const { stat } = await import("node:fs/promises");
+    try {
+      const st = await stat(fileOf(key));
+      return Date.now() - st.mtimeMs < CACHE_TTL_MS ? st : null;
+    } catch {
+      return null; // 未命中
+    }
+  };
 
   return {
     async put(key, data) {
@@ -44,35 +108,41 @@ function createDiskCached(inner: AudioStorage, cacheDir: string): AudioStorage {
       const { unlink } = await import("node:fs/promises");
       await unlink(fileOf(key)).catch(() => {});
     },
+    async getStream(key, range) {
+      const st = await freshStat(key);
+      if (!st) return null; // 未命中 → 调用方回退 get()（远端拉取 + 后台落盘）
+      const total = st.size;
+      const start = range ? Math.max(0, range.start) : 0;
+      const end = range ? Math.min(range.end, total - 1) : total - 1;
+      // 空文件/区间越界：交回 get() 走 416 分支（那里有权威 total）
+      if (total === 0 || start > end || start >= total) return null;
+      const { createReadStream } = await import("node:fs");
+      const { Readable } = await import("node:stream");
+      const body = Readable.toWeb(
+        createReadStream(fileOf(key), { start, end }),
+      ) as unknown as ReadableStream<Uint8Array>;
+      return { body, total, start, end };
+    },
     async get(key, range) {
-      const { readFile, stat, writeFile, mkdir } = await import("node:fs/promises");
-      const file = fileOf(key);
-      // 缓存命中（TTL 内）：本地磁盘直读（毫秒）
-      try {
-        const st = await stat(file);
-        if (Date.now() - st.mtimeMs < CACHE_TTL_MS) {
-          const full = new Uint8Array(await readFile(file));
+      const { readFile } = await import("node:fs/promises");
+      // 缓存命中（TTL 内）：本地磁盘直读（毫秒）——原子落盘保证读到的一定是完整文件
+      if (await freshStat(key)) {
+        try {
+          const full = new Uint8Array(await readFile(fileOf(key)));
           if (!range) return { data: full, total: full.length };
           const end = Math.min(range.end, full.length - 1);
           return { data: full.subarray(range.start, end + 1), total: full.length };
-        }
-      } catch { /* 未命中 */ }
-      // 未命中：小分片先用远端 Range 快速响应，同时后台全量落盘；无 range 直接全量落盘
+        } catch { /* 读失败（被清理/损坏）→ 落到远端 */ }
+      }
+      // 未命中：分片请求先用远端 Range 快速响应（只取够开播的一段），同时后台单飞整文件落盘
       if (range) {
-        const r = await inner.get(key, range);
-        void inner.get(key).then(async (full) => {
-          try {
-            await mkdir(join(file, ".."), { recursive: true });
-            await writeFile(file, full.data);
-          } catch { /* 缓存失败静默 */ }
-        }).catch(() => {});
+        const end = Math.min(range.end, range.start + MISS_FIRST_SPAN - 1);
+        const r = await inner.get(key, { start: range.start, end });
+        void fillCache(key);
         return r;
       }
       const full = await inner.get(key);
-      try {
-        await mkdir(join(file, ".."), { recursive: true });
-        await writeFile(file, full.data);
-      } catch { /* 缓存失败静默 */ }
+      void persist(key, full.data).catch(() => { /* 缓存失败静默 */ });
       return full;
     },
     async delete(key) {

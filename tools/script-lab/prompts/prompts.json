@@ -3,15 +3,15 @@
     "version": 1,
     "description": "审题第1轮：对话评分/选题（S1-S3），输出检测 JSON（scripts 留空）",
     "config": {
-      "temperature": 0.4,
+      "temperature": 0.1,
+      "seed" : 41,
       "maxTokens": 8192,
-      "thinking": "disabled"
+      "thinking": "disabled",
+      "responseFormat": { "type": "json_object" }
     },
     "params": {
       "dialogue": "对话 JSON 字符串（必填）",
-      "suggestion": "投稿建议（可空）",
-      "host": "主持人信息（可空）",
-      "guests": "嘉宾信息（可空）"
+      "suggestion": "投稿建议（可空）"
     },
     "messages": [
       {
@@ -23,7 +23,7 @@
         "file": "review.score.user.md"
       }
     ],
-    "name": "话题质量审核"
+    "name": "R1:话题质量审核"
   },
   "review.script": {
     "version": 1,
@@ -32,26 +32,27 @@
       "temperature": 0.4,
       "maxTokens": 8192,
       "thinking": "disabled",
-      "seed" : 49
+      "seed" : 49,
+      "responseFormat": { "type": "json_object" }
     },
     "params": {
-      "score": "第1轮评分（数字）",
-      "scriptRule": "脚本创作规则文本",
+      "score": "第1轮评分（数字，已通过审核）",
+      "selection": "round1 审题产物（选题依据）",
       "suggestion": "投稿建议（可空）",
-      "host": "主持人信息（可空）",
-      "guests": "嘉宾信息（可空）"
+      "host": "主持人信息（可空，缺省注入「主持人」）",
+      "guests": "嘉宾信息数组（可空，缺省注入「AI」）"
     },
     "messages": [
       {
         "role": "assistant",
-        "file": "review.script.assistant.md"
+        "file": "review.script.handoff.md"
       },
       {
         "role": "user",
         "file": "review.script.user.md"
       }
     ],
-    "name": "review.script"
+    "name": "R2:生成脚本初稿"
   },
   "polish.all": {
     "version": 1,
@@ -89,7 +90,7 @@
     },
     "params": {
       "script": "脚本 JSON",
-      "chosenIdea": "选题信息（可空）"
+      "selection": "round1 审题产物（选题信息，可空）"
     },
     "messages": [
       {

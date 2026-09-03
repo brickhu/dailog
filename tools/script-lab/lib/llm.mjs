@@ -1,17 +1,34 @@
 // 最小 OpenAI 兼容 chat/completions 客户端（流式 SSE；零依赖，Node 22+ 原生 fetch）
 // 接口与 services/api 计划的 createLlmClient 对齐：complete(messages) → 全文
 
+/** camelCase → snake_case（maxTokens→max_tokens、topP→top_p、responseFormat→response_format…）；无大写则原样（thinking/seed/stop/tools/model…） */
+function toApiParamKey(k) {
+  return /[A-Z]/.test(k) ? k.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase() : k;
+}
+
+/**
+ * 组装 chat/completions 请求体：config 中除 messages 外的全部参数透传
+ * （camelCase 自动转 snake_case；apiKey/baseUrl 为连接配置，永不入 body；thinking 等供应商扩展原样透传）
+ * 运行时 opts（stream/tools/toolChoice）优先级高于 config 中的同名键。
+ */
+export function buildChatBody(config, messages, opts = {}) {
+  const body = {};
+  for (const [k, v] of Object.entries(config || {})) {
+    if (v === undefined || v === null) continue;
+    if (k === "messages" || k === "apiKey" || k === "baseUrl") continue;
+    body[toApiParamKey(k)] = v;
+  }
+  body.messages = messages;
+  if (opts.stream !== undefined) body.stream = opts.stream;
+  else if (body.stream === undefined) body.stream = true;
+  if (opts.tools !== undefined) body.tools = opts.tools;
+  if (opts.toolChoice !== undefined) body.tool_choice = opts.toolChoice;
+  return body;
+}
+
 /** 流式或一次性调用，返回完整回复文本；onDelta 收到增量（默认打印到 stdout） */
-export async function complete(config, messages, { stream = true, onDelta, signal, onUsage } = {}) {
-  const body = {
-    model: config.model,
-    messages,
-    stream,
-    temperature: config.temperature,
-  };
-  if (config.maxTokens) body.max_tokens = config.maxTokens;
-  if (config.seed !== undefined) body.seed = config.seed; // 可复现性（provider 支持时生效；不支持会忽略或报错，去掉即可）
-  if (config.thinking !== undefined) body.thinking = config.thinking; // deepseek-v4 思考模式开关（{type:'disabled'} 直出，防推理耗尽致空响应）
+export async function complete(config, messages, { stream, onDelta, signal, onUsage, tools, toolChoice } = {}) {
+  const body = buildChatBody(config, messages, { stream, tools, toolChoice });
 
   let res;
   try {

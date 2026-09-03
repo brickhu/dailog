@@ -3,6 +3,48 @@ let pageNo = 1, pageTotal = 1;
 const fetchingIds = new Set();
 let fetchPollTimer = null;
 
+// ---- 采集弹层（单条/批量采集在弹层内显示进度，离开列表页不丢） ----
+function openCollectModal(title){
+  const m = document.getElementById('collectModal');
+  if (!m) return;
+  m.style.display = 'flex';
+  const t = document.getElementById('collectModalTitle');
+  if (t) t.textContent = title || '采集';
+  const body = document.getElementById('collectModalBody');
+  if (body) body.innerHTML = '<div class="muted">准备采集…</div>';
+  const doneBtn = document.getElementById('collectModalDoneBtn');
+  if (doneBtn) doneBtn.disabled = true;
+  const closeBtn = document.getElementById('collectModalClose');
+  if (closeBtn) closeBtn.disabled = true;
+}
+function closeCollectModal(){
+  const m = document.getElementById('collectModal');
+  if (m) m.style.display = 'none';
+}
+function updateCollectModal(d){
+  const body = document.getElementById('collectModalBody');
+  if (!body) return;
+  const fetching = (d && d.fetching) || [];
+  const results = (d && d.results) || {};
+  const rows = [];
+  fetching.forEach((f) => {
+    rows.push(`<div style='margin-bottom:6px'><span class='spin' style='display:inline-block'></span> 采集中 <span class='mono muted'>${esc(f.url || f.id || '')}</span></div>`);
+  });
+  Object.keys(results).forEach((id) => {
+    const r = results[id];
+    const ok = r && r.ok;
+    rows.push(`<div style='margin-bottom:6px;color:${ok ? '#3fb950' : '#f85149'}'><b>${ok ? '✓' : '✗'}</b> <span>${esc((r && r.detail) || (ok ? '采集成功' : '采集失败'))}</span></div>`);
+  });
+  body.innerHTML = rows.length ? rows.join('') : '<div class="muted">暂无采集任务</div>';
+  const done = fetching.length === 0;
+  const doneBtn = document.getElementById('collectModalDoneBtn');
+  if (doneBtn) doneBtn.disabled = !done;
+  const closeBtn = document.getElementById('collectModalClose');
+  if (closeBtn) closeBtn.disabled = !done;
+  const titleEl = document.getElementById('collectModalTitle');
+  if (titleEl) titleEl.textContent = done ? '采集完成' : ('采集中 ' + fetching.length + ' 条…');
+}
+
 async function loadApp(){
   // 首屏加载中：隐藏 批量采集条 / 表格 / 分页，显示“加载中....”
   const ld=document.getElementById('listLoading'); if(ld) ld.style.display='block';
@@ -71,6 +113,8 @@ document.addEventListener('click', (e) => {
 });
 
 async function singleFetch(id){
+  // 打开采集弹层（离开列表页不丢进度）
+  openCollectModal('采集中…');
   // 立即显示 spinner + 状态条（不等 server）
   fetchingIds.add(id);
   renderRows();
@@ -90,6 +134,8 @@ async function startFetchPoll(){
     try{
       const d = await j('/api/status/fetch');
       fetchingIds.clear();
+      // 采集弹层：同步更新进度
+      if (typeof updateCollectModal === 'function') { try { updateCollectModal(d); } catch {} }
       const fetching = d.fetching||[];
       fetching.forEach(f=>fetchingIds.add(f.id));
       // 统计条切换：队列非空显示"正在采集：<url>"+spinner
@@ -147,6 +193,7 @@ function renderPager(){
 async function goPage(n){ if(n<1||n>pageTotal) return; pageNo=n; await loadApp(); }
 
 async function batchFetch(){
+  openCollectModal('批量采集中…');
   const btn=document.getElementById('btnBatch');
   btn.disabled=true;btn.textContent='采集中…';
   try{

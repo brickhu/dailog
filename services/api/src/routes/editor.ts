@@ -250,6 +250,21 @@ export function editorRoutes(deps: EditorDeps) {
     }
     const res = await deps.repo.submissions.setCollected(id, body.collected);
     if (!res) return c.json({ error: "not_found" }, 404);
+    // 采集失败（→ rejected）：通知投稿人（区别于内容拒稿，文案标注"采集失败"）
+    if (body.collected === -1) {
+      await deps.repo.notifications.create({
+        userId: detail.userId,
+        type: "rejected",
+        title: "投稿采集失败",
+        body: "对话采集失败，投稿暂未通过（可稍后重试）",
+        link: "/me/submits",
+      }).catch(() => {});
+      await sendEmail(deps.env, {
+        to: detail.userEmail,
+        subject: "dailog：你的投稿采集失败",
+        html: `<p>你好 ${detail.personaInfo?.displayName ?? detail.userEmail}，</p><p>很遗憾，你的投稿对话采集失败：</p><p>投稿链接：<a href="${escapeHtml(detail.url)}">${escapeHtml(detail.url)}</a></p><p>你可以在 <a href="${deps.siteBaseUrl ?? ""}/me/submits">投稿状态页</a> 查看。</p>`,
+      }).catch(() => {});
+    }
     return c.json({ ok: true, collected: body.collected });
   }) as unknown as RouteHandler<typeof rCol, AuthEnv>);
 
@@ -310,8 +325,8 @@ export function editorRoutes(deps: EditorDeps) {
     const id = c.req.param("id")!;
     const detail = await deps.repo.submissions.getDetail(id);
     if (!detail) return c.json({ error: "not_found" }, 404);
-    // 发布起点：submitted（审核通过）或 crafted（音频就绪，发布卡发布）——published/rejected 不可再发
-    if (detail.status !== "submitted" && detail.status !== "crafted") {
+    // 发布起点：collected（审核通过、未合成）/ crafted（音频就绪，发布卡发布）——published/rejected 不可再发
+    if (detail.status !== "collected" && detail.status !== "submitted" && detail.status !== "crafted") {
       return c.json({ error: "invalid_state", detail: `该投稿当前状态为 ${detail.status}，无法发布` }, 409);
     }
 
@@ -330,23 +345,44 @@ export function editorRoutes(deps: EditorDeps) {
         return c.json({ error: "audio_too_large", detail: "音频超过 100MB 上限" }, 400);
       }
       const ext = /\.(mp3|m4a)$/i.test(audioFile.name) ? audioFile.name.toLowerCase().split(".").pop() : "mp3";
-      audioKey = `episodes/${detail.userId}/${id}.` + ext;
+      audioKey = `episodes/${id}.` + ext;   // flat：episodes/{submissionId}.{ext}
       await deps.storage.put(audioKey, new Uint8Array(await audioFile.arrayBuffer()));
       audioSize = audioFile.size;
     } else if (meta.audioKey) {
-      const src = meta.audioKey;
-      let obj: { data: Uint8Array; total: number };
-      try {
-        obj = await deps.storage.get(src);
-      } catch {
-        return c.json({ error: "audio_key_missing", detail: `R2 不存在音频 ${src}——请先合成并上传 full audio` }, 400);
+      // 产物本质 = 最终输出：合成确认已写入最终位置 episodes/{userId}/{id}.m4a——发布零拷贝直接引用
+      const finalKey = `episodes/${id}.m4a`;   // flat：episodes/{submissionId}.m4a
+      const direct = await deps.storage.get(finalKey).then((r) => r.data).catch(() => null);
+      if (direct) {
+        audioKey = finalKey;
+        audioSize = direct.length;
+      } else if (meta.audioKey.startsWith("episodes/")) {
+        // 已是最终位置（旧流程可能非 m4a 格式）——直接引用，不拷贝
+        const obj2 = await deps.storage.get(meta.audioKey).then((r) => r.data).catch(() => null);
+        if (!obj2) return c.json({ error: "audio_key_missing", detail: `R2 不存在音频 ${meta.audioKey}` }, 400);
+        audioKey = meta.audioKey;
+        audioSize = obj2.length;
+      } else {
+        // 旧值（full/...）兼容：拷贝到最终位置
+        const obj3 = await deps.storage.get(meta.audioKey).then((r) => r.data).catch(() => null);
+        if (!obj3) return c.json({ error: "audio_key_missing", detail: `R2 不存在音频 ${meta.audioKey}——请先合成并上传` }, 400);
+        await deps.storage.put(finalKey, obj3);
+        audioKey = finalKey;
+        audioSize = obj3.length;
       }
-      const ext = src.toLowerCase().endsWith(".m4a") ? "m4a" : src.toLowerCase().endsWith(".mp3") ? "mp3" : "mp3";
-      audioKey = `episodes/${detail.userId}/${id}.` + ext;
-      await deps.storage.put(audioKey, obj.data);
-      audioSize = obj.total;
     } else {
       return c.json({ error: "audio_required", detail: "缺少成品音频：multipart 字段 audio 或 meta.audioKey（R2 已上传的成品）" }, 400);
+    }
+    // 发布卡路径（audioKey 复用）：校验产出物② 打磨脚本存在（3 产出物齐全；旧 audio 文件直传路径不校验，兼容 CLI）
+    if (meta.audioKey) {
+      // 新 key scripts/{id}.json 优先；旧数据回退 workflows/{instance}/{id}.json（与 detail 读取一致）
+      let scriptObj = await deps.storage.get(`scripts/${id}.json`).then((r) => r.data).catch(() => null);
+      if (!scriptObj) {
+        const instance = (c.req.header("host") || "default").replace(/[.:]/g, "-");
+        scriptObj = await deps.storage.get(`workflows/${instance}/${id}.json`).then((r) => r.data).catch(() => null);
+      }
+      if (!scriptObj) {
+        return c.json({ error: "scripts_missing", detail: "缺少产出物②（打磨脚本）——请先完成创作（审题确认脚本入库）" }, 409);
+      }
     }
     const title = meta.title ?? null;
     const description = meta.description ?? null;
@@ -421,7 +457,7 @@ export function editorRoutes(deps: EditorDeps) {
   }) as unknown as RouteHandler<typeof r4, AuthEnv>);
 
   /** 标记投稿为 crafted：节目音频已生成并上传 R2（未发布）。
-   *  状态流：submitted（审核通过）→ crafted（音频就绪）→ published；幂等（已 crafted 可重标） */
+   *  状态流：submitted → collected（采集/审核后）→ crafted（音频就绪）→ published；幂等（已 crafted 可重标） */
   const rCrafted = createRoute({
     method: "post",
     path: "/v1/editor/submissions/:id/crafted",
@@ -434,7 +470,8 @@ export function editorRoutes(deps: EditorDeps) {
     const id = c.req.param("id")!;
     const detail = await deps.repo.submissions.getDetail(id);
     if (!detail) return c.json({ error: "not_found" }, 404);
-    if (detail.status !== "submitted" && detail.status !== "crafted") {
+    // 合成确认来自已采集/已审核（collected）、待发布重标（crafted）；已发布/已拒则跳过
+    if (detail.status !== "collected" && detail.status !== "submitted" && detail.status !== "crafted") {
       return c.json({ error: "invalid_state", detail: "当前状态 " + detail.status + " 无法标记 crafted" }, 409);
     }
     await deps.repo.submissions.setStatus(id, "crafted");
@@ -807,6 +844,30 @@ export function editorRoutes(deps: EditorDeps) {
     });
   }) as unknown as RouteHandler<typeof r12, AuthEnv>);
 
+  /** 创作产物音频流（合成确认后已写入最终位置 episodes/{userId}/{id}.m4a——crafted 预览播放源；发布零拷贝直接引用） */
+  const rCreateAudio = createRoute({
+    method: "get",
+    path: "/v1/editor/submissions/:id/audio",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "创作产物音频流" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(rCreateAudio, (async (c: Context) => {
+    const id = c.req.param("id")!;
+    const detail = await deps.repo.submissions.getDetail(id);
+    if (!detail) return c.json({ error: "not_found" }, 404);
+    // flat：episodes/{submissionId}.m4a（新流程）；旧数据回退 episodes/{userId}/{submissionId}.m4a
+    let bytes = await deps.storage.get(`episodes/${id}.m4a`).then((r) => r.data).catch(() => null);
+    if (!bytes && detail.userId) {
+      bytes = await deps.storage.get(`episodes/${detail.userId}/${id}.m4a`).then((r) => r.data).catch(() => null);
+    }
+    if (!bytes) return c.json({ error: "not_found" }, 404);
+    return new Response(bytes as unknown as BodyInit, {
+      headers: { "Content-Type": "audio/mp4", "Cache-Control": "private, max-age=300" },
+    });
+  }) as unknown as RouteHandler<typeof rCreateAudio, AuthEnv>);
+
   // ===== 创作审核确认（LLM 审核结果经业务接口入库：服务端内部写 R2 workflow + 拒稿联动 reject + 通知）=====
   const rReviewPost = createRoute({
     method: "post",
@@ -824,10 +885,12 @@ export function editorRoutes(deps: EditorDeps) {
     const rejected = result.rejected === true;
     // ① 审核决策存数据库（review_status 仅 rejected 时写，通过不写 approved——状态机无 approved；score 始终记录）
     await deps.repo.submissions.setReview(id, { rejected, score: typeof result.score === "number" ? result.score : null });
-    // ② 拒稿 → 联动 submissions 拒审 + 通知；通过 → title 回写
+    // ② 拒稿 → 联动 submissions 拒审 + 通知
     if (rejected) {
       const detail = await deps.repo.submissions.getDetail(id);
-      if (detail && detail.status === "submitted") {
+      // 拒审作用于待审/已采集投稿（状态机：submitted / collected → rejected）；已拒/已发布则跳过
+      const st = detail && detail.status;
+      if (detail && (st === "submitted" || st === "collected")) {
         const reason = String(result.rejection || "对话不满足创作要求").slice(0, 500);
         await deps.repo.submissions.reject(id, reason);
         await deps.repo.notifications.create({
@@ -839,7 +902,9 @@ export function editorRoutes(deps: EditorDeps) {
           html: `<p>你好 ${detail.personaInfo?.displayName ?? detail.userEmail}，</p><p>很遗憾，你的投稿未能通过创作审核：</p><blockquote>${escapeHtml(reason)}</blockquote><p>你可以在 <a href="${deps.siteBaseUrl ?? ""}/me/submits">投稿状态页</a> 查看。</p>`,
         }).catch(() => {});
       }
-    } else if (typeof result.title === "string" && result.title.trim()) {
+    }
+    // 标题回写：审核打分返回的标题一律覆盖 submission.title（通过或拒稿均回写）
+    if (typeof result.title === "string" && result.title.trim()) {
       await deps.repo.submissions.setTitle(id, result.title.trim()).catch(() => {});
     }
     // ③ scripts（产出物②）写 R2——key = scripts/{id}.json（以投稿 ID 标注，稳定跨环境）
@@ -890,7 +955,7 @@ export function editorRoutes(deps: EditorDeps) {
 
   // ===== 编辑 R2 存储读写（workflows/prompts/dialogues——多端经服务端统一入库，避免不同步）=====
   // key 前缀白名单，防越权覆盖音频/封面等对象
-  const STORAGE_PREFIXES = ["scripts/", "workflows/", "prompts/", "dialogues/", "full/"];
+  const STORAGE_PREFIXES = ["scripts/", "workflows/", "prompts/", "dialogues/", "full/", "episodes/"];
   const storageKeyOk = (key: string) => typeof key === "string" && STORAGE_PREFIXES.some((p) => key.startsWith(p)) && !key.includes("..");
   const stGet = createRoute({
     method: "post",

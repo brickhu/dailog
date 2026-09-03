@@ -67,7 +67,7 @@ collected ─重置采集(setCollected 0)──→ submitted
 |---|---|---|
 | 产出物① 原始对话 | R2 `dialogues/{sha256(url)前32}.json` | URL 哈希 |
 | 产出物② 打磨脚本 | R2 `scripts/{id}.json`（已规范化；旧 `workflows/{instance}/{id}.json` 兼容回退读取） | 投稿 ID |
-| 产出物③ 合成音频 | R2 `full/{id}.m4a` → 发布 `episodes/{userId}/{id}.{ext}` | 投稿 ID |
+| 产出物③ 合成音频 | R2 `episodes/{userId}/{id}.m4a`（合成确认直接写最终位置，发布零拷贝引用；旧 `full/{id}.m4a` 兼容回退） | 投稿 ID |
 | 生产素材（store） | 浏览器 `assets-{id}` | 投稿 ID |
 
 > **素材清除时机 = 节目发布后（published）**：发布成功时清浏览器素材（store / seg 语音缓存 / full 本地缓存 / fullmeta），3 个 R2 产出物保留。crafted 后素材保留（可改脚本/重新生成 meta）。

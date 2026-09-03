@@ -96,6 +96,18 @@
     </div>
   </div>
 </div>
+<!-- 采集进度弹层（单条/批量采集在弹层内显示进度，离开列表页不丢） -->
+<div class='modal-overlay' id='collectModal' style='display:none'>
+  <div class='modal' style='width:480px'>
+    <div class='modal-head'><b id='collectModalTitle'>采集</b><button class='modal-close' id='collectModalClose' onclick='closeCollectModal()' disabled title='采集中不可关闭'>✕</button></div>
+    <div class='modal-body' style='max-height:320px;overflow-y:auto'>
+      <div id='collectModalBody'><div class='muted'>准备采集…</div></div>
+    </div>
+    <div class='modal-foot' style='display:flex;justify-content:flex-end;gap:8px'>
+      <button class='pg' id='collectModalDoneBtn' onclick='closeCollectModal()' disabled>完成</button>
+    </div>
+  </div>
+</div>
 <!-- 音频合成对话框（loading → preview → uploading 状态机） -->
 <div class='modal-overlay' id='mergeModal' style='display:none'>
   <div class='modal' style='width:540px'>
@@ -122,10 +134,13 @@
 <script src="/js/login.js"></script>
 <script src="/js/home.js"></script>
 <script src="/vendor/ffmpeg-0.11.js"></script>
+<script src="/vendor/d3.min.js"></script>
+<script src="/vendor/textures.js"></script>
 <script src="/js/merge.js"></script>
 <script src="/js/assets.js"></script>
 <script src="/js/detail.js"></script>
 <script src="/js/llm-box.js"></script>
+<script src="/js/llm-console.js"></script>
 <script src="/js/publish.js"></script>
 <script src="/js/settings.js"></script>
 <script>boot();</script>

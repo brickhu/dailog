@@ -1,7 +1,7 @@
 // 提示词字典（prompts/prompts.json 目录文件 + 同目录 .md 正文）——工程文件，git 随源码备份，支持热更新（mtime 检测）
 // prompts.json 结构：{ "<label>": { label, version, description, config, params, messages[{role, file}] }, ... }
-//   - messages[].file 指向同目录 {label}.{role}.md（提示词正文，纯文本编辑）；content 可含 {{占位符}}
-//   - params 声明占位符白名单；config 承载模型参数（temperature/maxTokens/thinking）
+//   - messages[].file 指向同目录 {label}.{role}.md（提示词正文，纯文本编辑）；content 可含 {{占位符}}（支持点路径 {{a.b.c}}）
+//   - params 声明占位符根键白名单；config 透传 LLM 接口参数（除 messages 外全部，camelCase 自动转 snake_case，如 maxTokens→max_tokens；thinking 等供应商扩展原样）
 import { readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { fileURLToPath } from "url";
@@ -55,14 +55,40 @@ export function listPrompts() {
   return Object.keys(loadIndex()).sort();
 }
 
-/** 渲染：把 messages 里的 {{占位符}} 按 params 注入（白名单：仅替换 params 声明过的变量，未提供则替换为空串） */
+/** 沿点路径取值：支持对象/数组/JSON 字符串穿透——中间值是 JSON 字符串（{ / [ 开头）时自动 JSON.parse 后继续下行，
+ *  所以 {{dialogue.messages}} 在调用方传 dialogue=JSON.stringify(对象) 时也能取到；叶子值是字符串则原样返回 */
+function resolvePathValue(value, path) {
+  const segs = String(path).split(".");
+  let cur = value;
+  for (let i = 0; i < segs.length; i++) {
+    if (cur === undefined || cur === null) return undefined;
+    if (i > 0 && typeof cur === "string") {
+      const t = cur.trimStart();
+      if (!(t.startsWith("{") || t.startsWith("["))) return undefined;   // 非 JSON 字符串不可再下行
+      try { cur = JSON.parse(cur); } catch { return undefined; }
+    }
+    const seg = segs[i];
+    if (Array.isArray(cur) && String(Number(seg)) === seg) cur = cur[Number(seg)];
+    else if (cur !== null && typeof cur === "object") cur = cur[seg];
+    else return undefined;
+  }
+  return cur;
+}
+
+/** 渲染：把 messages 里的 {{占位符}} 按 params 注入（白名单：仅替换 params 声明过的根键，未提供则替换为空串；
+ *  支持点路径 {{a.b.c}}（含 JSON 字符串穿透）；数组首元素简写：{{guests.name}} 回退到 guests.0.name） */
 export function renderPrompt(prompt, values = {}) {
   const allowed = new Set(Object.keys(prompt.params || {}));
   return (prompt.messages || []).map(m => ({
     role: m.role,
-    content: String(m.content || "").replace(/\{\{(\w+)\}\}/g, (_, key) => {
-      if (!allowed.has(key)) throw new Error("提示词占位符未在 params 声明: {{" + key + "}}（" + (prompt.name || prompt.key) + "）");
-      const v = values[key];
+    content: String(m.content || "").replace(/\{\{([\w.]+)\}\}/g, (_, path) => {
+      const root = path.split(".")[0];
+      if (!allowed.has(root)) throw new Error("提示词占位符未在 params 声明: {{" + path + "}}（" + (prompt.name || prompt.key) + "）");
+      let v = resolvePathValue(values, path);
+      if ((v === undefined || v === null) && /\.\w+$/.test(path)) {
+        const alt = path.replace(/\.([^.]+)$/, ".0.$1");   // 数组首元素简写：guests.name → guests.0.name
+        if (alt !== path) v = resolvePathValue(values, alt);
+      }
       return v === undefined || v === null ? "" : (typeof v === "string" ? v : JSON.stringify(v, null, 1));
     }),
   }));

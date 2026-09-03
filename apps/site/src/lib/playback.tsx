@@ -26,9 +26,16 @@ export interface QueueEpisode {
   sourceUrl: string | null;
 }
 
-/** 公开音频端点 URL（音频在 storage，非 API 路径——同单集页逻辑） */
-export function episodeAudioUrl(id: string): string {
-  return `${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/episodes/${id}/audio`;
+/** 公开音频端点 URL（音频在 storage，非 API 路径——同单集页逻辑）。
+ *  version（节目 publishedAt）会拼成 ?v=：URL 随内容变化——重新发布即换 URL，
+ *  浏览器/中间层缓存里的旧副本自然失效；服务端也才敢对带版本的 URL 长缓存。
+ *  不带版本的裸 URL 服务端按"每次校验"处理（见 api app.ts 的 Cache-Control）——
+ *  否则一旦本地缓存里存下一份"读到某字节就断"的坏副本，用户会被钉死一周。 */
+export function episodeAudioUrl(id: string, version?: string | Date | null): string {
+  const base = `${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/episodes/${id}/audio`;
+  if (!version) return base;
+  const v = version instanceof Date ? version.getTime() : (Date.parse(version) || version);
+  return `${base}?v=${encodeURIComponent(String(v))}`;
 }
 
 export interface PlaybackContextValue {
@@ -70,15 +77,37 @@ const PlaybackContext = createContext<PlaybackContextValue>();
 
 // 完播阈值：进度 ≥95% 记为完播（ended 事件 + timeupdate 双保险）
 const COMPLETE_RATIO = 0.95;
-// buffering 兜底超时：waiting 后这么久仍未就绪（文件缺失/R2 挂起/网络黑洞）→ 视为加载失败，
-// 清缓冲并置 audioError（否则 spinner 无限转 = 用户看到"一直 loading"）
-const BUFFERING_TIMEOUT_MS = 10_000;
+// ---- 卡死看门狗（分片请求挂起/丢失时的自愈）----
+// 症状背景：音频按 Range 分片下载，某一片请求挂住时浏览器既不报 error、也不发 pause，
+// 只是 currentTime 停住（networkState=LOADING）——UI 看到的是"暂停图标 + 时间不动"，
+// 像是"播到一半自己停了"。只靠 waiting 事件 + 超时清 spinner 不解决问题，必须主动自愈。
+// 判定：播放中（!paused）连续这么久没有推进 = 卡死
+const STALL_TIMEOUT_MS = 8_000;
+// 自愈分级：前 N 次只做 seek 微调（不丢缓冲、不重下整集），之后才换 URL 重载
+const STALL_NUDGE_RETRIES = 2;
+// 自愈总次数上限：全部失败才判定音源不可用（显示警告 + 停在真实位置）
+const STALL_MAX_RETRIES = 4;
+// 缓冲空洞跳过上限（秒）：当前位置落在空洞里且下一段缓冲在这么近，直接跳过去续播
+const STALL_GAP_SKIP_SEC = 30;
+// 自愈后连续正常播放这么久 → 重置重试计数（长播过程中的偶发卡顿不累计到上限）
+const STALL_RESET_MS = 30_000;
+// 看门狗轮询间隔
+const STALL_TICK_MS = 1_000;
 
 /** 统计上报（0036 恢复；每 session 每期每事件一次；sessionStorage 去重——隐私模式静默）
  *  去重 key 在 POST **成功**后才写入：若首次上报失败（网络/CORS/服务端 404），
  *  该 session 内后续播放可重试，不会因失败残留的 key 永久短路（播放多次但统计恒 0 的隐患）。
  *  key 带 v2 版本前缀：旧版（无前缀，先写 key 后发请求）残留的短路 key 自动失效，
  *  无需用户手动清 sessionStorage */
+// 单例 <audio> 提到模块级：provider 万一被重建（dev 热更新等），复用同一个元素而不是
+// new 出第二个——否则老元素没人 pause 仍在播，页面上会出现"声音照常、播放条却不动"的分裂状态
+let audioSingleton: HTMLAudioElement | null = null;
+function ensureAudio(): HTMLAudioElement | null {
+  if (typeof document === "undefined") return null; // SSR：无音频元素
+  audioSingleton ??= new Audio();
+  return audioSingleton;
+}
+
 function reportStat(id: string, type: "play" | "completion") {
   const key = `dailog-stat-v2-${id}-${type}`;
   try {
@@ -115,31 +144,11 @@ export function PlaybackProvider(props: ParentProps) {
   // 临时暂停前是否在播（resume 只在原本在播时续播）
   const [wasPlaying, setWasPlaying] = createSignal(false);
 
-  // buffering 兜底超时：进入缓冲后 10s 未就绪 → 清缓冲（避免 spinner 无限转）。
-  // 注意：不置 audioError——慢速但最终成功的加载（R2 走代理 2-6s/次，大文件更久）
-  // 会超过 10s，误置 audioError 会让"明明有音频"的节目显示警告图标。
-  // audioError 只由 audio 元素真实的 error 事件驱动（404/解码失败等）。
-  // 只在首次进入 buffering 时启动一次计时（!bufTimer 守卫）：waiting 若反复触发
-  // （加载挂起重试），重置式计时会被无限推迟，兜底失效
-  let bufTimer: ReturnType<typeof setTimeout> | undefined;
-  createEffect(() => {
-    if (buffering()) {
-      if (!bufTimer) {
-        bufTimer = setTimeout(() => {
-          setBuffering(false);
-        }, BUFFERING_TIMEOUT_MS);
-      }
-    } else {
-      clearTimeout(bufTimer);
-      bufTimer = undefined;
-    }
-  });
-  onCleanup(() => clearTimeout(bufTimer));
+  // buffering 的清除不再靠固定超时（超时只是把 spinner 关掉，卡死依旧）：
+  // 统一交给下方「卡死看门狗」——有推进就清、久不推进就自愈重试、反复失败才置 audioError。
 
-  // 单例音频元素（客户端 only）
-  const [audio] = createSignal<HTMLAudioElement | null>(
-    typeof document !== "undefined" ? new Audio() : null,
-  );
+  // 单例音频元素（客户端 only；模块级复用，见 ensureAudio 注释）
+  const [audio] = createSignal<HTMLAudioElement | null>(ensureAudio());
 
   const current = () => currentEp();
 
@@ -165,7 +174,7 @@ export function PlaybackProvider(props: ParentProps) {
     // 会让播放按钮（playing 优先）显示暂停、而播放条（buffering 优先）还在转 spinner，
     // 两处状态不一致。切歌后 playing 只能由新音频真实的 "playing" 事件重新置 true
     setPreloadError(null); // 切节目：重置预加载失败标记（旧卡片警告失效）
-    a.src = episodeAudioUrl(ep.id);
+    a.src = episodeAudioUrl(ep.id, ep.publishedAt);
     a.load();
     if (opts.autoplay) {
       void a.play().catch(() => setPlaying(false)); // playing 由 "playing" 事件驱动（真正出声才置 true）；被拒（罕见）→ 停住等用户
@@ -178,7 +187,7 @@ export function PlaybackProvider(props: ParentProps) {
       const link = document.createElement("link");
       link.rel = "preload";
       link.as = "audio";
-      link.href = episodeAudioUrl(nextEp.id);
+      link.href = episodeAudioUrl(nextEp.id, nextEp.publishedAt);
       link.dataset.dailogPreload = "1";
       document.head.appendChild(link);
     }
@@ -356,11 +365,18 @@ export function PlaybackProvider(props: ParentProps) {
     };
     const onCanPlay = () => setBuffering(false);
     const onSeeked = () => setBuffering(false);
-    // 音源加载失败（404/网络/解码）→ audioError（封面按钮区显示警告图标）；同时清缓冲，
-    // 避免 waiting 后 error 把按钮卡在禁用态
+    // 播放中途的错误（分片 404/416、网络中断、解码失败）先走一次自愈（换 URL 重载 + 回原位），
+    // 反复失败才判定音源不可用。实现挂在下面看门狗区块（同一次 effect 内同步赋值，
+    // 事件触发时必然已就绪）；尚未开播（pos=0）的错误直接判失败，不做无谓重试
+    let recoverFromError: ((pos: number) => void) | null = null;
     const onError = () => {
-      setAudioError(true);
       setBuffering(false);
+      const pos = a.currentTime;
+      if (pos > 0 && recoverFromError) {
+        recoverFromError(pos);
+        return;
+      }
+      setAudioError(true);
     };
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("progress", onProgress);
@@ -368,16 +384,135 @@ export function PlaybackProvider(props: ParentProps) {
     a.addEventListener("playing", onPlaying);
     a.addEventListener("pause", onPause);
     a.addEventListener("waiting", onWaiting);
+    a.addEventListener("stalled", onWaiting); // 数据迟迟不来（分片请求挂起）：同 waiting 处理
     a.addEventListener("canplay", onCanPlay);
     a.addEventListener("seeked", onSeeked);
     a.addEventListener("error", onError);
+
+    // ---- 卡死看门狗：播放中进度长时间不推进 → 同 src 重新 load 并 seek 回原位 ----
+    // 浏览器对"某个 Range 分片请求挂住"不报错（不发 error/pause，只是停住），
+    // 所以只能自己盯进度。有推进即清 buffering；卡住先如实显示加载中，超时后自愈重试；
+    // 连续 STALL_MAX_RETRIES 次仍无推进才置 audioError（真·音源不可用）
+    let lastSrc = a.src;
+    let lastTime = -1;
+    let lastAdvanceAt = Date.now();
+    let retries = 0;
+    let lastRetryAt = 0;
+    /** 自愈第一档：seek 微调。不丢缓冲、不重下整集——只是让浏览器就"当前位置"重发
+     *  它需要的那段 Range 请求。若当前位置正好落在缓冲空洞里，直接跳到下一段已缓冲区间的
+     *  起点（空洞多半是某个分片没拿到，硬等只会一直等） */
+    const nudge = () => {
+      const t = a.currentTime;
+      let target = t + 0.05;
+      for (let i = 0; i < a.buffered.length; i++) {
+        const s = a.buffered.start(i);
+        if (s > t && s - t <= STALL_GAP_SKIP_SEC) { // 空洞在可接受范围内 → 跳过去
+          target = s + 0.01;
+          break;
+        }
+      }
+      try {
+        a.currentTime = Math.min(target, (a.duration || target) - 0.01);
+      } catch { /* readyState 太低时 seek 会抛：交给下一档 */ }
+      void a.play().catch(() => {});
+    };
+
+    /** 自愈第二档：换 URL 重载 + 回到原位。URL 上带一次性 retry 参数——
+     *  音频响应是 7 天强缓存，浏览器自身可能存着一份"读到某个字节就断"的坏副本，
+     *  用原 URL 重载只会一遍遍读回同一份坏数据（实测：同一 Range 请求重复三次、
+     *  每次都停在同一秒）。换 URL 才能真正绕开本地缓存/中间层 */
+    const reloadFrom = (pos: number) => {
+      const ep = current();
+      const base = ep ? episodeAudioUrl(ep.id, ep.publishedAt) : a.src.split("?")[0];
+      const url = `${base}${base.includes("?") ? "&" : "?"}retry=${retries}`;
+      const resume = () => {
+        try {
+          if (pos > 0) a.currentTime = pos;
+        } catch { /* 忽略：seek 失败时下面的 play 仍会从头播，好过卡死 */ }
+        setProgress(a.currentTime); // UI 立刻回到真实位置，不留幻影值
+        void a.play().catch(() => {});
+      };
+      a.addEventListener("loadedmetadata", resume, { once: true });
+      a.src = url;
+      lastSrc = a.src; // 自愈换 URL 不算"切节目"，别触发状态重置
+      a.load();
+    };
+
+    // error 事件的自愈入口（与看门狗共用同一套重试预算）
+    recoverFromError = (pos: number) => {
+      if (retries >= STALL_MAX_RETRIES) {
+        setAudioError(true);
+        return;
+      }
+      retries += 1;
+      lastRetryAt = Date.now();
+      lastAdvanceAt = Date.now();
+      reloadFrom(pos);
+    };
+
+    const watchdog = setInterval(() => {
+      // ① 无条件同步：播放条永远等于音频元素的真实状态。
+      // 这是硬约束——"进度条钉死在 70%/0"的假象正是 UI 与元素脱节造成的：
+      // 元素在 197.9s，播放条却停在别处。每拍同步后，UI 不可能再显示幻影值。
+      // 例外：自愈重载的一瞬间元素被清空（readyState=0 且 currentTime=0），
+      // 这时同步 0 会让进度条闪回起点——保持显示卡住位置，等 resume 校正即可
+      // （正常切节目由 loadEpisode 显式置 0，不受此守卫影响）
+      if (a.readyState > 0 || a.currentTime > 0) {
+        setProgress(a.currentTime);
+        setDuration(a.duration || 0);
+      }
+
+      if (a.src !== lastSrc) { // 切节目：看门狗状态整体重置
+        lastSrc = a.src;
+        lastTime = -1;
+        lastAdvanceAt = Date.now();
+        retries = 0;
+        return;
+      }
+      if (!a.src || a.paused || a.ended) { // 未播放/已结束：不判卡死
+        lastAdvanceAt = Date.now();
+        return;
+      }
+      const t = a.currentTime;
+      if (Math.abs(t - lastTime) > 0.05) { // 正常推进
+        lastTime = t;
+        lastAdvanceAt = Date.now();
+        setBuffering(false); // 有推进 = 不在缓冲（waiting 之后未必跟 canplay）
+        if (retries > 0 && Date.now() - lastRetryAt > STALL_RESET_MS) retries = 0;
+        return;
+      }
+      setBuffering(true); // 停住了：如实显示加载中（不是"暂停图标 + 时间不动"）
+      if (Date.now() - lastAdvanceAt < STALL_TIMEOUT_MS) return;
+      if (retries >= STALL_MAX_RETRIES) {
+        // 分级自愈全部失败 = 这个音源在这个位置就是拿不到数据（服务端/网络/本地坏缓存）。
+        // 明确报错并停在**真实位置**：宁可让用户看到"出错了"，也不要假装还在播
+        setAudioError(true);
+        setBuffering(false);
+        a.pause();
+        setProgress(a.currentTime);
+        return;
+      }
+      retries += 1;
+      lastRetryAt = Date.now();
+      lastAdvanceAt = Date.now(); // 给这次自愈留出时间窗
+      // 分级：有元数据 + 有缓冲数据时，前 STALL_NUDGE_RETRIES 次只做 seek 微调
+      // （代价小、不丢缓冲）；仍不动才升级为换 URL 重载（绕开坏缓存）。
+      // 元数据都没拿到（readyState=0，例如 moov 在文件尾、那个尾部请求恰好挂住）时
+      // 微调毫无意义——直接重载，别白白多等两轮
+      const canNudge = a.readyState >= 1 && a.buffered.length > 0;
+      if (canNudge && retries <= STALL_NUDGE_RETRIES) nudge();
+      else reloadFrom(a.currentTime);
+    }, STALL_TICK_MS);
+
     onCleanup(() => {
+      clearInterval(watchdog);
       a.removeEventListener("timeupdate", onTime);
       a.removeEventListener("progress", onProgress);
       a.removeEventListener("ended", onEnded);
       a.removeEventListener("playing", onPlaying);
       a.removeEventListener("pause", onPause);
       a.removeEventListener("waiting", onWaiting);
+      a.removeEventListener("stalled", onWaiting);
       a.removeEventListener("canplay", onCanPlay);
       a.removeEventListener("seeked", onSeeked);
       a.removeEventListener("error", onError);

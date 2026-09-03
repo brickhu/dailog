@@ -23,16 +23,19 @@ async function openDetail(id){
     const dc=dt.dialogueCount||null;
     const rawStatus = dt.status || '?';
     // 状态机：submitted 待采集 → collected 制作中 → crafted 待发布 → published 已发布；rejected 拒稿贯穿
-    const statusHtml = rawStatus==='rejected' ? `<span style='color:#f85149'>拒稿</span>`
-      : rawStatus==='published' ? `<span style='color:#3fb950'>已发布</span>`
-      : rawStatus==='crafted' ? `<span style='color:#d29922'>待发布</span>`
-      : rawStatus==='collected' ? `<span style='color:#4f8cff'>制作中</span>`
-      : `<span class='muted'>待采集</span>`;
+    // 投稿卡状态：直接展示 submission 原生 status 字段（带颜色区分，不映射中文）
+    const statusHtml = rawStatus==='rejected' ? `<span style='color:#f85149'>${esc(rawStatus)}</span>`
+      : rawStatus==='published' ? `<span style='color:#3fb950'>${esc(rawStatus)}</span>`
+      : rawStatus==='crafted' ? `<span style='color:#d29922'>${esc(rawStatus)}</span>`
+      : rawStatus==='collected' ? `<span style='color:#4f8cff'>${esc(rawStatus)}</span>`
+      : `<span class='muted'>${esc(rawStatus)}</span>`;
     // 采集卡：status 驱动（submitted=未采集；其余状态均视为已采集）
     const collectedOK = rawStatus !== 'submitted';
     let collectStatus;
     if (fetchingIds.has(id)) collectStatus = `<span style='color:#4f8cff'><span class='spin' style='display:inline-block'></span> 采集中</span>`;
-    else if (rawStatus === 'rejected') collectStatus = `<span style='color:#f85149'>已拒稿</span>`;
+    else if (rawStatus === 'rejected') collectStatus = (dt.collected === -1)
+      ? `<span style='color:#f85149'>采集失败</span>`
+      : `<span style='color:#f85149'>已拒稿</span>`;
     else if (collectedOK) collectStatus = dc ? `<span style='color:#3fb950'>✓ ${dc.messages} 条消息 · 共计 ${dc.chars} 字</span>` : `<span style='color:#3fb950'>✓ 已采集</span>`;
     else collectStatus = `<button class='ac-act' data-fetch-id='${id}'>采集</button>`;
     const collectHeadClick = collectedOK ? "onclick='toggleCard(this)'" : '';
@@ -59,7 +62,7 @@ async function openDetail(id){
             const segsAllAudio = (s.segments || []).length > 0 && (s.segments || []).every(seg => !!segAudioGet(segKey(id, seg)));
             return `<div style='margin-bottom:10px'>`
               + `<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:4px'>`
-              +   `<div style='display:flex;align-items:center;gap:8px'><span class='who' style='font-size:11px;color:#d29922'>脚本 ${si + 1}（${(s.segments||[]).length} 段）</span><button class='pg polish-btn' onclick='polishScript("${id}", ${si})' data-si='${si}'>打磨语感</button></div>`
+              +   `<div style='display:flex;align-items:center;gap:8px'><span class='who' style='font-size:11px;color:#d29922'>脚本 ${si + 1}（${(s.segments||[]).length} 段）</span><button class='pg' onclick='openPolishConsole("${id}", ${si})'>打磨控制台</button></div>`
               +   `<span style='display:flex;align-items:center;gap:8px'>`
               +     `<label class='muted' style='font-size:11px;display:flex;align-items:center;gap:3px;cursor:pointer'><input type='checkbox' class='seg-select-all' data-si='${si}' onchange='toggleSelectAllSegs(${si}, this.checked)'>全选</label>`
               +     `<button class='pg seg-batch-tts' onclick='batchGenSegAudio("${id}", ${si})' data-si='${si}' disabled>批量生成语音</button>`
@@ -71,13 +74,21 @@ async function openDetail(id){
         }).join('');
         createBody = scriptCardsHtml ? scriptCardsHtml : `<div class='muted'>已创作，脚本列表为空</div>`;
       } else {
-        createStatus = `<button class='ac-act' id='btnReview' onclick='openReviewDrawer("${id}")'>开始创作</button>`;
-        createBody = '';   // 未审核：单行卡片（仅头部按钮，无 body）
+        // 阶段动作：未审 → 审核(R1)；已审有评分 → 创作脚本(R2)；两者都不重复出现
+        let hasReview = null;
+        if (typeof getWorkflowInput === 'function') { try { const sel = getWorkflowInput(id, 'selection'); if (sel && typeof sel.score === 'number') hasReview = sel; } catch {} }
+        createStatus = hasReview
+          ? `<button class='ac-act' onclick='openScriptConsole("${id}")'>创作脚本</button>`
+          : `<button class='ac-act' onclick='openReviewConsole("${id}")'>审核</button>`;
+        createBody = '';
       }
     } else if (rawStatus === 'published') {
-      // 已发布节目不再创作
-      createStatus = `<span class='muted'>已发布</span>`;
-      createBody = `<div class='muted'>节目已发布</div>`;
+      // 已发布：创作卡锁定在该阶段的产物预览态——与 crafted 完全同渲染（脚本文稿 + 音频播放器）
+      createStatus = `<span style='color:#3fb950'>已发布</span>`;
+      // published：音频用发布后 episode 公开音频（episodes/... R2 对象），非 full/ 草稿源
+      const epAudioId = (dt.episodes && dt.episodes[0] && dt.episodes[0].id) || null;
+      const pubAudioSrc = epAudioId ? '/api/audio/episode?env=' + encodeURIComponent(labEnv || '') + '&episodeId=' + encodeURIComponent(epAudioId) : null;
+      createBody = renderCraftedBody(id, (ps && ps.scriptList) || [], null, pubAudioSrc);
     } else {
       createStatus = '';
       createBody = '';   // submitted：未采集，创作卡不展开
@@ -91,13 +102,26 @@ async function openDetail(id){
     }
     // 创作卡展开状态：脚本数据驱动（无 approved 概念）
     const scriptsExist = !!(ps && Array.isArray(ps.scriptList) && ps.scriptList.length);
+    // 已发布：所有卡片尾部展示节目地址（slug 发布时存 pubmeta）
+    let pubSlug = null;
+    // 已发布节目地址：优先从 detail 的 episodes（服务端权威），兜底本地 pubmeta（发布时记录）
+    try { if (dt.episodes && dt.episodes[0] && dt.episodes[0].slug) pubSlug = dt.episodes[0].slug; } catch {}   // episodes 在 detail 内（d.detail.episodes）
+    if (!pubSlug && typeof loadPubMeta === 'function') { try { pubSlug = (loadPubMeta(id) || {}).slug || null; } catch {} }
+    // 绝对节目 URL：siteUrl（envs.json）+ /episode/{slug}；无 siteUrl 时回退相对路径
+    const siteBaseUrl = (d.siteUrl || '').replace(/\/$/, '');
+    const pubUrl = pubSlug ? (siteBaseUrl ? siteBaseUrl + '/episode/' + pubSlug : '/episode/' + pubSlug) : null;
+    const pubUrlHtml = pubUrl ? `<div class='detail-row' style='margin-top:10px'><span class='k'>节目地址</span><span class='v'><a href='${esc(pubUrl)}' target='_blank' rel='noopener'>${esc(pubUrl)}</a></span></div>` : '';
+    // 默认展开：第一个（投稿卡）+ 可见范围的最后一个（按状态阶段动态：submitted→采集 / collected,rejected→创作 / crafted,published→发布）
+    let lastOpenCard = 'collect';
+    if (collectedOK) lastOpenCard = 'create';
+    if (rawStatus === 'crafted' || rawStatus === 'published') lastOpenCard = 'publish';
     // dialogue 存浏览器缓存（sessionStorage）——本页数据源，不再依赖本地/重复请求
     wrap.innerHTML=`
       <span class='back' onclick='showList()'>← 返回列表</span>
       <div class='ac'>
         <div class='ac-card open'>
-          <div class='ac-head' onclick='toggleCard(this)'><h3 style='margin:0;font-size:14px'>投稿</h3><span class='muted mono' style='font-size:11px'>${esc(d.id)}</span><span class='ac-status'>${statusHtml}</span>${rawStatus!=='published'?`<button class='pg' style='font-size:11px;padding:2px 8px;margin-left:8px;color:#f85149;border-color:#f85149' onclick='event.stopPropagation();rejectSubmission("${id}")'>拒稿</button>`:''}<span class='ac-arrow'>▾</span></div>
-          <div class='ac-body'>
+          <div class='ac-head' onclick='toggleCard(this)'><h3 style='margin:0;font-size:14px'>投稿</h3><span class='muted mono' style='font-size:11px'>${esc(d.id)}</span><span class='ac-status'>${statusHtml}</span><span class='ac-arrow'>▾</span></div>
+          <div class='ac-body' style='position:relative'>
             <div class='detail-info'>
               <div class='detail-row'><span class='k'>标题</span><span class='v' id='subTitle'>${dt.title?esc(dt.title):'<span class="muted">加载中...</span>'}</span></div>
               <div class='detail-row'><span class='k'>投稿时间</span><span class='v'>${fmtDate(dt.createdAt)}</span></div>
@@ -107,26 +131,29 @@ async function openDetail(id){
               <div class='detail-row'><span class='k'>建议</span><span class='v'>${esc(dt.suggestion||'—')}</span></div>
               <div class='detail-row'><span class='k'>音色采样</span><span class='v'>${hostSampleV && hostUserIdV ? `<button class='sample-play' data-src="/api/audio/host?env=${encodeURIComponent(labEnv||'')}&userId=${encodeURIComponent(hostUserIdV)}" onclick='toggleSampleAudio(this)'>▶</button><span style='font-size:12px'>${esc(hostNameV)}</span>` : `<span class='muted' style='font-size:12px'>主持人无声样</span>`}&nbsp;&nbsp;&nbsp;${guestIdV ? `<button class='sample-play' data-src="/api/audio/guest?env=${encodeURIComponent(labEnv||'')}&platform=${encodeURIComponent(guestIdV)}" onclick='toggleSampleAudio(this)'>▶</button><span style='font-size:12px'>${esc(guestNameV)}</span> <button class='gv-icon-btn' title='管理声线' onclick='openGuestVoiceModal("${guestIdV}", "${esc(guestNameV)}")'>⚙</button>` : `<span class='muted' style='font-size:12px'>嘉宾无声线</span> <button class='gv-icon-btn' title='配置声线' onclick='openGuestVoiceModal("${guestIdV || ''}", "${esc(guestNameV)}")'>🎙</button>`}</span></div>
             </div>
+            ${(rawStatus!=='published' && rawStatus!=='rejected')?`<button class='pg' style='position:absolute;right:12px;bottom:12px;font-size:12px;padding:4px 14px;color:#f85149;border-color:#f85149' onclick='rejectSubmission("${id}")'>拒稿</button>`:''}
           </div>
         </div>
-        <div class='ac-card'>
+        <div class='ac-card ${lastOpenCard==='collect'?'open':''}'>
           <div class='ac-head ${collectedOK?'':'muted'}' ${collectHeadClick}><h3 style='margin:0;font-size:14px'>采集</h3><span class='ac-status'>${collectStatus}</span>${collectArrow}</div>
           ${collectBodyHtml}
         </div>
-        ${collectedOK?`<div class='ac-card ${scriptsExist?'':'open'}'>
-          <div class='ac-head ${scriptsExist?'':'muted'}' ${scriptsExist?"onclick='toggleCard(this)'":''}><h3 style='margin:0;font-size:14px'>创作</h3><span class='ac-status'>${createStatus}</span>${scriptsExist?'<span class=\'ac-arrow\'>▾</span>':''}</div>
+        ${collectedOK?`<div class='ac-card ${lastOpenCard==='create'?'open':''}'>
+          <div class='ac-head' onclick='toggleCard(this)'><h3 style='margin:0;font-size:14px'>创作</h3><span class='ac-status'>${createStatus}</span><span class='ac-arrow'>▾</span></div>
           ${createBody?`<div class='ac-body'>${createBody}</div>`:''}
         </div>`:''}
-        ${(rawStatus==='crafted'||rawStatus==='published')?`<div class='ac-card'>
+        ${(rawStatus==='crafted'||rawStatus==='published')?`<div class='ac-card ${lastOpenCard==='publish'?'open':''}'>
           <div class='ac-head' onclick='toggleCard(this)'><h3 style='margin:0;font-size:14px'>发布</h3><span class='ac-status'>${rawStatus==='published'?'<span style="color:#3fb950">已发布</span>':'<span style="color:#d29922">待发布</span>'}</span><span class='ac-arrow'>▾</span></div>
           <div class="ac-body">${publishCardBody}</div>
         </div>`:''}
       </div>
-      ${d.progress?`<div class='card' style='margin-top:12px'><div class='muted' style='font-size:12px'>进度：${esc(d.progress.step)} · ${esc(new Date(d.progress.updatedAt).toLocaleString())}</div></div>`:''}`;
+      ${d.progress?`<div class='card' style='margin-top:12px'><div class='muted' style='font-size:12px'>进度：${esc(d.progress.step)} · ${esc(new Date(d.progress.updatedAt).toLocaleString())}</div></div>`:''}${pubUrlHtml}`;
     // 发布卡：仅 crafted/published 显示；表单/已发布态由 publish.js 渲染
     if (d.dialogue) { try { sessionStorage.setItem('dlg-'+id, JSON.stringify(d.dialogue)); } catch {} }
     // 发布卡：时长确定性数据自动检测（full audio loadedmetadata），发布时随 meta 携带
     if (rawStatus === 'crafted' && typeof initPubDur === 'function') { try { initPubDur(id, labEnv); } catch {} }
+    // 发布卡：内容未填完整前禁用发布按钮（初始状态）
+    if (rawStatus === 'crafted' && typeof updatePubSubmitState === 'function') { try { updatePubSubmitState(); } catch {} }
     if (collectedOK) loadCollectBody(id, dt.status==='rejected', d.dialogue);
     if (!dt.title) loadR2Title(id);
     // 发布卡：挂载通用 LLM 调用组件（预览 messages+config 可编辑 → 发送 → 收缩结果）
@@ -215,6 +242,75 @@ function restoreDrawerState(){
   else if (drawerState === 'result') setDrawerButtons({ close: false, retry: true, confirm: true, confirmText: '确认', send: false });
 }
 // 打开审题 drawer：内嵌两个 llm-box（评分 → 脚本），审题逻辑（round1/round2/confirm）不变
+// round2 试点入口：LLM 控制台（采纳 = 触发 onDone → 业务写 scripts 产物槽）
+async function openScriptConsole(id){
+  if (typeof openLlmConsole !== 'function') { alert('llm-console.js 未加载'); return; }
+  let selection = null;
+  if (typeof getWorkflowInput === 'function') { try { selection = getWorkflowInput(id, 'selection'); } catch {} }
+  const score = (selection && typeof selection.score === 'number') ? selection.score : null;
+  if (score == null) { alert('该投稿还没有审题评分——请先走「开始创作」完成 round1'); return; }
+  openLlmConsole({
+    id: id,
+    key: 'review.script',
+    title: 'round2 · 脚本创作（控制台试点）',
+    url: '/api/run/review/round2',
+    scoring: true,   // 对应 review.script 模板 config.scoring（提示词模板决定是否评分）
+    buildRequest: () => ({ id: id, score: score, selection: selection }),
+    onDone: async ({ request, response, meta }) => {
+      // —— 纯业务：采纳这版 scripts → 落 R2（services scripts）→ 刷新后工作区稳定可读（不被 R2 空数据覆盖）——
+      const scripts = (response && response.result && Array.isArray(response.result.scripts)) ? response.result.scripts : null;
+      if (!scripts || !scripts.length) throw new Error('该版没有 scripts，未采纳');
+      const d = await j('/api/run/script/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: id, scripts: scripts }) });
+      if (!(d && d.ok)) throw new Error((d && d.error) || '脚本入库失败');
+      if (typeof setWorkflowInput === 'function') { try { setWorkflowInput(id, 'scripts', scripts); } catch (e) { throw new Error('写产物槽失败：' + e.message); } }
+      openDetail(id);   // 刷新 → 创作工作区出现脚本（打磨/TTS 用采纳结果）
+    },
+  });
+}
+// 语感打磨（polish.all）接入 LLM 控制台：多候选（dry）→ 采纳 = 替换 scripts[si] 并保存
+async function openPolishConsole(id, si){
+  if (typeof openLlmConsole !== 'function') { alert('llm-console.js 未加载'); return; }
+  openLlmConsole({
+    id: id, key: 'polish.all', title: '语感打磨（脚本 ' + (si + 1) + '，控制台）', url: '/api/run/polish',
+    scoring: true,   // 对应 polish.all 模板 config.scoring
+    buildRequest: () => ({ id: id, scriptIndex: si, dry: true }),   // 多候选：生成不落 R2
+    onDone: async ({ response }) => {
+      const polished = response && response.result;
+      if (!polished || !Array.isArray(polished.segments)) throw new Error('该版没有打磨结果（segments）');
+      let scripts = [];
+      if (typeof getWorkflowInput === 'function') { try { const s = getWorkflowInput(id, 'scripts'); if (Array.isArray(s) && s.length) scripts = s; } catch {} }
+      if (!scripts.length) throw new Error('产物槽无 scripts——请先经 round2 控制台采纳脚本');
+      if (si >= scripts.length) throw new Error('脚本序号越界');
+      const next = scripts.map((s, i) => (i === si ? polished : s));
+      const d = await j('/api/run/script/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: id, scripts: next }) });
+      if (!(d && d.ok)) throw new Error((d && d.error) || '保存失败');
+      if (typeof setWorkflowInput === 'function') { try { setWorkflowInput(id, 'scripts', next); } catch {} }
+      openDetail(id);   // 采纳生效：刷新工作区（该脚本用打磨版）
+    },
+  });
+}
+// 审核（round1）接入 LLM 控制台：采纳 = 拒稿直接入库 rejected / 通过定稿 selection
+async function openReviewConsole(id){
+  if (typeof openLlmConsole !== 'function') { alert('llm-console.js 未加载'); return; }
+  openLlmConsole({
+    id: id, key: 'review.score', title: '审核（round1 · 审题评分）', url: '/api/run/review/round1',
+    scoring: true,   // 对应 review.score 模板 config.scoring
+    buildRequest: () => ({ id: id }),
+    onDone: async ({ response }) => {
+      const r = response && response.result;
+      if (!r || typeof r !== 'object') throw new Error('该版没有审题结果');
+      if (r.rejected === true) {
+        // 业务：拒稿入库——与弹窗拒稿同一链路（services /review → reject 状态 + 通知投稿人）
+        const d = await j('/api/run/review/confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: id, result: r }) });
+        if (!(d && d.ok)) throw new Error((d && d.error) || '拒稿入库失败');
+      } else {
+        // 通过：定稿审题产物 → 卡片切到「创作脚本」
+        if (typeof setWorkflowInput === 'function') { try { setWorkflowInput(id, 'selection', r); } catch (e) { throw new Error('写审题产物失败：' + e.message); } }
+      }
+      openDetail(id);
+    },
+  });
+}
 function openReviewDrawer(id){
   if (location.pathname.slice(1) !== id) history.pushState(null, '', '/' + id);
   const body = document.getElementById('drawerBody');
@@ -662,15 +758,17 @@ function renderPreviewBody(id, scripts, fullMeta){
     + `<audio controls style='width:100%;margin-bottom:10px' id='fullPlayer-${id}'></audio>`
     + rows;
 }
-// 创作完成态：segs 只读 + R2 音频播放器（✅ 创作完成；播放源 full/{id}.m4a）
-function renderCraftedBody(id, scripts){
+// 创作完成/已发布态：产物预览（脚本文稿只读 + 音频播放器）——crafted 用 full/{id}.m4a；published 用发布后 episode 公开音频
+function renderCraftedBody(id, scripts, label, audioSrc){
   const script = scripts[0] || { segments: [] };
   const segs = script.segments || [];
   const rows = segs.map((seg, i) => `<div class='script-seg seg-${seg.speaker === 'guest' ? 'guest' : 'host'}' style='margin-bottom:6px;padding:8px 10px'><span class='who who-${seg.speaker === 'guest' ? 'guest' : 'host'}'>${esc(seg.speaker)}</span> <span style='font-size:13px'>${esc(seg.text)}</span></div>`).join('');
   const env = (typeof labEnv !== 'undefined' && labEnv) ? encodeURIComponent(labEnv) : '';
-  return `<div style='margin-bottom:8px'><span style='color:#3fb950'>✅ 创作完成</span><span class='muted' style='font-size:12px'>（节目音频已生成并上传 R2，播放源 R2）</span></div>`
+  const title = label || '✅ 创作完成';
+  const src = audioSrc || `/api/audio/full?env=${env}&id=${encodeURIComponent(id)}`;
+  return `<div style='margin-bottom:8px'><span style='color:#3fb950'>${title}</span><span class='muted' style='font-size:12px'>（节目音频，播放源 R2）</span></div>`
     + `<audio controls style='width:100%;margin-bottom:10px' src='/api/audio/full?env=${env}&id=${encodeURIComponent(id)}'></audio>`
-    + rows;
+    + (rows.length ? rows : `<div class='muted' style='font-size:12px'>（该投稿未保留脚本文稿——发布时脚本未入库）</div>`);
 }
 // 确认上传成功回调：刷新详情 → 创作卡片切创作完成态
 function onMergeDone(id){ openDetail(id); }
@@ -791,15 +889,19 @@ function mountReviewBoxes(id){
   scoreMount.dataset.mounted = '1';
   // 累积审题结果（round1 检测 + round2 脚本），确认入库时合并提交
   const reviewAcc = { result: null, scripts: null, score: null, rejected: false };
+  let scriptBox = null;   // 组件2实例——确认时读取质量打分（未打分则按钮被禁用，进不来）
   window.__confirmReview = confirmReviewBoxes;   // 供 llm-box 内联确认按钮调用
-  // 确认入库：合并 round1+round2 结果 → /api/run/review/confirm（服务端写 DB 决策 + R2 scripts + 拒稿通知）
+  // 确认入库：合并 round1+round2 结果 → /api/run/review/confirm（服务端写 DB 决策 + R2 scripts + 拒稿通知 + 打分）
   async function confirmReviewBoxes(){
     const merged = { ...(reviewAcc.result || {}) };
     if (reviewAcc.scripts) merged.scripts = reviewAcc.scripts;
+    const fb = (scriptBox && typeof scriptBox.getFeedback === 'function') ? scriptBox.getFeedback() : null;
+    const extra = {};
+    if (fb && fb.score) { extra.score = fb.score; extra.fbTypes = fb.types; extra.note = fb.note || null; }
     const btn = document.querySelector('#drawerBody .llm-box-confirm');
     if (btn) { btn.disabled = true; btn.textContent = '确认中...'; }
     try {
-      await j('/api/run/review/confirm', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, result: merged }) });
+      await j('/api/run/review/confirm', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, result: merged, ...extra }) });
       closeReviewDrawer();
       openDetail(id);
     } catch (e) {
@@ -808,7 +910,6 @@ function mountReviewBoxes(id){
     }
   }
   // 组件2（脚本）：初始禁用；round1 完成且 score>=6.5 时启用 + 注入预览
-  let scriptBox = null;
   if (scriptMount && !scriptMount.dataset.mounted) {
     scriptMount.dataset.mounted = '1';
     scriptBox = createLlmBox({
@@ -816,6 +917,7 @@ function mountReviewBoxes(id){
       title: '加载中...',
       key: 'review.script',
       url: '/api/run/review/round2',
+      feedback: true,   // round2 结果区启用质量标记（提示词进化数据源）
       buildRequest: () => {
         // 原则①：round2 输入从 store 取——round1 选题（advice/main_topic/category）随请求传给 lab
         let selection = null;
@@ -861,8 +963,10 @@ function mountReviewBoxes(id){
           scriptMount.style.display = '';
           scriptMount.dataset.disabled = '';
           scriptBox.__score = score;
-          // 预取 round2 预览（注入 score）
-          j('/api/run/review/round2', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, score, preview: true }) })
+          // 预取 round2 预览（注入 score + 选题依据——user 消息含 {{selection}}，缺 selection 则 advice/main_topic 不渲染进快照）
+          let sel = null;
+          if (typeof getWorkflowInput === 'function') { try { sel = getWorkflowInput(id, 'selection'); } catch {} }
+          j('/api/run/review/round2', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, score, selection: sel, preview: true }) })
             .then(d => {
               if (d && d.preview) {
                 scriptBox.setPreviewJson(JSON.stringify(d.preview, null, 2));

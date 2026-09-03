@@ -9,6 +9,7 @@
 import { createRoute, OpenAPIHono, z, type RouteHandler } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import type { Repos } from "../repo";
+import { createHash, randomBytes } from "node:crypto";
 
 // 待审核投稿上限：同时排队待审的投稿超过该数 → 拒绝新投稿（防队列积压 + 引导等待）
 const PENDING_LIMIT = 5;
@@ -118,9 +119,6 @@ export async function probeReachability(url: string): Promise<Reachability> {
 
 // —— 确定性投稿 ID ——
 // 由「平台标识 + 平台内容 ID」hash 生成（UUID v5 / RFC 4122 命名空间）：
-// 同一分享 URL 永远得到同一 ID —— 天然幂等（重复提交撞唯一约束）、详情链接稳定、
-// 并发竞态由 DB 唯一约束兜底。存量数据（随机 UUID）保留不变，两者兼容。
-import { createHash } from "node:crypto";
 
 const SUBMISSION_NS = "d6a5c441-58e7-4b1c-9a2d-3f0e1b2c3d4e"; // 投稿命名空间（固定）
 
@@ -136,12 +134,14 @@ export function submissionKeyFromUrl(url: string): string {
   }
 }
 
-/** UUID v5：sha1(命名空间 + 名称) 取前 16 字节 → 标准 UUID 格式（确定性） */
-export function submissionIdFromUrl(url: string): string {
-  const key = submissionKeyFromUrl(url);
-  const digest = createHash("sha1").update(SUBMISSION_NS + key).digest();
+/** 投稿 ID：sha256(userId|url|timestamp|rand|host) 前 16 字节 → UUID 格式（确定性 + 绝对防撞 + 环境隔离）
+ *  - rand：每次随机 → 同参数也绝不碰撞
+ *  - host：生成时环境维度 → 多环境共用 R2 不冲突
+ *  - 生成一次存库，不重算（host/rand 仅生成瞬间参与） */
+export function generateSubmissionId(userId: string, url: string, ts: number, rand: string, host: string): string {
+  const digest = createHash("sha256").update([userId, url, String(ts), rand, host].join("|")).digest();
   const b = digest.subarray(0, 16);
-  b[6] = (b[6] & 0x0f) | 0x50; // version 5
+  b[6] = (b[6] & 0x0f) | 0x40; // version 4 风格
   b[8] = (b[8] & 0x3f) | 0x80; // variant 10xx
   const hex = b.toString("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
@@ -173,11 +173,8 @@ export function submissionsRoutes(repo: Repos) {
     }
     // 规范化：同内容多 URL（含追踪参数）→ 同一标准 URL 查询
     const canonical = canonicalUrl(url);
-    // 确定性 ID：同 URL 同 ID → 直接按主键查（全局唯一，不涉及用户）；
-    // 存量数据（随机 UUID）按 URL 全局兜底（任何人提交过都算重复）
-    const existing =
-      (await repo.submissions.findById(submissionIdFromUrl(url))) ??
-      (await repo.submissions.findByUrl(canonical));
+    // 投稿 ID 含 rand 不可重算——查重按 URL 权威（同 URL 全局唯一约束兜底）
+    const existing = await repo.submissions.findByUrl(canonical);
     if (!existing) return c.json({ existing: false });
     const episodes = await repo.episodes.listBySubmission(existing.id).catch(() => []);
     const published = episodes.find((e) => e.status === "published" && e.isPublic) ?? null;
@@ -258,7 +255,7 @@ export function submissionsRoutes(repo: Repos) {
     }
     // 重复提交同一链接（全局唯一，不涉及用户）→ 返回已有投稿 + 已生成节目
     const existing =
-      (await repo.submissions.findById(submissionIdFromUrl(url))) ??
+      (await repo.submissions.findByUrl(url)) ??
       (await repo.submissions.findByUrl(canonicalUrl2));
     if (existing) {
       const episodes = await repo.episodes.listBySubmission(existing.id).catch(() => []);
@@ -291,7 +288,10 @@ export function submissionsRoutes(repo: Repos) {
       }
     } catch { /* 嘉宾匹配失败不影响投稿 */ }
     const host = { callName: callNameInEpisode ?? null, personaInfo: personaInfo ?? null, voiceSampleId: voiceSampleId ?? null };
-    const created = await repo.submissions.create(submissionIdFromUrl(url), userId, canonicalUrl2, title, suggestion, guest, host);
+    // 投稿 ID：sha256(userId|url|timestamp|rand|host) → UUID 格式（绝对防撞 + 环境隔离；生成一次存库不重算）
+    const rand = randomBytes(8).toString("hex");
+    const reqHost = c.req.header("host") || "default";
+    const created = await repo.submissions.create(generateSubmissionId(userId, canonicalUrl2, Date.now(), rand, reqHost), userId, canonicalUrl2, title, suggestion, guest, host);
     if (!created.id) {
       return c.json({ error: "already_submitted", detail: "该链接已提交过投稿" }, 409);
     }

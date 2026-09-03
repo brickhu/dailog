@@ -138,6 +138,31 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
   const ep = () => props.episode;
   const hostName = () => ep().callName ?? ep().displayName ?? ep().username;
   const [showTranscript, setShowTranscript] = createSignal(false);
+  // 台本 = scripts/{submissionId}.json 引用：展开时拉取公开端点 → 解析 segments → 去情绪标签
+  const [transcriptText, setTranscriptText] = createSignal<string | null>(null);
+  createEffect(() => {
+    if (!showTranscript()) return;
+    const ref = ep().transcript;
+    if (!ref) return;
+    const m = /^scripts\/([0-9a-f-]+)\.json$/.exec(ref);
+    if (!m) { setTranscriptText(null); return; }
+    const sid = m[1];
+    let cancelled = false;
+    fetch(`${apiBaseForFetch}/v1/public/scripts/${encodeURIComponent(sid)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        const scripts = (data && data.scripts) || [];
+        const segs = (scripts[0] && scripts[0].segments) || [];
+        if (!segs.length) { setTranscriptText(null); return; }
+        const text = segs
+          .map((s: { speaker?: string; text?: unknown }) => `${s.speaker === "guest" ? "嘉宾" : "主持人"}：${String(s.text || "").replace(/\[[^\]]*\]/g, "").trim()}`)
+          .join("\n");
+        setTranscriptText(text);
+      })
+      .catch(() => { if (!cancelled) setTranscriptText(null); });
+    onCleanup(() => { cancelled = true; });
+  });
   // 播放/完播统计（0036 恢复）：createResource 独立加载；likes 计数由 InteractButtons 复用 stats
   const [stats, { refetch: refetchStats }] = createResource(
     () => ep().id,
@@ -261,8 +286,11 @@ export function EpisodeDetail(props: { episode: QueueEpisode }) {
         <button {...stylex.props(styles.transcriptBtn)} onClick={() => setShowTranscript((v) => !v)}>
           {showTranscript() ? t("common.cancel") : t("episode.transcript")}
         </button>
-        <Show when={showTranscript()}>
-          <p {...stylex.props(styles.transcript)}>{ep().transcript}</p>
+        <Show when={showTranscript() && transcriptText() !== null}>
+          <p {...stylex.props(styles.transcript)}>{transcriptText()}</p>
+        </Show>
+        <Show when={showTranscript() && transcriptText() === null}>
+          <p {...stylex.props(styles.transcript)}>…</p>
         </Show>
       </Show>
     </div>

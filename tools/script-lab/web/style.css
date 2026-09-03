@@ -6,6 +6,11 @@
   td { padding:10px 12px; border-bottom:1px solid #1c2029; vertical-align:middle; }
   tr:hover td { background:#1b202a; }
   .tag { font-size:11px; padding:2px 8px; border-radius:20px; border:1px solid #262b36; color:#8a91a0; white-space:nowrap; }
+  /* 列表状态颜色（英文状态值，对齐详情页状态机） */
+  .tag.published { color:#3fb950; border-color:#3fb950; }    /* 已发布：绿 */
+  .tag.rejected { color:#f85149; border-color:#f85149; }     /* 拒稿：红 */
+  .tag.crafted { color:#d29922; border-color:#d29922; }      /* 待发布：黄 */
+  .tag.submitted, .tag.collected { color:#8a91a0; }          /* 待采集/制作中：灰 */
   .tag.待采集 { color:#4f8cff; border-color:#4f8cff; }
   .tag.制作中 { color:#d29922; border-color:#d29922; }
   .tag.已发布 { color:#3fb950; border-color:#3fb950; }

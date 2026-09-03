@@ -1,4 +1,8 @@
 对话全文：
-{{dialogue}}
+{{dialogue.messages}}
 
-投稿建议（可选）：{{suggestion}}
+投稿建议：
+{{suggestion}}
+
+对话原文地址：
+{{dialogue.sourceUrl}}

@@ -7,7 +7,7 @@
 // thumb 默认隐藏：桌面 hover 轨道 / 键盘聚焦 / 拖动中显示；移动端拖动时显示。
 // 键盘（APG slider pattern）：方向键 ±5s、PageUp/Down ±30s、Home/End；键盘操作直接提交。
 import * as stylex from "@stylexjs/stylex";
-import { createSignal, splitProps, type JSX } from "solid-js";
+import { createSignal, onCleanup, onMount, splitProps, type JSX } from "solid-js";
 import { type StyleXStyles } from "@stylexjs/stylex";
 import { colors, dimensions, durations, easings } from "@dailogues/ui/theme.stylex";
 
@@ -189,6 +189,12 @@ export function PlayerSeekBar(props: PlayerSeekBarProps) {
   };
   const moveDrag = (e: PointerEvent) => {
     if (dragSec() === null || isDisabled() || !known()) return;
+    // 鼠标键已松开却没收到 pointerup（指针捕获被打断/在窗口外松手）：立即收尾，
+    // 否则 dragSec 永久非 null → 进度条与时间钉死在松手位置、声音却继续走
+    if (e.pointerType === "mouse" && e.buttons === 0) {
+      endDrag();
+      return;
+    }
     const v = valueFromPointer(e.clientX);
     setDragSec(v);
     local.onPreview?.(v);
@@ -199,6 +205,29 @@ export function PlayerSeekBar(props: PlayerSeekBarProps) {
     setDragSec(null);
     local.onSeek(v);
   };
+
+  // 拖动收尾兜底：pointerup/pointercancel 未必落回本元素（指针捕获丢失、元素被重建、
+  // 窗口失焦、拖出浏览器窗口松手……）。挂 window 级收尾，保证拖动状态一定能结束——
+  // 否则本地预览值会永久覆盖真实进度，表现为"进度条不再自动更新"。
+  // endDrag 幂等（dragSec 为 null 直接返回），与元素自身的 pointerup 不冲突。
+  onMount(() => {
+    const stop = () => endDrag();
+    // 连 pointerup 都没等到（捕获丢失后指针在别处松开）时的最后一道兜底：
+    // 拖动中若发现按键其实已松开，立刻收尾
+    const stopIfReleased = (e: PointerEvent) => {
+      if (dragSec() !== null && e.buttons === 0) endDrag();
+    };
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+    window.addEventListener("blur", stop);
+    window.addEventListener("pointermove", stopIfReleased);
+    onCleanup(() => {
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      window.removeEventListener("blur", stop);
+      window.removeEventListener("pointermove", stopIfReleased);
+    });
+  });
 
   // ---- keyboard（APG slider pattern；键盘操作无中间态，直接提交）----
   const onKeyDown = (e: KeyboardEvent) => {

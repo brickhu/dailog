@@ -80,6 +80,9 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   // 封面缩放规格（?w=）：白名单防滥用；响应式图片按视口选规格，避免每张卡拉原图
   const COVER_WIDTHS = new Set([160, 320, 480, 640, 960, 1280]);
+  // 音频开放区间（bytes=N-）单次响应上限：节目 2-10MB，实际总是一次回到文件尾；
+  // 该上限只为超大文件兜底（避免一次性进内存），不是分片策略——切勿再调小成 1MiB
+  const RANGE_MAX_SPAN = 32 * 1024 * 1024;
   // 缩放结果内存缓存（key `cover:{id}:{w}`；原图已有磁盘缓存，缩放结果小、命中即毫秒）
   const coverResizeCache = new Map<string, { data: Uint8Array; total: number }>();
   app.openapi(createRoute({
@@ -130,6 +133,26 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
       return c.json({ error: "not_found" }, 404);
     }
   });
+  // 节目台本（公开）：scripts/{submissionId}.json（打磨脚本文件引用——节目页拉取后去情绪标签展示）
+  const publicScriptRoute = createRoute({
+    method: "get",
+    path: "/v1/public/scripts/:id",
+    request: { params: IdParam },
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "打磨脚本 JSON（segments）" },
+      404: { content: { "application/json": { schema: ErrorResp } }, description: "脚本不存在" },
+    },
+  });
+  app.openapi(publicScriptRoute, (async (c: Context) => {
+    const sid = c.req.param("id")!;   // id = submissionId
+    if (!UUID_RE.test(sid)) return c.json({ error: "not_found" }, 404);
+    const bytes = await deps.voice.storage.get(`scripts/${sid}.json`).then((r) => r.data).catch(() => null);
+    if (!bytes) return c.json({ error: "not_found" }, 404);
+    return new Response(bytes as unknown as BodyInit, {
+      headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=3600" },
+    });
+  }) as unknown as RouteHandler<typeof publicScriptRoute, AuthEnv>);
+
   // 播放列表封面（公开）：仅公开列表可读；缓存 86400s（与单集封面同模式）
   app.openapi(createRoute({
     method: "get",
@@ -176,23 +199,48 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
     try {
       // Content-Type 按存储 key 后缀（mp3/m4a 双格式兼容；已发布老节目是 mp3）
       const audioContentType = audio.audioKey.endsWith(".m4a") ? "audio/mp4" : "audio/mpeg";
+      // 缓存策略：站点播放用的 URL 带 ?v=<publishedAt>（内容变即换 URL）→ 长缓存且不校验；
+      // 裸 URL（RSS/外链/历史书签）内容可变（重新发布会覆盖同一路径），必须每次校验——
+      // 否则浏览器缓存里一旦存下旧版本、或"读到某字节就断"的坏副本，用户会被钉死整整 7 天，
+      // 服务端怎么修都传不到他那里。ETag 命中只是 304 空响应，成本可忽略
       const baseHeaders = {
         "Content-Type": audioContentType,
         "Accept-Ranges": "bytes",
-        "Cache-Control": "public, max-age=604800",
+        "Cache-Control": c.req.query("v")
+          ? "public, max-age=604800, immutable"
+          : "public, max-age=0, must-revalidate",
         ETag: etag,
       };
+      const storage = deps.voice.storage;
       // Range 分片（浏览器流式播放/seek 依赖 206）：storage 层有磁盘缓存——
-      // 命中本地直读（毫秒）；未命中小分片 R2 直读快速响应 + 后台落盘；无 range 全量落盘后返回
+      // 命中本地→流式直读（毫秒，不整块进内存）；未命中→远端分片快速响应 + 后台单飞落盘。
+      // 只接受带明确起点的区间；bytes=-N（尾部区间）语法有效但本端点不支持 → 按 RFC 忽略 Range 返回 200。
       const range = c.req.header("range");
-      const m = range ? /^bytes=(\d*)-(\d*)$/.exec(range.trim()) : null;
-      if (m) {
-        const start = m[1] ? parseInt(m[1], 10) : 0;
-        const end = m[2] ? parseInt(m[2], 10) : start + 1024 * 1024;
-        const r = await deps.voice.storage.get(audio.audioKey, { start, end });
+      const m = range ? /^bytes=(\d+)-(\d*)$/.exec(range.trim()) : null;
+      const start = m ? parseInt(m[1], 10) : 0;
+      const explicitEnd = m && m[2] ? parseInt(m[2], 10) : null;
+      // 开放区间（bytes=N-，Safari/Firefox/部分播放器常用）一律给到文件尾：
+      // 旧实现每次只回 1MiB，一集要 8 次往返，任何一次挂住/失败播放就永久停在分片边界
+      // （症状：总时长 5:23，播到 5:05 卡死不报错）。RANGE_MAX_SPAN 只是超大文件的内存兜底。
+      const end = explicitEnd ?? start + RANGE_MAX_SPAN - 1;
+      // 非法区间（终点小于起点）：按 RFC 7233 忽略 Range，退回 200 全量
+      const validRange = m !== null && Number.isFinite(start) && Number.isFinite(end) && start <= end;
+      if (validRange) {
+        const streamed = await storage.getStream?.(audio.audioKey, { start, end });
+        if (streamed) {
+          return new Response(streamed.body as unknown as BodyInit, {
+            status: 206,
+            headers: {
+              ...baseHeaders,
+              "Content-Range": `bytes ${streamed.start}-${streamed.end}/${streamed.total}`,
+              "Content-Length": String(streamed.end - streamed.start + 1),
+            },
+          });
+        }
+        const r = await storage.get(audio.audioKey, { start, end });
         const total = r.total;
-        if (!Number.isFinite(start) || start > end || start >= total) {
-          return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${total}` } });
+        if (start >= total || r.data.length === 0) {
+          return new Response(null, { status: 416, headers: { ...baseHeaders, "Content-Range": `bytes */${total}` } });
         }
         return new Response(r.data as unknown as BodyInit, {
           status: 206,
@@ -203,8 +251,14 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
           },
         });
       }
-      // 无 Range：全量（storage 磁盘缓存层落盘后本地直读）
-      const full = await deps.voice.storage.get(audio.audioKey);
+      // 无 Range（或忽略非法 Range）：全量——命中缓存流式下发，未命中远端拉取后落盘
+      const streamedFull = await storage.getStream?.(audio.audioKey);
+      if (streamedFull) {
+        return new Response(streamedFull.body as unknown as BodyInit, {
+          headers: { ...baseHeaders, "Content-Length": String(streamedFull.total) },
+        });
+      }
+      const full = await storage.get(audio.audioKey);
       return new Response(full.data as unknown as BodyInit, {
         headers: { ...baseHeaders, "Content-Length": String(full.total) },
       });
