@@ -143,7 +143,7 @@ export async function merge(config: EditorConfig, args: string[]): Promise<void>
   try {
     const app = process.platform === "darwin" ? "-a QuickTime Player" : "";
     execFileSync("open", app ? ["-a", "QuickTime Player", finalPath] : [finalPath], { stdio: "ignore" });
-    console.log(`[merge] ▶️ 已在 QuickTime Player 打开 ${finalPath} 试听（发布前请确认音色/断句/情绪标签正常）`);
+    console.log("[merge] ▶️ 已在 QuickTime Player 打开 " + ${finalPath} + " 试听——像不像两个人在聊？四问：①找得到几处'对方存在'的证据 ②有没有整段像念稿 ③情绪是跟着话走还是像在演 ④有没有至少一处不完美的真实");
   } catch {
     console.log(`[merge] 试听：open ${finalPath}（自动打开失败，请手动打开）`);
   }
