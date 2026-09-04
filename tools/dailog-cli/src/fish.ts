@@ -153,8 +153,9 @@ export async function synthesizeSingle(
   config: EditorConfig,
   text: string,
   hostRef: ReferenceAudio,
-  timeoutMs = 600000,
+  opts: { timeoutMs?: number; normalize?: boolean } = {},
 ): Promise<Buffer> {
+  const { timeoutMs = 600000, normalize } = opts;
   const body = msgpackEncode({
     text,
     references: [{ audio: hostRef.audio, text: hostRef.text ?? REF_TRANSCRIPT }],
@@ -162,6 +163,9 @@ export async function synthesizeSingle(
     mp3_bitrate: 128,
     // 基于已生成 chunk 条件生成，保证长段内音色/语调连贯
     condition_on_previous_chunks: true,
+    // normalize=false：关引擎文本规范化（数字/日期/URL 改写）——2026 这类年份按原文语境读
+    //   （2026-09 A/B 实测：normalize=false + 原文 → 「二零二六」正确；不传走默认 true 会读错年份）
+    ...(normalize === undefined ? {} : { normalize }),
   });
   return fishPost(config.secrets, "/v1/tts", body as unknown as Buffer, timeoutMs);
 }

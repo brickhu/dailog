@@ -28,6 +28,25 @@ const activeEnv = () => env || process.env.DAILOG_ENV || null;
 const FB_DIR = join(here, "feedback");
 const FB_FILE = join(FB_DIR, "review.jsonl");
 const FB_SIG_FILES = ["prompts.json", "review.score.system.md", "review.score.user.md", "review.script.user.md", "review.script.handoff.md"];
+
+// ===== 音频合成：BGM 混音滤镜（与 web/js/merge.js 的 bgmMixFilter 保持同一套语义）=====
+// 干声 dry.wav(44100 mono) + BGM(stream_loop 无限循环) → amix(duration=first)；
+// 音乐淡入/淡出只作用于 BGM 链，人声不动；输出 44100 mono，与无 BGM 时声道一致
+function serverBgmFilter(cfg, durSec) {
+  const T = Math.max(0.1, Number(durSec) || 0);
+  const vol = Math.min(0.4, Math.max(0.02, Number(cfg && cfg.vol) || 0.15));
+  let fadeIn = Math.min(15, Math.max(0, Number(cfg && cfg.fadeIn) || 0));
+  let fadeOut = Math.min(15, Math.max(0, Number(cfg && cfg.fadeOut) || 0));
+  if (fadeIn >= T) fadeIn = 0;
+  if (fadeOut >= T) fadeOut = 0;
+  const num = (n) => String(Math.round(Number(n) * 1000) / 1000);
+  let bg = "[1:a]aformat=sample_rates=44100:channel_layouts=mono,volume=" + num(vol);
+  if (fadeIn > 0) bg += ",afade=t=in:st=0:d=" + num(fadeIn);
+  if (fadeOut > 0) bg += ",afade=t=out:st=" + num(T - fadeOut) + ":d=" + num(fadeOut);
+  bg += "[bg]";
+  // normalize=0：amix 默认会按输入数归一化（人声减半），必须关掉让人声 1:1 保留
+  return "[0:a]aformat=sample_rates=44100:channel_layouts=mono[a0];" + bg + ";[a0][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[out]";
+}
 /** 提示词版本指纹（md mtime）——回溯"哪版规则产生了这个结果" */
 function promptSig() {
   return FB_SIG_FILES
@@ -714,8 +733,8 @@ async function handleApi(path, res, req) {
   }
 
   // POST /api/run/full-merge → 服务端 ffmpeg 拼接（浏览器 Wasm 不可用/无跨域隔离时的兜底）
-  //   body { id, si, segs: [base64...], seq: [{t:'seg',i}|{t:'gap',sec}|{t:'intro',url}] }
-  //   → 逐项写文件/生成静音/拉 intro → concat → aac 128k m4a → 返回 base64
+  //   body { id, si, segs: [base64...], seq: [{t:'seg',i}|{t:'gap',sec}|{t:'intro',url}], bgm?: {kind:'url',url}|{kind:'file',dataBase64}, vol, fadeIn, fadeOut }
+  //   → 逐项写文件/生成静音/拉 intro → concat；带 bgm 时两段式（干声 wav + 铺 BGM 混音）→ aac 128k m4a → 返回 base64
   if (path === "/api/run/full-merge" && req.method === "POST") {
     const cred = reqCred(req);
     if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
@@ -760,7 +779,30 @@ async function handleApi(path, res, req) {
         n++;
       }
       writeFileSync(jn(dir, "list.txt"), list.join("\n"));
-      execFileSync("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", jn(dir, "list.txt"), "-c:a", "aac", "-b:a", "128k", jn(dir, "final.m4a")], { stdio: "ignore" });
+      const bgmCfg = (body && body.bgm && typeof body.bgm === "object" && (body.bgm.kind === "url" || body.bgm.kind === "file")) ? body.bgm : null;
+      if (bgmCfg) {
+        // 带 BGM：两段式——第 1 段 concat 出干声 wav（44100 mono），第 2 段铺 BGM 混音
+        execFileSync("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", jn(dir, "list.txt"), "-ar", "44100", "-ac", "1", "-c:a", "pcm_s16le", jn(dir, "dry.wav")], { stdio: "ignore" });
+        let bgmBytes = null;
+        if (bgmCfg.kind === "file" && typeof bgmCfg.dataBase64 === "string" && bgmCfg.dataBase64) {
+          bgmBytes = Buffer.from(bgmCfg.dataBase64, "base64");
+        } else if (bgmCfg.kind === "url" && typeof bgmCfg.url === "string" && bgmCfg.url) {
+          const resp = await fetch(bgmCfg.url).catch(() => null);
+          if (!resp || !resp.ok) { sendJson(res, { ok: false, error: "BGM 下载失败: " + (bgmCfg.url || "") }, 400); return; }
+          bgmBytes = Buffer.from(await resp.arrayBuffer());
+        }
+        if (!bgmBytes || !bgmBytes.length) { sendJson(res, { ok: false, error: "BGM 内容缺失" }, 400); return; }
+        writeFileSync(jn(dir, "bgm.bin"), bgmBytes);
+        // 干声时长（ffprobe）→ 淡出定位
+        const durStr = execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", jn(dir, "dry.wav")], { encoding: "utf8" }).trim();
+        const dur = Number(durStr) || 0;
+        if (!(dur > 0)) { sendJson(res, { ok: false, error: "干声时长探测失败" }, 500); return; }
+        const fc = serverBgmFilter(bgmCfg, dur);
+        execFileSync("ffmpeg", ["-y", "-i", jn(dir, "dry.wav"), "-stream_loop", "-1", "-i", jn(dir, "bgm.bin"), "-filter_complex", fc, "-map", "[out]", "-c:a", "aac", "-b:a", "128k", jn(dir, "final.m4a")], { stdio: "ignore" });
+      } else {
+        // 无 BGM：保持原单段 concat（行为与改造前一致）
+        execFileSync("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", jn(dir, "list.txt"), "-c:a", "aac", "-b:a", "128k", jn(dir, "final.m4a")], { stdio: "ignore" });
+      }
       const out = readFileSync(jn(dir, "final.m4a"));
       sendJson(res, { ok: true, audio: Buffer.from(out).toString("base64"), mime: "audio/mp4", size: out.length });
     } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -816,7 +858,8 @@ async function handleApi(path, res, req) {
         execFileSync("ffmpeg", ["-y", "-i", jn(dir, "in.bin"), "-ar", "44100", "-ac", "1", jn(dir, "out.wav")], { stdio: "ignore" });
         wav = new Uint8Array(readFileSync(jn(dir, "out.wav")));
       } finally { rmSync(dir, { recursive: true, force: true }); }
-      const audio = await synthesizeSingle(config, seg.text, { audio: wav, text: ref.text || null });
+      // normalize:false——关引擎文本规范化，2026 这类年份按原文读（A/B 实测正确，见 docs/spikes/fish-audio.md §10）
+      const audio = await synthesizeSingle(config, seg.text, { audio: wav, text: ref.text || null }, { normalize: false });
       sendJson(res, { ok: true, audio: Buffer.from(audio).toString("base64"), mime: "audio/mpeg", speaker: seg.speaker, text: seg.text.slice(0, 50) });
     } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
     return;

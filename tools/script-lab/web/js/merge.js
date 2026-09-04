@@ -3,6 +3,9 @@
 //   仅间隔：[0.5s]
 //   穿插外部音频：[0.5s]+[https://example.com/a.mp3]+[0.2s]
 //   解析失败 fallback：[0s]
+// 背景音乐（BGM）：合成面板内可配置（URL 或本地上传 + 音量/淡入淡出），
+//   启用时两段式合成：先拼干声 wav，再叠 BGM 铺底（amix，首尾音乐淡入淡出，人声不动）。
+//   BGM 配置存 localStorage 'fullbgm-<id>'，文件字节存 IndexedDB key 'bgm-<id>'。
 // full audio 存 IndexedDB（大文件），元数据存 localStorage；合成后配置锁定（预览态）
 
 const FFMPEG_CDN = 'https://cdn.jsdelivr.net/npm';
@@ -47,6 +50,55 @@ function loadGapExprs(id, segCount){
   return list.slice(0, n);
 }
 function saveGapExprs(id, list){ try { localStorage.setItem('fullgap-' + id, JSON.stringify(list)); } catch {} }
+
+// ---------- BGM 背景音乐配置：持久化（localStorage 配置 + IndexedDB 文件字节） ----------
+// 配置形如：{ enabled:true, vol:0.15, fadeIn:3, fadeOut:4, src:{kind:'url',url} | {kind:'file',file:{name,size}} }
+function loadBgmConfig(id){ try { return JSON.parse(localStorage.getItem('fullbgm-' + id) || 'null') || {}; } catch { return {}; } }
+function saveBgmConfig(id, cfg){ try { localStorage.setItem('fullbgm-' + id, JSON.stringify(cfg || {})); } catch {} }
+function bgmSummary(cfg){
+  if (!cfg || !cfg.enabled) return null;
+  return { vol: cfg.vol, fadeIn: cfg.fadeIn, fadeOut: cfg.fadeOut, kind: (cfg.src && cfg.src.kind) || null };
+}
+async function bgmBytesSave(id, bytes){
+  const db = await idbOpen();
+  await new Promise((res, rej) => {
+    const tx = db.transaction('audios', 'readwrite');
+    tx.objectStore('audios').put(bytes, 'bgm-' + id);
+    tx.oncomplete = res;
+    tx.onerror = () => rej(tx.error || new Error('BGM 写入失败'));
+  });
+}
+async function bgmBytesLoad(id){
+  const db = await idbOpen();
+  return await new Promise((res, rej) => {
+    const rq = db.transaction('audios', 'readonly').objectStore('audios').get('bgm-' + id);
+    rq.onsuccess = () => res(rq.result || null);
+    rq.onerror = () => rej(rq.error || new Error('BGM 读取失败'));
+  });
+}
+async function bgmBytesDelete(id){
+  try {
+    const db = await idbOpen();
+    await new Promise((res, rej) => {
+      const tx = db.transaction('audios', 'readwrite');
+      tx.objectStore('audios').delete('bgm-' + id);
+      tx.oncomplete = res;
+      tx.onerror = () => rej(tx.error || new Error('BGM 删除失败'));
+    });
+  } catch {}
+}
+function fmtSize(n){
+  n = Number(n) || 0;
+  if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + 'MB';
+  if (n >= 1024) return Math.round(n / 1024) + 'KB';
+  return n + 'B';
+}
+function bytesToBase64(bytes){
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  return btoa(bin);
+}
 
 // ---------- 气泡渲染 / 编辑 ----------
 function gapBubbleHtml(id, si, segi, expr){
@@ -322,33 +374,45 @@ async function resetFullAudio(id){
 
 
 
-// ---------- 音频合成对话框（loading → preview → uploading） ----------
-let mergeCtx = null;        // { id, si }
-let mergeMode = 'closed';   // closed | loading | preview | uploading
+// ---------- 音频合成对话框（config → loading → preview → uploading） ----------
+let mergeCtx = null;        // { id, si, bgm }
+let mergeMode = 'closed';   // closed | config | loading | preview | uploading
 
 function setMergeMode(mode){
   mergeMode = mode;
   const title = document.getElementById('mergeTitle');
   const closeBtn = document.getElementById('mergeCloseBtn');
   const loading = document.getElementById('mergeLoading');
+  const config = document.getElementById('mergeConfig');
   const preview = document.getElementById('mergePreview');
   const confirmBtn = document.getElementById('mergeConfirmBtn');
   const remergeBtn = document.getElementById('mergeRemergeBtn');
-  if (mode === 'loading') {
+  if (mode === 'config') {
+    if (title) title.textContent = '音频合成';
+    if (closeBtn) closeBtn.style.display = '';              // 可关闭（放弃本次）
+    if (loading) loading.style.display = 'none';
+    if (config) config.style.display = 'block';
+    if (preview) preview.style.display = 'none';
+  } else if (mode === 'loading') {
     if (title) title.textContent = '音频合成中…';
     if (closeBtn) closeBtn.style.display = 'none';          // 禁止关闭
     if (loading) loading.style.display = 'block';
+    if (config) config.style.display = 'none';
     if (preview) preview.style.display = 'none';
   } else if (mode === 'preview') {
     if (title) title.textContent = '音频已合成';
     if (closeBtn) closeBtn.style.display = '';              // 可关闭
     if (loading) loading.style.display = 'none';
+    if (config) config.style.display = 'none';
     if (preview) preview.style.display = 'block';
     if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = '确认'; }
-    if (remergeBtn) remergeBtn.disabled = false;
+    if (remergeBtn) { remergeBtn.disabled = false; remergeBtn.textContent = '重新合成'; }
   } else if (mode === 'uploading') {
     if (title) title.textContent = '正在上传…';
     if (closeBtn) closeBtn.style.display = 'none';          // 禁止关闭
+    if (loading) loading.style.display = 'none';
+    if (config) config.style.display = 'none';
+    if (preview) preview.style.display = 'block';
     if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = '上传中…'; }
     if (remergeBtn) remergeBtn.disabled = true;
   }
@@ -360,9 +424,10 @@ function setMergeStep(pct, text){
   if (step) step.textContent = text || '';
 }
 
-// 合成主体（对话框模式）：收集段音频 → ffmpeg 拼接 → IndexedDB 暂存 → 返回 blob
+// 合成主体（对话框模式）：收集段音频 → ffmpeg 拼接 → （可选铺 BGM）→ IndexedDB 暂存 → 返回 blob
 async function runMergeConcat(){
   const { id, si } = mergeCtx;
+  const bgmCfg = (mergeCtx.bgm && mergeCtx.bgm.enabled) ? mergeCtx.bgm : null;   // 本次合成生效的 BGM
   setMergeStep(5, '读取脚本…');
   const d = await j('/api/detail/' + id);
   const script = ((d.prodSummary && d.prodSummary.scriptList) || [])[si];
@@ -375,7 +440,7 @@ async function runMergeConcat(){
   const gapList = loadGapExprs(id, segs.length);
   // 无跨域隔离（SAB 不可用）→ 自动降级服务端 ffmpeg 合并（不依赖浏览器 Wasm）
   if (!sabAvailable()) {
-    return runServerMerge(id, si, script, audios, gapList);
+    return runServerMerge(id, si, script, audios, gapList, bgmCfg);
   }
   const inputs = [];
   const seq = [];
@@ -394,6 +459,8 @@ async function runMergeConcat(){
   }
   setMergeStep(12, '加载合成引擎…');
   const ffmpeg = await loadFFmpeg();
+  // 清理上次合成残留（FS writeFile 同名会报 EEXIST）
+  ['_list.txt', 'final.m4a', 'dry.wav', 'bgm0.bin'].concat(inputs.map(i => i.name)).forEach(n => { try { ffmpeg.FS('unlink', n); } catch {} });
   setMergeStep(25, '写入音频片段…');
   for (const it of inputs) ffmpeg.FS('writeFile', it.name, it.data);
   setMergeStep(45, '处理间隔与 intro…');
@@ -411,49 +478,226 @@ async function runMergeConcat(){
       listLines.push("file '" + s.name + "'");
     }
   }
-  setMergeStep(75, '拼接编码中…');
   ffmpeg.FS('writeFile', '_list.txt', new TextEncoder().encode(listLines.join('\n')));
-  await ffmpeg.run('-y', '-f', 'concat', '-safe', '0', '-i', '_list.txt', '-c:a', 'aac', '-b:a', '128k', 'final.m4a');
+  if (bgmCfg) {
+    // 第 1 段：干声 → 无损中间轨（44100 mono，保证 amix 声道/采样率一致）
+    setMergeStep(70, '拼接干声…');
+    await ffmpeg.run('-y', '-f', 'concat', '-safe', '0', '-i', '_list.txt', '-ar', '44100', '-ac', '1', '-c:a', 'pcm_s16le', 'dry.wav');
+    setMergeStep(80, '准备背景音乐…');
+    // BGM 来源：URL（浏览器 fetch，需 CORS）或本地上传（IndexedDB 字节）
+    let bgmBytes = null;
+    if (bgmCfg.src && bgmCfg.src.kind === 'file') {
+      bgmBytes = await bgmBytesLoad(id);
+      if (!bgmBytes || !bgmBytes.length) throw new Error('本地 BGM 文件缺失——请重新选择音乐文件');
+    } else if (bgmCfg.src && bgmCfg.src.url) {
+      const resp = await fetch(bgmCfg.src.url);
+      if (!resp.ok) throw new Error('BGM 下载失败: ' + bgmCfg.src.url + '（需目标允许跨域）');
+      bgmBytes = new Uint8Array(await resp.arrayBuffer());
+    }
+    if (!bgmBytes || !bgmBytes.length) throw new Error('BGM 内容为空');
+    ffmpeg.FS('writeFile', 'bgm0.bin', bgmBytes);
+    // 干声时长 → 淡出定位（浏览器解码 wav 取 duration）
+    const dryBytes = ffmpeg.FS('readFile', 'dry.wav');
+    const dur = await audioDurationOf(dryBytes, 'audio/wav');
+    if (!dur) throw new Error('无法读取干声时长');
+    setMergeStep(88, '混入背景音乐…');
+    await ffmpeg.run('-y', '-i', 'dry.wav', '-stream_loop', '-1', '-i', 'bgm0.bin',
+      '-filter_complex', bgmMixFilter(bgmCfg, dur), '-map', '[out]', '-c:a', 'aac', '-b:a', '128k', 'final.m4a');
+  } else {
+    setMergeStep(75, '拼接编码中…');
+    await ffmpeg.run('-y', '-f', 'concat', '-safe', '0', '-i', '_list.txt', '-c:a', 'aac', '-b:a', '128k', 'final.m4a');
+  }
   setMergeStep(92, '生成成品…');
   const out = ffmpeg.FS('readFile', 'final.m4a');
   if (!out || !out.length) throw new Error('合成结果为空');
   const blob = new Blob([out.buffer], { type: 'audio/mp4' });
   await fullAudioSave(id, blob);
-  saveFullMeta(id, { at: Date.now(), size: blob.size, scriptIndex: si, segCount: segs.length, gaps: gapList, scriptName: script.title || null });
+  saveFullMeta(id, { at: Date.now(), size: blob.size, scriptIndex: si, segCount: segs.length, gaps: gapList, scriptName: script.title || null, bgm: bgmSummary(bgmCfg) });
   const player = document.getElementById('mergePlayer');
   if (player) player.src = URL.createObjectURL(blob);
   return blob;
 }
 
-// 打开合成对话框并开始合成（合成按钮入口）
+// ---------- 合成面板 BGM 配置区：面板读写 ----------
+function bgmPanelEls(){
+  return {
+    enable: document.getElementById('bgmEnable'),
+    fields: document.getElementById('bgmFields'),
+    url: document.getElementById('bgmUrl'),
+    file: document.getElementById('bgmFile'),
+    fileInfo: document.getElementById('bgmFileInfo'),
+    fileClear: document.getElementById('bgmFileClear'),
+    vol: document.getElementById('bgmVol'),
+    volLabel: document.getElementById('bgmVolLabel'),
+    fadeIn: document.getElementById('bgmFadeIn'),
+    fadeOut: document.getElementById('bgmFadeOut'),
+  };
+}
+// 用持久化配置回填面板（每次打开面板 / 预览返回时调用）
+function fillBgmPanel(id){
+  const el = bgmPanelEls();
+  if (!el.enable) return;
+  const cfg = loadBgmConfig(id) || {};
+  el.enable.checked = !!cfg.enabled;
+  el.fields.style.display = el.enable.checked ? 'block' : 'none';
+  el.url.value = (cfg.src && cfg.src.kind === 'url') ? (cfg.src.url || '') : '';
+  clearBgmFileUi();
+  if (cfg.enabled && cfg.src && cfg.src.kind === 'file' && cfg.src.file) {
+    el.file.dataset.src = JSON.stringify(cfg.src.file);
+    el.fileInfo.textContent = '已选 ' + cfg.src.file.name + '（' + fmtSize(cfg.src.file.size) + '）';
+    el.fileClear.style.display = '';
+  }
+  el.vol.value = cfg.vol != null ? cfg.vol : 0.15;
+  if (el.volLabel) el.volLabel.textContent = Math.round(Number(el.vol.value) * 100) + '%';
+  el.fadeIn.value = cfg.fadeIn != null ? cfg.fadeIn : 3;
+  el.fadeOut.value = cfg.fadeOut != null ? cfg.fadeOut : 4;
+}
+function clearBgmFileUi(){
+  const el = bgmPanelEls();
+  if (!el.file) return;
+  delete el.file.dataset.src;
+  el.file.value = '';
+  if (el.fileInfo) el.fileInfo.textContent = '';
+  if (el.fileClear) el.fileClear.style.display = 'none';
+}
+// 面板 → 配置对象；未启用返回 {enabled:false}；启用但无来源返回 null（校验用）
+function readBgmPanelConfig(){
+  const el = bgmPanelEls();
+  if (!el.enable || !el.enable.checked) return { enabled: false };
+  const vol = Math.min(0.4, Math.max(0.02, Number(el.vol.value) || 0.15));
+  const fadeIn = Math.min(15, Math.max(0, Number(el.fadeIn.value) || 0));
+  const fadeOut = Math.min(15, Math.max(0, Number(el.fadeOut.value) || 0));
+  const url = String(el.url.value || '').trim();
+  const fileMeta = el.file && el.file.dataset.src ? (JSON.parse(el.file.dataset.src) || null) : null;
+  const cfg = { enabled: true, vol, fadeIn, fadeOut };
+  if (fileMeta && fileMeta.name) cfg.src = { kind: 'file', file: fileMeta };          // 文件优先
+  else if (url) cfg.src = { kind: 'url', url };                                        // 否则 URL
+  else return null;                                                                     // 启用但无来源
+  return cfg;
+}
+function onBgmEnableToggle(){
+  const el = bgmPanelEls();
+  if (el.fields) el.fields.style.display = el.enable.checked ? 'block' : 'none';
+}
+function onBgmVol(){
+  const el = bgmPanelEls();
+  if (el.volLabel) el.volLabel.textContent = Math.round(Number(el.vol.value) * 100) + '%';
+}
+async function onBgmFile(input){
+  if (!mergeCtx || !input || !input.files || !input.files[0]) return;
+  const f = input.files[0];
+  const buf = await f.arrayBuffer();
+  await bgmBytesSave(mergeCtx.id, new Uint8Array(buf));
+  const el = bgmPanelEls();
+  el.file.dataset.src = JSON.stringify({ name: f.name, size: f.size });
+  el.url.value = '';                       // 文件与 URL 互斥：选文件后清 URL
+  el.fileInfo.textContent = '已选 ' + f.name + '（' + fmtSize(f.size) + '）';
+  el.fileClear.style.display = '';
+  el.enable.checked = true;
+  el.fields.style.display = 'block';
+}
+async function clearBgmFile(){
+  const el = bgmPanelEls();
+  clearBgmFileUi();
+  if (mergeCtx) await bgmBytesDelete(mergeCtx.id);   // 清除 IndexedDB 字节，防串期
+}
+
+// ---------- BGM 混音滤镜（Wasm 与服务端同一套语义） ----------
+// 两段式：干声 dry.wav(44100 mono) + BGM(stream_loop 无限循环) → amix(duration=first)
+//   音乐淡入/淡出只作用于 BGM 链（人声全程不动）；输出 44100 mono m4a，与无 BGM 时声道一致
+function fmtNum(n){ return String(Math.round(Number(n) * 1000) / 1000); }
+function bgmMixFilter(cfg, durSec){
+  const T = Math.max(0.1, Number(durSec) || 0);
+  const vol = Math.min(0.4, Math.max(0.02, Number(cfg.vol) || 0.15));
+  let fadeIn = Math.min(15, Math.max(0, Number(cfg.fadeIn) || 0));
+  let fadeOut = Math.min(15, Math.max(0, Number(cfg.fadeOut) || 0));
+  if (fadeIn >= T) fadeIn = 0;      // 整轨比淡入还短 → 关淡入
+  if (fadeOut >= T) fadeOut = 0;    // 同上 → 关淡出
+  let bg = '[1:a]aformat=sample_rates=44100:channel_layouts=mono,volume=' + fmtNum(vol);
+  if (fadeIn > 0) bg += ',afade=t=in:st=0:d=' + fmtNum(fadeIn);
+  if (fadeOut > 0) bg += ',afade=t=out:st=' + fmtNum(T - fadeOut) + ':d=' + fmtNum(fadeOut);
+  bg += '[bg]';
+  // normalize=0：amix 默认会按输入数归一化（人声减半），必须关掉让人声 1:1 保留
+  return '[0:a]aformat=sample_rates=44100:channel_layouts=mono[a0];' + bg + ';[a0][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[out]';
+}
+// 用浏览器解码读音频字节时长（淡出定位用）
+function audioDurationOf(bytes, mime){
+  return new Promise((res, rej) => {
+    const u = URL.createObjectURL(new Blob([bytes], { type: mime || 'audio/wav' }));
+    const a = new Audio();
+    a.onloadedmetadata = () => { URL.revokeObjectURL(u); res(Number.isFinite(a.duration) ? a.duration : 0); };
+    a.onerror = () => { URL.revokeObjectURL(u); rej(new Error('无法读取音频时长（浏览器解码失败）')); };
+    a.src = u;
+  });
+}
+// 服务端兜底参数：把面板配置序列化为 full-merge body.bgm（文件 → base64 走 IDB 字节）
+async function bgmForServer(id, cfg){
+  if (!cfg || !cfg.enabled) return null;
+  const b = { vol: cfg.vol, fadeIn: cfg.fadeIn, fadeOut: cfg.fadeOut };
+  if (cfg.src && cfg.src.kind === 'file') {
+    const bytes = await bgmBytesLoad(id);
+    if (!bytes || !bytes.length) throw new Error('本地 BGM 文件缺失（IndexedDB）——请重新选择音乐文件');
+    b.kind = 'file';
+    b.dataBase64 = bytesToBase64(bytes);
+  } else if (cfg.src && cfg.src.url) {
+    b.kind = 'url';
+    b.url = cfg.src.url;
+  } else return null;
+  return b;
+}
+
+// ---------- 打开合成对话框（先配置 BGM，再开始合成） ----------
 async function openMergeDialog(id, si){
   if (mergeMode !== 'closed') return;
-  mergeCtx = { id, si };
+  mergeCtx = { id, si, bgm: loadBgmConfig(id) };
   // 停止预览音频播放并释放资源
   const player = document.getElementById('mergePlayer');
   if (player) { try { player.pause(); } catch {} player.src = ''; player.load(); }
   const overlay = document.getElementById('mergeModal');
   if (overlay) overlay.style.display = 'flex';
+  setMergeMode('config');
+  fillBgmPanel(id);
+  // 面板信息行：显示脚本/段数（拉详情，失败不阻断）
+  const info = document.getElementById('mergeConfigInfo');
+  if (info) info.textContent = '读取脚本…';
+  try {
+    const d = await j('/api/detail/' + id);
+    const script = ((d.prodSummary && d.prodSummary.scriptList) || [])[si];
+    const n = (script && script.segments) ? script.segments.length : 0;
+    if (info) info.textContent = (n ? '第 ' + (si + 1) + ' 个脚本 · ' + n + ' 段语音已就绪' : '脚本为空，无法合成') + '，可配置背景音乐后开始';
+  } catch { if (info) info.textContent = ''; }
+}
+// 配置面板：开始合成
+async function startMergeFromConfig(){
+  if (mergeMode !== 'config' || !mergeCtx) return;
+  const cfg = readBgmPanelConfig();
+  if (cfg === null) { notice('已勾选背景音乐，请填写音乐 URL 或选择本地音乐文件', 'error'); return; }
+  saveBgmConfig(mergeCtx.id, cfg);
+  mergeCtx.bgm = cfg;
   setMergeMode('loading');
   try {
     await runMergeConcat();
     setMergeMode('preview');
+    setMergeBgmNote();
   } catch (e) {
-    closeMergeModal(true, true);   // 确认成功：强制关闭
+    setMergeMode('config');              // 失败回配置面板可调整后重试
     notice('✗ 语音合成失败: ' + e.message, 'error');
   }
 }
-// 预览态：重新合成
-async function remergeAudio(){
-  if (mergeMode !== 'preview') return;
-  setMergeMode('loading');
-  try {
-    await runMergeConcat();
-    setMergeMode('preview');
-  } catch (e) {
-    closeMergeModal(true, true);   // 确认成功：强制关闭
-    notice('✗ 语音合成失败: ' + e.message, 'error');
-  }
+// 预览态：重新合成 → 回配置面板（可改 BGM 再跑）
+function remergeAudio(){
+  if (mergeMode !== 'preview' || !mergeCtx) return;
+  setMergeMode('config');
+  fillBgmPanel(mergeCtx.id);
+}
+// 预览 note：本次用了什么 BGM（音量/淡入淡出）
+function setMergeBgmNote(){
+  const note = document.getElementById('mergeBgmNote');
+  if (!note || !mergeCtx) return;
+  const s = bgmSummary(mergeCtx.bgm);
+  note.textContent = s
+    ? '🎵 已铺背景音乐 · 音量 ' + Math.round(Number(s.vol) * 100) + '% · 淡入 ' + (s.fadeIn || 0) + 's / 淡出 ' + (s.fadeOut || 0) + 's · 来源 ' + (s.kind === 'file' ? '本地文件' : 'URL')
+    : '';
 }
 // 预览态：确认 → 上传 R2（uploading 态禁关闭）→ 成功清缓存 + 触发创作完成
 async function confirmMergeUpload(){
@@ -488,7 +732,8 @@ async function confirmMergeUpload(){
 // 关闭对话框：uploading 禁关闭；preview 直接关闭 = 放弃本次合成（清 IndexedDB 缓存）
 async function closeMergeModal(skipCleanup, force){
   if (!force && mergeMode === 'uploading') return;   // 上传中禁关闭（确认成功强制关闭除外）
-  if (!skipCleanup && mergeMode === 'preview' && mergeCtx) {
+  if (!skipCleanup && (mergeMode === 'preview' || mergeMode === 'config') && mergeCtx) {
+    // config/preview 直接关闭 = 放弃本次合成（清本地 full audio 缓存与元数据）
     try { await fullAudioDelete(mergeCtx.id); } catch {}
     try { localStorage.removeItem('fullmeta-' + mergeCtx.id); } catch {}
   }
@@ -524,19 +769,20 @@ function buildMergeSeq(segCount, gapList){
   return seq;
 }
 
-// 服务端 ffmpeg 合并（SAB 不可用时）：段 base64 + 序列 → /api/run/full-merge → m4a base64
-async function runServerMerge(id, si, script, audios, gapList){
+// 服务端 ffmpeg 合并（SAB 不可用时）：段 base64 + 序列(+可选 bgm) → /api/run/full-merge → m4a base64
+async function runServerMerge(id, si, script, audios, gapList, bgmCfg){
   const segs = script.segments;
   setMergeStep(15, '上传片段到服务端…');
   const seq = buildMergeSeq(segs.length, gapList);
-  const body = { id, si, segs: audios.map(a => a && a.audio), seq };
+  const bgm = await bgmForServer(id, bgmCfg);   // URL / file base64；无 BGM → null
+  const body = { id, si, segs: audios.map(a => a && a.audio), seq, bgm };
   const d = await j('/api/run/full-merge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   if (!(d && d.ok && d.audio)) throw new Error((d && d.error) || '服务端合成失败');
   setMergeStep(85, '服务端拼接完成，接收中…');
   const bytes = base64ToBytes(d.audio);
   const blob = new Blob([bytes.buffer], { type: d.mime || 'audio/mp4' });
   await fullAudioSave(id, blob);
-  saveFullMeta(id, { at: Date.now(), size: blob.size, scriptIndex: si, segCount: segs.length, gaps: gapList, scriptName: script.title || null });
+  saveFullMeta(id, { at: Date.now(), size: blob.size, scriptIndex: si, segCount: segs.length, gaps: gapList, scriptName: script.title || null, bgm: bgmSummary(bgmCfg) });
   const player = document.getElementById('mergePlayer');
   if (player) player.src = URL.createObjectURL(blob);
   setMergeStep(100, '完成');

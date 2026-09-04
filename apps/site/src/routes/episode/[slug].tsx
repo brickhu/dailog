@@ -116,16 +116,21 @@ const css = stylex.create({
   },
   highlight: {
     margin: 0,
-    paddingLeft: dimensions.spacing4,
     borderLeft: `2px solid ${colors.primaryWeak}`,
     display: "relative",
     fontStyle: "italic",
+    color: `color-mix(in srgb, currentColor 60%, transparent)`,
     '::before': {
-      content: '"★ "',
-      color: 'gold',
+      content: `"“"`,
+      paddingRight: dimensions.spacing2,
+      // float: "left",  
+      top: `-10px`,
       display: 'absolute',
-      left : `-${dimensions.spacing4}`,
-      float: "left",
+      whiteSpace: "nowrap",
+      fontSize: dimensions.fontSize2xl,
+      // left : `-${dimensions.spacing4}`,
+      // top: `-${dimensions.spacing2}`,
+      // float: "left",
     },
   },
   credit: {
@@ -137,7 +142,12 @@ const css = stylex.create({
     display: "flex",
     flexDirection: "column",
     gap: dimensions.spacing2,
-    marginTop: dimensions.spacing5,
+    paddingTop: dimensions.spacing5,
+    borderColor: colors.surface,
+    borderTopWidth: dimensions.borderWidthThin,
+    borderTopStyle: "solid",
+    width: "100%",
+    // backgroundColor: colors.surfaceStrong,
   },
   refsLabel: {
     color: colors.neutral,
@@ -147,6 +157,13 @@ const css = stylex.create({
     fontSize: dimensions.fontSizeSm,
     color: colors.foreground,
     lineHeight: 1.6,
+    "::before": {
+      content: `"*"`,
+      paddingRight: dimensions.spacing2,
+    }
+  },
+  refItemTd: {
+    fontWeight: dimensions.fontWeightBold,
   },
   refLink: {
     color: colors.brand,
@@ -582,19 +599,18 @@ export default function EpisodeDetailPage() {
 
           <Show when={ep()?.references?.length}>
             <div {...stylex.props(css.refs)}>
-              <div {...stylex.props(typography.caption, css.refsLabel)}>{t("episode.references")}</div>
+              {/* <div {...stylex.props(typography.caption, css.refsLabel)}>{t("episode.references")}</div> */}
               <For each={ep()?.references ?? []}>
                 {(r) => (
                   <div {...stylex.props(css.refItem)}>
-                    <strong>{r.term}</strong>
-                    {r.type ? `（${r.type}）` : ""}：{r.explanation}
-                    <Show when={r.links?.length}>
+                    <strong {...stylex.props(css.refItemTd)}>{r.term} : </strong> {r.explanation}
+                    {/* <Show when={r.links?.length}>
                       <span>{" "}
                         <For each={r.links}>
                           {(l) => <a href={l} target="_blank" rel="noopener noreferrer" {...stylex.props(css.refLink)}>{l}</a>}
                         </For>
                       </span>
-                    </Show>
+                    </Show> */}
                   </div>
                 )}
               </For>

@@ -108,18 +108,54 @@
     </div>
   </div>
 </div>
-<!-- 音频合成对话框（loading → preview → uploading 状态机） -->
+<!-- 音频合成对话框（config → loading → preview → uploading 状态机；config 含 BGM 背景音乐配置） -->
 <div class='modal-overlay' id='mergeModal' style='display:none'>
   <div class='modal' style='width:540px'>
     <div class='modal-head'><b id='mergeTitle'>音频合成中…</b><button class='modal-close' id='mergeCloseBtn' onclick='closeMergeModal()' style='display:none'>✕</button></div>
     <div class='modal-body'>
-      <div id='mergeLoading'>
+      <div id='mergeConfig' style='display:none'>
+        <div class='muted' style='font-size:12px;margin-bottom:10px' id='mergeConfigInfo'>准备合成…</div>
+        <div style='background:#151a23;border:1px solid #2a3342;border-radius:6px;padding:10px'>
+          <label style='display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px'>
+            <input type='checkbox' class='merge-check' id='bgmEnable' onchange='onBgmEnableToggle()'> 🎵 背景音乐（可选 · 全程低音量铺底）
+          </label>
+          <div id='bgmFields' style='display:none;margin-top:8px;font-size:12px'>
+            <div style='margin-bottom:6px'>
+              <div class='muted' style='font-size:11px;margin-bottom:3px'>音乐 URL（需目标允许跨域 CORS；无跨域时请改用上传文件）</div>
+              <input class='merge-input' id='bgmUrl' style='width:100%;box-sizing:border-box' placeholder='https://…/music.mp3'>
+            </div>
+            <div style='margin-bottom:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap'>
+              <span class='muted' style='font-size:11px'>或上传本地音乐文件</span>
+              <input type='file' class='merge-file' id='bgmFile' accept='audio/*' onchange='onBgmFile(this)'>
+              <span class='muted' id='bgmFileInfo' style='font-size:11px'></span>
+              <button class='pg' id='bgmFileClear' style='display:none;font-size:11px;padding:2px 10px' onclick='clearBgmFile()'>✕ 清除</button>
+            </div>
+            <div style='margin-bottom:6px;display:flex;align-items:center;gap:10px'>
+              <span class='muted' style='font-size:11px;flex-shrink:0'>音量</span>
+              <input type='range' class='merge-input' id='bgmVol' min='0.05' max='0.4' step='0.01' value='0.15' oninput='onBgmVol()' style='flex:1'>
+              <span id='bgmVolLabel' style='font-size:11px;min-width:40px;text-align:right' class='muted'>15%</span>
+            </div>
+            <div style='display:flex;gap:16px;align-items:center;flex-wrap:wrap'>
+              <label class='muted' style='font-size:11px;display:flex;align-items:center;gap:4px'>淡入 <input type='number' class='merge-input bgm-num' id='bgmFadeIn' min='0' max='15' step='0.5' value='3'>s</label>
+              <label class='muted' style='font-size:11px;display:flex;align-items:center;gap:4px'>淡出 <input type='number' class='merge-input bgm-num' id='bgmFadeOut' min='0' max='15' step='0.5' value='4'>s</label>
+              <span class='muted' style='font-size:11px'>建议音量 ≤25% · 淡入淡出 0 表示关闭</span>
+            </div>
+          </div>
+        </div>
+        <div class='muted' style='font-size:11px;margin-top:8px'>设置好后点「开始合成」：先拼接人声，再铺 BGM 叠音；合成后可随时回来调整重新合成</div>
+        <div style='display:flex;justify-content:flex-end;gap:10px;margin-top:12px'>
+          <button class='pg' onclick='closeMergeModal()' id='mergeCancelBtn'>取消</button>
+          <button class='pg' style='background:#4f8cff;color:#fff;border:0' onclick='startMergeFromConfig()' id='mergeStartBtn'>开始合成</button>
+        </div>
+      </div>
+      <div id='mergeLoading' style='display:none'>
         <div class='muted' style='font-size:12px;margin-bottom:8px' id='mergeStepText'>准备中…</div>
         <div style='background:#151a23;border-radius:6px;height:10px;overflow:hidden'>
           <div id='mergeBar' style='width:0%;height:100%;background:#4f8cff;transition:width .3s'></div>
         </div>
       </div>
       <div id='mergePreview' style='display:none'>
+        <div class='muted' id='mergeBgmNote' style='font-size:11px;margin-bottom:6px'></div>
         <audio controls style='width:100%;margin-bottom:10px' id='mergePlayer'></audio>
         <div style='display:flex;justify-content:flex-end;gap:10px'>
           <button class='pg' onclick='remergeAudio()' id='mergeRemergeBtn'>重新合成</button>

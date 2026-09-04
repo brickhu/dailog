@@ -248,4 +248,19 @@ textarea.pub-input{resize:vertical}
 .pub-cover-gen{width:100%;margin:8px 0 0;background:#171a21;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;padding:8px;font-size:13px;cursor:pointer}
 .pub-cover-gen:hover{border-color:#4f8cff;color:#fff}
 .pub-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
+/* 音频合成面板：BGM 配置输入 */
+.merge-input{
+  background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;
+  border-radius:6px;padding:6px 10px;font-size:12px;font-family:inherit;outline:none;
+}
+.merge-input:focus{border-color:#4f8cff}
+input.merge-input[type=range]{padding:0;border:0;background:transparent;accent-color:#4f8cff}
+input[type=checkbox].merge-check{accent-color:#4f8cff}
+.bgm-num{width:56px;box-sizing:border-box}
+input[type=file].merge-file{color:#8a91a0;font-size:12px;max-width:220px}
+input[type=file].merge-file::file-selector-button{
+  background:#171a21;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;
+  padding:4px 10px;font-size:12px;cursor:pointer;margin-right:8px;
+}
+input[type=file].merge-file::file-selector-button:hover{border-color:#4f8cff;color:#fff}
 

@@ -150,6 +150,7 @@ OpenAPI schema 对 `text` 无 `maxLength` 约束 → 服务端限制，实测为
   - 大写 `DESIGN 点 M D` 同样正确（`design 点 md` ✓）
   - 多文件混排（`DESIGN.md 和 AGENTS.md`）必须逐项改写：原文回听为 `D EZNMD / Agents NMD`（字母拼读 ❌），改写后 `design 点 md / agents 点 md` ✓
 - **normalize 参数**：`normalize`（默认 true）会把 `DESIGN.md` 当「大写字母串 + .md 后缀」处理 → 逐字母拼读；这是现状 `D-E-S-I-G-N dot md` 的根因。设 `normalize: false` 可避免改写周边文本（数字/日期/URL），但英文缩写类仍不稳定（实测 `DESIGN.md` + 标签 + normalize=false → `Design Dem`，仍不理想），**首选仍是改写文本**
+  - **2026-09 实测补充（lab 已落地）**：A/B 验证「现在是2026年」——normalize 默认(true)读错年份，`normalize:false` + 原文 → 「二零二六」正确（s2.1-pro-free）。lab `/api/run/tts-seg` 已对 `synthesizeSingle` 传 `{ normalize: false }`（fish.ts 新增可选 opts，CLI 不传保持原行为）。缩写/文件名类不受此开关保护，仍按上文「改写文本」处理
 - **计费无关**：phoneme 标签与改写文本都按输入 UTF-8 字节计费，无额外费用
 
 ### 10.2 为什么 phoneme 标签不可依赖（实测数据）
