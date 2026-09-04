@@ -189,9 +189,9 @@ describe("拒审", () => {
     expect((await res.json()) as { error: string }).toMatchObject({ error: "reason_required" });
   });
 
-  it("非 submitted 状态拒审 → 409", async () => {
+  it("已发布状态拒审 → 409（发布后不可拒）", async () => {
     const res = await makeApp({
-      repo: fakeRepo({ submissions: { ...fakeRepo().submissions, getDetail: async () => ({ ...SUBMITTED_DETAIL, status: "rejected" as const }) } }),
+      repo: fakeRepo({ submissions: { ...fakeRepo().submissions, getDetail: async () => ({ ...SUBMITTED_DETAIL, status: "published" as const }) } }),
     }).request("/v1/editor/submissions/sub-1/reject", {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ reason: "内容不符合要求" }),
     });
@@ -288,6 +288,86 @@ describe("发布（编辑本地制作完成后一次性上传）", () => {
       repo: fakeRepo({ submissions: { ...fakeRepo().submissions, getDetail: async () => SUBMITTED_DETAIL } }),
     }).request("/v1/editor/submissions/sub-1/publish", { method: "POST", body: form });
     expect(res.status).toBe(201);
+  });
+
+  // 回归：crafted 投稿发布（发布卡复用路径）——音频已在 R2（canonical episodes/{userId}/{id}.m4a），
+  // 不发文件也不带 audioKey 也应成功（曾因客户端默认 flat key 而 400 audio_key_missing）
+  it("crafted 发布（无 audio 文件/无 audioKey）→ 服务端解析 canonical 成品，零拷贝发布成功", async () => {
+    const storagePut = vi.fn(async () => {});
+    const createPublished = vi.fn(async () => ({ id: "ep-8", number: 8, slug: "slug-8" }));
+    const markPublished = vi.fn(async () => {});
+    // canonical 命中；flat/full 无；scripts 存在（scripts/{id}.json）
+    const get = vi.fn(async (key: string) => {
+      if (key === "episodes/user-1/sub-1.m4a") return { data: new Uint8Array([7, 8]), total: 2 };
+      if (key.startsWith("scripts/") || key.startsWith("workflows/")) return { data: new Uint8Array([1, 2]), total: 2 };
+      return { data: null as unknown as Uint8Array, total: 0 };
+    });
+    const form = new FormData();
+    form.append("meta", JSON.stringify({ title: "crafted 复用发布", language: "zh" }));
+    const res = await makeApp({
+      storage: { put: storagePut, get, delete: async () => {} },
+      repo: fakeRepo({
+        submissions: {
+          ...fakeRepo().submissions,
+          getDetail: async () => ({ ...SUBMITTED_DETAIL, status: "crafted" as const }),
+          markPublished,
+        },
+        episodes: { ...fakeRepo().episodes, createPublished },
+      }),
+    }).request("/v1/editor/submissions/sub-1/publish", { method: "POST", body: form });
+
+    expect(res.status).toBe(201);
+    expect(createPublished).toHaveBeenCalledWith(expect.objectContaining({
+      audioUrl: "episodes/user-1/sub-1.m4a",
+      audioSize: 2,
+      rawConversationUrl: "https://claude.ai/share/abc-123",
+    }));
+    // canonical 已存在 → 零拷贝：audio 不重传
+    expect(storagePut).not.toHaveBeenCalledWith("episodes/user-1/sub-1.m4a", expect.anything());
+    expect(markPublished).toHaveBeenCalledWith("sub-1");
+  });
+
+  // 回归：音频在历史 flat episodes/{id}.m4a（2026-09 过渡布局）→ 解析命中后拷贝归一到 canonical
+  it("crafted 发布但音频仅在 flat key → 拷贝归一到 episodes/{userId}/{id}.m4a", async () => {
+    const storagePut = vi.fn(async () => {});
+    const createPublished = vi.fn(async () => ({ id: "ep-9", number: 9, slug: "slug-9" }));
+    const get = vi.fn(async (key: string) => {
+      if (key === "episodes/sub-1.m4a") return { data: new Uint8Array([9, 9, 9]), total: 3 };
+      if (key.startsWith("scripts/") || key.startsWith("workflows/")) return { data: new Uint8Array([1, 2]), total: 2 };
+      return { data: null as unknown as Uint8Array, total: 0 };
+    });
+    const form = new FormData();
+    form.append("meta", JSON.stringify({ title: "flat 迁移发布", language: "zh" }));
+    const res = await makeApp({
+      storage: { put: storagePut, get, delete: async () => {} },
+      repo: fakeRepo({
+        submissions: {
+          ...fakeRepo().submissions,
+          getDetail: async () => ({ ...SUBMITTED_DETAIL, status: "crafted" as const }),
+        },
+        episodes: { ...fakeRepo().episodes, createPublished },
+      }),
+    }).request("/v1/editor/submissions/sub-1/publish", { method: "POST", body: form });
+
+    expect(res.status).toBe(201);
+    expect(createPublished).toHaveBeenCalledWith(expect.objectContaining({ audioUrl: "episodes/user-1/sub-1.m4a", audioSize: 3 }));
+    expect(storagePut).toHaveBeenCalledWith("episodes/user-1/sub-1.m4a", new Uint8Array([9, 9, 9]));
+  });
+
+  // crafted 但 R2 无任何成品音频 → 明确 400 audio_key_missing（不再落入 audio_required 误报）
+  it("crafted 发布但 R2 无成品音频 → 400 audio_key_missing", async () => {
+    const get = vi.fn(async () => ({ data: null as unknown as Uint8Array, total: 0 }));
+    const form = new FormData();
+    form.append("meta", JSON.stringify({ title: "无音频发布", language: "zh" }));
+    const res = await makeApp({
+      storage: { put: async () => {}, get, delete: async () => {} },
+      repo: fakeRepo({
+        submissions: { ...fakeRepo().submissions, getDetail: async () => ({ ...SUBMITTED_DETAIL, status: "crafted" as const }) },
+      }),
+    }).request("/v1/editor/submissions/sub-1/publish", { method: "POST", body: form });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: "audio_key_missing" });
   });
 });
 

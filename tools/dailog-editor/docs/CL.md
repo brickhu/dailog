@@ -15,7 +15,7 @@ CL-STEP-3 批量采集：pnpm editor batch [--limit N]（并发提取，已提�
 
 **CL-IN 输入规范与依赖**
 - 输入：submissionId 或投稿 URL（粘贴直接触发）；解码必须**消息双全**（user + assistant 都有）才算完整
-- **内容过短硬门槛（采集层直接拒审）**：user 轮次 <3 或 总字数 <500 → 直接拒审（原因："Conversation too short: dialogue rounds must exceed 3, and total message length must be greater than 500 characters."——英文，投稿人可见），**不落 dialogue.json 草稿**；批量采集后汇总汇报 ⛔ 组（无需编辑处置）
+- **采集不自动拒稿**：不设轮次/字数门槛，也不因采集失败/内容过短拒审——采集只负责解码；失败状态保持 submitted（collected=-1 仅记失败标记，可重试），是否拒稿由编辑决定（batch-reject / reject，见 REJ）
 - 采样：detail 返回 voiceSamples（全部语种）；⚠️ 无采样 = 无法克隆主持人音色（TTS 前置约束）
 
 **CL-GATE 确认门选项与输出模板**
@@ -33,4 +33,4 @@ dialogue.json  # [{role: "user"|"assistant", content}]
 - 拉取失败（403/超时/失效）→ 如实汇报，引导编辑走浏览器控制台兜底（console-script → paste）
 - 解码规则未命中 → 通用嗅探 → 仍失败则浏览器兜底 + **规则自进化**（rule-test 验证消息双全后 --save 入库，失败规则不沉淀）
 - 消息缺一方 → 内容不完整，继续兜底，不得进入下游
-- 内容过短（轮次/字数不足）→ 已直接拒审 + 汇报（见 CL-IN 硬门槛），不落草稿
+- 采集失败 / 内容过短 → **不拒稿**：状态保持 submitted（collected=-1 失败标记），汇总汇报由编辑处置（重试 / 拒审 REJ / 人工 / 跳过）

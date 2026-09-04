@@ -219,7 +219,8 @@ export function editorRoutes(deps: EditorDeps) {
     return c.json({ ok: true, title });
   }) as unknown as RouteHandler<typeof rTitle, AuthEnv>);
 
-  /** 采集状态写入：collected（-1 失败 / 0 未采集 / 1 成功）；CLI 采集成功/失败后调用 */
+  /** 采集状态写入：collected（-1 失败 / 0 未采集 / 1 成功）；CLI 采集成功/失败后调用。
+   *  采集失败（-1）不拒稿：状态保持 submitted（仅记失败标记），是否拒稿由编辑手工 reject 决定 */
   const rCol = createRoute({
     method: "patch",
     path: "/v1/editor/submissions/:id/collected",
@@ -250,21 +251,7 @@ export function editorRoutes(deps: EditorDeps) {
     }
     const res = await deps.repo.submissions.setCollected(id, body.collected);
     if (!res) return c.json({ error: "not_found" }, 404);
-    // 采集失败（→ rejected）：通知投稿人（区别于内容拒稿，文案标注"采集失败"）
-    if (body.collected === -1) {
-      await deps.repo.notifications.create({
-        userId: detail.userId,
-        type: "rejected",
-        title: "投稿采集失败",
-        body: "对话采集失败，投稿暂未通过（可稍后重试）",
-        link: "/me/submits",
-      }).catch(() => {});
-      await sendEmail(deps.env, {
-        to: detail.userEmail,
-        subject: "dailog：你的投稿采集失败",
-        html: `<p>你好 ${detail.personaInfo?.displayName ?? detail.userEmail}，</p><p>很遗憾，你的投稿对话采集失败：</p><p>投稿链接：<a href="${escapeHtml(detail.url)}">${escapeHtml(detail.url)}</a></p><p>你可以在 <a href="${deps.siteBaseUrl ?? ""}/me/submits">投稿状态页</a> 查看。</p>`,
-      }).catch(() => {});
-    }
+    // 采集失败不拒稿、不通知投稿人（状态保持 submitted，编辑在队列里决定重试/拒稿）
     return c.json({ ok: true, collected: body.collected });
   }) as unknown as RouteHandler<typeof rCol, AuthEnv>);
 
@@ -336,49 +323,56 @@ export function editorRoutes(deps: EditorDeps) {
     if (!meta) {
       return c.json({ error: "invalid_meta", detail: "meta 字段不是合法 JSON" }, 400);
     }
-    // 音频二选一：① multipart audio 文件上传；② meta.audioKey 复用创作步已传 R2 的成品（full/{id}.m4a），免重传
+    // 音频二选一：① multipart audio 文件上传（CLI 直传）；② 复用创作步已传 R2 的成品（发布卡路径，免重传）。
+    // 最终位置（canonical）= episodes/{userId}/{id}.m4a（合成确认写入，与 republish/详情流/站点读取同 key）。
+    // ② 由服务端按确定性候选链解析（不信任客户端猜 key——曾默认 flat episodes/{id}.m4a，
+    //    旧数据 crafted 投稿实际在 canonical/full 布局 → 发布 400 audio_key_missing）：
+    //    canonical → flat episodes/{id}.m4a（2026-09 过渡）→ 旧 full/{id}.m4a → meta.audioKey 显式引用。
     let audioKey: string | null = null;
     let audioSize = 0;
     const audioFile = form?.get("audio");
-    if (audioFile instanceof File && audioFile.size > 0) {
-      if (audioFile.size > MAX_AUDIO_BYTES) {
+    const reusePath = !(audioFile instanceof File && audioFile.size > 0);
+    if (!reusePath) {
+      if (audioFile!.size > MAX_AUDIO_BYTES) {
         return c.json({ error: "audio_too_large", detail: "音频超过 100MB 上限" }, 400);
       }
-      const ext = /\.(mp3|m4a)$/i.test(audioFile.name) ? audioFile.name.toLowerCase().split(".").pop() : "mp3";
-      audioKey = `episodes/${id}.` + ext;   // flat：episodes/{submissionId}.{ext}
-      await deps.storage.put(audioKey, new Uint8Array(await audioFile.arrayBuffer()));
-      audioSize = audioFile.size;
-    } else if (meta.audioKey) {
-      // 产物本质 = 最终输出：合成确认已写入最终位置 episodes/{userId}/{id}.m4a——发布零拷贝直接引用
-      const finalKey = `episodes/${id}.m4a`;   // flat：episodes/{submissionId}.m4a
-      const direct = await deps.storage.get(finalKey).then((r) => r.data).catch(() => null);
-      if (direct) {
-        audioKey = finalKey;
-        audioSize = direct.length;
-      } else if (meta.audioKey.startsWith("episodes/")) {
-        // 已是最终位置（旧流程可能非 m4a 格式）——直接引用，不拷贝
-        const obj2 = await deps.storage.get(meta.audioKey).then((r) => r.data).catch(() => null);
-        if (!obj2) return c.json({ error: "audio_key_missing", detail: `R2 不存在音频 ${meta.audioKey}` }, 400);
-        audioKey = meta.audioKey;
-        audioSize = obj2.length;
-      } else {
-        // 旧值（full/...）兼容：拷贝到最终位置
-        const obj3 = await deps.storage.get(meta.audioKey).then((r) => r.data).catch(() => null);
-        if (!obj3) return c.json({ error: "audio_key_missing", detail: `R2 不存在音频 ${meta.audioKey}——请先合成并上传` }, 400);
-        await deps.storage.put(finalKey, obj3);
-        audioKey = finalKey;
-        audioSize = obj3.length;
+      const ext = /\.(mp3|m4a)$/i.test(audioFile!.name) ? audioFile!.name.toLowerCase().split(".").pop() : "mp3";
+      audioKey = `episodes/${detail.userId}/${id}.` + ext;   // canonical：episodes/{userId}/{submissionId}.{ext}
+      await deps.storage.put(audioKey, new Uint8Array(await audioFile!.arrayBuffer()));
+      audioSize = audioFile!.size;
+    } else if (meta.audioKey || detail.status === "crafted") {
+      const canonicalKey = `episodes/${detail.userId}/${id}.m4a`;
+      const candidates = [canonicalKey, `episodes/${id}.m4a`, `full/${id}.m4a`];
+      if (meta.audioKey && !candidates.includes(meta.audioKey)) candidates.push(meta.audioKey);
+      let src: { data: Uint8Array; total: number; key: string } | null = null;
+      for (const key of candidates) {
+        const obj = await deps.storage.get(key)
+          .then((r) => (r.data && r.data.length ? { data: r.data, total: r.total ?? r.data.length, key } : null))
+          .catch(() => null);
+        if (obj) { src = obj; break; }
       }
+      if (!src) {
+        return c.json({ error: "audio_key_missing", detail: `R2 不存在创作成品音频（已尝试 ${candidates.join(" / ")}）——请先完成 TTS 合成确认` }, 400);
+      }
+      if (src.key !== canonicalKey) {
+        // 历史布局（flat / full / 显式 key）→ 拷贝归一到 canonical 后引用（episode.audioUrl 与后续读取同 key）
+        await deps.storage.put(canonicalKey, src.data);
+      }
+      audioKey = canonicalKey;
+      audioSize = src.total;
     } else {
-      return c.json({ error: "audio_required", detail: "缺少成品音频：multipart 字段 audio 或 meta.audioKey（R2 已上传的成品）" }, 400);
+      return c.json({ error: "audio_required", detail: "缺少成品音频：multipart 字段 audio 或 R2 已上传的创作成品（先完成 TTS 合成确认）" }, 400);
     }
-    // 发布卡路径（audioKey 复用）：校验产出物② 打磨脚本存在（3 产出物齐全；旧 audio 文件直传路径不校验，兼容 CLI）
-    if (meta.audioKey) {
-      // 新 key scripts/{id}.json 优先；旧数据回退 workflows/{instance}/{id}.json（与 detail 读取一致）
-      let scriptObj = await deps.storage.get(`scripts/${id}.json`).then((r) => r.data).catch(() => null);
+    // 发布卡路径（复用创作成品）：校验产出物② 打磨脚本存在（3 产出物齐全；audio 文件直传路径不校验，兼容 CLI）
+    if (reusePath) {
+      // 新 key scripts/{id}.json 优先；旧数据回退 workflows/{instance}/{id}.json（与 detail 读取一致）。
+      // 命中旧 key 时顺手迁移到 scripts/{id}.json——节目页 transcript 按 scripts/{submissionId}.json 拉取
+      const scriptKey = `scripts/${id}.json`;
+      let scriptObj = await deps.storage.get(scriptKey).then((r) => r.data).catch(() => null);
       if (!scriptObj) {
         const instance = (c.req.header("host") || "default").replace(/[.:]/g, "-");
         scriptObj = await deps.storage.get(`workflows/${instance}/${id}.json`).then((r) => r.data).catch(() => null);
+        if (scriptObj) await deps.storage.put(scriptKey, scriptObj).catch(() => {});
       }
       if (!scriptObj) {
         return c.json({ error: "scripts_missing", detail: "缺少产出物②（打磨脚本）——请先完成创作（审题确认脚本入库）" }, 409);
@@ -857,10 +851,17 @@ export function editorRoutes(deps: EditorDeps) {
     const id = c.req.param("id")!;
     const detail = await deps.repo.submissions.getDetail(id);
     if (!detail) return c.json({ error: "not_found" }, 404);
-    // flat：episodes/{submissionId}.m4a（新流程）；旧数据回退 episodes/{userId}/{submissionId}.m4a
-    let bytes = await deps.storage.get(`episodes/${id}.m4a`).then((r) => r.data).catch(() => null);
-    if (!bytes && detail.userId) {
-      bytes = await deps.storage.get(`episodes/${detail.userId}/${id}.m4a`).then((r) => r.data).catch(() => null);
+    // 创作产物音频读取：canonical episodes/{userId}/{submissionId}.m4a → flat episodes/{submissionId}.m4a（2026-09 过渡）→ 旧 full/{submissionId}.m4a
+    // （与发布解析同一候选链；合成确认后播放源即最终位置）
+    const audioCandidates = [
+      detail.userId ? `episodes/${detail.userId}/${id}.m4a` : null,
+      `episodes/${id}.m4a`,
+      `full/${id}.m4a`,
+    ].filter(Boolean) as string[];
+    let bytes: Uint8Array | null = null;
+    for (const key of audioCandidates) {
+      bytes = await deps.storage.get(key).then((r) => r.data).catch(() => null);
+      if (bytes) break;
     }
     if (!bytes) return c.json({ error: "not_found" }, 404);
     return new Response(bytes as unknown as BodyInit, {
@@ -922,6 +923,24 @@ export function editorRoutes(deps: EditorDeps) {
     }
     return c.json({ ok: true, rejected, message: rejected ? "已标注审核不通过并通知投稿人" : "创作审核通过，脚本已入库" });
   }) as unknown as RouteHandler<typeof rReviewPost, AuthEnv>);
+
+  // ===== 采纳审核结果入库（submissions.review jsonb 整包；不改状态机、不触发拒稿/通知——决定权在编辑）=====
+  const rReviewResultPut = createRoute({
+    method: "put",
+    path: "/v1/editor/submissions/:id/review",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "存采纳的审核产物（body { review }）" },
+      400: { content: { "application/json": { schema: Err } }, description: "review 缺失" },
+    },
+  });
+  app.openapi(rReviewResultPut, (async (c: Context) => {
+    const id = c.req.param("id")!;
+    const body = (await c.req.json().catch(() => null)) as { review?: unknown } | null;
+    const review = body && body.review && typeof body.review === "object" ? body.review : null;
+    if (!review) return c.json({ error: "review_required" }, 400);
+    await deps.repo.submissions.setReviewResult(id, review as Record<string, unknown>);
+    return c.json({ ok: true, id });
+  }) as unknown as RouteHandler<typeof rReviewResultPut, AuthEnv>);
 
   // ===== 保存手工修改的 scripts（编辑在创作面板改脚本 → 更新 R2 workflow + 清缓存）=====
   const rScriptsPut = createRoute({

@@ -2,16 +2,16 @@
 //   pnpm editor batch [--limit N]
 //   ① 队列（submitted）逐个（并发）：已提取（dialogue.json 就绪）→ 跳过
 //   ② 提取结果分三类：
-//      ✅ 成功（消息双全）→ 展示 N 轮对话
+//      ✅ 成功（消息双全）→ 展示 N 轮对话（内容长短不设采集门槛，取舍由编辑在脚本阶段把关）
 //      ❌ 触达失败（网络异常/404 失效/非 HTML）→ 地址无法触达
-//      ⚠️ 解码失败（403 反爬/未提取到消息/消息不全/内容过短）→ 附原因
+//      ⚠️ 解码失败（403 反爬/未提取到消息/消息不全）→ 附原因
 //   ③ 分组呈现（url + email + 详情）→ 请管理员给处置意见
-//   处置后续：✅ 组进入脚本生成；❌/⚠️ 组由管理员决定（拒审/人工处理/跳过）
+//   采集失败不自动拒稿：投稿状态保持 submitted，拒审（batch-reject）与否由编辑决定
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { EditorConfig } from "./lib.js";
 import { api, draftDir } from "./lib.js";
-import { extractSubmission, isTooShort, rejectShort, SHORT_REASON, MIN_USER_TURNS, MIN_CHARS } from "./fetch.js";
+import { extractSubmission } from "./fetch.js";
 
 /** 提取并发数（网络 IO 密集，并发提速；LLM 无涉） */
 const CONCURRENCY = 4;
@@ -27,7 +27,7 @@ interface ResultRow {
   id: string;
   url: string;
   email: string;
-  status: "ok" | "unreachable" | "decode_failed" | "rejected";
+  status: "ok" | "unreachable" | "decode_failed";
   detail: string;
   turns?: number;
 }
@@ -49,11 +49,6 @@ async function extractOne(config: EditorConfig, row: QueueRow): Promise<ResultRo
     };
   }
   const users = result.messages!.filter((m) => m.role === "user").length;
-  const words = result.messages!.reduce((n, m) => n + m.content.length, 0);
-  if (isTooShort(users, words)) {
-    await rejectShort(config, row.id, users, words); // 直接拒审，不落草稿
-    return { ...base, status: "rejected", detail: SHORT_REASON };
-  }
   return { ...base, status: "ok", detail: `${users} 轮对话`, turns: users };
 }
 
@@ -84,22 +79,19 @@ export async function batch(config: EditorConfig, args: string[]): Promise<void>
   const ok = results.filter((r) => r.status === "ok");
   const unreachable = results.filter((r) => r.status === "unreachable");
   const decodeFailed = results.filter((r) => r.status === "decode_failed");
-  const rejected = results.filter((r) => r.status === "rejected");
-
   console.log(`\n已解析了 ${results.length} 条投稿（跳过已提取 ${skipped} 条）：`);
   let idx = 0;
   for (const r of results) {
     idx++;
-    const mark = r.status === "ok" ? "✅" : r.status === "rejected" ? "⛔" : r.status === "unreachable" ? "❌" : "⚠️";
+    const mark = r.status === "ok" ? "✅" : r.status === "unreachable" ? "❌" : "⚠️";
     console.log(`${idx}. ${mark} ${r.url} - ${r.email} - ${r.detail}`);
   }
 
   console.log("\n========== 分组汇总 ==========");
-  console.log(`✅ 提取成功（${ok.length}）→ 可进入脚本生成`);
-  console.log(`⛔ 内容过短已直接拒审（${rejected.length}）→ 原因：${SHORT_REASON}`);
+  console.log(`✅ 提取成功（${ok.length}）→ 可进入脚本生成（内容取舍由编辑把关）`);
   console.log(`❌ 触达失败（${unreachable.length}）→ 链接不可达`);
   console.log(`⚠️ 解码失败（${decodeFailed.length}）→ 反爬/内容问题`);
   console.log(`已提取跳过（${skipped}）`);
 
-  console.log("\n处置：✅ 组继续生成脚本；❌/⚠️ 组拒审（附原因）/ 人工处理 / 跳过；⛔ 组已自动拒审无需处理");
+  console.log("\n处置：✅ 组继续生成脚本；❌/⚠️ 组及内容取舍均由编辑决定——拒审（batch-reject 附原因）/ 人工处理 / 跳过 / 重试（采集失败不自动拒稿）");
 }

@@ -104,10 +104,11 @@ const css = stylex.create({
     fontStyle: "italic",
   },
   highlights: {
-    marginTop: dimensions.spacing6,
     display: "flex",
     flexDirection: "column",
     gap: dimensions.spacing4,
+    
+  
   },
   highlightsTitle: {
     opacity: 0.8,
@@ -117,7 +118,15 @@ const css = stylex.create({
     margin: 0,
     paddingLeft: dimensions.spacing4,
     borderLeft: `2px solid ${colors.primaryWeak}`,
+    display: "relative",
     fontStyle: "italic",
+    '::before': {
+      content: '"★ "',
+      color: 'gold',
+      display: 'absolute',
+      left : `-${dimensions.spacing4}`,
+      float: "left",
+    },
   },
   credit: {
     marginTop: dimensions.spacing5,
@@ -514,7 +523,7 @@ export default function EpisodeDetailPage() {
                 <A {...stylex.props(global.linkText,css.creatorLink)} href={"/@" + (ep()!.username ?? "")}>{t("episode.createBy", { user: ep()!.username! })}</A>
     */}
               </div>
-              <div {...stylex.props(typography.headingMd,css.title)}>{ep()?.title}</div>
+              <div {...stylex.props(typography.headingMd)}>{ep()?.title}</div>
             </div>
 
             <div {...stylex.props(css.actions)}>
@@ -562,7 +571,7 @@ export default function EpisodeDetailPage() {
         <Block cols={7} start={6} xstyle={css.main}>
           <Show when={ep()?.highlights?.length}>
             <div {...stylex.props(css.highlights)}>
-              <div {...stylex.props(typography.caption, css.highlightsTitle)}>{t("episode.highlights")}</div>
+              {/* <div {...stylex.props(typography.caption, css.highlightsTitle)}>{t("episode.highlights")}</div> */}
               <For each={ep()?.highlights ?? []}>
                 {(h) => <blockquote {...stylex.props(css.highlight, typography.bodyLg)}>{h.text}</blockquote>}
               </For>

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// script-lab web 层：投稿列表 + 分步采编发布控制台（调共享 CLI 底座 tools/dailog-cli）
+// script-lab web 层：投稿列表 + 分步采编发布控制台
+//   采集（原始对话内容）已自包含：lib/collect.mjs（不依赖 CLI）；TTS 合成/环境配置等仍复用 CLI 底座（迁移中）
 // 用法：node tools/script-lab/server.mjs [--port 4173] [--env dev]
 // 安全：绑定 127.0.0.1 + Host 头校验（防 DNS rebinding）
 import { createServer } from "node:http";
@@ -225,7 +226,7 @@ async function markCollected(envName, token, id, messages, title) {
 }
 
 /** 异步执行单条采集：CLI 纯功能提取 → lab 接管 R2 存储 + 服务端标记 */
-async function runSingleFetch(envName, token, id, url) {
+async function runSingleFetch(envName, token, id, url, title) {
   const fkey = envName + ":" + id;
   fetchingSet.add(fkey);
   if (url) fetchingInfo.set(fkey, { url });
@@ -240,12 +241,9 @@ async function runSingleFetch(envName, token, id, url) {
         return { ok: true, messages: cached.messages };
       }
     }
-    // ② CLI 纯功能采集（不写文件、不标记，只返回数据）
-    const fetchMod = await import(join(CLI_DIST, "fetch.js"));
-    const lib = await loadCliLib();
-    lib.setApiCookie(getCookieSession(envName) || null);
-    lib.setApiToken(token || null);
-    const r = await fetchMod.extractSubmission(await configFor(envName), id, token);
+    // ② 采集（lab 自包含 collect.mjs——原始对话内容采集不再依赖 CLI；url/title 由 lab 侧已获取，直接解码）
+    const collect = await import("./lib/collect.mjs");
+    const r = await collect.collectDialogue(url, { title: title ?? null });
     // ③ lab 接管存储：R2 写入 + 服务端标记
     if (r.ok && Array.isArray(r.messages) && r.messages.length > 0) {
       const sourceUrl = r.sourceUrl || url;
@@ -478,7 +476,7 @@ async function handleApi(path, res, req) {
     // 异步启动，不等待（带 url 供统计条展示"正在采集：<url>"）
     const sub = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null);
     if (sub && sub.collected === 1) { sendJson(res, { ok: true, state: "already_fetched", id }); return; }
-    runSingleFetch(e, token, id, (sub && sub.url) || null).catch(() => {});
+    runSingleFetch(e, token, id, (sub && sub.url) || null, (sub && sub.title) || null).catch(() => {});
     sendJson(res, { ok: true, state: "fetching", id });
     return;
   }
@@ -513,7 +511,7 @@ async function handleApi(path, res, req) {
     const worker = async () => {
       while (idx < pending.length) {
         const row = pending[idx++];
-        await runSingleFetch(e, token, row.id, row.url || null);
+        await runSingleFetch(e, token, row.id, row.url || null, row.title || null);
       }
     };
     // 异步启动，不等待（返回已入队数量；进度由 /api/status/fetch 轮询）
@@ -645,8 +643,13 @@ async function handleApi(path, res, req) {
     const audio = (body && body.audio) || null;
     if (!id || !audio) { sendJson(res, { ok: false, error: "需 id + audio(base64)" }, 400); return; }
     try {
-      // 产物本质 = 最终输出：合成确认直接写最终位置 episodes/{submissionId}.m4a（flat，发布零拷贝）
-      const key = "episodes/" + id + ".m4a";
+      // 产物本质 = 最终输出：合成确认直接写最终位置 episodes/{userId}/{submissionId}.m4a（canonical，发布零拷贝；与文档/republish/流式同 key）
+      // userId 经投稿详情获取；详情拉取失败时回退 flat episodes/{submissionId}.m4a（发布解析链同样覆盖）
+      let key = "episodes/" + id + ".m4a";
+      try {
+        const d = await apiWithToken(e, token, "/v1/editor/submissions/" + id);
+        if (d && d.userId) key = "episodes/" + d.userId + "/" + id + ".m4a";
+      } catch (err) { console.log("[full-upload] 投稿详情获取失败（回退 flat key）:", String((err && err.message) || err).slice(0, 300)); }
       await apiWithToken(e, token, "/v1/editor/storage/put", { method: "POST", body: { key, content: "b64:" + audio } });
       // 上传成功 → 标记投稿为 crafted（节目音频已生成未发布；标记失败不阻断上传成功）
       let crafted = false;
@@ -870,7 +873,7 @@ async function handleApi(path, res, req) {
       // 第2轮：scriptRule = 渲染后的续接指令（review.script 单条 user：规则 + 数据；评分由 review 运行时注入）
       const rendered = renderPrompt(pScript, {
         score: null,
-        selection: null,
+        review: null,
         suggestion: (detail && detail.suggestion) || "",
         host: hostSnap ? { callName: hostSnap.callName || "主持人", personaInfo: hostSnap.personaInfo || undefined } : { callName: "主持人" },
         guests: guestSnap ? [{ name: guestSnap.name, platform: guestSnap.id, intro: guestSnap.intro || null }] : [{ name: "AI" }],
@@ -947,15 +950,15 @@ async function handleApi(path, res, req) {
       const guestSnap = (detail && detail.guest) || null;
       const pScore = getPrompt("review.score");
       const pScript = getPrompt("review.script");
-      // 原则①：round2 输入从 store 取（前端随请求带 round1 审题产物）——基于 round1 的 advice 写命题作文
-      const selection = (body && body.selection && typeof body.selection === "object") ? body.selection : null;
+      // 原则①：round2 输入从 store 取（前端随请求带 round1 审核采纳结果 review；兼容旧 selection 键）
+      const review = (body && body.review && typeof body.review === "object") ? body.review : ((body && body.selection && typeof body.selection === "object") ? body.selection : null);
       // B' 续接式：R2 前两条复用 R1 的 system+user（与 round1 请求逐字一致 → 命中 DeepSeek 前缀缓存，对话原文不再全价重付）；
       // [2] assistant=审题交接（评分+主线+价值锚点+创作建议 advice——模型视为自己说过的结论，遵循度最高）；
-      // [3] user=创作规则 + 角色数据（不含对话原文、不含 selection JSON）
+      // [3] user=创作规则 + 角色数据（不含对话原文、不含 review JSON）
       const msgs1 = renderPrompt(pScore, { dialogue: JSON.stringify(dialogue), suggestion: "" });
       const rendered = renderPrompt(pScript, {
         score,
-        selection,
+        review,
         suggestion: (detail && detail.suggestion) || "",
         host: hostSnap ? { callName: hostSnap.callName || "主持人", personaInfo: hostSnap.personaInfo || undefined } : { callName: "主持人" },
         guests: guestSnap ? [{ name: guestSnap.name, platform: guestSnap.id, intro: guestSnap.intro || null }] : [{ name: "AI" }],
@@ -966,7 +969,7 @@ async function handleApi(path, res, req) {
         rendered[0],         // assistant：审题交接（handoff，含 advice）
         rendered[1],         // user：创作规则 + 角色数据
       ];
-      console.log("[round2] selection=" + (selection ? "有(" + Object.keys(selection).join(",") + ")" : "无") + " | handoff=" + rendered[0].content.length + "字 含advice=" + rendered[0].content.includes("advice") + " | rules=" + rendered[1].content.length + "字");
+      console.log("[round2] review=" + (review ? "有(" + Object.keys(review).join(",") + ")" : "无") + " | handoff=" + rendered[0].content.length + "字 含advice=" + rendered[0].content.includes("advice") + " | rules=" + rendered[1].content.length + "字");
       const cfgOverride = {};
       if (body && Array.isArray(body.messages) && body.messages.length) {
         const cfg = (body && body.config) || {};
@@ -1072,7 +1075,24 @@ async function handleApi(path, res, req) {
     return;
   }
 
-  // POST /api/run/review/confirm → 确认入库：读取暂存的审核结果 → production.selection + script
+  // POST /api/run/review/save → 采纳审核结果入库（submissions.review jsonb；不改状态——拒稿/继续创作由编辑动作决定）
+  if (path === "/api/run/review/save" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const body = await readBody(req);
+    const id = (body && body.id) || null;
+    const review = (body && body.review && typeof body.review === "object") ? body.review : null;
+    if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
+    if (!review) { sendJson(res, { ok: false, error: "无审核结果（review）" }, 400); return; }
+    try {
+      const r = await apiWithToken(e, token, "/v1/editor/submissions/" + id + "/review", { method: "PUT", body: { review } });
+      sendJson(res, { ok: true, id, saved: !!(r && r.ok) });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/run/review/confirm → 确认入库：读取暂存的审核结果 → production.review + script
   if (path === "/api/run/review/confirm" && req.method === "POST") {
     const cred = reqCred(req);
     if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
@@ -1095,6 +1115,11 @@ async function handleApi(path, res, req) {
       const rejected = d.rejected === true;
       const detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null);
       productionCache.set(e + ":" + id, detail || null);
+      // 标题回写兜底：后端 /review 已按 result.title setTitle；此处 lab 再幂等确认一次（防后端旧版未实现/漏写）
+      if (!rejected && result.title && typeof result.title === "string" && result.title.trim()) {
+        try { await apiWithToken(e, token, "/v1/editor/submissions/" + id + "/title", { method: "PATCH", body: { title: result.title.trim() } }); }
+        catch (err) { console.log("[review/confirm] title 回写失败:", String((err && err.message) || err).slice(0, 200)); }
+      }
       // 入库打分（一次）→ 与重试轨迹合并成一条自进化记录 kind:"final"：
       //   "重试了 X 次之后给出 N 分，其中暴露缺陷：[1. … 2. …]"
       if (fbScore) {
@@ -1119,7 +1144,7 @@ async function handleApi(path, res, req) {
     return;
   }
 
-  // POST /api/run/script → 创作：dialogue + selection 提示词 → 脚本结构（写 production.json.selection + script）
+  // POST /api/run/script → 创作：dialogue + review 提示词 → 脚本结构（写 production.json.review + script）
   if (path === "/api/run/script" && req.method === "POST") {
     const cred = reqCred(req);
     if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
@@ -1135,7 +1160,7 @@ async function handleApi(path, res, req) {
       const { content: out } = await llmComplete(msgs[0].content, msgs[1].content, undefined, undefined, p.config);
       const parsed = extractJson(out);
       const prod = await saveProduction(e, token, id, {
-        selection: parsed,
+        review: parsed,
         script: Array.isArray(parsed.scripts) ? parsed.scripts[0] : null,
         progress: { step: "script", updatedAt: new Date().toISOString() },
       });
@@ -1161,7 +1186,8 @@ async function handleApi(path, res, req) {
       const target = scripts[scriptIndex];
       if (!target || !Array.isArray(target.segments)) { sendJson(res, { ok: false, error: "脚本不存在（index " + scriptIndex + "）" }, 404); return; }
       const p = getPrompt("polish.all");
-      const defaultMsgs = renderPrompt(p, { scripts: JSON.stringify(target, null, 1), scope: "all", target: "", revision: "" });
+      const dialogue = await loadDialogue(e, token, id).catch(() => null);   // 定稿对照：polish 需比对原始对话
+      const defaultMsgs = renderPrompt(p, { scripts: JSON.stringify(target, null, 1), dialogue: dialogue ? JSON.stringify(dialogue, null, 1) : "", scope: "all", target: "", revision: "" });
       const cfgOverride = {};
       if (body && Array.isArray(body.messages) && body.messages.length) {
         const cfg = (body && body.config) || {};
@@ -1220,9 +1246,9 @@ async function handleApi(path, res, req) {
     const id = (body && body.id) || null;
     if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
     try {
-      // 原则①：meta 工作流输入从 store 取（前端随请求带 selection + script）；回退 R2 reviewScripts
+      // 原则①：meta 工作流输入从 store 取（前端随请求带 review + script）；回退 R2 reviewScripts
       const inScript = (body && body.script && typeof body.script === "object") ? body.script : null;
-      const inSel = (body && body.selection && typeof body.selection === "object") ? body.selection : null;
+      const inSel = (body && body.review && typeof body.review === "object") ? body.review : ((body && body.selection && typeof body.selection === "object") ? body.selection : null);
       let script = inScript;
       if (!script) {
         const detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null);
@@ -1233,7 +1259,7 @@ async function handleApi(path, res, req) {
       // preview 模式：返回渲染后的 messages+config（llm-box 填入可编辑输入框），不执行
       if (body && body.preview) {
         const p = getPrompt("meta");
-        const msgs = renderPrompt(p, { script, selection: inSel });
+        const msgs = renderPrompt(p, { script, review: inSel });
         sendJson(res, { ok: true, apiBody: previewApiBody("meta", msgs), preview: { messages: msgs, config: p.config || {}, name: p.name || "meta", description: p.description || "" } });
         return;
       }
@@ -1248,7 +1274,7 @@ async function handleApi(path, res, req) {
         if (cfg.thinking !== undefined) cfgOverride.thinking = cfg.thinking;
       } else {
         const p = getPrompt("meta");
-        msgs = renderPrompt(p, { script, selection: inSel });
+        msgs = renderPrompt(p, { script, review: inSel });
       }
       const r = await llmComplete(null, null, cfgOverride, withRevision(msgs, (body && body.revision) || ""), getPrompt("meta").config);
       const parsed = extractJson(r.content);

@@ -19,7 +19,7 @@
       "userSelector": "[data-message-author-role='user']",
       "assistantSelector": "[data-message-author-role='assistant']",
       "contentSelector": null,
-      "note": "2026-08-13 占位规则（data-message-author-role 系，待实测校准）",
+      "note": "doubao 分享 API 直取（/share/ 与 /thread/ 同 API，2026-09-04 /thread/ 实测）；分享页是 SPA 壳（DOM 无 data-message-author-role），规则仅 API 失败时兜底",
       "hits": 0
     },
     {

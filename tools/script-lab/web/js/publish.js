@@ -508,13 +508,13 @@ async function autoFillMeta(){
   const btn = document.getElementById('pubAutoBtn');
   if (btn) { btn.disabled = true; btn.textContent = '填充中…'; }
   try {
-    // 原则①：meta 工作流输入从 store 取——round1 审题产物（selection）+ 打磨脚本（scripts）
+    // 原则①：meta 工作流输入从 store 取——round1 审核结果（review）+ 打磨脚本（scripts）
     const inBody = { id, fillOnly: true };
     if (typeof getWorkflowInput === 'function') {
       try {
-        const sel = getWorkflowInput(id, 'selection');
+        const sel = (getWorkflowInput(id, 'review') || getWorkflowInput(id, 'selection'));
         const scr = getWorkflowInput(id, 'scripts');
-        if (sel) inBody.selection = sel;
+        if (sel) inBody.review = sel;
         if (Array.isArray(scr) && scr.length) inBody.script = scr[0];
       } catch {}
     }
@@ -532,9 +532,9 @@ async function openMetaConsole(){
   const inBody = { id, fillOnly: true };
   if (typeof getWorkflowInput === 'function') {
     try {
-      const sel = getWorkflowInput(id, 'selection');
+      const sel = (getWorkflowInput(id, 'review') || getWorkflowInput(id, 'selection'));
       const scr = getWorkflowInput(id, 'scripts');
-      if (sel) inBody.selection = sel;
+      if (sel) inBody.review = sel;
       if (Array.isArray(scr) && scr.length) inBody.script = scr[0];
     } catch {}
   }
@@ -604,7 +604,9 @@ async function publishEpisode(){
       transcript: 'scripts/' + id + '.json',   // 台本 = 打磨脚本文件引用（节目页拉取去标签展示）
       durationSeconds: (typeof window !== 'undefined' && window.__pubDur) || null,   // 确定性数据：音频自动检测
       guestId: names.guestId || null,   // guests 表 id（如 deepseek/doubao）
-      audioKey: ws.audioKey || fm.r2Key || ('episodes/' + id + '.m4a'),   // 最终位置（flat）：合成确认写入，发布零拷贝引用
+      // 复用创作成品 key（合成确认返回的 canonical episodes/{userId}/{id}.m4a；或旧 fullmeta.r2Key）。
+      // 缺省不猜 key——服务端按投稿确定性解析（canonical → flat → full），旧数据 crafted 也能发
+      audioKey: ws.audioKey || fm.r2Key || null,
     };
     if (!meta.title) throw new Error('请填写标题');
     const form = new FormData();

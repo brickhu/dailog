@@ -120,10 +120,12 @@ export interface SubmissionsRepo {
   setTitle(id: string, title: string | null): Promise<{ id: string } | null>;
   /** 创作审核决策（rejected=true → review_status=rejected；通过 → 不写 approved，仅记 score） */
   setReview(id: string, review: { rejected: boolean; score: number | null }): Promise<{ id: string } | null>;
+  /** 采纳的审核产物入库（review jsonb 整包；不改状态、不触发决策） */
+  setReviewResult(id: string, review: Record<string, unknown>): Promise<{ id: string } | null>;
   /** 设置投稿主状态（crafted = 节目音频已生成上传，未发布） */
   setStatus(id: string, status: "submitted" | "collected" | "rejected" | "published" | "crafted"): Promise<{ id: string } | null>;
   /** 采集状态：-1=采集失败 / 0=未采集 / 1=采集成功（R2 key 由 URL 哈希推导，不存库） */
-  /** 采集状态写入（-1 失败 / 0 未采集 / 1 成功）——联动投稿主状态：1→collected、-1→rejected（附原因）、0→submitted */
+  /** 采集状态写入（-1 失败 / 0 未采集 / 1 成功）——联动投稿主状态：1→collected、0→submitted；-1 仅记失败标记（不拒稿，拒稿由编辑手工 reject） */
   setCollected(id: string, collected: number, reason?: string | null): Promise<{ id: string } | null>;
   /** 采集统计写入（消息数/各角色轮数/字数） */
   setDialogueCount(id: string, stats: { messages: number; userTurns: number; assistantTurns: number; chars: number }): Promise<{ id: string } | null>;
@@ -949,6 +951,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             reviewedAt: schema.submissions.reviewedAt,
             reviewStatus: schema.submissions.reviewStatus,
             reviewScore: schema.submissions.reviewScore,
+            review: schema.submissions.review,
             createdAt: schema.submissions.createdAt,
             userEmail: schema.authUsers.email,
             host: schema.submissions.host,
@@ -983,6 +986,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           reviewedAt: row.reviewedAt,
           reviewStatus: row.reviewStatus as "approved" | "rejected" | null,
           reviewScore: row.reviewScore as number | null,
+          review: row.review as Record<string, unknown> | null,
           createdAt: row.createdAt,
           userEmail: row.userEmail,
           personaInfo: (row.host && row.host.personaInfo) || null,
@@ -1013,13 +1017,13 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .returning({ id: schema.submissions.id });
         return rows[0]?.id ? { id: rows[0].id } : null;
       },
-      /** 采集状态写入（-1 失败 / 0 未采集 / 1 成功）——联动投稿主状态：1→collected、-1→rejected（附原因）、0→submitted */
-      async setCollected(id: string, collected: number, reason?: string | null) {
+      /** 采集状态写入（-1 失败 / 0 未采集 / 1 成功）——联动投稿主状态：1→collected、0→submitted；
+       *  -1 只记失败标记，不流转状态、不拒稿——采集失败保持 submitted，是否拒稿由编辑手工 reject 决定 */
+      async setCollected(id: string, collected: number, _reason?: string | null) {
         const rows = await db.update(schema.submissions)
           .set({
             collected,
-            status: collected === 1 ? "collected" : collected === -1 ? "rejected" : "submitted",
-            ...(collected === -1 ? { rejectedReason: reason || "采集失败" } : {}),
+            ...(collected === 1 ? { status: "collected" as const } : collected === 0 ? { status: "submitted" as const } : {}),
             updatedAt: new Date(),
           })
           .where(eq(schema.submissions.id, id))
@@ -1046,6 +1050,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       async setReview(id: string, review: { rejected: boolean; score: number | null }) {
         const rows = await db.update(schema.submissions)
           .set({ reviewStatus: review.rejected ? "rejected" : null, reviewScore: review.score, updatedAt: new Date() })
+          .where(eq(schema.submissions.id, id))
+          .returning({ id: schema.submissions.id });
+        return rows[0]?.id ? { id: rows[0].id } : null;
+      },
+      /** 采纳的审核产物入库（review jsonb 整包；不改状态、不触发决策） */
+      async setReviewResult(id: string, review: Record<string, unknown>) {
+        const rows = await db.update(schema.submissions)
+          .set({ review, updatedAt: new Date() })
           .where(eq(schema.submissions.id, id))
           .returning({ id: schema.submissions.id });
         return rows[0]?.id ? { id: rows[0].id } : null;

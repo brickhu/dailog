@@ -36,6 +36,7 @@ async function openDetail(id){
     else if (rawStatus === 'rejected') collectStatus = (dt.collected === -1)
       ? `<span style='color:#f85149'>采集失败</span>`
       : `<span style='color:#f85149'>已拒稿</span>`;
+    else if (dt.collected === -1) collectStatus = `<span style='color:#f85149;font-size:12px'>上次采集失败（未拒稿——可重试，或由编辑决定拒稿）</span> <button class='ac-act' data-fetch-id='${id}'>重试采集</button>`;
     else if (collectedOK) collectStatus = dc ? `<span style='color:#3fb950'>✓ ${dc.messages} 条消息 · 共计 ${dc.chars} 字</span>` : `<span style='color:#3fb950'>✓ 已采集</span>`;
     else collectStatus = `<button class='ac-act' data-fetch-id='${id}'>采集</button>`;
     const collectHeadClick = collectedOK ? "onclick='toggleCard(this)'" : '';
@@ -43,6 +44,38 @@ async function openDetail(id){
     const collectBodyHtml = collectedOK ? `<div class='ac-body' id='collectBody'><div class='muted'>加载中…</div></div>` : '';
     // 创作卡：仅采集成功后显示；状态由 status + 脚本数据驱动（无 approved 概念）
     const ps = d.prodSummary || null;
+    // 审核采纳结果（submissions.review 后端权威；本地回填供旧控件读取）
+    let review = (dt.review && typeof dt.review === 'object' && Object.keys(dt.review).length) ? dt.review : null;
+    if (!review && typeof getWorkflowInput === 'function') { try { review = getWorkflowInput(id, 'review') || null; } catch {} }
+    if (review && typeof setWorkflowInput === 'function') { try { setWorkflowInput(id, 'review', review); } catch {} }
+    const hasReview = !!(review && typeof review.score === 'number');
+    // 已有脚本 = 创作已进行（旧流程产物可能无 review 入库）——不再提供质量检测
+    const hasScripts = !!(ps && Array.isArray(ps.scriptList) && ps.scriptList.length);
+    // 渐进式步骤卡：审核没出结果，不显示创作卡（拒稿态/旧产物除外）
+    const showCreateCard = collectedOK && (rawStatus === 'rejected' || hasReview || hasScripts);
+    let auditCardHtml = '';
+    if (rawStatus !== 'rejected' && rawStatus !== 'published') {
+      auditCardHtml = hasReview ? `
+        <div class='ac-card open'>
+          <div class='ac-head'><h3 style='margin:0;font-size:14px'>审核</h3><span class='ac-status'><span style='color:#3fb950'>已审核 · 评分 ${esc(String((review && review.score) != null ? review.score : '?'))}</span></span></div>
+          <div class='ac-body'>
+            <div class='detail-info'>
+              <div class='detail-row'><span class='k'>主线话题</span><span class='v'>${esc((review && review.main_topic) || '—')}</span></div>
+              <div class='detail-row'><span class='k'>分类</span><span class='v'>${esc((review && review.category) || '—')}</span></div>
+              <div class='detail-row'><span class='k'>用户的困惑</span><span class='v'>${esc((review && review.confusion) || '—')}</span></div>
+              ${(Array.isArray(review && review.confusion_quotes) && review.confusion_quotes.length) ? `<div class='detail-row'><span class='k'>困惑原话</span><span class='v'>${review.confusion_quotes.map((q) => '“' + esc(String(q)) + '”').join(' ')}</span></div>` : ''}
+              <div style='display:flex;align-items:baseline;gap:8px;margin:2px 0 4px'><span class='k' style='font-size:12px'>总分</span><span style='font-size:22px;font-weight:700;color:#3fb950'>${Number.isFinite(Number(review && review.score)) ? Number(review.score).toFixed(1) : esc(String((review && review.score) ?? '—'))}</span><span class='muted' style='font-size:11px'>（编辑参考，≥6.5 提示达标）</span></div>
+              <div class='detail-row'><span class='k'>评分明细</span><span class='v'>${(Array.isArray(review && review['score-detail']) && review['score-detail'].length) ? review['score-detail'].map((x) => esc(String(x.dimension)) + ' ' + esc(String(x.score)) + '（×' + esc(String(x.weight)) + '）').join(' · ') : esc(String((review && review.score) ?? '—'))}</span></div>
+              <div class='detail-row'><span class='k'>创作建议</span><span class='v'>${esc((review && review.advice) || '—')}</span></div>
+            </div>
+            <div style='margin-top:10px;display:flex;gap:8px'>
+              <button class='ac-act' onclick='openScriptConsole("${id}")'>继续创作</button>
+              <button class='pg' style='color:#f85149;border-color:#f85149' onclick='rejectSubmission("${id}")'>拒稿</button>
+            </div>
+          </div>
+        </div>`
+        : (hasScripts ? `<div class='ac-card'><div class='ac-head'><h3 style='margin:0;font-size:14px'>审核</h3><span class='ac-status'><span class='muted'>已创作（旧流程产物，未入库 review）</span></span></div></div>` : `<div class='ac-card'><div class='ac-head'><h3 style='margin:0;font-size:14px'>审核</h3><span class='ac-status'><span class='muted'>待审核</span> <button class='ac-act' onclick='openReviewConsole("${id}")'>质量检测</button></span></div></div>`);
+    }
     let createStatus, createBody;
     if (rawStatus === 'rejected') {
       createStatus = `<span style='color:#f85149'>已拒稿</span>`;
@@ -74,12 +107,10 @@ async function openDetail(id){
         }).join('');
         createBody = scriptCardsHtml ? scriptCardsHtml : `<div class='muted'>已创作，脚本列表为空</div>`;
       } else {
-        // 阶段动作：未审 → 审核(R1)；已审有评分 → 创作脚本(R2)；两者都不重复出现
-        let hasReview = null;
-        if (typeof getWorkflowInput === 'function') { try { const sel = getWorkflowInput(id, 'selection'); if (sel && typeof sel.score === 'number') hasReview = sel; } catch {} }
+        // 阶段动作：审核在独立「审核」卡完成——创作卡只负责创作
         createStatus = hasReview
           ? `<button class='ac-act' onclick='openScriptConsole("${id}")'>创作脚本</button>`
-          : `<button class='ac-act' onclick='openReviewConsole("${id}")'>审核</button>`;
+          : `<span class='muted' style='font-size:12px'>待审核——先在「审核」卡做质量检测</span>`;
         createBody = '';
       }
     } else if (rawStatus === 'published') {
@@ -138,7 +169,8 @@ async function openDetail(id){
           <div class='ac-head ${collectedOK?'':'muted'}' ${collectHeadClick}><h3 style='margin:0;font-size:14px'>采集</h3><span class='ac-status'>${collectStatus}</span>${collectArrow}</div>
           ${collectBodyHtml}
         </div>
-        ${collectedOK?`<div class='ac-card ${lastOpenCard==='create'?'open':''}'>
+        ${auditCardHtml}
+        ${showCreateCard?`<div class='ac-card ${lastOpenCard==='create'?'open':''}'>
           <div class='ac-head' onclick='toggleCard(this)'><h3 style='margin:0;font-size:14px'>创作</h3><span class='ac-status'>${createStatus}</span><span class='ac-arrow'>▾</span></div>
           ${createBody?`<div class='ac-body'>${createBody}</div>`:''}
         </div>`:''}
@@ -162,9 +194,22 @@ async function openDetail(id){
   }
 }
 
-// 手工拒绝投稿（未 published 前任意状态可拒；原因投稿人可见）
+// 手工拒绝投稿（未 published 前任意状态可拒；原因投稿人可见；预填审核的拒稿理由草稿）
 async function rejectSubmission(id){
-  const reason = prompt('填写拒稿原因（投稿人可见）:');
+  let draft = '';
+  if (typeof getWorkflowInput === 'function') {
+    try {
+      const rv = getWorkflowInput(id, 'review');
+      if (rv && typeof rv.rejection_draft === 'string' && rv.rejection_draft.trim()) draft = rv.rejection_draft.trim();
+      else if (rv && rv.score != null) {
+        const s = Number(rv.score);
+        draft = Number.isFinite(s)
+          ? '这篇对话暂未达到创作标准（综合评分 ' + s.toFixed(1) + '）。如果你愿意，可以带着一个更想聊清楚的问题再来，很期待下一条对话。'
+          : '';
+      }
+    } catch {}
+  }
+  const reason = draft ? prompt('填写拒稿原因（投稿人可见）:', draft) : prompt('填写拒稿原因（投稿人可见）:');
   if (reason === null) return;   // 取消
   if (!reason.trim()) { notice('请填写拒稿原因', 'error'); return; }
   try {
@@ -245,9 +290,9 @@ function restoreDrawerState(){
 // round2 试点入口：LLM 控制台（采纳 = 触发 onDone → 业务写 scripts 产物槽）
 async function openScriptConsole(id){
   if (typeof openLlmConsole !== 'function') { alert('llm-console.js 未加载'); return; }
-  let selection = null;
-  if (typeof getWorkflowInput === 'function') { try { selection = getWorkflowInput(id, 'selection'); } catch {} }
-  const score = (selection && typeof selection.score === 'number') ? selection.score : null;
+  let review = null;
+  if (typeof getWorkflowInput === 'function') { try { review = getWorkflowInput(id, 'review') || getWorkflowInput(id, 'selection'); } catch {} }
+  const score = (review && typeof review.score === 'number') ? review.score : null;
   if (score == null) { alert('该投稿还没有审题评分——请先走「开始创作」完成 round1'); return; }
   openLlmConsole({
     id: id,
@@ -255,7 +300,7 @@ async function openScriptConsole(id){
     title: 'round2 · 脚本创作（控制台试点）',
     url: '/api/run/review/round2',
     scoring: true,   // 对应 review.script 模板 config.scoring（提示词模板决定是否评分）
-    buildRequest: () => ({ id: id, score: score, selection: selection }),
+    buildRequest: () => ({ id: id, score: score, review: review }),
     onDone: async ({ request, response, meta }) => {
       // —— 纯业务：采纳这版 scripts → 落 R2（services scripts）→ 刷新后工作区稳定可读（不被 R2 空数据覆盖）——
       const scripts = (response && response.result && Array.isArray(response.result.scripts)) ? response.result.scripts : null;
@@ -289,7 +334,7 @@ async function openPolishConsole(id, si){
     },
   });
 }
-// 审核（round1）接入 LLM 控制台：采纳 = 拒稿直接入库 rejected / 通过定稿 selection
+// 审核（round1）接入 LLM 控制台：采纳 = 审核结果存 review（submissions.review jsonb + 本地）——是否拒稿/继续创作由编辑决定
 async function openReviewConsole(id){
   if (typeof openLlmConsole !== 'function') { alert('llm-console.js 未加载'); return; }
   openLlmConsole({
@@ -299,14 +344,13 @@ async function openReviewConsole(id){
     onDone: async ({ response }) => {
       const r = response && response.result;
       if (!r || typeof r !== 'object') throw new Error('该版没有审题结果');
-      if (r.rejected === true) {
-        // 业务：拒稿入库——与弹窗拒稿同一链路（services /review → reject 状态 + 通知投稿人）
-        const d = await j('/api/run/review/confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: id, result: r }) });
-        if (!(d && d.ok)) throw new Error((d && d.error) || '拒稿入库失败');
-      } else {
-        // 通过：定稿审题产物 → 卡片切到「创作脚本」
-        if (typeof setWorkflowInput === 'function') { try { setWorkflowInput(id, 'selection', r); } catch (e) { throw new Error('写审题产物失败：' + e.message); } }
+      // 采纳：审核产物整包存 review（submissions.review jsonb = 后端权威；本地同步供本页渲染）
+      const d = await j('/api/run/review/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: id, review: r }) }).catch((e) => ({ __err: String((e && e.message) || e) }));
+      if (!(d && d.ok)) {
+        const detail = d && d.__err ? d.__err : ((d && d.error) || JSON.stringify(d).slice(0, 200) || '空响应');
+        throw new Error('审核结果保存失败：' + detail);
       }
+      if (typeof setWorkflowInput === 'function') { try { setWorkflowInput(id, 'review', r); } catch (e) { throw new Error('写审核结果失败：' + e.message); } }
       openDetail(id);
     },
   });
@@ -920,9 +964,9 @@ function mountReviewBoxes(id){
       feedback: true,   // round2 结果区启用质量标记（提示词进化数据源）
       buildRequest: () => {
         // 原则①：round2 输入从 store 取——round1 选题（advice/main_topic/category）随请求传给 lab
-        let selection = null;
-        if (typeof getWorkflowInput === 'function') { try { selection = getWorkflowInput(id, 'selection'); } catch {} }
-        return { id, score: scriptBox.__score, selection };
+        let review = null;
+        if (typeof getWorkflowInput === 'function') { try { review = getWorkflowInput(id, 'review') || getWorkflowInput(id, 'selection'); } catch {} }
+        return { id, score: scriptBox.__score, review };
       },
       onDone: (result, usage) => {
         const scripts = (result && result.scripts) || [];
@@ -953,7 +997,9 @@ function mountReviewBoxes(id){
       reviewAcc.score = score;
       reviewAcc.rejected = !!rejected;
       // 原则①：审题产物（round1 输出原样）写入素材 store——round2/meta 的工作流输入源
-      if (typeof setWorkflowInput === 'function') { try { setWorkflowInput(id, 'selection', result); } catch {} }
+      if (typeof setWorkflowInput === 'function') { try { setWorkflowInput(id, 'review', result); } catch {} }
+      // 采纳结果同步到投稿（submissions.review jsonb）——跨端/创作卡的权威输入源
+      j('/api/run/review/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, review: result }) }).catch(() => {});
       const html = rejected
         ? '<span style="color:#f85149">✗ 审核不通过（得分 ' + (score ?? '?') + '）</span>'
         : '<span style="color:#3fb950">✓ 评分 ' + (score ?? '?') + (passed ? '（可进入脚本创作）' : '（<6.5 不满足创作）') + '</span>';
@@ -963,10 +1009,10 @@ function mountReviewBoxes(id){
           scriptMount.style.display = '';
           scriptMount.dataset.disabled = '';
           scriptBox.__score = score;
-          // 预取 round2 预览（注入 score + 选题依据——user 消息含 {{selection}}，缺 selection 则 advice/main_topic 不渲染进快照）
+          // 预取 round2 预览（注入 score + 审核材料 review——user 消息含 {{review}}）
           let sel = null;
-          if (typeof getWorkflowInput === 'function') { try { sel = getWorkflowInput(id, 'selection'); } catch {} }
-          j('/api/run/review/round2', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, score, selection: sel, preview: true }) })
+          if (typeof getWorkflowInput === 'function') { try { sel = getWorkflowInput(id, 'review') || getWorkflowInput(id, 'selection'); } catch {} }
+          j('/api/run/review/round2', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, score, review: sel, preview: true }) })
             .then(d => {
               if (d && d.preview) {
                 scriptBox.setPreviewJson(JSON.stringify(d.preview, null, 2));

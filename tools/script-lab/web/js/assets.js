@@ -57,7 +57,7 @@ function initAssets(id, detail, dialogue){
 }
 
 /** 取工作流输入（原则①：工作流输入统一从 store 取）
- *  键：selection（审题 round1 产物）/ scripts（打磨脚本）/ metadata（meta 产物） */
+ *  键：review（审核采纳结果）/ scripts（打磨脚本）/ metadata（meta 产物） */
 function getWorkflowInput(id, key){
   const a = loadAssets(id);
   return (a && a[key] !== undefined) ? a[key] : null;

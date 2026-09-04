@@ -10,13 +10,13 @@
 | `collected` | 原始对话采集成功 | 审题 → 脚本 → 打磨/TTS → 合成 | 采集卡（预览）+ 创作卡 |
 | `crafted` | 创作完成（音频已上传 R2），未发布 | **只能发布** | 采集/创作（预览）+ 发布卡 |
 | `published` | 已发布（episode 已创建） | 发布卡可编辑节目 meta | 全部卡片结果预览 + 节目 URL |
-| `rejected` | 拒稿（采集失败 / 审核失败 / 手工拒绝） | 无（终态，可看原因） | 拒稿原因展示 |
+| `rejected` | 拒稿（审核失败 / 手工拒绝） | 无（终态，可看原因） | 拒稿原因展示 |
 
 ## 2. 状态流转表
 
 ```
 submitted ─采集成功(setCollected 1)──→ collected
-submitted ─采集失败(setCollected -1)─→ rejected
+submitted ─采集失败(setCollected -1)─→ 保持 submitted（-1 仅失败标记，可重试；拒稿由编辑手工 reject）
 collected ─创作完成(音频上传确认)────→ crafted
 collected ─审核失败(review→reject)───→ rejected
 crafted ──发布(markPublished)────────→ published
@@ -29,7 +29,7 @@ collected ─重置采集(setCollected 0)──→ submitted
 | 动作 | API 端点 | repo 方法 | 写入 |
 |---|---|---|---|
 | 采集成功 | `PATCH /v1/editor/submissions/:id/collected` `{collected:1}` | `setCollected(id, 1)` | status=`collected` |
-| 采集失败 | 同上 `{collected:-1}` | `setCollected(id, -1, reason?)` | status=`rejected` + rejected_reason |
+| 采集失败 | 同上 `{collected:-1}` | `setCollected(id, -1)` | 仅写 collected=-1 失败标记；**status 保持 submitted**（不拒稿——拒稿由编辑手工 reject，不通知投稿人） |
 | 重置采集 | 同上 `{collected:0}` | `setCollected(id, 0)` | status=`submitted` |
 | 创作审核 | `POST /v1/editor/submissions/:id/review` | `setReview(id, {rejected, score})` | 通过：不写 review_status（无 approved），仅记 score；失败：review_status=`rejected` + `reject()` |
 | 音频上传确认 | `POST /v1/editor/submissions/:id/crafted` | `setStatus(id, 'crafted')` | status=`crafted` |
@@ -48,7 +48,7 @@ collected ─重置采集(setCollected 0)──→ submitted
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `collected` | smallint | 采集状态冗余（-1/0/1），status 为权威，保留兼容 |
+| `collected` | smallint | 采集状态冗余（-1 最近一次采集失败 / 0 未采集 / 1 成功），status 为权威，保留兼容——-1 不流转状态 |
 | `review_status` | text | 仅 `rejected` 写；通过不写（**无 approved 概念**） |
 | `review_score` | real | 审核得分（0-10），始终记录 |
 | `rejected_reason` | text | 拒稿原因（rejected 必填，投稿人可见） |
@@ -67,7 +67,7 @@ collected ─重置采集(setCollected 0)──→ submitted
 |---|---|---|
 | 产出物① 原始对话 | R2 `dialogues/{sha256(url)前32}.json` | URL 哈希 |
 | 产出物② 打磨脚本 | R2 `scripts/{id}.json`（已规范化；旧 `workflows/{instance}/{id}.json` 兼容回退读取） | 投稿 ID |
-| 产出物③ 合成音频 | R2 `episodes/{userId}/{id}.m4a`（合成确认直接写最终位置，发布零拷贝引用；旧 `full/{id}.m4a` 兼容回退） | 投稿 ID |
+| 产出物③ 合成音频 | R2 `episodes/{userId}/{id}.m4a`（canonical：合成确认直接写最终位置，发布/详情流零拷贝引用；发布解析链兼容 flat `episodes/{id}.m4a`（2026-09 过渡）与旧 `full/{id}.m4a`，非 canonical 命中时发布时拷贝归一到 canonical） | 投稿 ID |
 | 生产素材（store） | 浏览器 `assets-{id}` | 投稿 ID |
 
 > **素材清除时机 = 节目发布后（published）**：发布成功时清浏览器素材（store / seg 语音缓存 / full 本地缓存 / fullmeta），3 个 R2 产出物保留。crafted 后素材保留（可改脚本/重新生成 meta）。

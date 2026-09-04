@@ -1,4 +1,4 @@
 脚本：
 {{script}}
 
-选题：{{selection}}
+审核采纳结果：{{review}}

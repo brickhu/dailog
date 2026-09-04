@@ -13,51 +13,18 @@
 //      2. 无规则命中 → 通用嗅探（data-message-author-role 容器）
 //      3. 都失败 → 提示沉淀新规则（浏览器兜底后直接更新 .dailog-editor/rules.json，下次生效）
 //   首次使用：从工程种子（assets/rules.json）自动初始化复制到 .dailog-editor/rules.json
-import { writeFileSync, existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { writeFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir as osTmpdir } from "node:os";
 import { join } from "node:path";
 import { load as loadHtml } from "cheerio";
 import type { EditorConfig } from "./lib.js";
-import { api, defaultAssetsDir, draftDir, rulesPath, writeProgress } from "./lib.js";
-import { deleteR2Object, dialogueR2Key } from "./r2.js";
+import { api, defaultAssetsDir, draftDir, rulesPath } from "./lib.js";
+
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 const FETCH_TIMEOUT_MS = 30_000;
 const MAX_HTML_BYTES = 5 * 1024 * 1024; // 5MB 上限（超长页截断）
-
-// —— 内容过短硬门槛（采集层直接拒审，不落草稿）——
-export const MIN_USER_TURNS = 3; // user 轮次下限
-export const MIN_CHARS = 500;    // 总字数下限
-export const SHORT_REASON = "Conversation too short: dialogue rounds must exceed 3, and total message length must be greater than 500 characters.";
-
-export function isTooShort(users: number, words: number): boolean {
-  return users < MIN_USER_TURNS || words < MIN_CHARS;
-}
-
-/** 过短投稿：删除已落盘 dialogue.json（不保留草稿）+ 直接拒审（reason 统一）——单条 fetch / 批量采集共用 */
-export async function rejectShort(config: EditorConfig, submissionId: string, users: number, words: number): Promise<void> {
-  // 过短投稿：删本地对话 + R2 对话（URL 哈希 key）
-  const localDlg = join(draftDir(submissionId), "dialogue.json");
-  let url: string | null = null;
-  try {
-    if (existsSync(localDlg)) {
-      const d = JSON.parse(readFileSync(localDlg, "utf-8"));
-      url = d?.sourceUrl || null;
-    }
-  } catch { /* 忽略 */ }
-  rmSync(localDlg, { force: true });
-  if (url) {
-    try { await deleteR2Object(config, dialogueR2Key(url)); }
-    catch (e) { console.warn(`[fetch] R2 对话删除失败：${(e as Error).message?.slice(0, 120)}`); }
-  }
-  try {
-    await api(config, `/v1/editor/submissions/${submissionId}/reject`, { method: "POST", body: { reason: SHORT_REASON } });
-    writeProgress(submissionId, "rejected");
-  } catch (e) {
-    console.warn(`[fetch] 拒审失败（${submissionId}）：${(e as Error).message}`);
-  }
-}
 
 export interface DecodeRule {
   platform: string;
@@ -194,7 +161,8 @@ function detectPlatform(url: string): PlatformInfo | null {
     const host = u.hostname;
     const path = u.pathname;
     if (host === "chat.deepseek.com" && path.startsWith("/share/")) return { api: "deepseek" };
-    if (host === "www.doubao.com" && path.startsWith("/share/")) return { api: "doubao" };
+    // doubao 分享两种形态：/share/<id>（web 对话分享）与 /thread/<id>（thread 分享，share_landing SPA 壳）——同走 im/message/share/get
+    if (host === "www.doubao.com" && (path.startsWith("/share/") || path.startsWith("/thread/"))) return { api: "doubao" };
     if (host === "chatgpt.com" && path.startsWith("/share/")) return { ssr: "chatgpt" };
     if ((host === "share.gemini.google" || host === "gemini.google.com") && path.startsWith("/")) return { gemini: true };
     // Grok 分享（x.com/i/grok/share/<id>——React SPA，对话客户端渲染，需 Chromium 无头渲染）
@@ -244,10 +212,13 @@ async function extractDeepseekApi(url: string): Promise<{ role: string; content:
   return out.length > 0 ? out : null;
 }
 
-/** doubao 分享 API（2026-08-13 实测）：POST /im/message/share/get，body {"share_id": <id>}
+/** doubao 分享 API（2026-08-13 /share/ 实测；2026-09-04 /thread/ 形态实测——同 API）：
+ *  POST /im/message/share/get，body {"share_id": <id>}
  *  （alice 变体报 710020202，用 im 变体；消息 content 是 JSON 字符串 {"text": "..."}） */
 async function extractDoubaoApi(url: string): Promise<{ role: string; content: string }[] | null> {
-  const id = shareIdOf(url, "/share/");
+  const pathname = new URL(url).pathname;
+  const prefix = pathname.startsWith("/thread/") ? "/thread/" : "/share/"; // /share/<id> 与 /thread/<id> 同 API
+  const id = shareIdOf(url, prefix);
   if (!id) return null;
   let res: Response;
   try {
@@ -257,7 +228,7 @@ async function extractDoubaoApi(url: string): Promise<{ role: string; content: s
         "user-agent": UA,
         "content-type": "application/json",
         origin: "https://www.doubao.com",
-        referer: `https://www.doubao.com/share/${id}`,
+        referer: `https://www.doubao.com${prefix}${id}`,
       },
       body: JSON.stringify({ share_id: id }),
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),

@@ -153,6 +153,8 @@ export const submissions = pgTable(
     reviewStatus: text("review_status", { enum: ["approved", "rejected"] }),
     /** 创作审核得分（LLM 决策依据提取，0-10） */
     reviewScore: real("review_score"),
+    /** 审核采纳结果（编辑采纳的整包审核产物：评分明细/主线/困惑/建议——创作卡与下游输入源；不参与状态机） */
+    review: jsonb("review").$type<Record<string, unknown> | null>(),
     status: text("status", { enum: ["submitted", "collected", "rejected", "published", "crafted"] }).notNull().default("submitted"),
     /** 拒审原因（rejected 时必填，投稿人 /me/submits 可见） */
     rejectedReason: text("rejected_reason"),
