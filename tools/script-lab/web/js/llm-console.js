@@ -201,7 +201,17 @@
       else s += ' · 缓存命中 n/a';
       return s;
     }
-    function summary(resp) { try { const r = resp && resp.result; if (r && Array.isArray(r.scripts)) return 'scripts × ' + r.scripts.length; if (r && r.score !== undefined) return 'score=' + r.score; if (r) return 'ok'; } catch {} return 'ok'; }
+    function summary(resp) { try { const r = resp && resp.result; if (r && Array.isArray(r.scripts)) return 'scripts × ' + r.scripts.length + fidScoreSuffix(r.scripts); if (r && r.score !== undefined) return 'score=' + r.score; if (r) return 'ok'; } catch {} return 'ok'; }
+    // 脚本保真总分（round2 服务端已按原话/改写/新写标注 fidelity；无标注则按 seg.src 兜底统计；内容句=原话+改写）
+    function fidScoreSuffix(scripts) {
+      let orig = 0, rw = 0, nw = 0;
+      (Array.isArray(scripts) ? scripts : []).forEach((sc) => {
+        if (sc && sc.fidelity && typeof sc.fidelity.contentTotal === 'number') { orig += sc.fidelity.hostOriginal || 0; rw += sc.fidelity.hostRewrite || 0; nw += sc.fidelity.hostNew || 0; }
+        else if (sc && Array.isArray(sc.segments)) { sc.segments.forEach((seg) => { if (seg && seg.speaker === 'host') { if (seg.src === 'original') orig++; else if (seg.src === 'rewrite') rw++; else nw++; } }); }
+      });
+      const content = orig + rw;
+      return content ? ' · 原话率 ' + Math.round((orig / content) * 100) + '%（原话 ' + orig + ' · 改写 ' + rw + ' · 新写 ' + nw + '）' : '';
+    }
     // 标准折叠卡片：整条头部可点（带 ▸/▾），正文收在卡片内；footer=正文末尾单独一行小字
     function histBlock(label, color, json, footer) {
       const card = document.createElement('div');

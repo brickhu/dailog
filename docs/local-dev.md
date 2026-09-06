@@ -48,7 +48,7 @@ docker compose down      # 停止（数据保留）
 所有 API 端点统一 `/v1/` 前缀（域名已标识 API，路径前缀做版本化）：
 
 - 认证：`/v1/auth/*`（better-auth `basePath: "/v1/auth"`）
-- 业务：`/v1/submissions`、`/v1/me/*`、`/v1/editor/*`（编辑本地 Agent）、`/v1/device/*`（配对登录）、`/v1/episodes/*`（互动）
+- 业务：`/v1/submissions`、`/v1/me/*`、`/v1/editor/*`（dailog lab 采编调用）、`/v1/device/*`（配对登录）、`/v1/episodes/*`（互动）
 - 公开：`/health`（无前缀，免鉴权）；`/v1/public/episodes/:id/audio|cover`（播放）
 - 鉴权：`app.use("/v1/*", authMiddleware)` 一条中间件覆盖全部业务端点；`/v1/auth/*`、`/v1/device`、`/v1/device/poll` 挂在中间件之前免鉴权
 
@@ -69,15 +69,18 @@ docker compose down      # 停止（数据保留）
 | `PORT=80`（site） | 容器内监听 80 | OrbStack 域名 80 → 容器 80 |
 | `ADMIN_EMAILS` | 编辑账号邮箱 | 部署自动预留管理员（启动/注册时提升为 admin） |
 
-## 编辑本地 Agent（tools/dailog-editor）
+## dailog lab 采编控制台（tools/script-lab）
 
 ```bash
-cp .dailog-editor/.env.example .dailog-editor/.env      # Fish/Pexels 密钥
-cp tools/dailog-editor/templates/envs.example.json .dailog-editor/envs.json  # 环境清单（local/dev/prod）
-pnpm editor --env local login      # 配对码登录（浏览器授权 → 粘贴配对码）
-pnpm editor --env local auth-status  # 会话初始化：/health 端点检查 + 授权检查
-pnpm editor --env local list       # 待审队列
+cd tools/script-lab
+cp .env.example .env               # LLM/Fish 密钥（gitignored）
+pnpm lab:dev                       # 启动 lab（127.0.0.1:4173，--env dev）
+# 浏览器打开 http://127.0.0.1:4173 → 登录选环境（local/dev/prod）→ 采编控制台
 ```
+
+lab 直连 dailog API（local = api.dailog.orb.local；dev = api.candelbot.app）与 LLM/Fish；
+制作产物 R2 权威 + 浏览器缓存（localStorage/IndexedDB），无本地草稿文件。
+旧 dailog-editor（pnpm editor + `.dailog-editor`）已下线（2026-09-05）。
 
 ## 常用命令
 
@@ -111,3 +114,4 @@ docker exec dailog-pg psql -U dailogues -d dailogues  # 直连数据库
 - 2026-08-09：sslip.io + Caddy 反代方案（已废弃——多域名 HTTPS/HMR/证书问题多）
 - 2026-08-10：切换 OrbStack compose + `*.orb.local`；API 路径统一 `/v1/` 前缀
 - 2026-08-13：本质版——admin/importer 容器删除；编辑工作流迁到本地 Agent（tools/dailog-editor 工程）
+- 2026-09-05：采编 lab 化——编辑工作流迁移 dailog lab（tools/script-lab），dailog-editor 下线

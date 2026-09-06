@@ -1,4 +1,4 @@
-# 双环境控制台配置清单（本质版，2026-08-13 更新）
+# 双环境控制台配置清单（本质版 2026-08-13；采编 lab 化 2026-09-05）
 
 仓库：`https://github.com/brickhu/dailog`（`dev` = 开发环境，`master` = 生产环境）
 
@@ -7,9 +7,9 @@
 | 开发 | `dev` | `api.candelbot.app` | `candelbot.app` | Railway Development 环境 |
 | 生产 | `master` | `api.dailog.fm` | `dailog.fm` | Railway Production 环境 |
 
-> 本质版要点：**服务端无采集/LLM/TTS/ffmpeg**——编辑工作流全部在编辑本地 Agent
-> （`tools/dailog-editor` 子工程 → 产物 `.agents/skills/dailog-editor`，密钥在编辑机器 `.dailog-editor/.env`）。
-> admin/studio/extension/importer 四个前端与采集服务已删除，无对应部署。
+> 本质版要点：**服务端（api）无采集/LLM/ffmpeg**——编辑工作流在 **dailog lab**（`tools/script-lab`：浏览器采编控制台 +
+> 轻服务端，本地运行；LLM/Fish 密钥在 `tools/script-lab/.env`）。dailog-editor 本地 Agent 管线已下线（2026-09-05）。
+> admin/studio/extension/importer 四个前端与采集服务已删除，无对应部署；`/v1/editor/tts` 保留为兼容端点（FISH_* 保留在服务端）。
 
 ## 1. Railway（API + Postgres）
 
@@ -32,7 +32,7 @@
 | `FISH_API_KEY` / `FISH_PROXY_URL` | ✓（统一 TTS 端点合成语音；本地容器经 socks 代理出网） | ✓ |
 | `PORT` | 不配（Railway 默认；healthcheck 自动探测） | 同左 |
 
-> 已移除的服务端变量：`DEEPSEEK_*`、`PEXELS_API_KEY`、`IMPORTER_URL/TOKEN`、`POLISH_MAX_VERSIONS`、`ASSETS_DIR`（LLM/封面/资产编辑本地承载；TTS 已收敛回服务端统一端点，故 FISH_* 保留在服务端）。
+> 已移除的服务端变量：`DEEPSEEK_*`、`PEXELS_API_KEY`、`IMPORTER_URL/TOKEN`、`POLISH_MAX_VERSIONS`、`ASSETS_DIR`（LLM/封面/资产由 dailog lab 承载；TTS 兼容端点保留，故 FISH_* 仍在服务端）。
 
 7. [x] 迁移**随部署自动执行**（Dockerfile CMD = `pnpm db:migrate && pnpm start`；drizzle 幂等）。手动兜底：
    `pnpm --filter @dailogues/api db:migrate`（Service → Exec 或本地 `railway run`）
@@ -68,19 +68,20 @@
 - `api.candelbot.app` → CNAME/ALIAS 到 Railway Dev API
 - `candelbot.app` → CF Pages `dailog-site` preview 环境
 
-## 4. 编辑本地 Agent（无需部署）
+## 4. dailog lab 采编控制台（无需部署，本地运行）
 
 ```bash
-cp .dailog-editor/.env.example .dailog-editor/.env            # Fish/Pexels 密钥
-cp tools/dailog-editor/templates/envs.example.json .dailog-editor/envs.json  # 环境清单（local/dev/prod）
-pnpm editor --env dev login        # 配对码登录（浏览器授权 → 粘贴配对码）
-pnpm editor --env dev auth-status  # 会话初始化：/health + 授权检查
-pnpm editor --env dev list         # 待审队列
+cd tools/script-lab
+cp .env.example .env               # LLM/Fish 密钥（gitignored）
+pnpm lab:dev                       # 启动 lab（127.0.0.1:4173，--env dev）
+# 浏览器打开 http://127.0.0.1:4173 → 登录选环境（dev/prod）→ 采编控制台
 ```
+
+lab 经服务端 `/v1/editor/*` 与 `/v1/editor/storage` 操作数据与 R2；产物 R2 权威 + 浏览器缓存。
 
 ## 5. dev 跑通验证链
 
 1. `https://api.candelbot.app/health` → 200；`https://candelbot.app` 打开 → 正常渲染
-2. 新对话初始化：`pnpm editor --env dev auth-status` → 端点可用 → 配对 → list 出队列
+2. 采编初始化：`cd tools/script-lab && pnpm lab:dev` → 登录选 dev 环境 → 队列出投稿
 3. 本地投稿（site `dailog.orb.local` /submit）→ dev 队列可见 → 编辑制作 → 发布 → 站点播放
 4. 全部通过后：`dev → master` 合并触发生产部署

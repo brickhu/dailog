@@ -33,7 +33,15 @@ function readRulesFile(path) {
     return null;
   }
 }
+// R2 注入态：服务端在采集前 setCollectRules(r2Doc) ——容器/远程无仓库根文件依赖；bumpHits 走回调持久化
+let injectedDoc = null;
+let rulesPersistCb = null;
+export function setCollectRules(doc, persistCb) {
+  injectedDoc = doc && Array.isArray(doc.rules) ? doc : null;
+  rulesPersistCb = typeof persistCb === 'function' ? persistCb : null;
+}
 function loadRules() {
+  if (injectedDoc) return { rules: injectedDoc.rules, fromLocal: false };
   const local = rulesPath();
   const localRules = readRulesFile(local);
   if (localRules) return { rules: localRules, fromLocal: true };
@@ -45,6 +53,12 @@ function loadRules() {
   return { rules: [], fromLocal: true };
 }
 function bumpHits(rule) {
+  if (injectedDoc && rulesPersistCb) {
+    const target = injectedDoc.rules.find((r) => r.platform === rule.platform && r.host === rule.host);
+    if (target) target.hits = (target.hits ?? 0) + 1;
+    try { rulesPersistCb(injectedDoc); } catch { /* 持久化失败不阻断采集 */ }
+    return;
+  }
   const local = rulesPath();
   let rules = readRulesFile(local);
   if (!rules) {

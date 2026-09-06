@@ -61,23 +61,6 @@
     </div>
   </div>
 </div>
-<!-- 创作审核结果 drawer -->
-<div class='drawer-overlay' id='drawerOverlay' onclick='closeReviewDrawer()'></div>
-<div class='drawer' id='drawer'>
-  <div class='drawer-head'>
-    <span class='title'>创作审核结果</span>
-    <button class='drawer-close' id='drawerClose' onclick='closeReviewDrawer()'>✕</button>
-  </div>
-  <div class='drawer-body' id='drawerBody'><div class='muted'>加载中…</div></div>
-  <div class='drawer-foot'>
-    <span id='drawerUsage' class='muted' style='font-size:12px;align-self:center'></span>
-    <span style='display:flex;gap:10px'>
-      <button class='pg' id='btnSend' onclick='sendReview()' style='display:none;background:#4f8cff;color:#fff;border:0'>发送</button>
-      <button class='pg' id='btnRetry' onclick='retryReview()'>重试</button>
-      <button class='pg' id='btnConfirm' onclick='confirmReview()' style='background:#4f8cff;color:#fff;border:0'>确认</button>
-    </span>
-  </div>
-</div>
 <!-- 嘉宾声线上传弹窗 -->
 <div class='modal-overlay' id='guestVoiceModal' style='display:none' onclick='if(event.target===this)closeGuestVoiceModal()'>
   <div class='modal' style='width:420px'>

@@ -12,7 +12,6 @@ import { complete, buildChatBody } from "./lib/llm.mjs";
 import { getPrompt, renderPrompt, promptConfig } from "./lib/prompt.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const CLI_DIST = join(here, "..", "dailog-cli", "dist");
 const WEB_DIR = join(here, "web");
 
 const args = process.argv.slice(2);
@@ -25,7 +24,7 @@ let env = flagValue("--env") || process.env.DAILOG_ENV || null;   // 启动时�
 const activeEnv = () => env || process.env.DAILOG_ENV || null;
 
 // ===== 提示词进化数据（feedback/review.jsonl）=====
-const FB_DIR = join(here, "feedback");
+const FB_DIR = join(process.env.LAB_STATE_DIR || here, "feedback");
 const FB_FILE = join(FB_DIR, "review.jsonl");
 const FB_SIG_FILES = ["prompts.json", "review.score.system.md", "review.score.user.md", "review.script.user.md", "review.script.handoff.md"];
 
@@ -87,7 +86,7 @@ const retryAttempts = new Map();   // env:id -> 非预览 round2 调用次数
 const retryDefects = new Map();    // env:id -> 每次带修改意见重试的缺陷文本[]
 
 function loadCliLib() {
-  return import(join(CLI_DIST, "lib.js"));
+  return import("./lib/clilib.mjs");
 }
 
 /** 列出可用环境（envs.json） */
@@ -148,7 +147,7 @@ async function loadDialogue(envName, token, id) {
   try {
     const detail = await apiWithToken(envName, token, "/v1/editor/submissions/" + id).catch(() => null);
     if (!detail || !detail.url) return null;
-    const { dialogueR2Key } = await import(join(CLI_DIST, "r2.js"));   // 纯哈希函数，无网络
+    const { dialogueR2Key } = await import("./lib/r2key.mjs");   // 纯哈希函数，无网络
     const content = await r2Get(envName, token, dialogueR2Key(detail.url));
     if (!content) return null;
     const d = JSON.parse(content);
@@ -199,7 +198,7 @@ async function saveProduction(envName, token, id, patch) {
 async function envLoggedIn(name) { return false; }
 
 /** 密码登录的 cookie 会话（按 env 存文件——重启不丢；webui 登录后后续 API 调用带此 cookie） */
-const COOKIE_FILE = join(here, ".lab-cookies.json");
+const COOKIE_FILE = join(process.env.LAB_STATE_DIR || here, ".lab-cookies.json");
 const cookieSessions = new Map();  // env → cookie 字符串
 export function getCookieSession(envName) { return cookieSessions.get(envName) || null; }
 function loadCookies() {
@@ -224,7 +223,7 @@ const FETCH_RESULT_TTL = 5 * 60_000; // 结果保留 5 分钟
 /** 读 R2 对话缓存（经服务端 API；lab 管内存缓存） */
 async function readDialogueR2(envName, token, url) {
   try {
-    const { dialogueR2Key } = await import(join(CLI_DIST, "r2.js"));   // 纯哈希函数
+    const { dialogueR2Key } = await import("./lib/r2key.mjs");   // 纯哈希函数
     const content = await r2Get(envName, token, dialogueR2Key(url));
     return content ? JSON.parse(content) : null;
   } catch { return null; }
@@ -245,6 +244,24 @@ async function markCollected(envName, token, id, messages, title) {
 }
 
 /** 异步执行单条采集：CLI 纯功能提取 → lab 接管 R2 存储 + 服务端标记 */
+/** 注入采集规则：R2 rules/collect.json 优先；缺失则读 assets 种子并异步补种 R2 */
+async function ensureCollectRules(envName, token) {
+  try {
+    const docStr = await r2Get(envName, token, "rules/collect.json");
+    if (docStr) {
+      const doc = JSON.parse(docStr);
+      const m = await import("./lib/collect.mjs");
+      m.setCollectRules(doc, (d) => { r2Put(envName, token, "rules/collect.json", JSON.stringify(d)).catch(() => {}); });
+      return;
+    }
+  } catch {}
+  try {
+    const seed = JSON.parse(readFileSync(join(here, "assets", "rules.json"), "utf8"));
+    const m = await import("./lib/collect.mjs");
+    m.setCollectRules(seed, null);
+    r2Put(envName, token, "rules/collect.json", JSON.stringify(seed)).catch(() => {});
+  } catch {}
+}
 async function runSingleFetch(envName, token, id, url, title) {
   const fkey = envName + ":" + id;
   fetchingSet.add(fkey);
@@ -260,7 +277,9 @@ async function runSingleFetch(envName, token, id, url, title) {
         return { ok: true, messages: cached.messages };
       }
     }
-    // ② 采集（lab 自包含 collect.mjs——原始对话内容采集不再依赖 CLI；url/title 由 lab 侧已获取，直接解码）
+    // ② 注入采集规则（R2 rules/collect.json 优先，种子兜底）
+    await ensureCollectRules(envName, token);
+// ② 采集（lab 自包含 collect.mjs——原始对话内容采集不再依赖 CLI；url/title 由 lab 侧已获取，直接解码）
     const collect = await import("./lib/collect.mjs");
     const r = await collect.collectDialogue(url, { title: title ?? null });
     // ③ lab 接管存储：R2 写入 + 服务端标记
@@ -269,7 +288,7 @@ async function runSingleFetch(envName, token, id, url, title) {
       const data = { sourceUrl, source: r.source || "", title: r.title || null, messages: r.messages };
       // R2 备份（多端同步）——不写本地（彻底解耦）
       try {
-        const { dialogueR2Key } = await import(join(CLI_DIST, "r2.js"));   // 纯哈希函数
+        const { dialogueR2Key } = await import("./lib/r2key.mjs");   // 纯哈希函数
         await r2Put(envName, token, dialogueR2Key(sourceUrl), JSON.stringify(data));
         dialogueCache.set(fkey, { at: Date.now(), data });
       } catch { /* R2 上传失败不阻塞标记 */ }
@@ -315,6 +334,14 @@ async function apiWithToken(envName, token, path, opts = {}) {
 }
 
 /** 从请求头取 { env, token, hasCookie }（密码登录走 cookie 会话，配对码走 Bearer token） */
+async function apiFetchBytes(cfg, envName, token, fwd) {
+  const headers = { "x-lab-env": envName };
+  const cookie = getCookieSession(envName);
+  if (cookie) headers.cookie = cookie; else if (token) headers.authorization = "Bearer " + token;
+  const r = await fetch(cfg.apiBase + fwd, { headers });
+  if (!r.ok) throw new Error("字节拉取失败 " + fwd + " → " + r.status);
+  return Buffer.from(await r.arrayBuffer());
+}
 function reqCred(req) {
   const env = req.headers["x-lab-env"] || null;
   const auth = req.headers.authorization || "";
@@ -448,7 +475,6 @@ async function handleApi(path, res, req) {
   }
 
 
-
   // GET /api/submissions → 全量投稿记录（服务端拉取 + 本地草稿状态推断，按 createdAt 倒序）
   if (path.startsWith("/api/submissions")) {
     const cred = reqCred(req);
@@ -480,6 +506,59 @@ async function handleApi(path, res, req) {
     const pendingCount = rows.filter((r) => r.stage === "submitted").length;   // rows 对象用 stage 承载状态值
     const paged = rows.slice((page - 1) * pageSize, page * pageSize);
     sendJson(res, { ok: true, env: e, rows: paged, total, pendingCount, page, pageSize });
+    return;
+  }
+
+  // GET/POST /api/run/config/prompts/:file —— 提示词 R2 读写（与 rules 同模式；POST 同时写本地供运行时热更）
+  if (path.startsWith("/api/run/config/prompts/")) {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录" }, 401); return; }
+    const file = decodeURIComponent(path.slice("/api/run/config/prompts/".length).split("?")[0]);
+    if (file.includes("..")) { sendJson(res, { ok: false, error: "非法文件名" }, 400); return; }
+    const localPath = join(here, "prompts", file);
+    if (req.method === "GET") {
+      try {
+        const content = await r2Get(cred.env, cred.token, "prompts/" + file);
+        if (content !== null && content !== undefined) { sendJson(res, { ok: true, content, key: "prompts/" + file }); return; }
+      } catch {}
+      try { const c = readFileSync(localPath, "utf8"); sendJson(res, { ok: true, content: c, local: true }); } catch { sendJson(res, { ok: false, error: "文件不存在: " + file }, 404); }
+      return;
+    }
+    const body = await readBody(req);
+    const content = typeof body.content === "string" ? body.content : null;
+    if (content === null) { sendJson(res, { ok: false, error: "需 content" }, 400); return; }
+    try {
+      await r2Put(cred.env, cred.token, "prompts/" + file, content);
+      try { writeFileSync(localPath, content); } catch { /* 容器内写本地仅当前实例热更 */ }
+      const { sigOf } = await import("./lib/config-store.mjs");
+      sendJson(res, { ok: true, sig: sigOf(content) });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+  // GET/POST /api/run/rules → 采集规则读写（R2 rules/collect.json；种子兜底）
+  if (path === "/api/run/rules" && req.method === "GET") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录" }, 401); return; }
+    try {
+      const docStr = await r2Get(cred.env, cred.token, "rules/collect.json");
+      if (docStr) { sendJson(res, { ok: true, doc: JSON.parse(docStr) }); return; }
+      const seed = JSON.parse(readFileSync(join(here, "assets", "rules.json"), "utf8"));
+      sendJson(res, { ok: true, doc: seed, seeded: true });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+  if (path === "/api/run/rules" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录" }, 401); return; }
+    const body = await readBody(req);
+    const doc = (body && body.doc && Array.isArray(body.doc.rules)) ? body.doc : null;
+    if (!doc) { sendJson(res, { ok: false, error: "需 doc.rules" }, 400); return; }
+    try {
+      await r2Put(cred.env, cred.token, "rules/collect.json", JSON.stringify(doc));
+      const m = await import("./lib/collect.mjs");
+      m.setCollectRules(doc, (d) => { r2Put(cred.env, cred.token, "rules/collect.json", JSON.stringify(d)).catch(() => {}); });
+      sendJson(res, { ok: true });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
     return;
   }
 
@@ -821,14 +900,15 @@ async function handleApi(path, res, req) {
     const segIndex = (body && body.segIndex !== undefined) ? Number(body.segIndex) : 0;
     if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
     try {
-      const detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id);
-      const scripts = (detail && Array.isArray(detail.reviewScripts)) ? detail.reviewScripts : [];
+      let detail = null;
+      try { detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null); } catch {}
+      // 脚本来源：优先前端工作副本（body.scripts，定稿前不落 R2）；无则 R2 权威
+      const scripts = (body && Array.isArray(body.scripts) && body.scripts.length) ? body.scripts : ((detail && Array.isArray(detail.reviewScripts)) ? detail.reviewScripts : []);
       const target = scripts[scriptIndex];
       const seg = target && target.segments && target.segments[segIndex];
       if (!seg || typeof seg.text !== "string" || !seg.text.trim()) { sendJson(res, { ok: false, error: "片段不存在" }, 404); return; }
       const config = await configFor(e);
-      const { getR2Object } = await import(join(CLI_DIST, "r2.js"));
-      const { synthesizeSingle } = await import(join(CLI_DIST, "fish.js"));
+      const { synthesizeSingle } = await import("./lib/fish.mjs");
       // 参考音频：host = voiceSamples（R2 直取 + 转 wav）；guest = guests 声线（R2 audioKey + 转 wav）
       let ref;
       if (seg.speaker === "guest") {
@@ -837,13 +917,13 @@ async function handleApi(path, res, req) {
         const mine = (Array.isArray(samples) ? samples : []).filter((x) => x.guestId === guestId);
         const row = mine.find((x) => x.language === "zh") || mine[0];
         if (!row || !row.audioKey) { sendJson(res, { ok: false, error: "嘉宾 " + (guestId || "?") + " 无声线（guest-voice 上传）" }); return; }
-        const bytes = await getR2Object(config, row.audioKey);
+        const bytes = await apiFetchBytes(config, e, token, "/v1/editor/samples/guest/" + encodeURIComponent((detail && detail.guest && detail.guest.id) || "") + "/audio");
         ref = { audio: bytes, text: row.transcript || null };
       } else {
         const samples = (detail && detail.voiceSamples) || [];
         const sample = samples.find((x) => x.status === "ready") || samples[0];
         if (!sample || !sample.audioUrl) { sendJson(res, { ok: false, error: "主持人无声样" }); return; }
-        const bytes = await getR2Object(config, sample.audioUrl);
+        const bytes = await apiFetchBytes(config, e, token, "/v1/editor/samples/host/" + encodeURIComponent((detail && detail.userId) || "") + "/audio");
         ref = { audio: bytes, text: sample.transcript || null };
       }
       // ffmpeg 转 44100Hz 单声道 wav（Fish 参考格式）
@@ -970,8 +1050,26 @@ async function handleApi(path, res, req) {
       console.log("[round1] 消息来源=" + (msgs === defaultMsgs ? "defaultMsgs(最新渲染)" : "body.messages(快照 " + msgs.length + " 条)"));
       const r = await llmComplete(null, null, cfgOverride, withRevision(msgs, (body && body.revision) || ""), p.config);
       const result = extractJson(r.content);
-      console.log("[review-debug] round1 score:", result.score);
-      sendJson(res, { ok: true, result, usage: fmtUsage(r.usage) });
+      // 提案版出稿校验（不阻断，仅报告）：链节 turns 越界 / event 引文未在原文找到 → 人工核对
+      const warnings = [];
+      const dlgMsgs = Array.isArray(dialogue && dialogue.messages) ? dialogue.messages : [];
+      if (result && Array.isArray(result.proposals)) {
+        result.proposals.forEach((pp, pi) => {
+          (Array.isArray(pp.chain) ? pp.chain : []).forEach((c) => {
+            const idxs = Array.isArray(c.turns) ? c.turns : [];
+            const bad = idxs.filter((t) => !Number.isInteger(t) || t < 0 || t >= dlgMsgs.length);
+            if (bad.length) warnings.push(`P${pi + 1}.${c.id || "?"} turns 越界: ${bad.join(",")}`);
+          });
+          const eq = pp.event && typeof pp.event.quote === "string" ? pp.event.quote : "";
+          if (eq) {
+            const joined = dlgMsgs.map((m) => String((m && m.content) || "")).join("\n");
+            if (!joined.includes(eq)) warnings.push(`P${pi + 1} event 引文未在原文逐字找到（可能是概括，请人工核对）`);
+          }
+        });
+      }
+      if (warnings.length) console.warn("[proposals-validate]", warnings.join(" | "));
+      console.log("[review-debug] round1 result:", Array.isArray(result && result.proposals) ? ("proposals x" + result.proposals.length) : (result && result.score !== undefined ? "single score=" + result.score : "?"));
+      sendJson(res, { ok: true, result, warnings, usage: fmtUsage(r.usage) });
     } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
     return;
   }
@@ -999,8 +1097,11 @@ async function handleApi(path, res, req) {
       // [2] assistant=审题交接（评分+主线+价值锚点+创作建议 advice——模型视为自己说过的结论，遵循度最高）；
       // [3] user=创作规则 + 角色数据（不含对话原文、不含 review JSON）
       const msgs1 = renderPrompt(pScore, { dialogue: JSON.stringify(dialogue), suggestion: "" });
+      // 下游契约 = 选定提案（review 槽现承载 proposal：chain/event/modal/landingHint）——只消费不重推
+      const proposal = (review && typeof review === "object") ? review : null;
       const rendered = renderPrompt(pScript, {
-        score,
+        score: (proposal && typeof proposal.score === "number") ? proposal.score : score,
+        proposal,
         review,
         suggestion: (detail && detail.suggestion) || "",
         host: hostSnap ? { callName: hostSnap.callName || "主持人", personaInfo: hostSnap.personaInfo || undefined } : { callName: "主持人" },
@@ -1012,7 +1113,7 @@ async function handleApi(path, res, req) {
         rendered[0],         // assistant：审题交接（handoff，含 advice）
         rendered[1],         // user：创作规则 + 角色数据
       ];
-      console.log("[round2] review=" + (review ? "有(" + Object.keys(review).join(",") + ")" : "无") + " | handoff=" + rendered[0].content.length + "字 含advice=" + rendered[0].content.includes("advice") + " | rules=" + rendered[1].content.length + "字");
+      console.log("[round2] proposal=" + (proposal ? "有(" + Object.keys(proposal).join(",") + ")" : "无") + " | handoff=" + rendered[0].content.length + "字 | rules=" + rendered[1].content.length + "字");
       const cfgOverride = {};
       if (body && Array.isArray(body.messages) && body.messages.length) {
         const cfg = (body && body.config) || {};
@@ -1070,6 +1171,31 @@ async function handleApi(path, res, req) {
         if (again !== null && again.length) scripts = again;
         r = rr;
       }
+// 原话保真标注（编辑选稿依据）——确定性匹配，无 LLM 成本；口径：短附和(<6字)不认原话；保真率只按内容句(原话+改写)算；改写=host 与原文最长连续片段覆盖率>=0.5 且>=4字，原话=覆盖率>=0.9 且>=6字
+      const normTxt2 = (s) => String(s || '').toLowerCase().replace(/\[[^\]]*\]/g, '').replace(/[\s\p{P}\p{S}]+/gu, '');
+      const lcsLen = (a, b) => { const n = a.length, m = b.length; if (!n || !m) return 0; const dp = new Array(m + 1).fill(0); let best = 0; for (let i = 1; i <= n; i++) { let prev = 0; for (let j = 1; j <= m; j++) { const cur = dp[j]; if (a[i - 1] === b[j - 1]) { dp[j] = prev + 1; if (dp[j] > best) best = dp[j]; } else dp[j] = 0; prev = cur; } } return best; };
+      const dlgUsers = (dialogue && Array.isArray(dialogue.messages) ? dialogue.messages : []).map((m, mi) => ({ mi, t: normTxt2(m && m.content) }));
+      (Array.isArray(scripts) ? scripts : []).forEach((sc) => {
+        if (!sc || !Array.isArray(sc.segments)) return;
+        let hostOriginal = 0, hostRewrite = 0, hostNew = 0;
+        sc.segments.forEach((seg) => {
+          if (!seg || seg.speaker !== 'host') return;
+          const t = normTxt2(seg.text);
+          if (!t) { seg.src = 'new'; seg.origRatio = 0; hostNew++; return; }
+          let best = null;
+          dlgUsers.forEach((u) => { if (!u.t) return; const len = lcsLen(t, u.t); const cov = len / t.length; if (!best || cov > best.cov || (cov === best.cov && len > best.len)) best = { cov, len, mi: u.mi }; });
+          const cov = best ? best.cov : 0;
+          let src = 'new';
+          if (best && best.len >= 6 && cov >= 0.9) src = 'original';
+          else if (best && best.len >= 4 && cov >= 0.5) src = 'rewrite';
+          seg.src = src;
+          if (best) seg.fromTurn = best.mi;
+          seg.origRatio = Math.round(cov * 100);
+          if (src === 'original') hostOriginal++; else if (src === 'rewrite') hostRewrite++; else hostNew++;
+        });
+        const contentTotal = hostOriginal + hostRewrite;
+        sc.fidelity = { hostOriginal, hostRewrite, hostNew, contentTotal, originalRate: contentTotal ? Math.round((hostOriginal / contentTotal) * 100) : 0 };
+      });
       console.log("[review-debug] round2 scripts:", scripts.length);
       sendJson(res, {
         ok: true, result: { scripts },
@@ -1131,84 +1257,10 @@ async function handleApi(path, res, req) {
     try {
       const r = await apiWithToken(e, token, "/v1/editor/submissions/" + id + "/review", { method: "PUT", body: { review } });
       sendJson(res, { ok: true, id, saved: !!(r && r.ok) });
-    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
-    return;
-  }
-
-  // POST /api/run/review/confirm → 确认入库：读取暂存的审核结果 → production.review + script
-  if (path === "/api/run/review/confirm" && req.method === "POST") {
-    const cred = reqCred(req);
-    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
-    const { env: e, token } = cred;
-    const body = await readBody(req);
-    const id = (body && body.id) || null;
-    // 审题结果由前端持有并随确认请求传回（不依赖 server 内存——重启/多实例不丢）
-    const result = (body && body.result && typeof body.result === "object") ? body.result : null;
-    const score = Number(body && body.score);
-    const fbScore = Number.isInteger(score) && score >= 1 && score <= 10 ? score : null;
-    if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
-    if (!result) { sendJson(res, { ok: false, error: "无审题结果——请先执行审题" }); return; }
-    try {
-      // 调服务端业务接口：服务端内部写 DB 决策 + R2 scripts + 拒稿联动 reject + 通知
-      const d = await apiWithToken(e, token, "/v1/editor/submissions/" + id + "/review", {
-        method: "POST",
-        body: { result },
-      });
-      // 服务端写入成功后，同步本地内存缓存（读 DB 决策状态）
-      const rejected = d.rejected === true;
-      const detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null);
-      productionCache.set(e + ":" + id, detail || null);
-      // 标题回写兜底：后端 /review 已按 result.title setTitle；此处 lab 再幂等确认一次（防后端旧版未实现/漏写）
-      if (!rejected && result.title && typeof result.title === "string" && result.title.trim()) {
-        try { await apiWithToken(e, token, "/v1/editor/submissions/" + id + "/title", { method: "PATCH", body: { title: result.title.trim() } }); }
-        catch (err) { console.log("[review/confirm] title 回写失败:", String((err && err.message) || err).slice(0, 200)); }
-      }
-      // 入库打分（一次）→ 与重试轨迹合并成一条自进化记录 kind:"final"：
-      //   "重试了 X 次之后给出 N 分，其中暴露缺陷：[1. … 2. …]"
-      if (fbScore) {
-        const _fk = e + ":" + id;
-        const _attempts = retryAttempts.get(_fk) || 1;
-        const _defects = retryDefects.get(_fk) || [];
-        appendFeedback({
-          ts: Date.now(), iso: new Date().toISOString(),
-          env: e, promptKey: "review.script", promptSig: promptSig(),
-          submissionId: id, kind: "final",
-          retries: Math.max(0, _attempts - 1),   // 重试次数 = 实际生成次数 - 首次
-          score: fbScore,
-          verdict: fbScore >= 7 ? "ok" : "problem",
-          defects: _defects,                      // 每次带意见重试的缺陷（1..N）
-          types: Array.isArray(body.fbTypes) ? body.fbTypes.filter((t) => typeof t === "string").slice(0, 6) : [],
-          note: body.note ? String(body.note).slice(0, 500) : null,
-        });
-        retryAttempts.delete(_fk); retryDefects.delete(_fk);   // 记录完成后清空该投稿轨迹
-      }
-      sendJson(res, { ok: true, rejected, message: d.message || (rejected ? "已标注审核不通过" : "审核通过") });
-    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
-    return;
-  }
-
-  // POST /api/run/script → 创作：dialogue + review 提示词 → 脚本结构（写 production.json.review + script）
-  if (path === "/api/run/script" && req.method === "POST") {
-    const cred = reqCred(req);
-    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
-    const { env: e, token } = cred;
-    const body = await readBody(req);
-    const id = (body && body.id) || null;
-    if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
-    try {
-      const dialogue = await loadDialogue(e, token, id);
-      if (!dialogue) { sendJson(res, { ok: false, error: "未采集——请先采集对话" }); return; }
-      const p = getPrompt("review.score");
-      const msgs = renderPrompt(p, { dialogue: JSON.stringify(dialogue) });
-      const { content: out } = await llmComplete(msgs[0].content, msgs[1].content, undefined, undefined, p.config);
-      const parsed = extractJson(out);
-      const prod = await saveProduction(e, token, id, {
-        review: parsed,
-        script: Array.isArray(parsed.scripts) ? parsed.scripts[0] : null,
-        progress: { step: "script", updatedAt: new Date().toISOString() },
-      });
-      sendJson(res, { ok: true, message: "脚本生成完成" + (prod.script ? "" : "（未解析到 scripts，请查看 production.json）") });
-    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    } catch (err) {
+      console.error("[review/save]", JSON.stringify({ env: e, id, error: String((err && err.message) || err) }));
+      sendJson(res, { ok: false, error: "[env:" + e + "|id:" + id + "] " + String((err && err.message) || err) });
+    }
     return;
   }
 
@@ -1223,14 +1275,23 @@ async function handleApi(path, res, req) {
     const scriptIndex = (body && body.scriptIndex !== undefined) ? Number(body.scriptIndex) : 0;
     if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
     try {
-      // 读当前 scripts（R2 权威）
-      const detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id);
-      const scripts = (detail && Array.isArray(detail.reviewScripts)) ? detail.reviewScripts : [];
+      // 打磨输入：优先前端工作副本（body.scripts，定稿前不落 R2）；无则 R2 权威
+      let detail = null;
+      try { detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null); } catch {}
+      const localMode = Array.isArray(body.scripts) && body.scripts.length > 0;
+      const scripts = localMode ? body.scripts : ((detail && Array.isArray(detail.reviewScripts)) ? detail.reviewScripts : []);
       const target = scripts[scriptIndex];
       if (!target || !Array.isArray(target.segments)) { sendJson(res, { ok: false, error: "脚本不存在（index " + scriptIndex + "）" }, 404); return; }
       const p = getPrompt("polish.all");
       const dialogue = await loadDialogue(e, token, id).catch(() => null);   // 定稿对照：polish 需比对原始对话
-      const defaultMsgs = renderPrompt(p, { scripts: JSON.stringify(target, null, 1), dialogue: dialogue ? JSON.stringify(dialogue, null, 1) : "", scope: "all", target: "", revision: "" });
+      // 选定提案（submissions.review = proposal）→ 附给打磨作事件低偏移依据；无则忽略
+      let proposalParam = "";
+      try {
+        const _detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null);
+        const _r = (_detail && _detail.review && typeof _detail.review === "object") ? _detail.review : null;
+        if (_r && _r.event) proposalParam = JSON.stringify(_r, null, 1);
+      } catch {}
+      const defaultMsgs = renderPrompt(p, { scripts: JSON.stringify(target, null, 1), dialogue: dialogue ? JSON.stringify(dialogue, null, 1) : "", scope: "all", target: "", revision: "", proposal: proposalParam });
       const cfgOverride = {};
       if (body && Array.isArray(body.messages) && body.messages.length) {
         const cfg = (body && body.config) || {};
@@ -1266,6 +1327,11 @@ async function handleApi(path, res, req) {
       const polished = { ...target, segments: segs };
       if (body && body.dry === true) {
         sendJson(res, { ok: true, dry: true, result: polished, retried, usage: fmtUsage(r.usage) });
+        return;
+      }
+      // 本地工作副本：只回传不落 R2（定稿（persist=true 或脚本已入库路径）才写）
+      if (localMode && body && body.persist !== true) {
+        sendJson(res, { ok: true, local: true, result: polished, retried, usage: fmtUsage(r.usage) });
         return;
       }
       scripts[scriptIndex] = polished;

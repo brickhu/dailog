@@ -1,7 +1,7 @@
 {
   "review.score": {
-    "version": 1,
-    "description": "审题第1轮：对话评分/选题（S1-S3），输出检测 JSON（scripts 留空）",
+    "version": 2,
+    "description": "审题（提案版）：挖认知事件 → 回溯主线问题链 → 1-N 提案（模态/三维评分/pitch）+ 拒稿候选",
     "config": {
       "temperature": 0.1,
       "seed": 41,
@@ -25,11 +25,11 @@
         "file": "review.score.user.md"
       }
     ],
-    "name": "R1:话题质量审核"
+    "name": "R1:选题提案（proposals）"
   },
   "review.script": {
-    "version": 1,
-    "description": "脚本创作",
+    "version": 2,
+    "description": "脚本创作（沿选定提案的问题链剪 + 移交落点）",
     "config": {
       "temperature": 0.8,
       "maxTokens": 8192,
@@ -40,11 +40,11 @@
       }
     },
     "params": {
-      "score": "第1轮评分（数字，已通过审核）",
+      "score": "选定提案的评分（数字）",
       "suggestion": "投稿建议（可空）",
       "host": "主持人信息（可空，缺省注入「主持人」）",
       "guests": "嘉宾信息数组（可空，缺省注入「AI」）",
-      "review": "round1 审题产物（选题依据）"
+      "proposal": "编辑选定的提案（含 chain/event/modal/landingHint——下游契约，只消费不重推）"
     },
     "messages": [
       {
@@ -56,11 +56,11 @@
         "file": "review.script.user.md"
       }
     ],
-    "name": "R2:生成脚本初稿"
+    "name": "R2:生成脚本初稿（沿链）"
   },
   "polish.all": {
-    "version": 1,
-    "description": "脚本语感打磨（内容 + 听感）",
+    "version": 2,
+    "description": "脚本语感打磨（内容 + 听感；困惑/想通/移交拍为四主角；可选提案事件低偏移）",
     "config": {
       "temperature": 0.4,
       "maxTokens": 8192,
@@ -71,7 +71,8 @@
       "scope": "all|one|line",
       "target": "定位目标（可空）",
       "revision": "修改意见（可空）",
-      "dialogue": "原文对话 JSON（scope=all 定稿对照用；可空）"
+      "dialogue": "原文对话 JSON（scope=all 定稿对照用；可空）",
+      "proposal": "选定提案（可空；含 event.quote —— 有则事件/困惑节点低偏移）"
     },
     "messages": [
       {

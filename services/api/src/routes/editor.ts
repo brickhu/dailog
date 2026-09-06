@@ -974,7 +974,7 @@ export function editorRoutes(deps: EditorDeps) {
 
   // ===== 编辑 R2 存储读写（workflows/prompts/dialogues——多端经服务端统一入库，避免不同步）=====
   // key 前缀白名单，防越权覆盖音频/封面等对象
-  const STORAGE_PREFIXES = ["scripts/", "workflows/", "prompts/", "dialogues/", "full/", "episodes/"];
+  const STORAGE_PREFIXES = ["scripts/", "workflows/", "prompts/", "dialogues/", "rules/", "full/", "episodes/"];
   const storageKeyOk = (key: string) => typeof key === "string" && STORAGE_PREFIXES.some((p) => key.startsWith(p)) && !key.includes("..");
   const stGet = createRoute({
     method: "post",

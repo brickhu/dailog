@@ -3,19 +3,36 @@
 改提示词 → 一条命令 → 拿任意输入文件跑 LLM → 看输出。无构建、无步骤专用逻辑，
 **提示词放工具目录随时改，输入走文件路径**。
 
+## 容器化运行（推荐：本机一键 / 远程部署同镜像）
+
+```bash
+cd tools/script-lab
+# 1) 复制环境变量示例并填入密钥（LLM / FISH；API 目标可用 DAILOG_ENV 或 LAB_API_BASE）
+cp .env.example .env   # 或直接以环境变量传入（见 docker-compose.yml）
+# 2) 构建并启动（http://127.0.0.1:4173）
+docker compose up --build
+# 3) 远程部署：把同一镜像推到任意支持 docker 的主机即可（docker compose up 或 docker run -p 4173:4173 ...）
+```
+
+- **无状态**：会话 cookie 与提示词反馈写 `LAB_STATE_DIR`（容器内 `/data`，compose 已挂卷）；R2/DB 等平台数据一律经 services/api（storage/scripts/review/publish），容器只持 LLM/Fish 密钥（环境变量注入，不烧进镜像）
+- **环境目标**：连哪个 services/api —— 内置 local/dev/prod 清单；远程用 `LAB_API_BASE`（+`DAILOG_ENV` 命名）+ `LAB_SITE_URL` 覆盖
+- **提示词**：镜像内置 `prompts/`；开发时用 compose 里的 `./prompts:/app/prompts` bind mount 热改；镜像内直接编辑会随容器重建丢失（后续迁 R2 后由 SPA 管理）
+- **限制**：采集的动态渲染平台（Gemini/Grok 部分页面）需本机 chromium，镜像暂未内置——失败会如实报错；其余平台走 cheerio 规则（R2 `rules/collect.json`，可配）
+- 本地开发仍可用 `pnpm lab`（同代码）；`Dockerfile`/`docker-compose.yml`/`.dockerignore` 见本目录
+
 ## 用法
 
 ```bash
 # 通用形式
 node tools/script-lab/run.mjs <提示词名称> --input <文件> [--input <文件>...] [选项]
 
-# 顶层封装（推荐）：pnpm selection / draft / meta <投稿ID>——自动注入该投稿的
-#   dialogue.json（自动识别形态）+ info.json（suggestion/host/guests，有则注入）
-pnpm selection <投稿ID>      # = node tools/script-lab/run.mjs selection <投稿ID>
-pnpm draft <投稿ID>          # = node tools/script-lab/run.mjs draft <投稿ID>
-pnpm meta <投稿ID>           # = node tools/script-lab/run.mjs meta <投稿ID>
-#   info.json 由 pnpm editor fetch <id> 采集时自动落盘（drafts/<id>/info.json）
-#   无 info.json 时降级为只注入 dialogue；仍可叠加 --input/--note 等选项
+# run.mjs 是提示词的**离线测试入口**（web 采编走 server.mjs，见下）；输入为任意 JSON 文件：
+#   提示词本体即 tools/script-lab/prompts/*.md（即改即生效，无同步回 dailog-editor 概念——该技能已下线 2026-09-05）
+pnpm selection <input>       # = node tools/script-lab/run.mjs selection --input <input>
+pnpm draft <input>           # = node tools/script-lab/run.mjs draft --input <input>
+pnpm meta <input>            # = node tools/script-lab/run.mjs meta --input <input>
+#   <input> 为任意信封 JSON（dialogue/info/review 等）；web 工作流内联注入对话，不依赖本地草稿
+#   仍可叠加 --as/--extract/--note 等选项
 ```
 
 - **<提示词名称>**：`tools/script-lab/prompts/` 目录下的 .md 文件名（如 `selection` / `draft` / `meta` / 你新建的任何名字），或任意 .md 文件路径
@@ -34,15 +51,15 @@ pnpm meta <投稿ID>           # = node tools/script-lab/run.mjs meta <投稿ID>
 ## 示例
 
 ```bash
-# 只测选题：改 prompts/selection.md 后跑
-node tools/script-lab/run.mjs selection --input .dailog-editor/drafts/<id>/dialogue.json
+# 只测选题：改 prompts/review.score.system.md 后跑（输入为任意 dialogue JSON 文件）
+node tools/script-lab/run.mjs review.score --input <dialogue.json> --as dialogue
 
 # 注入投稿信息（嘉宾/主持人/节目建议）：dialogue + info.json 两个输入自动合并成一个信封
 #   info.json = {"suggestion": "...", "host": {"callName": "飞", ...}, "guests": [{"name": "DeepSeek", ...}]}
 #   selection.md 里用「suggestion」「host」「guests」作指针（已在 #1 输入说明中约定）
-node tools/script-lab/run.mjs selection \
-  --input .dailog-editor/drafts/<id>/dialogue.json --as dialogue \
-  --input info.json
+node tools/script-lab/run.mjs review.score \
+  --input <dialogue.json> --as dialogue \
+  --input info.json      # info = {suggestion, host, guests}
 
 # 测脚本打磨：一个 JSON 信封（key = dialogue / idea / selection）
 node tools/script-lab/run.mjs draft --input my-input.json
@@ -90,8 +107,8 @@ cp tools/script-lab/.env.example tools/script-lab/.env
   `export const config = { temperature: 0.2, seed: 42, maxTokens: 4000 };`
   优先级：**命令行 flag > 本文件 config > 环境变量/.env > 默认（temp 0.7）**；未写的字段自动回退
 - `sections` 按 `.md` 的 `#` 标题拆分，供 JS 里拼接（`import { sections } from "./prompts/selection.mjs"`）
-- 仓库自带的 `selection.md` / `draft.md` / `meta.md` 是 dailog-editor 技能提示词的**副本**；
-  改到满意后**同步回** `tools/dailog-editor/prompts/*.md`，再 `pnpm --filter @dailogues/dailog-editor build` 生效到技能
+- 本目录 `prompts/*.md` 即现行提示词（web 工作台与 run.mjs 共用，即改即生效）；
+  旧 `selection.md` / `draft.md` / `meta.md` 副本与 dailog-editor 同步机制已随其下线（2026-09-05）
 - 注意：`draft.md` 副本保留了生产环境的「分 3 次生成、3 次写盘」约束，单次完整测试时加
   `--note "一次输出完整 script.json，三个 parts 的 segments 全部填好，忽略分段生成要求"`
   （或直接删掉提示词里那段——这是测试台，随你改）

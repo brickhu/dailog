@@ -106,7 +106,35 @@ services:
     depends_on:
       - api
 
+  # dailog lab —— 编辑器工作台（OrbStack 内与 api/site 同网络管理；profile=lab 不随默认 up 启动）
+  lab:
+    build: ./tools/script-lab
+    container_name: dailog-lab
+    profiles: ["lab"]
+    ports:
+      - "4173:4173"
+    environment:
+      # 同网络经服务名连平台 api；sign-in origin 用 localhost:3000（在 APP_ORIGINS 白名单内）
+      LAB_API_BASE: http://api:8787
+      LAB_SITE_URL: http://localhost:3000
+      LAB_STATE_DIR: /data
+      FISH_API_KEY: ${FISH_API_KEY:-}
+      FISH_PROXY_URL: ${FISH_PROXY_URL:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+    volumes:
+      # 会话 cookie + 反馈（无状态容器）；提示词热改用 bind mount 注释行
+      - lab-state:/data
+      # - ./tools/script-lab/prompts:/app/prompts
+    depends_on:
+      - api
+
 volumes:
   pgdata:
+  lab-state:
     # 复用旧项目（dailog-dev）的数据卷——项目名改了但数据不丢
     name: dailog-dev_pgdata

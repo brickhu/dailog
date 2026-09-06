@@ -1,0 +1,32 @@
+# dailog lab 容器（本机/远程 docker 均可）
+#   env：DEEPSEEK_* 或 LLM_*（LLM）、FISH_API_KEY（TTS）、DAILOG_ENV + LAB_API_BASE（连哪个 services/api；留空则用内置 local/dev/prod 清单）
+services:
+  lab:
+    build: .
+    ports:
+      - "4173:4173"
+    extra_hosts:
+      # 让容器内经 host.docker.internal 访问宿主机（连本机已在跑的 api，如 8787）
+      - "host.docker.internal:host-gateway"
+    environment:
+      DAILOG_ENV: "${DAILOG_ENV:-}"
+      LAB_API_BASE: "${LAB_API_BASE:-}"
+      LAB_SITE_URL: "${LAB_SITE_URL:-}"
+      FISH_API_KEY: "${FISH_API_KEY:-}"
+      FISH_PROXY_URL: "${FISH_PROXY_URL:-}"
+      DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
+      DEEPSEEK_BASE_URL: "${DEEPSEEK_BASE_URL:-}"
+      DEEPSEEK_MODEL: "${DEEPSEEK_MODEL:-}"
+      LLM_API_KEY: "${LLM_API_KEY:-}"
+      LLM_BASE_URL: "${LLM_BASE_URL:-}"
+      LLM_MODEL: "${LLM_MODEL:-}"
+    volumes:
+      # 会话 cookie + 提示词反馈（无状态：删容器不丢）
+# 提示：本机 api 占 8787（仓库根 compose 的 api 服务）——lab 自身只映射 4173；
+#   · 连本机 api：LAB_API_BASE=http://host.docker.internal:8787（无需 DAILOG_ENV）
+#   · 连远程 api：LAB_API_BASE=https://api.dailog.fm（或 dev 的 api.candelbot.app）
+      - lab-state:/data
+      # 可选：本地热改提示词（开发时注释掉即用镜像内置）
+      # - ./prompts:/app/prompts
+volumes:
+  lab-state:

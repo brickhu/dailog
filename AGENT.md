@@ -1,27 +1,28 @@
 # AGENT — 项目总览
 
 > 本项目所有文档的入口与汇总。任何 Agent / 协作者先读本文件。
-> 最后更新：2026-08-14（**架构极简改造完成**：投稿 = URL + 声音采样，制作 = 编辑本地 Agent。
-> 服务端无采集/LLM/队列代码，TTS 收敛为服务端统一端点 `/v1/editor/tts`；
-> admin/studio/extension/importer 四个 app 删除；
-> 编辑工作流落地为 `tools/dailog-editor` 子工程（源码 → 打包产物 `.agents/skills/dailog-editor`）
+> 最后更新：2026-09-05（**采编 lab 化**）：dailog-editor 本地 Agent 管线下线，编辑工作流迁移 **dailog lab**
+>（`tools/script-lab`：浏览器采编控制台 + 轻服务端，`pnpm lab` 本地运行）；制作产物 R2 权威 + 浏览器缓存，
+> 无本地草稿目录依赖；提示词工程在 `tools/script-lab/prompts/`（即改即生效）。
+> 历史：2026-08-13 架构极简改造（投稿 = URL + 采样；服务端删采集/LLM/队列；admin/studio/extension/importer 删除）。
+> 服务端（api.dailog.fm）无采集/LLM；`/v1/editor/tts` 保留为兼容端点，lab 逐段 TTS 直调 Fish。
 
 ## 项目一句话
 
-**dailog**：一档将「AI 聊天记录」模拟为真人采访 AI 的播客，单期 5-10 分钟呈现对话原文中的收获时刻（新知、经验、建议及启发）——任何人（dailog.fm）投稿
-「**分享链接 + 声音采样**」即可；**编辑在本地 Agent**（ZCode + dailog-editor skill）拉取网页、
-生成脚本、合成语音、制作封面，成品一次性上传发布（投稿人 = 主持人克隆音色，AI = 嘉宾品牌声线），
+**dailog**：一档将「AI 聊天记录」模拟为真人采访 AI 的播客，单期 5-10 分钟呈现人与 AI 真实的思考过程（困惑 → 想通）——任何人（dailog.fm）投稿
+「**分享链接 + 声音采样**」即可；**编辑在 dailog lab 采编工作台**（tools/script-lab）采集对话、审题、
+生成脚本、语感打磨、逐段 TTS、合成语音、制作封面并发布（投稿人 = 主持人克隆音色，AI = 嘉宾品牌声线），
 在 dailog 单一品牌频道分发（播放页 + 单 feed RSS）。
 
 ## 核心流程（本质版）
 
 ```
 【投稿人】dailog.fm 注册（开放 + 邮箱验证）→ 提交分享链接（合法性+触达性检查）+ 声音采样
-         → /me/submits 查看状态（submitted / rejected / published）
-【编辑】本地 Agent（pnpm editor + dailog-editor skill）：
-         list 队列 → detail 详情 → download 采样 → 本地拉取网页 → 生成脚本（dailog 标准）
-         → Fish TTS（host 克隆 / guest 品牌声线）→ ffmpeg 合成 → Pexels 封面
-         → publish 一次性上传（published + 期号 + 通知投稿人）/ reject（附原因 + 通知）
+         → /me/submits 查看状态（submitted / collected / crafted / rejected / published）
+【编辑】dailog lab（tools/script-lab：浏览器工作台 + 轻服务端，pnpm lab 本地运行）：
+         投稿队列 → 采集对话原文（R2，URL 哈希 key）→ 审题（LLM 评分/方向）→ 脚本创作 + 手工修改 → 语感打磨
+         → 逐段 Fish TTS（host 克隆 / guest 品牌声线）→ 合成 full audio（R2 成品位）→ 封面 + 节目信息
+         → publish（published + 期号 + 通知投稿人）/ reject（附原因 + 通知）
 【听众】订阅 dailog 单 feed → 收听 / 分享（播放页 /episode/:id + RSS）
 ```
 
@@ -52,11 +53,14 @@ dailog/
 │       ├── repo/               #   submissions / episodes / guests / notifications / playlists
 │       └── db/                 #   Drizzle schema + migrations（Railway Postgres）
 ├── tools/
-│   └── dailog-editor/            # 编辑本地 Agent **源码工程**（src CLI + skill/ + templates/ + assets/ 资源 + build.mjs）
-│       └── build.mjs             #   构建 → 产物 .agents/skills/dailog-editor/（scripts/*.js + SKILL.md + 模板 + assets/）
+│   ├── script-lab/               # **dailog lab 采编工作台**（web/ 浏览器控制台 + server.mjs 轻服务端；pnpm lab 本地运行）
+│   │   ├── prompts/              #   提示词工程（review.score / review.script / polish.all / meta —— 即改即生效）
+│   │   └── lib/ + web/           #   llm/collect/prompt 封装（采集自包含）+ 采编控制台前端
+│   ├── dailog-cli/               # 共享 CLI 底座（r2.js 哈希 / fish.js 封装；script-lab 复用中，迁移完成可并入）
+│   └── dailog-editor/            # **已下线**（2026-09-05）——旧本地 Agent CLI + skill 源码，保留待清理
 ├── .agents/skills/
-│   └── dailog-editor/            # 编辑工作流 skill **打包产物**（gitignored，构建生成——pnpm editor 跑这里）
-├── .dailog-editor/               # 编辑本地配置（.env，gitignored）+ envs.json + drafts/ 草稿（gitignored）
+│   └── dailog-editor/            # 已下线技能产物（历史遗留，不再构建/使用）
+├── .dailog-editor/               # 旧本地配置与草稿（已下线，不再使用）
 ├── packages/                     # ui（设计 token）/ i18n / auth-ui / shared
 ├── infra/                        # railway Dockerfile、local compose
 ├── AGENT.md / PRD.md / ARC.md / MRD.md
@@ -73,8 +77,9 @@ dailog/
 | Postgres | `dailog-pg` 容器（5432） | Railway Dev 实例 | Railway Prod 实例 |
 
 > API 路径统一 `/v1/` 前缀（认证 `/v1/auth/*` 为 better-auth basePath）。
-> **编辑不部署任何前端**——用本地 Agent（tools/dailog-editor 工程 → .agents/skills/dailog-editor 产物）操作，密钥只放 `.dailog-editor/.env`。
-> 环境清单（编辑本地）：`.dailog-editor/envs.json`（local/dev/prod 三环境，模板 `tools/dailog-editor/templates/envs.example.json`）。
+> **编辑工作台 = dailog lab（tools/script-lab，本地运行）**——不向公网部署编辑前端；
+> lab 登录页选择环境（dev/prod），会话存 `tools/script-lab/.lab-cookies.json`；
+> LLM/密钥等配置在 `tools/script-lab/.env`（模板 `.env.example`）。
 
 ## 技术要点速查
 
@@ -88,31 +93,31 @@ dailog/
   developer-guide §投稿详情页修复记录）。
 - 前端：SolidJS + Solid Router + StyleX（设计 token 与基础组件在 `packages/ui`）
 - 后端：Node + TypeScript + Hono + Drizzle + better-auth（自托管邮箱+密码会话）
-- **服务端无采集/LLM**——内容拉取、脚本生成、音频拼接、封面在编辑本地完成；
-  **含统一 TTS 端点** `/v1/editor/tts`（Fish TTS + ffmpeg 转 wav，编辑本地一次调用）
+- **服务端（api）无采集/LLM**——采集、脚本生成（提示词驱动）、TTS、音频拼接、封面在 **dailog lab**（tools/script-lab）完成；
+  经 `/v1/editor/*` 与 `/v1/editor/storage` 读写服务端与 R2；`/v1/editor/tts` 保留为兼容端点（lab 逐段直调 Fish）
 - 存储：R2/fs（voice_samples / episodes 音频 / covers）；`STORAGE_DRIVER=fs|r2`
-- 数据模型（本质版核心）：`submissions`（投稿：URL + 状态 submitted/rejected/published）
+- 数据模型（本质版核心）：`submissions`（投稿：URL + 状态 submitted/collected/crafted/rejected/published + review jsonb 审题采纳结果）
   → `episodes`（成品：submissionId 关联、audioUrl 直读、期号 max+1、published 即公开）；
-  `guests`/`guest_voice_samples`（品牌声线宿主，编辑 TTS 取用）；`voice_samples`（投稿人采样）；
+  `guests`/`guest_voice_samples`（品牌声线宿主，lab TTS 取用）；`voice_samples`（投稿人采样）；
   `playlists`/`playlist_episodes`（0032 播放列表：平台策展 + 用户自建，有序集合；封面 MVP 取首期节目封面）
 - 编辑端点：`requireRole(editor|admin)`；`ADMIN_EMAILS` 环境变量 = 部署自动预留管理员
 - 通知：站内 notifications + Resend 邮件（拒审 / 上线「dailog 第 N 期」）
-- 成本：除 LLM/TTS（编辑本地按量）/Resend 外：CF/R2 免费 + better-auth $0 + Railway ~$5–15/月
-- 编辑本地：ffmpeg/ffprobe 必需；Fish Audio + Pexels key 在 `.dailog-editor/.env`
+- 成本：除 LLM/TTS（lab 按量，经 tools/script-lab 服务端直连）/Resend 外：CF/R2 免费 + better-auth $0 + Railway ~$5–15/月
+- dailog lab：本地运行需 Node ≥22（server.mjs）；浏览器需跨域隔离（SAB）供 ffmpeg.wasm 合成——不可用自动降级 lab 服务端合成；LLM/Fish 等 key 在 `tools/script-lab/.env`
 
-## 编辑工作流（新增协作者必读）
+## 采编工作流 dailog lab（tools/script-lab，新增协作者必读）
 
-1. 配置：`.dailog-editor/.env`（Pexels key）+ `envs.json`（local/dev/prod 环境清单）
-2. 登录：`pnpm editor login --env <环境>`（配对码，浏览器授权——token 绑定环境）
-3. 命令（23 个）：`overview`（工作台概要）/ `batch`（批量提取分组）/ `batch-reject`（批量拒审）/
-   `batch-scripts`（脚本批次汇总）/ `produce`（制作流水线 tts→merge→cover）/
-   `fetch`（采集+解码，规则自进化）/ `script-preview`（脚本确认门）/ `tts` / `merge` / `cover` /
-   `publish`（发布=状态+通知+邮件+草稿清理）/ `reject` / `guests` / `guest-voice` / `guest-set` /
-   `playlist`（平台播放列表：list/create/add/remove/reorder/pick/cover 等）/ `progress`（中断恢复）/
-   `login` / `auth-status` / `list` / `detail` 等
-4. 完整流程与规范：`.agents/skills/dailog-editor/SKILL.md`（含 `prompts/` 下 selection/draft/polish/meta 提示词模板；
-   批量两级流程：提取分组处置 → 自动质量检查/脚本生成 → 脚本分组处置 → 选号 produce → 两个确认门 → publish）
-5. 草稿：`.dailog-editor/drafts/{submissionId}/`（gitignored；发布后自动清理）
+1. 启动：`cd tools/script-lab && pnpm lab`（或 `pnpm lab:dev`）→ 浏览器打开 127.0.0.1:4173 → 登录页选择环境（dev/prod）
+2. 环节：投稿队列 → **采集**（对话原文 → R2，URL 哈希 key）→ **审题**（review.score：主线话题 / 用户的困惑 / 评分 / 方向）→
+   **脚本创作**（review.script，多候选；链上提问保真、困惑颗粒不磨平）→ **语感打磨**（polish.all：顺口/放大/停顿/情绪标签）→
+   **逐段 TTS**（host = 投稿人采样 / guest = 品牌声线）→ **合成**（浏览器 ffmpeg.wasm，段间间隔 / intro / BGM 可配）→
+   **节目信息 + 封面** → **发布 / 拒审**
+3. 提示词工程：`tools/script-lab/prompts/*.md` 即改即生效；服务端按 promptSig（md mtime 指纹）随输出落
+   `feedback/review.jsonl`——可回溯“哪版规则产生了这个结果”，构成提示词反馈闭环
+4. 产物与恢复：关键产物即时 R2/入库（审题采纳 → submission review jsonb；脚本定稿 → R2 `scripts/{id}.json`；
+   成品音频 → R2 `episodes/{userId}/{id}.m4a`），浏览器 localStorage/IndexedDB 只存可再生工作副本——换浏览器/清缓存不丢已落产物
+5. 服务端（server.mjs）接口入口 `/api/run/*`：fetch/batch · review · script · polish · tts-seg · full-merge · full-upload · publish-submit · reject；
+   LLM 配置 `tools/script-lab/.env`（模板 `.env.example`）
 
 ## 共享设计系统约束（StyleX 硬性规则）
 
@@ -133,11 +138,12 @@ dailog/
 - [x] **架构极简改造（2026-08-13）**：投稿 = URL + 采样；编辑 = 本地 Agent（skill + scripts）；
       服务端删采集/LLM/队列；TTS 收敛回服务端统一端点；admin/studio/extension/importer 删除；0026 迁移落地
 - [x] M6：内容站完善（播放器化重构：全局播放条 + 个人中心 + 统计卡片 + FAQ + 主播/嘉宾入口 + 我的节目下架上架）
-- [ ] M7：成本与风控（质量门前置、用稿率观察；编辑本地按量可控）
+- [x] **采编 lab 化（2026-09-05）**：dailog-editor 本地 Agent 管线下线；编辑工作流迁移 dailog lab（tools/script-lab：浏览器工作台 + 轻服务端）；产物 R2 权威 + 浏览器缓存；提示词体系迁至 tools/script-lab/prompts
+- [ ] M7：成本与风控（质量门前置、用稿率观察；lab 按量可控）
 - [ ] M8：E2E + 上线（首期节目制作 + 分发验证）
 
 ## 约定
 
 - 文档改动同步更新 AGENT.md 索引与里程碑
-- 实现时所有供应商密钥经环境变量注入，不提交仓库（编辑本地密钥只在 `.dailog-editor/.env`）
+- 实现时所有供应商密钥经环境变量注入，不提交仓库（lab 密钥只在 `tools/script-lab/.env`，gitignored）
 - 前端样式/组件改动遵循「共享设计系统约束」章节

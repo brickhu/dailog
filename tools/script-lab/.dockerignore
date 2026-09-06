@@ -1,0 +1,8 @@
+node_modules
+.env
+.env.*
+.lab-cookies.json
+feedback
+scripts
+run.mjs
+.reorg.mjs

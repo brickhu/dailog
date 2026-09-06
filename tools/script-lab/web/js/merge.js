@@ -193,7 +193,7 @@ async function mergeSegAudio(id, si){
   };
   try {
     const d = await j('/api/detail/' + id);
-    const script = ((d.prodSummary && d.prodSummary.scriptList) || [])[si];
+    const script = ((typeof labWorkScriptsOf === 'function' && labWorkScriptsOf(id) && labWorkScriptsOf(id)[si]) ? labWorkScriptsOf(id)[si] : ((d.prodSummary && d.prodSummary.scriptList) || [])[si]);
     if (!script || !Array.isArray(script.segments) || !script.segments.length) { notice('脚本为空，无法合成', 'error'); return; }
     const segs = script.segments;
     // 全量 audio 校验
@@ -430,7 +430,7 @@ async function runMergeConcat(){
   const bgmCfg = (mergeCtx.bgm && mergeCtx.bgm.enabled) ? mergeCtx.bgm : null;   // 本次合成生效的 BGM
   setMergeStep(5, '读取脚本…');
   const d = await j('/api/detail/' + id);
-  const script = ((d.prodSummary && d.prodSummary.scriptList) || [])[si];
+  const script = ((typeof labWorkScriptsOf === 'function' && labWorkScriptsOf(id) && labWorkScriptsOf(id)[si]) ? labWorkScriptsOf(id)[si] : ((d.prodSummary && d.prodSummary.scriptList) || [])[si]);
   if (!script || !Array.isArray(script.segments) || !script.segments.length) throw new Error('脚本为空，无法合成');
   const segs = script.segments;
   const audios = segs.map(seg => segAudioGet(segKey(id, seg)));
@@ -662,7 +662,7 @@ async function openMergeDialog(id, si){
   if (info) info.textContent = '读取脚本…';
   try {
     const d = await j('/api/detail/' + id);
-    const script = ((d.prodSummary && d.prodSummary.scriptList) || [])[si];
+    const script = ((typeof labWorkScriptsOf === 'function' && labWorkScriptsOf(id) && labWorkScriptsOf(id)[si]) ? labWorkScriptsOf(id)[si] : ((d.prodSummary && d.prodSummary.scriptList) || [])[si]);
     const n = (script && script.segments) ? script.segments.length : 0;
     if (info) info.textContent = (n ? '第 ' + (si + 1) + ' 个脚本 · ' + n + ' 段语音已就绪' : '脚本为空，无法合成') + '，可配置背景音乐后开始';
   } catch { if (info) info.textContent = ''; }
@@ -713,6 +713,13 @@ async function confirmMergeUpload(){
     // 服务端 crafted 标记双保险：full-upload 已尝试，失败则前端再补一次
     if (!(up && up.crafted)) {
       try { await j('/api/run/mark-crafted', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id }) }); } catch {}
+    }
+    // 定稿入库：合成确认完成 → 把本地工作脚本（改/打磨后的终稿）写入 R2 scripts（此后发布/展示读 R2）
+    if (typeof labWorkScriptsOf === 'function') {
+      const finScripts = labWorkScriptsOf(id);
+      if (Array.isArray(finScripts) && finScripts.length) {
+        try { await j('/api/run/script/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, scripts: finScripts }) }); } catch (e3) { console.error('[final-scripts] 定稿入库失败', e3); }
+      }
     }
     // 成功：记录 r2Key + done，清浏览器缓存（seg 片段 + full——播放走 R2）
     const meta = loadFullMeta(id) || {};
