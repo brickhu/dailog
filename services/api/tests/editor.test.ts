@@ -559,3 +559,108 @@ describe("节目下线申请（用户申请 → 编辑审批）", () => {
   });
 });
 
+
+
+// ===== selected 状态（编辑采纳脚本=锁定选题）=====
+describe("selected 状态", () => {
+  const collectedDetail = { ...SUBMITTED_DETAIL, status: "collected" as const, reviewedAt: null };
+
+  function subsFake(status: string, setStatus: ReturnType<typeof vi.fn>, setReviewResult = vi.fn(async () => {})) {
+    return fakeRepo({
+      submissions: {
+        ...fakeRepo().submissions,
+        getDetail: async () => ({ ...SUBMITTED_DETAIL, status }) as never,
+        setReviewResult,
+        setStatus,
+      },
+    });
+  }
+
+  it("GET /v1/editor/submissions?status=selected → listQueue(selected)", async () => {
+    const listQueue = vi.fn(async () => []);
+    const res = await makeApp({
+      repo: fakeRepo({ submissions: { ...fakeRepo().submissions, listQueue } }),
+    }).request("/v1/editor/submissions?status=selected");
+    expect(res.status).toBe(200);
+    expect(listQueue).toHaveBeenCalledWith("selected");
+  });
+
+  it("PUT /:id/review（采纳）collected 投稿 → 自动置 selected", async () => {
+    const setStatus = vi.fn(async () => ({ id: "sub-1" }));
+    const res = await makeApp({ repo: subsFake("collected", setStatus) })
+      .request("/v1/editor/submissions/sub-1/review", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ review: { id: "P1", score: 8.2, main_topic: "主线", chain: [], event: { modal: "mirror", quote: "原文" }, storyline: {} } }),
+      });
+    expect(res.status).toBe(200);
+    expect(setStatus).toHaveBeenCalledWith("sub-1", "selected");
+  });
+
+  it("PUT /:id/review（采纳）crafted 投稿 → 不降级状态", async () => {
+    const setStatus = vi.fn(async () => ({ id: "sub-1" }));
+    const res = await makeApp({ repo: subsFake("crafted", setStatus) })
+      .request("/v1/editor/submissions/sub-1/review", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ review: { score: 9, proposals: [] } }),
+      });
+    expect(res.status).toBe(200);
+    expect(setStatus).not.toHaveBeenCalled();
+  });
+
+  it("PUT /:id/review（采纳）published 投稿 → 不动", async () => {
+    const setStatus = vi.fn(async () => ({ id: "sub-1" }));
+    const res = await makeApp({ repo: subsFake("published", setStatus) })
+      .request("/v1/editor/submissions/sub-1/review", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ review: { score: 9 } }),
+      });
+    expect(res.status).toBe(200);
+    expect(setStatus).not.toHaveBeenCalled();
+  });
+
+  it("POST /:id/reopen（selected）→ 清空锁定选题 + 退回 collected", async () => {
+    const setStatus = vi.fn(async () => ({ id: "sub-1" }));
+    const setReviewResult = vi.fn(async () => ({ id: "sub-1" }));
+    const res = await makeApp({ repo: subsFake("selected", setStatus, setReviewResult) })
+      .request("/v1/editor/submissions/sub-1/reopen", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({}) });
+    expect(res.status).toBe(200);
+    expect(setReviewResult).toHaveBeenCalledWith("sub-1", null);
+    expect(setStatus).toHaveBeenCalledWith("sub-1", "collected");
+  });
+
+  it("POST /:id/reopen（crafted）→ 同样退回 collected", async () => {
+    const setStatus = vi.fn(async () => ({ id: "sub-1" }));
+    const res = await makeApp({ repo: subsFake("crafted", setStatus) })
+      .request("/v1/editor/submissions/sub-1/reopen", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({}) });
+    expect(res.status).toBe(200);
+    expect(setStatus).toHaveBeenCalledWith("sub-1", "collected");
+  });
+
+  it("POST /:id/reopen（published）→ 409 不可逆，状态不动", async () => {
+    const setStatus = vi.fn(async () => ({ id: "sub-1" }));
+    const res = await makeApp({ repo: subsFake("published", setStatus) })
+      .request("/v1/editor/submissions/sub-1/reopen", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({}) });
+    expect(res.status).toBe(409);
+    expect(setStatus).not.toHaveBeenCalled();
+  });
+
+  it("POST /:id/reopen（collected）→ 409 无需退回", async () => {
+    const setStatus = vi.fn(async () => ({ id: "sub-1" }));
+    const res = await makeApp({ repo: subsFake("collected", setStatus) })
+      .request("/v1/editor/submissions/sub-1/reopen", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({}) });
+    expect(res.status).toBe(409);
+    expect(setStatus).not.toHaveBeenCalled();
+  });
+
+  it("selected 投稿可标记 crafted（音频就绪放行）", async () => {
+    const setStatus = vi.fn(async () => ({ id: "sub-1" }));
+    const res = await makeApp({ repo: subsFake("selected", setStatus) })
+      .request("/v1/editor/submissions/sub-1/crafted", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({}) });
+    expect(res.status).toBe(200);
+    expect(setStatus).toHaveBeenCalledWith("sub-1", "crafted");
+  });
+});
+

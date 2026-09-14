@@ -9,31 +9,14 @@ function loadPubMeta(id){ try { return JSON.parse(localStorage.getItem('pub-' + 
 function renderPublishCard(id, dt, rawStatus, labEnvVal, scripts){
   if (rawStatus === 'published') {
     const pm = loadPubMeta(id) || {};
-    const siteBase = (typeof API_BASE !== 'undefined' && API_BASE) ? '' : '';
     const url = pm.slug ? ('/episode/' + pm.slug) : null;
-    // 已发布态：展示节目信息 + 编辑入口（预览态可修改节目 meta，不影响投稿状态与关联）
     return '<div class="muted" style="font-size:12px;margin-bottom:8px">✅ 已发布</div>'
       + '<div class="detail-row"><span class="k">期号</span><span class="v">' + (pm.number ? '第 ' + esc(pm.number) + ' 期' : '—') + '</span></div>'
       + '<div class="detail-row"><span class="k">标题</span><span class="v">' + esc(pm.title || dt.title || '—') + '</span></div>'
       + (url ? '<div class="detail-row"><span class="k">详情页</span><span class="v"><a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(url) + '</a></span></div>' : '')
       + (pm.episodeId ? '<div class="detail-row"><span class="k">节目 ID</span><span class="v mono">' + esc(pm.episodeId) + '</span></div>' : '')
       + '<div style="margin-top:10px"><button class="pg" onclick="togglePubEdit()" id="pubEditToggle">✏️ 编辑节目信息</button></div>'
-      + '<div id="pubEditBox" style="display:none;margin-top:8px;border-top:1px solid #262b36;padding-top:10px">'
-        + '<div class="muted" style="font-size:11px;margin-bottom:6px">留空 = 不修改该字段；保存后更新已发布节目</div>'
-        + '<div class="pub-fields" style="gap:6px">'
-          + '<textarea id="pubEditTitle" class="pub-input" rows="1" spellcheck="false" placeholder="标题（留空不改）"></textarea>'
-          + '<textarea id="pubEditDesc" class="pub-input" rows="2" spellcheck="false" placeholder="描述（留空不改）"></textarea>'
-          + '<select id="pubEditCat" class="pub-input"><option value="">分类（不改）</option><option value="insight">insight · 新知</option><option value="experience">experience · 经验</option><option value="advice">advice · 建议</option><option value="inspiration">inspiration · 启发</option></select>'
-          + '<textarea id="pubEditTags" class="pub-input" rows="1" spellcheck="false" placeholder="标签，逗号分隔（留空不改）"></textarea>'
-          + '<textarea id="pubEditSummary" class="pub-input" rows="2" spellcheck="false" placeholder="摘要（留空不改）"></textarea>'
-          + '<textarea id="pubEditRefs" class="pub-input" rows="2" spellcheck="false" placeholder=&#39;引用 JSON 数组（留空不改）&#39;></textarea>'
-          + '<textarea id="pubEditHl" class="pub-input" rows="1" spellcheck="false" placeholder=&#39;金句 JSON 数组（留空不改）&#39;></textarea>'
-        + '</div>'
-        + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">'
-          + '<button class="pg" onclick="togglePubEdit()">取消</button>'
-          + '<button class="pg" style="background:#4f8cff;color:#fff;border:0" onclick="savePubMetaEdit()" id="pubEditSave">保存修改</button>'
-        + '</div>'
-      + '</div>';
+      + '<div id="pubEditBox" style="display:none;margin-top:8px"></div>';
   }
   // 未发布（crafted）：左右两列——左：节目表字段表单（统一 textarea 黑底）；右：方形封面占位 + 生成封面
   const hostName = (dt && dt.host && (dt.host.callName || (dt.host.personaInfo && dt.host.personaInfo.displayName))) || '主持人';
@@ -92,38 +75,120 @@ function togglePubEdit(){
   const btn = document.getElementById('pubEditToggle');
   if (!box) return;
   const show = box.style.display === 'none';
+  if (show && !box.innerHTML) renderPubEditBox();   // 首次打开构建与 crafted 同款两栏编辑面
   box.style.display = show ? 'block' : 'none';
   if (btn) btn.textContent = show ? '收起编辑' : '✏️ 编辑节目信息';
+  if (show) prefillPubEdit();                       // 打开即预填已发布信息（服务端权威）
 }
-// 保存：只提交用户填写的字段（留空 = 不修改，服务端保留旧值）
+// 构建已发布编辑面（与 crafted 发布表单同款：左=字段，右=封面）
+function renderPubEditBox(){
+  const box = document.getElementById('pubEditBox');
+  if (!box) return;
+  box.innerHTML = '<div class="pub-grid">'
+    + '<div class="pub-fields" style="gap:6px">'
+      + '<label class="muted" style="font-size:12px">标题</label>'
+      + '<textarea id="pubEditTitle" class="pub-input" rows="1" spellcheck="false"></textarea>'
+      + '<label class="muted" style="font-size:12px">描述（导读）</label>'
+      + '<textarea id="pubEditDesc" class="pub-input" rows="3" spellcheck="false"></textarea>'
+      + '<label class="muted" style="font-size:12px">分类</label>'
+      + '<select id="pubEditCat" class="pub-input"><option value="">—</option><option value="insight">insight · 新知</option><option value="experience">experience · 经验</option><option value="advice">advice · 建议</option><option value="inspiration">inspiration · 启发</option></select>'
+      + '<label class="muted" style="font-size:12px">标签（逗号分隔）</label>'
+      + '<textarea id="pubEditTags" class="pub-input" rows="1" spellcheck="false"></textarea>'
+      + '<label class="muted" style="font-size:12px">摘要（列表/分享短简介）</label>'
+      + '<textarea id="pubEditSummary" class="pub-input" rows="2" spellcheck="false"></textarea>'
+      + '<label class="muted" style="font-size:12px">引用/术语（JSON 数组）</label>'
+      + '<textarea id="pubEditRefs" class="pub-input" rows="3" spellcheck="false"></textarea>'
+      + '<label class="muted" style="font-size:12px">金句（JSON 数组）</label>'
+      + '<textarea id="pubEditHl" class="pub-input" rows="2" spellcheck="false"></textarea>'
+    + '</div>'
+    + '<div class="pub-cover-col">'
+      + '<div class="pub-cover-zone" id="pubCoverZone" onclick="document.getElementById(\'pubCoverFile\').click()">'
+        + '<input type="file" id="pubCoverFile" accept="image/*" style="display:none" onchange="previewCoverFile(this)">'
+        + '<img id="pubCoverPreview" class="pub-cover-img" style="display:none" alt="">'
+        + '<div class="pub-cover-placeholder" id="pubCoverPlaceholder"><div style="font-size:22px">🖼</div><div class="muted" style="font-size:11px">点击选择新封面</div><div class="muted" style="font-size:10px">当前封面已自动展示（可选更换）</div></div>'
+      + '</div>'
+      + '<button class="pg pub-cover-gen" onclick="generateCover()">🎨 生成封面</button>'
+      + '<div class="muted" id="pubCoverHint" style="font-size:11px;text-align:center"></div>'
+    + '</div>'
+    + '</div>'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px">'
+      + '<button class="pg" onclick="openPubMetaConsoleEdit()" id="pubEditMeta">✨ 生成 meta（回填下方）</button>'
+      + '<span style="display:flex;gap:8px"><button class="pg" onclick="togglePubEdit()">取消</button>'
+      + '<button class="pg" style="background:#4f8cff;color:#fff;border:0" onclick="savePubMetaEdit()" id="pubEditSave">保存修改</button></span>'
+    + '</div>'
+    + '<div class="muted" style="font-size:11px;margin-top:8px">保存 = 整体覆盖：下方字段以表单为准（空=清空该字段）；封面可选更换；音频/期号/公开状态不变。</div>';
+}
+// 预填：服务端当前 meta（episode-meta）→ 字段 + 封面
+async function prefillPubEdit(){
+  const id = (typeof currentPubId !== 'undefined') ? currentPubId : '';
+  const pm = id ? (loadPubMeta(id) || {}) : {};
+  let cur = pm;
+  if (pm.episodeId) {
+    try {
+      const d = await j('/api/run/episode-meta?episodeId=' + encodeURIComponent(pm.episodeId));
+      if (d && d.ok && d.meta) { cur = d.meta; savePubMeta(id, Object.assign({}, pm, d.meta)); }
+    } catch { /* 回退本地缓存 */ }
+  }
+  const set = (el, v) => { const e = document.getElementById(el); if (e) e.value = (v === null || v === undefined) ? '' : (Array.isArray(v) ? (el.indexOf('Refs') >= 0 || el.indexOf('Hl') >= 0 ? JSON.stringify(v) : v.join(', ')) : String(v)); };
+  set('pubEditTitle', cur.title || '');
+  set('pubEditDesc', cur.description || '');
+  const cat = document.getElementById('pubEditCat'); if (cat) cat.value = cur.category || '';
+  set('pubEditTags', cur.tags || '');
+  set('pubEditSummary', cur.summary || '');
+  set('pubEditRefs', cur.references || '');
+  set('pubEditHl', cur.highlights || '');
+  // 封面：只要有 episodeId 就尝试取当前封面字节 → 预览（不再被 cur.coverUrl 卡住；失败明示）
+  if (pm.episodeId) {
+    try {
+      const cv = await j('/api/episode-cover?episodeId=' + encodeURIComponent(pm.episodeId));
+      if (cv && cv.ok && cv.b64) {
+        const img = document.getElementById('pubCoverPreview');
+        const ph = document.getElementById('pubCoverPlaceholder');
+        if (img) { img.src = 'data:' + (cv.mime || 'image/jpeg') + ';base64,' + cv.b64; img.style.display = 'block'; }
+        if (ph) ph.style.display = 'none';
+      } else {
+        const ph = document.getElementById('pubCoverPlaceholder');
+        if (ph) ph.innerHTML = '<div style="font-size:22px">🖼</div><div class="muted" style="font-size:11px">无封面或加载失败（可点击上传/生成）</div>';
+      }
+    } catch (err) {
+      notice('封面加载失败：' + ((err && err.message) || err), 'error');
+      const ph = document.getElementById('pubCoverPlaceholder');
+      if (ph) ph.innerHTML = '<div style="font-size:22px">🖼</div><div class="muted" style="font-size:11px">封面加载失败，可点击上传/生成</div>';
+    }
+  }
+}
+// 保存（全改）：表单所有字段整体覆盖；封面有选择则一并换
 async function savePubMetaEdit(){
   const id = (typeof currentPubId !== 'undefined') ? currentPubId : '';
   const pm = loadPubMeta(id) || {};
   const episodeId = pm.episodeId;
   if (!episodeId) { notice('缺少节目 ID（发布时未记录，请刷新）', 'error'); return; }
-  const val = (elId) => { const el = document.getElementById(elId); return el ? el.value.trim() : ''; };
-  const meta = {};
-  const t = val('pubEditTitle'); if (t) meta.title = t;
-  const d = val('pubEditDesc'); if (d) meta.description = d;
-  const c = val('pubEditCat'); if (c) meta.category = c;
-  const tg = val('pubEditTags'); if (tg) meta.tags = tg.split(',').map(s => s.trim()).filter(Boolean);
-  const su = val('pubEditSummary'); if (su) meta.summary = su;
-  const rf = val('pubEditRefs');
-  if (rf) { try { const a = JSON.parse(rf); if (Array.isArray(a) && a.length) meta.references = a; else { notice('引用需为非空 JSON 数组', 'error'); return; } } catch { notice('引用 JSON 格式错误', 'error'); return; } }
-  const hl = val('pubEditHl');
-  if (hl) { try { const a = JSON.parse(hl); if (Array.isArray(a) && a.length) meta.highlights = a; else { notice('金句需为非空 JSON 数组', 'error'); return; } } catch { notice('金句 JSON 格式错误', 'error'); return; } }
-  if (!Object.keys(meta).length) { notice('未填写任何要修改的字段', 'error'); return; }
+  const val = (elId) => { const el = document.getElementById(elId); return el ? el.value : ''; };
+  const parseArr = (s) => { try { const a = JSON.parse(s); return Array.isArray(a) ? a : []; } catch { return []; } };
+  const tags = val('pubEditTags').split(',').map(x => x.trim()).filter(Boolean);
+  const meta = {
+    title: val('pubEditTitle').trim(),
+    description: val('pubEditDesc'),
+    category: val('pubEditCat'),
+    tags: tags,
+    summary: val('pubEditSummary'),
+    references: parseArr(val('pubEditRefs')),
+    highlights: parseArr(val('pubEditHl')),
+  };
   const btn = document.getElementById('pubEditSave');
   if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
   try {
-    await j('/api/run/episode-meta-update', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ episodeId, meta }) });
-    notice('✓ 节目信息已更新', 'success');
-    if (meta.title) savePubMeta(id, { ...pm, title: meta.title });
+    const fd = new FormData();
+    fd.append('meta', JSON.stringify(meta));
+    if (window.__pubCover && window.__pubCover.blob) fd.append('cover', window.__pubCover.blob, 'cover.jpg');
+    const d = await j('/api/run/episode-save?episodeId=' + encodeURIComponent(episodeId), { method: 'POST', body: fd });
+    if (!(d && d.ok)) throw new Error((d && d.error) || '保存失败');
+    savePubMeta(id, Object.assign({}, pm, meta));
+    notice('✓ 节目信息已更新（全量覆盖）', 'success');
     if (typeof openDetail === 'function') openDetail(id);
   } catch (err) { notice('✗ 更新失败: ' + err.message, 'error'); }
   finally { if (btn) { btn.disabled = false; btn.textContent = '保存修改'; } }
 }
-
 // ---------- 封面：Canvas 生成（复刻 CLI cover） ----------
 const COVER_SIZE = 1400;
 const COVER_TEXTURES = ['squares', 'crosses', 'hexagons', 'woven', 'diagonal', 'zigzag'];
@@ -501,6 +566,44 @@ function applyPubMeta(meta){
   set('pubHl', Array.isArray(r.highlights) && r.highlights.length ? JSON.stringify(r.highlights) : '');
   if (typeof updatePubSubmitState === 'function') { try { updatePubSubmitState(); } catch {} }
 }
+// 已发布编辑态：meta 回填 pubEdit* 字段（不自动保存——点「保存修改」才更新节目）
+function applyPubMetaEdit(meta){
+  const r = meta || {};
+  const set = (el, v) => { const e = document.getElementById(el); if (e) e.value = (v === undefined || v === null) ? '' : (Array.isArray(v) ? v.join(', ') : String(v)); };
+  if (r.title) set('pubEditTitle', r.title);
+  if (r.description) set('pubEditDesc', r.description);
+  if (r.category) { const c = document.getElementById('pubEditCat'); if (c) c.value = r.category; }
+  if (Array.isArray(r.tags) && r.tags.length) set('pubEditTags', r.tags.join(', '));
+  if (r.summary) set('pubEditSummary', r.summary);
+  if (Array.isArray(r.references) && r.references.length) set('pubEditRefs', JSON.stringify(r.references));
+  if (Array.isArray(r.highlights) && r.highlights.length) set('pubEditHl', JSON.stringify(r.highlights));
+}
+async function openPubMetaConsoleEdit(){
+  const id = (typeof currentPubId !== 'undefined') ? currentPubId : '';
+  if (!id) { notice('缺少投稿 id', 'error'); return; }
+  if (typeof openLlmConsole !== 'function') { notice('llm-console.js 未加载', 'error'); return; }
+  const inBody = { id, fillOnly: true };
+  if (typeof getWorkflowInput === 'function') {
+    try {
+      const sel = ((typeof srvOf === 'function' && srvOf(id) && srvOf(id).review) || null);   // 服务端 submission.review
+      const scr = getWorkflowInput(id, 'scripts');
+      if (sel) inBody.review = sel;
+      if (Array.isArray(scr) && scr.length) inBody.script = scr[0];
+    } catch {}
+  }
+  openLlmConsole({
+    id: id, key: 'r4-meta', title: '发布 meta（已发布编辑）', url: '/api/run/publish',
+    scoring: true,
+    buildRequest: () => inBody,
+    onDone: ({ response }) => {
+      const meta = response && response.result;
+      if (!meta || typeof meta !== 'object') throw new Error('该版没有 meta 结果');
+      applyPubMetaEdit(meta);
+      if (typeof setWorkflowInput === 'function') { try { setWorkflowInput(id, 'metadata', meta); } catch {} }
+      notice('✓ meta 已回填下方字段——确认后点「保存修改」', 'success');
+    },
+  });
+}
 // 自动填充：脚本 → meta 提示词 → LLM → 回填表单
 async function autoFillMeta(){
   const id = (typeof currentPubId !== 'undefined') ? currentPubId : '';
@@ -512,7 +615,7 @@ async function autoFillMeta(){
     const inBody = { id, fillOnly: true };
     if (typeof getWorkflowInput === 'function') {
       try {
-        const sel = (getWorkflowInput(id, 'review') || getWorkflowInput(id, 'selection'));
+        const sel = ((typeof srvOf === 'function' && srvOf(id) && srvOf(id).review) || null);   // 服务端 submission.review
         const scr = getWorkflowInput(id, 'scripts');
         if (sel) inBody.review = sel;
         if (Array.isArray(scr) && scr.length) inBody.script = scr[0];
@@ -520,6 +623,7 @@ async function autoFillMeta(){
     }
     const d = await j('/api/run/publish', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(inBody) });
     applyPubMeta((d && d.result) || {});
+    if (d && d.result && typeof setWorkflowInput === 'function') { try { setWorkflowInput(id, 'metadata', d.result); } catch {} }   // 持久化到素材槽：刷新/重进发布卡可回填
     notice('✓ 已自动填充（可继续编辑）', 'success');
   } catch (e) { notice('✗ 自动填充失败: ' + e.message, 'error'); }
   finally { if (btn) { btn.disabled = false; btn.textContent = '✨ 自动填充'; } }
@@ -532,14 +636,14 @@ async function openMetaConsole(){
   const inBody = { id, fillOnly: true };
   if (typeof getWorkflowInput === 'function') {
     try {
-      const sel = (getWorkflowInput(id, 'review') || getWorkflowInput(id, 'selection'));
+      const sel = ((typeof srvOf === 'function' && srvOf(id) && srvOf(id).review) || null);   // 服务端 submission.review
       const scr = getWorkflowInput(id, 'scripts');
       if (sel) inBody.review = sel;
       if (Array.isArray(scr) && scr.length) inBody.script = scr[0];
     } catch {}
   }
   openLlmConsole({
-    id: id, key: 'meta', title: '发布 meta（控制台）', url: '/api/run/publish',
+    id: id, key: 'r4-meta', title: '发布 meta（控制台）', url: '/api/run/publish',
     scoring: true,   // 对应 meta 模板 config.scoring
     buildRequest: () => inBody,
     onDone: ({ response }) => {
@@ -586,6 +690,13 @@ async function publishEpisode(){
   const btn = document.getElementById('pubSubmitBtn');
   if (btn) { btn.disabled = true; btn.textContent = '发布中…'; }
   setPubFormDisabled(true);   // 发布中：禁用全部输入框/按钮
+  // 发布卡头进「发布中」（就地改，不重渲染——否则表单会被冲掉）
+  try {
+    if (!window.__publishing) window.__publishing = {};
+    window.__publishing[id] = true;
+    const st = document.getElementById('pubCardStatus');
+    if (st) { st.innerHTML = "<span class='spin' style='display:inline-block'></span> 发布中…"; st.style.color = '#4f8cff'; }
+  } catch (e) {}
   try {
     const names = (typeof window !== 'undefined' && window.__pubCoverNames) || {};
     // 共享工作流状态：audioKey 由创作步（full audio 上传 R2）写入，发布步直接复用，免重传
@@ -614,7 +725,7 @@ async function publishEpisode(){
     if (window.__pubCover && window.__pubCover.blob) form.append('cover', window.__pubCover.blob, 'cover.jpg');
     const d = await j('/api/run/publish-submit?id=' + encodeURIComponent(id), { method: 'POST', body: form });
     if (!(d && d.ok)) throw new Error((d && d.error) || '发布失败');
-    savePubMeta(id, { episodeId: d.episodeId, slug: d.slug, number: d.number, title: meta.title });
+    savePubMeta(id, { episodeId: d.episodeId, slug: d.slug, number: d.number, title: meta.title, description: meta.description || null, category: meta.category || null, tags: meta.tags || null, summary: meta.summary || null, references: meta.references || null, highlights: meta.highlights || null, language: (typeof window !== 'undefined' && window.__pubLang) || null, durationSeconds: meta.durationSeconds || null });
     // 素材清除时机 = 节目发布后：清浏览器素材（store/seg 缓存/full 缓存/fullmeta）——3 个 R2 产出物保留
     if (typeof clearAssets === 'function') { try { clearAssets(id); } catch {} }
     if (typeof clearSegAudioCache === 'function') { try { clearSegAudioCache(id); } catch {} }
@@ -625,6 +736,11 @@ async function publishEpisode(){
   } catch (e) { notice('✗ 发布失败: ' + e.message, 'error'); }
   finally {
     setPubFormDisabled(false);   // 恢复输入（按钮状态由必填校验决定）
+    try {
+      if (window.__publishing) window.__publishing[id] = false;
+      const st = document.getElementById('pubCardStatus');   // 成功时已重渲染成「发布完成」，这里只管失败回退
+      if (st && !/发布完成/.test(st.textContent || '')) { st.textContent = '待发布'; st.style.color = '#d29922'; }
+    } catch (e) {}
     if (typeof updatePubSubmitState === 'function') { try { updatePubSubmitState(); } catch {} }
   }
 }

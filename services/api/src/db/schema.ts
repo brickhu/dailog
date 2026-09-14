@@ -119,7 +119,8 @@ export interface PersonaSnapshot {
 // ---------------------------------------------------------------------------
 
 /** 投稿：用户提交的分享链接 + 采样（采样存 voiceSamples，投稿仅关联 userId）。
- *  状态机：submitted（待审核）→ rejected（拒审，附原因）/ published（已上线）。
+ *  状态机：submitted（待审核）→ collected（已采集/进入制作）→ selected（编辑采纳脚本·锁定选题）
+ *          → crafted（音频就绪）→ published（已上线）；rejected（拒审，附原因）贯穿。
  *  审核与制作在编辑本地 Agent 完成，此处不承载生成中间状态。
  *  callNameInEpisode：本次节目的主持人自称（投稿确认页默认填 displayName，可改；
  *  脚本生成时按脚本语言改写：匹配原样/英文通用/小语种转英文）。
@@ -155,7 +156,7 @@ export const submissions = pgTable(
     reviewScore: real("review_score"),
     /** 审核采纳结果（编辑采纳的整包审核产物：评分明细/主线/困惑/建议——创作卡与下游输入源；不参与状态机） */
     review: jsonb("review").$type<Record<string, unknown> | null>(),
-    status: text("status", { enum: ["submitted", "collected", "rejected", "published", "crafted"] }).notNull().default("submitted"),
+    status: text("status", { enum: ["submitted", "collected", "selected", "rejected", "published", "crafted"] }).notNull().default("submitted"),
     /** 拒审原因（rejected 时必填，投稿人 /me/submits 可见） */
     rejectedReason: text("rejected_reason"),
     /** 编辑处理时间（reject/publish 落库） */

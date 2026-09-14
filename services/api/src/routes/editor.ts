@@ -137,7 +137,7 @@ export function editorRoutes(deps: EditorDeps) {
   });
   app.openapi(r1, (async (c: Context) => {
     const raw = c.req.query("status");
-    const status = raw === "rejected" || raw === "published" || raw === "crafted" || raw === "collected" ? raw : "submitted";
+    const status = raw === "rejected" || raw === "published" || raw === "crafted" || raw === "collected" || raw === "selected" ? raw : "submitted";
     const list = await deps.repo.submissions.listQueue(status);
     return c.json(list);
   }) as unknown as RouteHandler<typeof r1, AuthEnv>);
@@ -313,7 +313,7 @@ export function editorRoutes(deps: EditorDeps) {
     const detail = await deps.repo.submissions.getDetail(id);
     if (!detail) return c.json({ error: "not_found" }, 404);
     // 发布起点：collected（审核通过、未合成）/ crafted（音频就绪，发布卡发布）——published/rejected 不可再发
-    if (detail.status !== "collected" && detail.status !== "submitted" && detail.status !== "crafted") {
+    if (detail.status !== "collected" && detail.status !== "submitted" && detail.status !== "crafted" && detail.status !== "selected") {
       return c.json({ error: "invalid_state", detail: `该投稿当前状态为 ${detail.status}，无法发布` }, 409);
     }
 
@@ -465,12 +465,35 @@ export function editorRoutes(deps: EditorDeps) {
     const detail = await deps.repo.submissions.getDetail(id);
     if (!detail) return c.json({ error: "not_found" }, 404);
     // 合成确认来自已采集/已审核（collected）、待发布重标（crafted）；已发布/已拒则跳过
-    if (detail.status !== "collected" && detail.status !== "submitted" && detail.status !== "crafted") {
+    if (detail.status !== "collected" && detail.status !== "submitted" && detail.status !== "crafted" && detail.status !== "selected") {
       return c.json({ error: "invalid_state", detail: "当前状态 " + detail.status + " 无法标记 crafted" }, 409);
     }
     await deps.repo.submissions.setStatus(id, "crafted");
     return c.json({ ok: true, status: "crafted" });
   }) as unknown as RouteHandler<typeof rCrafted, AuthEnv>);
+
+  /** 退回审题：把已锁定选题 / 已合成的投稿退回 collected（编辑点「重新审题」时调用）。
+   *  状态流：selected、crafted → collected；published / rejected 不可逆，submitted / collected 无需退回。
+   *  连清空 locked review（collected 的语义＝已采集、未选题）；不动脚本产物、不通知投稿人。 */
+  const rReopen = createRoute({
+    method: "post",
+    path: "/v1/editor/submissions/:id/reopen",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/submissions/:id/reopen" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(rReopen, (async (c: Context) => {
+    const id = c.req.param("id")!;
+    const detail = await deps.repo.submissions.getDetail(id);
+    if (!detail) return c.json({ error: "not_found" }, 404);
+    if (detail.status !== "selected" && detail.status !== "crafted") {
+      return c.json({ error: "invalid_state", detail: "当前状态 " + detail.status + " 无需退回审题" }, 409);
+    }
+    await deps.repo.submissions.setReviewResult(id, null);   // 撤销这次锁定（重新审题 = 重新来过）
+    await deps.repo.submissions.setStatus(id, "collected");
+    return c.json({ ok: true, status: "collected" });
+  }) as unknown as RouteHandler<typeof rReopen, AuthEnv>);
 
   /** 成品音频（R2 full/{id}.m4a，播放流）——创作完成后编辑工作台/发布流程直接加载 */
   const rFullAudio = createRoute({
@@ -555,6 +578,64 @@ export function editorRoutes(deps: EditorDeps) {
     await deps.repo.episodes.updatePublished(ep.id, patch);
     return c.json({ ok: true });
   }) as unknown as RouteHandler<typeof r6, AuthEnv>);
+
+  /** 已发布节目整包更新（发布卡编辑·全改）：multipart（meta JSON 全量字段 + 可选 cover 文件）
+   *  → 文字字段整体覆盖（空串=清空）；cover 有则换 covers/{submissionId}.jpg。音频/期号/公开状态不动 */
+  const rEpUpdate = createRoute({
+    method: "post",
+    path: "/v1/editor/episodes/:id/update",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/episodes/:id/update" },
+      404: { content: { "application/json": { schema: Err } }, description: "不存在" },
+    },
+  });
+  app.openapi(rEpUpdate, (async (c: Context) => {
+    const id = c.req.param("id")!;
+    const ep = await deps.repo.episodes.getById(id);
+    if (!ep) return c.json({ error: "not_found" }, 404);
+    const form = await c.req.formData().catch(() => null);
+    const rawMeta = typeof form?.get("meta") === "string" ? (form.get("meta") as string) : null;
+    const parsed = (() => { try { return rawMeta ? JSON.parse(rawMeta) as Record<string, unknown> : null; } catch { return null; } })();
+    if (!parsed) return c.json({ error: "invalid_meta", detail: "meta 字段不是合法 JSON" }, 400);
+    const pick = (k: string) => (parsed[k] !== undefined ? (parsed[k] as never) : undefined);
+    const row: Record<string, unknown> = {};
+    for (const k of ["title", "description", "summary", "category", "language", "transcript", "guestId", "durationSeconds"]) {
+      const v = pick(k);
+      if (v !== undefined) row[k] = v;
+    }
+    for (const k of ["tags", "references", "highlights"]) {
+      const v = pick(k);
+      if (v !== undefined) row[k] = Array.isArray(v) ? v : (v === null || v === "" ? [] : v);
+    }
+    const coverFile = form?.get("cover");
+    if (coverFile instanceof File && coverFile.size > 0) {
+      if (coverFile.size > 5 * 1024 * 1024) return c.json({ error: "cover_too_large" }, 400);
+      const coverBytes = await normalizeCoverBytes(new Uint8Array(await coverFile.arrayBuffer()));
+      const coverUrl = `covers/${ep.submissionId}.jpg`;
+      await deps.storage.put(coverUrl, coverBytes);
+      row.coverUrl = coverUrl;
+    }
+    if (Object.keys(row).length) await deps.repo.episodes.updateEpisodeContent(id, row as never);
+    return c.json({ ok: true });
+  }) as unknown as RouteHandler<typeof rEpUpdate, AuthEnv>);
+
+  /** 已发布节目封面字节（发布卡编辑右列展示当前封面）——covers/{submissionId}.jpg */
+  const rEpCover = createRoute({
+    method: "get",
+    path: "/v1/editor/episodes/:id/cover",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/episodes/:id/cover" },
+      404: { content: { "application/json": { schema: Err } }, description: "无封面或不存在" },
+    },
+  });
+  app.openapi(rEpCover, (async (c: Context) => {
+    const id = c.req.param("id")!;
+    const ep = await deps.repo.episodes.getById(id);
+    if (!ep || !ep.coverUrl) return c.json({ error: "no_cover" }, 404);
+    const bytes = await deps.storage.get(ep.coverUrl).then((r) => r.data).catch(() => null);
+    if (!bytes) return c.json({ error: "no_cover" }, 404);
+    return new Response(bytes as unknown as BodyInit, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "private, max-age=60" } });
+  }) as unknown as RouteHandler<typeof rEpCover, AuthEnv>);
 
   /** 重新生成已发布节目：multipart（audio + 可选 cover + meta，结构同 publish）——
    *  更新已有 episode 行（保留 id/slug/期号/统计/精选/公开状态），覆盖 R2 音频/封面对象，
@@ -939,6 +1020,14 @@ export function editorRoutes(deps: EditorDeps) {
     const review = body && body.review && typeof body.review === "object" ? body.review : null;
     if (!review) return c.json({ error: "review_required" }, 400);
     await deps.repo.submissions.setReviewResult(id, review as Record<string, unknown>);
+    // 采纳即锁定选题：投稿置为 selected（submitted/collected/selected → selected；crafted/published/rejected 不动）
+    try {
+      const cur = await deps.repo.submissions.getDetail(id);
+      const st = cur && cur.status;
+      if (st === "submitted" || st === "collected" || st === "selected") {
+        await deps.repo.submissions.setStatus(id, "selected");
+      }
+    } catch { /* 状态联动失败不阻塞采纳落库 */ }
     return c.json({ ok: true, id });
   }) as unknown as RouteHandler<typeof rReviewResultPut, AuthEnv>);
 

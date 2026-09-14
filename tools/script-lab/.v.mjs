@@ -1,5 +1,5 @@
 import { getPrompt, renderPrompt } from "./lib/prompt.mjs";
-const pScript = getPrompt("review.script");
+const pScript = getPrompt("r2-script");
 const msgs = renderPrompt(pScript, { score: 7.3, selection: { main_topic: "挂谷猜想", category: "insight", advice: "用线段旋转的最小面积做开场钩子" }, suggestion: "s", host: { callName: "飞" }, guests: [{ name: "KAI" }] });
 console.log("结构:", msgs.map(m => m.role).join(" + "));
 const h = msgs[0].content, u = msgs[1].content;

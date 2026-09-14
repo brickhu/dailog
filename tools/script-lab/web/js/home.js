@@ -4,6 +4,8 @@ const fetchingIds = new Set();
 let fetchPollTimer = null;
 
 // ---- 采集弹层（单条/批量采集在弹层内显示进度，离开列表页不丢） ----
+let _collectTargetId = null;   // 本次采集的目标 id（弹窗只认它的结果，不显示历史残留）
+
 function openCollectModal(title){
   const m = document.getElementById('collectModal');
   if (!m) return;
@@ -30,7 +32,10 @@ function updateCollectModal(d){
   fetching.forEach((f) => {
     rows.push(`<div style='margin-bottom:6px'><span class='spin' style='display:inline-block'></span> 采集中 <span class='mono muted'>${esc(f.url || f.id || '')}</span></div>`);
   });
+  // 只展示本次采集目标 id 的结果（fetchResults 跨请求共享，历史失败会残留——不显示旧条目）
+  const targetId = _collectTargetId;
   Object.keys(results).forEach((id) => {
+    if (targetId && id !== targetId) return;
     const r = results[id];
     const ok = r && r.ok;
     rows.push(`<div style='margin-bottom:6px;color:${ok ? '#3fb950' : '#f85149'}'><b>${ok ? '✓' : '✗'}</b> <span>${esc((r && r.detail) || (ok ? '采集成功' : '采集失败'))}</span></div>`);
@@ -43,6 +48,11 @@ function updateCollectModal(d){
   if (closeBtn) closeBtn.disabled = !done;
   const titleEl = document.getElementById('collectModalTitle');
   if (titleEl) titleEl.textContent = done ? '采集完成' : ('采集中 ' + fetching.length + ' 条…');
+  // 本次目标已完成 → 自动关弹窗并刷新列表（成功与失败都收口）
+  if (done && targetId && results[targetId]) {
+    _collectTargetId = null;
+    setTimeout(() => { closeCollectModal(); loadApp(); }, 600);
+  }
 }
 
 async function loadApp(){
@@ -113,6 +123,7 @@ document.addEventListener('click', (e) => {
 });
 
 async function singleFetch(id){
+  _collectTargetId = id;   // 本次采集目标
   // 打开采集弹层（离开列表页不丢进度）
   openCollectModal('采集中…');
   // 立即显示 spinner + 状态条（不等 server）

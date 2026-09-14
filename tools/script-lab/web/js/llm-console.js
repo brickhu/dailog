@@ -202,15 +202,21 @@
       return s;
     }
     function summary(resp) { try { const r = resp && resp.result; if (r && Array.isArray(r.scripts)) return 'scripts × ' + r.scripts.length + fidScoreSuffix(r.scripts); if (r && r.score !== undefined) return 'score=' + r.score; if (r) return 'ok'; } catch {} return 'ok'; }
-    // 脚本保真总分（round2 服务端已按原话/改写/新写标注 fidelity；无标注则按 seg.src 兜底统计；内容句=原话+改写）
+    // 脚本质量摘要：接话 = host 现场补的话（不是缺陷）；超长段 = 一口气说不完的段
     function fidScoreSuffix(scripts) {
-      let orig = 0, rw = 0, nw = 0;
+      let talk = 0, long = 0;
       (Array.isArray(scripts) ? scripts : []).forEach((sc) => {
-        if (sc && sc.fidelity && typeof sc.fidelity.contentTotal === 'number') { orig += sc.fidelity.hostOriginal || 0; rw += sc.fidelity.hostRewrite || 0; nw += sc.fidelity.hostNew || 0; }
-        else if (sc && Array.isArray(sc.segments)) { sc.segments.forEach((seg) => { if (seg && seg.speaker === 'host') { if (seg.src === 'original') orig++; else if (seg.src === 'rewrite') rw++; else nw++; } }); }
+        if (sc && sc.fidelity) { /* 保真标注仍在 sc.fidelity 里（原话/改写/接话），标题只露接话段数 */ }
+        if (sc && Array.isArray(sc.segments)) sc.segments.forEach((seg) => {
+          if (!seg || seg.speaker !== 'host') return;
+          if (seg.chain === false || (!seg.chain && seg.src && seg.src === 'new')) talk++;
+          if (String(seg.text || '').length > 100) long++;
+        });
       });
-      const content = orig + rw;
-      return content ? ' · 原话率 ' + Math.round((orig / content) * 100) + '%（原话 ' + orig + ' · 改写 ' + rw + ' · 新写 ' + nw + '）' : '';
+      const parts = [];
+      if (talk) parts.push('接话 ' + talk + ' 段');
+      if (long) parts.push('超长段 ' + long);
+      return parts.length ? ' · ' + parts.join(' · ') : '';
     }
     // 标准折叠卡片：整条头部可点（带 ▸/▾），正文收在卡片内；footer=正文末尾单独一行小字
     function histBlock(label, color, json, footer) {

@@ -70,13 +70,22 @@ export function isShareUrl(input: string): boolean {
   }
 }
 
-/** 规范化分享 URL：https + host 小写 + 路径（去 query/hash/协议差异）——
- *  同一分享内容可能经多个 URL（平台结构变化 / 用户追加追踪参数）访问，
+/** 平台分享链接的同站点宿主别名（host 等价 → 统一到标准 host，防同一分享内容经别名 URL 重复投稿）：
+ *  doubao.com/www.doubao.com、chat.openai.com/chatgpt.com（旧分享链接重定向）、twitter.com/x.com */
+const HOST_ALIASES: Record<string, string> = {
+  "doubao.com": "www.doubao.com",
+  "chat.openai.com": "chatgpt.com",
+  "twitter.com": "x.com",
+};
+
+/** 规范化分享 URL：https + host 小写（别名 host 归一）+ 路径（去 query/hash/协议差异）——
+ *  同一分享内容可能经多个 URL（平台结构变化 / 用户追加追踪参数 / 别名域名）访问，
  *  入库统一用提炼出的标准 URL（与 submissionKeyFromUrl 的 key 同源） */
 export function canonicalUrl(input: string): string {
   try {
     const u = new URL(input);
-    return `https://${u.hostname.toLowerCase()}${u.pathname.replace(/\/+$/, "")}`;
+    const host = u.hostname.toLowerCase();
+    return `https://${HOST_ALIASES[host] ?? host}${u.pathname.replace(/\/+$/, "")}`;
   } catch {
     return input;
   }

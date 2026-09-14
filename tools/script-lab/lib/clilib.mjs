@@ -10,12 +10,22 @@ const BUILTIN_ENVS = [
 ];
 
 export function listEnvironments() {
-  // 支持环境变量覆盖（容器/远程部署）：LAB_API_BASE 必填时仅暴露单一环境
-  const over = process.env.LAB_API_BASE || "";
+  // lab 是 api services 的本地管理工具：默认暴露 local/dev/prod 三套。
+  // 容器/部署场景：LAB_API_BASE 覆盖“所管 api 服务”那一档（默认 local；DAILOG_ENV=dev/prod 可指定覆盖哪档），
+  // 其余档仍走内置远端地址——一个登录页即可管理本机与远程三套 api。
+  const over = (process.env.LAB_API_BASE || "").replace(/\/+$/, "");
   if (over) {
-    const name = process.env.DAILOG_ENV || "remote";
-    const siteUrl = process.env.LAB_SITE_URL || over;
-    return [{ name, label: "远程（LAB_API_BASE 配置）", apiBase: over.replace(/\/$/, ""), siteUrl }];
+    const pinned = BUILTIN_ENVS.some((e) => e.name === process.env.DAILOG_ENV) ? process.env.DAILOG_ENV : "local";
+    const siteOverride = process.env.LAB_SITE_URL || "";
+    return BUILTIN_ENVS.map((e) => {
+      if (e.name !== pinned) return { ...e };
+      return {
+        ...e,
+        apiBase: over,
+        siteUrl: siteOverride || e.siteUrl,
+        label: e.label.replace(/（API [^）]*）/, "（" + over + "）"),
+      };
+    });
   }
   return BUILTIN_ENVS;
 }
@@ -35,7 +45,7 @@ function loadSecrets() {
 
 /** 返回 { envName, apiBase, siteUrl, secrets }——兼容旧 CLI loadConfig 消费方（configFor） */
 export function loadConfig(argv = process.argv) {
-  const name = flagEnvValue(argv) || process.env.DAILOG_ENV || (process.env.LAB_API_BASE ? "remote" : null);
+  const name = flagEnvValue(argv) || process.env.DAILOG_ENV || (process.env.LAB_API_BASE ? "local" : null);
   const envs = listEnvironments();
   const target = (name && envs.find((e) => e.name === name)) || (envs.length === 1 ? envs[0] : null);
   if (!target) {

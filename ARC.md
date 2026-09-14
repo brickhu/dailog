@@ -139,7 +139,7 @@ covers/{submissionId}.jpg                  ← 封面（lab 发布时上传，�
   制作工作态（`workflows/{env}/{id}.json`）、成品音频（`episodes/{userId}/{id}.m4a`）；
   浏览器 localStorage（`assets-{id}` 素材 store：review/scripts/metadata 工作流输入槽 + dialogue 快照）与 IndexedDB（seg 音频/full/BGM）
   只作工作副本——**无本地草稿目录**（dailog-editor 的 `.dailog-editor/drafts` 依赖已去除）
-- **提示词工程**：`prompts/*.md`（review.score → 审题；review.script handoff+user → 创作；polish.all → 打磨；meta → 节目信息）+ prompts.json；
+- **提示词工程**：`prompts/*.md`（r1-review → 审题；r2-script handoff+user → 创作；r3-polish → 打磨；r4-meta → 节目信息）+ prompts.json；
   服务端 promptSig（md mtime 指纹）随每轮输出落 `feedback/review.jsonl`——可回溯“哪版规则产生了这个结果”，构成提示词反馈闭环
 - **采集**：lib/collect.mjs 自包含（不依赖 CLI）——分享链接解码 → dialogue.json → R2（URL 哈希 key）；
   服务端标记 collected；批量并发（/api/run/batch）
@@ -150,12 +150,12 @@ covers/{submissionId}.jpg                  ← 封面（lab 发布时上传，�
 
 ### 4.1 审题与脚本（提示词两段式）
 
-- review.score：主线话题 + 「用户的困惑」（逐字引用）+ 四维评分（共鸣×4/思考推进×2/张力×3/可迁移×1，硬伤写进维度理由）+
+- r1-review：主线话题 + 「用户的困惑」（逐字引用）+ 四维评分（共鸣×4/思考推进×2/张力×3/可迁移×1，硬伤写进维度理由）+
   创作方向——输出材料，不给通过/拒绝结论（编辑决定）
-- review.script（handoff = 剪辑规则 / user = 素材与任务）：保真单位 = **用户的问题链**；困惑颗粒不磨平；
+- r2-script（handoff = 剪辑规则 / user = 素材与任务）：保真单位 = **用户的问题链**；困惑颗粒不磨平；
   AI 点破困惑的提炼句与**重塑时刻**（换框架，“思考真正移动的证据，比金句更值钱”）近原样保留；任务式改写请教式；
   现场感（话筒是热的，禁重放腔/解说腔）；结尾必须收住（收获对 host 说，不对听众喊话）
-- polish.all：只做顺口 / 放大 / 停顿 / 情绪标签——三主角 = host 困惑句 / guest 接住与提炼 / 想通瞬间；
+- r3-polish：只做顺口 / 放大 / 停顿 / 情绪标签——三主角 = host 困惑句 / guest 接住与提炼 / 想通瞬间；
   北极星 = 听起来像“两个人在想”不是“两个人在念”；不做结构创作（事件/顺序/提炼句含义不可动），
   offset（1-10）汇报终稿与原文偏离并交代“动了哪/为什么/守住什么”
 

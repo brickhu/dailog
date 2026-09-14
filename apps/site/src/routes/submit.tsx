@@ -177,6 +177,9 @@ export default function SubmitPage() {
   // 可达性探测结果（仅展示，不阻断投稿）：null = 检测中 / reachable = 存在 / notfound = 404 / unknown = 无法确认
   const [reachable, setReachable] = createSignal<Reachability | null>(null);
   const [existing, setExisting] = createSignal<string | null>(null);
+  // 重复投稿响应的附属信息：已有投稿 id（详情链接）+ 已生成节目（published 才返回）
+  const [existingId, setExistingId] = createSignal<string | null>(null);
+  const [existingEpisode, setExistingEpisode] = createSignal<{ slug?: string; title?: string | null } | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   // 人设（可选）+ 采样（必填；已有采样自动填充可沿用）
   const [callName, setCallName] = createSignal("");   // callNameInEpisode：本次节目称呼（默认 displayName）
@@ -293,11 +296,15 @@ export default function SubmitPage() {
         }),
       });
       const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+      // 重复投稿：服务端命中已有投稿时返回 200 { existing: true }（信息响应，非错误码）——
+      // 必须先于 res.ok 判断，否则 existing 被当成功处理，页面误显示“提交成功/等待审核”
+      if (data?.existing) {
+        setExisting(String((data as { status?: string })?.status ?? "submitted"));
+        setExistingId(typeof data?.submissionId === "string" ? data.submissionId : null);
+        setExistingEpisode((data as { episode?: { slug?: string; title?: string | null } | null })?.episode ?? null);
+        return;
+      }
       if (!res.ok) {
-        if (data?.existing) {
-          setExisting(String((data as { status?: string })?.status ?? "submitted"));
-          return;
-        }
         // 错误码映射友好文案；未知码显示后端 detail
         const code = String(data?.error ?? res.status);
         const mapped = t(`submit.error.${code}` as never);
@@ -414,9 +421,16 @@ export default function SubmitPage() {
 
                 {/* 提交时撞重复 / 错误提示（区块外） */}
                 <Show when={existing()}>
-                  <p {...stylex.props(styles.error)}>{t("submit.existing")}</p>
+                  {/* 重复投稿：已生成节目（published）提示“只能生成一期”并指向节目；仅已有投稿提示已投过并指向投稿详情 */}
+                  <p {...stylex.props(styles.error)}>
+                    {existingEpisode()?.slug ? t("submit.existing") : t("importDialog.duplicate")}
+                  </p>
                   <p {...stylex.props(styles.hint)}>
-                    <A href="/me/submits">{t("submit.viewSubmissions")}</A>
+                    <Show when={existingEpisode()?.slug} fallback={
+                      <A href={existingId() ? `/submission/${existingId()}` : "/me/submits"}>{t("submit.viewSubmissions")}</A>
+                    }>
+                      <A href={`/episode/${existingEpisode()!.slug}`}>{existingEpisode()!.title ?? t("submit.viewEpisode")}</A>
+                    </Show>
                   </p>
                 </Show>
                 <Show when={error()}>

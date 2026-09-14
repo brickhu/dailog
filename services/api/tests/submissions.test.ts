@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import { canonicalUrl, submissionIdFromUrl, submissionsRoutes } from "../src/routes/submissions";
+import { canonicalUrl, submissionsRoutes } from "../src/routes/submissions";
 import type { Repos } from "../src/repo";
 import { fakePlaylistsRepo } from "./helpers/fake-playlists";
 
@@ -168,8 +168,8 @@ describe("POST /v1/submissions —— 并发上限 / 重复 / 入库", () => {
     expect(await res.json()).toEqual({ existing: true, submissionId: "sub-old", status: "submitted", episode: null });
   });
 
-  it("creates submission with url + optional title + callName + suggestion + voiceSampleId（采样校验传参、trim 入库）", async () => {
-    const create = vi.fn(async (_id: string, _u: string, _url: string, _t: string | null, _cn?: string | null, _pi?: unknown, _vs?: string | null, _sug?: string | null) => ({ id: _id || "sub-new" }));
+  it("creates submission with url + title + callName + suggestion + voiceSampleId（采样校验传参、trim、规范化入库）", async () => {
+    const create = vi.fn(async (_id: string, _u: string, _url: string, _t: string | null, _sug?: string | null, _guest?: unknown, _host?: unknown) => ({ id: _id || "sub-new" }));
     const hasReadyVoiceSample = vi.fn(async () => true);
     const app = makeApp({ create, hasReadyVoiceSample });
     const res = await app.request("/v1/submissions", {
@@ -180,10 +180,19 @@ describe("POST /v1/submissions —— 并发上限 / 重复 / 入库", () => {
     expect(res.status).toBe(201);
     // 采样归属校验：传入的 voiceSampleId 必须原样交给校验（防引用他人采样）
     expect(hasReadyVoiceSample).toHaveBeenCalledWith("user-1", "11111111-1111-4111-8111-111111111111");
-    expect(create).toHaveBeenCalledWith(
-      submissionIdFromUrl(VALID_URL), "user-1", canonicalUrl(VALID_URL), "我的对话", "飞",
-      expect.objectContaining({ displayName: "测试员" }), "11111111-1111-4111-8111-111111111111", "想聊聊 AI 编程的实际用法",
-    );
+    // 入库参数：id 为 UUID 格式（含随机 rand，不可预测）；url 规范化入库；host 定格 callName/画像/采样
+    const createArgs = create.mock.calls[0]!;
+    expect(createArgs[1]).toBe("user-1"); // userId
+    expect(createArgs[2]).toBe(canonicalUrl(VALID_URL)); // 规范化 URL 入库
+    expect(createArgs[3]).toBe("我的对话"); // title
+    expect(createArgs[4]).toBe("想聊聊 AI 编程的实际用法"); // suggestion（trim 后）
+    expect(createArgs[5]).toBeNull(); // guest（无平台匹配）
+    expect(createArgs[6]).toEqual(expect.objectContaining({
+      callName: "飞",
+      voiceSampleId: "11111111-1111-4111-8111-111111111111",
+      personaInfo: expect.objectContaining({ displayName: "测试员" }),
+    }));
+    expect(String(createArgs[0])).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 });
 

@@ -1,0 +1,114 @@
+{
+ "r1-review": {
+  "version": 2,
+  "description": "审题：对话 → 判别（真/假认知探索）→ 估值 → 0/1-N 提案（who/value/carrier/endpoint/solve/process + 四维评分）",
+  "config": {
+   "temperature": 0.1,
+   "seed": 41,
+   "maxTokens": 8192,
+   "thinking": "disabled",
+   "responseFormat": {
+    "type": "json_object"
+   }
+  },
+  "params": {
+   "dialogue": "对话 JSON 字符串（必填）",
+   "suggestion": "投稿建议（可空）"
+  },
+  "messages": [
+   {
+    "role": "system",
+    "file": "r1-review.system.md"
+   },
+   {
+    "role": "user",
+    "file": "r1-review.user.md"
+   }
+  ],
+  "name": "R1:审题 · 提案生成（判别先行 + 校准集）"
+ },
+ "r2-script": {
+  "version": 3,
+  "description": "脚本创作（把对话原文重演成现场访谈：边界/访谈外壳/对手戏/检查清单/完整示范；输出 hostOpen/guestOpen/turns/hostWrap/guestSum/hostOutro）",
+  "config": {
+   "temperature": 0.8,
+   "maxTokens": 8192,
+   "thinking": "disabled",
+   "seed": 49,
+   "responseFormat": {
+    "type": "json_object"
+   }
+  },
+  "params": {
+   "brand": "节目品牌名（缺省 dailog）",
+   "suggestion": "投稿建议（可空）",
+   "host": "主持人信息（可空，缺省注入「主持人」）",
+   "guests": "嘉宾信息数组（可空，缺省注入「AI」）",
+   "proposal": "编辑选定的提案（契约：who/value/endpoint/solve + 这一期要走完的几步）",
+   "dialogue": "对话原文（渲染为 tN.M 编号素材，供台词指认出处）"
+  },
+  "messages": [
+   {
+    "role": "system",
+    "file": "r2-script.handoff.md"
+   },
+   {
+    "role": "user",
+    "file": "r2-script.user.md"
+   }
+  ],
+  "name": "R2:脚本创作（开头/对手戏/收尾）"
+ },
+ "r3-polish": {
+  "version": 2,
+  "description": "脚本语感打磨（内容 + 听感；困惑/想通/移交拍为四主角；可选提案事件低偏移）",
+  "config": {
+   "temperature": 0.4,
+   "maxTokens": 8192,
+   "thinking": "disabled"
+  },
+  "params": {
+   "scripts": "脚本 JSON",
+   "scope": "all|one|line",
+   "target": "定位目标（可空）",
+   "revision": "修改意见（可空）",
+   "dialogue": "原文对话 JSON（scope=all 定稿对照用；可空）",
+   "proposal": "选定提案（可空；含 event.quote —— 有则事件/困惑节点低偏移）"
+  },
+  "messages": [
+   {
+    "role": "system",
+    "file": "r3-polish.system.md"
+   },
+   {
+    "role": "user",
+    "file": "r3-polish.user.md"
+   }
+  ],
+  "name": "R3:语感打磨（polish）"
+ },
+ "r4-meta": {
+  "version": 1,
+  "description": "发布元信息（标题/描述/封面提示等）",
+  "config": {
+   "temperature": 0.4,
+   "maxTokens": 8192,
+   "thinking": "disabled"
+  },
+  "params": {
+   "script": "脚本 JSON",
+   "review": "round1 审题产物（选题信息，可空）"
+  },
+  "messages": [
+   {
+    "role": "system",
+    "file": "r4-meta.system.md"
+   },
+   {
+    "role": "user",
+    "file": "r4-meta.user.md"
+   }
+  ],
+  "name": "R4:发布元信息（meta）"
+ }
+}

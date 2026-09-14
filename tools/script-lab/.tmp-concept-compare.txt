@@ -1,0 +1,99 @@
+{
+ "current": {
+  "chain": [
+   {
+    "type": "confusion",
+    "speaker": "user",
+    "turns": [
+     4
+    ],
+    "quote": "Glasp说实话，跟我们 aimark完全不是一回事"
+   },
+   {
+    "type": "reframe",
+    "speaker": "assistant",
+    "turns": [
+     5
+    ],
+    "quote": "一个是'我收藏了什么'，一个是'我想出了什么'"
+   },
+   {
+    "type": "event",
+    "speaker": "user",
+    "turns": [
+     6
+    ],
+    "quote": "你不用替换MRD，你说说aimark如何应对Perplexity Pages, 以及如何差异化？"
+   }
+  ],
+  "event": {
+   "modal": "mirror",
+   "quote": "你不用替换MRD，你说说aimark如何应对Perplexity Pages, 以及如何差异化？",
+   "nodeId": "C3"
+  },
+  "storyline": {
+   "beats": [
+    {
+     "who": "用户",
+     "step": "起",
+     "text": "我拿着我的产品方案来问你，你却说我的竞品分析有盲区？"
+    },
+    {
+     "who": "AI",
+     "step": "承",
+     "text": "你看，Perplexity Pages和Glasp其实已经做了类似的事，你的MRD里都没提。"
+    },
+    {
+     "who": "用户",
+     "step": "转",
+     "text": "Glasp跟我们完全不是一回事，你别搞混了。"
+    },
+    {
+     "who": "AI",
+     "step": "合",
+     "text": "你说得对，我收回。那我们来聊聊怎么应对Perplexity Pages吧。"
+    }
+   ],
+   "event": "用户从被AI纠正到主动追问差异化策略，AI给出五条具体打法",
+   "topic": "这是关于「AI产品如何面对巨头竞品」的对话",
+   "takeaway": "当AI指出你的盲区时，别急着反驳，先分清对手再谈竞争。",
+   "takeawayKind": "mirror"
+  },
+  "modal": "mirror",
+  "landingHint": "移交动作：听众可以带走一个'先分清对手再谈竞争'的思考框架。",
+  "offChain": [
+   "回合0-3：初始MRD评估与AI反馈，属于铺垫",
+   "回合7-8：技术可行性讨论，属于支线",
+   "回合9-10：集成流畅度讨论，属于支线",
+   "回合11-13：播客功能讨论，属于支线"
+  ],
+  "takeawayKind": "mirror",
+  "confusion": "用户认为自己的产品aimark与Glasp完全不同，但AI之前把它们放在一起比较，用户感到被误解，想澄清真正的差异。"
+ },
+ "converged": {
+  "topic": "AI产品MRD的竞品分析与差异化定位",
+  "chain": [
+   {
+    "question": "Glasp说实话，跟我们 aimark完全不是一回事",
+    "turns": [
+     4
+    ]
+   },
+   {
+    "question": "那 aimark 和 Glasp 到底差在哪？",
+    "turns": [
+     5
+    ]
+   },
+   {
+    "question": "那 aimark 如何应对 Perplexity Pages、怎么差异化？",
+    "turns": [
+     6,
+     8
+    ]
+   }
+  ],
+  "storyline": "创业者拿着产品方案来找 AI 评估，被指出竞品分析有盲区；他不服气地反驳，最后在 AI 的拆解下自己把真正的对手和打法想清楚了。",
+  "takeaway": "被指出盲区时别急着反驳——先分清谁是真正的对手，再谈怎么竞争。"
+ }
+}

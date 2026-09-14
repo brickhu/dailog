@@ -3,7 +3,7 @@
 
 原文对话：
 {{dialogue}}
-（scope=all 定稿对照用）
+（scope=all 定稿对照用：核对"不许新增/不许串人"时参考）
 
 打磨范围：{{scope}}
 定位目标：{{target}}

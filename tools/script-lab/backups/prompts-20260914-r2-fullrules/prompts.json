@@ -1,0 +1,148 @@
+{
+ "review-agent": {
+  "version": 1,
+  "description": "脚本创作 Agent（对话式）：注入对话原文 + 编辑选定的提案，用自然语言反复改脚本；编辑说采纳时交付。内嵌 R2 创作规则（同一份 rules 文件）",
+  "config": {
+   "temperature": 0.8,
+   "maxTokens": 16384,
+   "thinking": "enabled"
+  },
+  "params": {
+   "force": "流程提示（系统给的确定性指令：如「编辑刚选定提案，请立刻给第一版完整脚本」）",
+   "host": "主持人信息（与 r2-script 共用 handoff，缺省注入「主持人」）",
+   "guests": "嘉宾信息数组（与 r2-script 共用 handoff，缺省注入「AI」）",
+   "scope": "本期锁定的素材范围",
+   "history": "最近几轮对话（编辑说的 + 你说过的）",
+   "dialogue": "素材：对话原文（tN 编号块）",
+   "proposal": "编辑选定的提案 JSON（方向由它定）",
+   "script": "当前脚本（六字段，可空）",
+   "text": "编辑这一句"
+  },
+  "messages": [
+   {
+    "role": "system",
+    "file": "r2-script.handoff.md"
+   },
+   {
+    "role": "system",
+    "file": "review-agent.system.md"
+   },
+   {
+    "role": "user",
+    "file": "review-agent.user.md"
+   }
+  ],
+  "name": "Agent:脚本创作（对话式改稿）"
+ },
+ "r1-review": {
+  "version": 3,
+  "description": "审题：对话 → 提炼「立场 → 思辨 → 钥匙」→ 三维打分 → 0/1-N 提案（提案陈述 + 创作意见）",
+  "config": {
+   "temperature": 0.1,
+   "seed": 41,
+   "maxTokens": 12288,
+   "thinking": "disabled",
+   "responseFormat": {
+    "type": "json_object"
+   }
+  },
+  "params": {
+   "dialogue": "对话 JSON 字符串（必填）",
+   "turns": "对话消息条数（提案陈述里的「共计 N 轮对话」用它）",
+   "suggestion": "投稿建议（可空）"
+  },
+  "messages": [
+   {
+    "role": "system",
+    "file": "r1-review.system.md"
+   },
+   {
+    "role": "user",
+    "file": "r1-review.user.md"
+   }
+  ],
+  "name": "R1:审题 · 提案（立场 → 思辨 → 钥匙）"
+ },
+ "r2-script": {
+  "version": 4,
+  "description": "脚本创作：照 R1 的创作意见，把对话原文重演成一期现场访谈（输出 hostOpen/guestOpen/turns/hostWrap/guestSum/hostOutro）",
+  "config": {
+   "temperature": 0.8,
+   "maxTokens": 16384,
+   "thinking": "disabled",
+   "seed": 49,
+   "responseFormat": {
+    "type": "json_object"
+   }
+  },
+  "params": {
+   "direction": "R1 的创作意见（立场 → 思辨 → 钥匙）",
+   "structure": "立场 → 思辨 → 钥匙：这一期要走的台阶（不许重排）",
+   "key": "钥匙：收尾要落到的那一句（就是 R1 磨出来的那把钥匙）",
+   "scope": "本期锁定的素材范围（如 t3–t9、t13–t15（共 10 条））",
+   "dialogue": "对话原文（只给锁定范围内的 tN 编号素材）",
+   "suggestion": "投稿人建议（可空）",
+   "host": "主持人信息（可空，缺省注入「主持人」）",
+   "guests": "嘉宾信息数组（可空，缺省注入「AI」）"
+  },
+  "messages": [
+   {
+    "role": "system",
+    "file": "r2-script.handoff.md"
+   },
+   {
+    "role": "user",
+    "file": "r2-script.user.md"
+   }
+  ],
+  "name": "R2:脚本创作（照一句话方向重演）"
+ },
+ "r3-polish": {
+  "version": 3,
+  "description": "语感打磨：逐段给台词加情绪/语气/音效/停顿标签，一个字不改",
+  "config": {
+   "temperature": 0.4,
+   "maxTokens": 8192,
+   "thinking": "disabled"
+  },
+  "params": {
+   "scripts": "脚本 JSON（分层：壳 + 主体 segments，含 source 标注 R/Q/M）"
+  },
+  "messages": [
+   {
+    "role": "system",
+    "file": "r3-polish.system.md"
+   },
+   {
+    "role": "user",
+    "file": "r3-polish.user.md"
+   }
+  ],
+  "name": "R3:语感打磨（polish）"
+ },
+ "r4-meta": {
+  "version": 2,
+  "description": "发布元信息（标题/描述/封面提示等；锚 = 选题说明的受众与价值，钥匙不剧透）",
+  "config": {
+   "temperature": 0.4,
+   "maxTokens": 8192,
+   "thinking": "disabled"
+  },
+  "params": {
+   "script": "脚本 JSON（打磨后的分层脚本）",
+   "direction": "R1 的创作意见（作锚）",
+   "brief": "R1 的提案 JSON（对话总结/立场/钥匙/话题/思辨/覆盖轮次/目标听众）"
+  },
+  "messages": [
+   {
+    "role": "system",
+    "file": "r4-meta.system.md"
+   },
+   {
+    "role": "user",
+    "file": "r4-meta.user.md"
+   }
+  ],
+  "name": "R4:发布元信息（meta）"
+ }
+}

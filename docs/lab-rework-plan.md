@@ -115,3 +115,26 @@
 - 删 index.html 旧 drawer 骨架
 - 打磨入口收敛为「打磨控制台」；「批量打磨」按钮本就不渲染，代码已清
 - 遗留（无害）：部分函数内对 .polish-btn 的空查询（无元素=no-op）；旧历史数据无 fidelity 标注
+
+---
+
+## 附录：容器化局限性评估（2026-09-06 补记——教训：docker 化验收必须按「功能 × 环境依赖」矩阵过，而非只看进程可运行）
+
+背景：lab 容器化后采集 gemini 投稿失败，暴露下列边界未在 docker 化时评估。已实测的真值如下。
+
+| lab 功能 | 外部依赖 | 容器（node:22-slim + ffmpeg + curl）内现状 | 说明 |
+|---|---|---|---|
+| 审题/创作/打磨（LLM） | 出网 LLM API | ✅ | 密钥 env 注入即可 |
+| TTS / 合成 | fish API + ffmpeg | ⚠️ ffmpeg 已装；fish 走 FISH_PROXY_URL——若宿主 SOCKS 仅回环，同「采集」隐患，未实测 | |
+| 采集·可直连平台（doubao/claude/kimi/deepseek） | 直接出网 + 采集规则 | ✅ | 实测 doubao thread 采到 18 条（api:doubao） |
+| 采集·被墙平台（chatgpt.com / gemini / grok） | 宿主 SOCKS 代理 | ❌ | 宿主直连 gemini 也失败，必须走 SOCKS；容器内 fetch 直连超时 |
+| SOCKS 可达性 | 代理必须容器可连 | ❌ | 宿主代理只监听 127.0.0.1 → 容器（host.docker.internal/网关）不可达；需代理开 0.0.0.0 或 TCP 转发 |
+| SOCKS 兜底执行器 | curl | ✅（本次补装） | collect.mjs fetchViaProxy = execFileSync("curl", --socks5-hostname)；此前镜像无 curl → 兜底必然抛 ENOENT |
+| SOCKS 探测 | findSocksProxy | ⚠️ | Linux 容器不跑 scutil 分支，只认 ALL_PROXY/HTTPS_PROXY/https_proxy env（本次 compose 已注入 ALL_PROXY） |
+| 采集·JS 动态渲染平台（gemini/grok） | chromium 渲染 | ❌ | 镜像无 chromium；且即使有，socks 不通仍不可达 |
+| 登录/会话/状态 | LAB_STATE_DIR 卷 | ✅ | lab-state:/data |
+
+### 后续约定（防再犯）
+1. 任何「换运行形态」（docker 化/换基镜像/远程部署）前，产出上表同款「功能 × 环境依赖」矩阵并逐格实测，用户确认后再动。
+2. 容器验收标准至少覆盖：LLM 调用、fish TTS、采集（直连平台 + 被墙平台）、合成、发布，一条真实链路。
+3. 遗留决策：A) SOCKS 开 LAN（0.0.0.0）→ ALL_PROXY 指向宿主 IP；B) 镜像加 chromium；C) gemini/grok 类投稿走宿主实例采集（R2 同 URL 缓存，容器复用）。未定。

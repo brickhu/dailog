@@ -54,7 +54,7 @@ dailog/
 │       └── db/                 #   Drizzle schema + migrations（Railway Postgres）
 ├── tools/
 │   ├── script-lab/               # **dailog lab 采编工作台**（web/ 浏览器控制台 + server.mjs 轻服务端；pnpm lab 本地运行）
-│   │   ├── prompts/              #   提示词工程（review.score / review.script / polish.all / meta —— 即改即生效）
+│   │   ├── prompts/              #   提示词工程（r1-review / r2-script / r3-polish / r4-meta —— 即改即生效）
 │   │   └── lib/ + web/           #   llm/collect/prompt 封装（采集自包含）+ 采编控制台前端
 │   ├── dailog-cli/               # 共享 CLI 底座（r2.js 哈希 / fish.js 封装；script-lab 复用中，迁移完成可并入）
 │   └── dailog-editor/            # **已下线**（2026-09-05）——旧本地 Agent CLI + skill 源码，保留待清理
@@ -108,8 +108,10 @@ dailog/
 ## 采编工作流 dailog lab（tools/script-lab，新增协作者必读）
 
 1. 启动：`cd tools/script-lab && pnpm lab`（或 `pnpm lab:dev`）→ 浏览器打开 127.0.0.1:4173 → 登录页选择环境（dev/prod）
-2. 环节：投稿队列 → **采集**（对话原文 → R2，URL 哈希 key）→ **审题**（review.score：主线话题 / 用户的困惑 / 评分 / 方向）→
-   **脚本创作**（review.script，多候选；链上提问保真、困惑颗粒不磨平）→ **语感打磨**（polish.all：顺口/放大/停顿/情绪标签）→
+2. 环节：投稿队列 → **采集**（对话原文 → R2，URL 哈希 key）→ **审题**（r1-review：判别真/假认知探索 → 产出提案 =
+   **选题说明**（给编辑：切片/为什么值得做/受众/禁区/评分）+ **一句话创作指引**（给 R2：起点→走向→终点））→
+   **脚本创作**（r2-script：照这一句话，把原始对话重演成一期现场访谈；红线 = 不编造立场/事实、数字一致）→
+   **语感打磨**（r3-polish：顺口/放大/停顿/情绪标签）→
    **逐段 TTS**（host = 投稿人采样 / guest = 品牌声线）→ **合成**（浏览器 ffmpeg.wasm，段间间隔 / intro / BGM 可配）→
    **节目信息 + 封面** → **发布 / 拒审**
 3. 提示词工程：`tools/script-lab/prompts/*.md` 即改即生效；服务端按 promptSig（md mtime 指纹）随输出落

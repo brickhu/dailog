@@ -3,8 +3,8 @@
 //   仅间隔：[0.5s]
 //   穿插外部音频：[0.5s]+[https://example.com/a.mp3]+[0.2s]
 //   解析失败 fallback：[0s]
-// 背景音乐（BGM）：合成面板内可配置（URL 或本地上传 + 音量/淡入淡出），
-//   启用时两段式合成：先拼干声 wav，再叠 BGM 铺底（amix，首尾音乐淡入淡出，人声不动）。
+// 背景音乐（BGM）：常驻在创作卡底部左侧的配置条（外置出合成弹窗），改动即持久化；
+//   点「🎬 语音合成」直接开始合成（loading→preview），合成时读取配置条当前值。
 //   BGM 配置存 localStorage 'fullbgm-<id>'，文件字节存 IndexedDB key 'bgm-<id>'。
 // full audio 存 IndexedDB（大文件），元数据存 localStorage；合成后配置锁定（预览态）
 
@@ -280,17 +280,36 @@ function blobToBase64(blob){
 }
 
 // ---------- 合成按钮状态 / seg 缓存预加载 ----------
+// 合成可用性：不必全部段都生成语音——≥2 段（或该脚本全部段）即可；未生成语音的段在合成时直接跳过
+function segsReadyInfo(id, segs){
+  const list = segs || [];
+  let ready = 0;
+  for (let i = 0; i < list.length; i++) {
+    const k = segKey(id, list[i]);
+    if (k && segAudioGet(k)) ready++;
+  }
+  return { total: list.length, ready: ready };
+}
+function segCanMerge(id, segs){
+  const r = segsReadyInfo(id, segs);
+  return r.total > 0 && r.ready >= Math.min(2, r.total);
+}
 // 更新「语音合成」按钮可用态（生成/打磨/保存后调用；按 DOM 实际缓存检查）
 function updateMergeBtn(id, si){
   const btn = document.querySelector('.seg-merge-btn[data-si="' + si + '"]');
   if (!btn) return;
   const rows = [...document.querySelectorAll('.seg-row[data-si="' + si + '"]')];
-  const allReady = rows.length > 0 && rows.every(row => {
+  let ready = 0;
+  rows.forEach(row => {
     const k = row && row.dataset.segkey;
-    return !!k && !!segAudioGet(k);
+    if (k && segAudioGet(k)) ready++;
   });
-  btn.disabled = !allReady;
-  btn.title = allReady ? '拼接全部段为完整 m4a' : '需全部段生成语音后才可合成';
+  const total = rows.length;
+  const ok = total > 0 && ready >= Math.min(2, total);
+  btn.disabled = !ok;
+  if (ready >= total) btn.title = '拼接全部段为完整 m4a（快捷键 m）';
+  else if (ok) btn.title = '可合成：已生成 ' + ready + '/' + total + ' 段语音，未生成段将被跳过（快捷键 m）';
+  else btn.title = '已生成语音不足（≥2 段或全部段）——未生成段会被跳过，请再生成一些';
 }
 
 // 预加载该投稿全部 seg 语音缓存（IndexedDB → 内存）：segAudioGet 是同步的，渲染前先批量读入内存
@@ -374,9 +393,9 @@ async function resetFullAudio(id){
 
 
 
-// ---------- 音频合成对话框（config → loading → preview → uploading） ----------
+// ---------- 音频合成对话框（loading → preview → uploading；error 展示失败原因；BGM 配置在创作卡底部左侧常驻条） ----------
 let mergeCtx = null;        // { id, si, bgm }
-let mergeMode = 'closed';   // closed | config | loading | preview | uploading
+let mergeMode = 'closed';   // closed | loading | preview | uploading | error
 
 function setMergeMode(mode){
   mergeMode = mode;
@@ -387,9 +406,9 @@ function setMergeMode(mode){
   const preview = document.getElementById('mergePreview');
   const confirmBtn = document.getElementById('mergeConfirmBtn');
   const remergeBtn = document.getElementById('mergeRemergeBtn');
-  if (mode === 'config') {
-    if (title) title.textContent = '音频合成';
-    if (closeBtn) closeBtn.style.display = '';              // 可关闭（放弃本次）
+  if (mode === 'error') {
+    if (title) title.textContent = '合成失败';
+    if (closeBtn) closeBtn.style.display = '';              // 可关闭后调整再试
     if (loading) loading.style.display = 'none';
     if (config) config.style.display = 'block';
     if (preview) preview.style.display = 'none';
@@ -433,25 +452,33 @@ async function runMergeConcat(){
   const script = ((typeof labWorkScriptsOf === 'function' && labWorkScriptsOf(id) && labWorkScriptsOf(id)[si]) ? labWorkScriptsOf(id)[si] : ((d.prodSummary && d.prodSummary.scriptList) || [])[si]);
   if (!script || !Array.isArray(script.segments) || !script.segments.length) throw new Error('脚本为空，无法合成');
   const segs = script.segments;
-  const audios = segs.map(seg => segAudioGet(segKey(id, seg)));
-  for (let i = 0; i < audios.length; i++) {
-    if (!audios[i]) throw new Error('第 ' + (i + 1) + ' 段尚无语音，请先生成');
-  }
   const gapList = loadGapExprs(id, segs.length);
+  // 只取已生成语音的片段（未生成语音的段直接跳过）；段间停顿取「下一幸存段原位置前的间隔」
+  const ready = [];
+  segs.forEach(function (seg, i) {
+    const k = segKey(id, seg);
+    const a = (k && segAudioGet(k)) || null;
+    if (a) ready.push({ segi: i, seg: seg, audio: a });
+  });
+  if (!ready.length) throw new Error('没有已生成语音的片段——请先为片段生成语音');
+  if (ready.length < Math.min(2, segs.length)) throw new Error('已生成语音片段不足（≥2 段或全部段）——请再生成一些，未生成段会被跳过');
+  mergeCtx.skipped = segs.length - ready.length;
+  const gapStrs = [];
+  for (let j = 0; j < ready.length - 1; j++) gapStrs.push(gapList[ready[j + 1].segi - 1] || defaultGapExpr());
   // 无跨域隔离（SAB 不可用）→ 自动降级服务端 ffmpeg 合并（不依赖浏览器 Wasm）
   if (!sabAvailable()) {
-    return runServerMerge(id, si, script, audios, gapList, bgmCfg);
+    return runServerMerge(id, si, script, ready, gapStrs, bgmCfg);
   }
   const inputs = [];
   const seq = [];
-  for (let i = 0; i < segs.length; i++) {
-    const nm = 'seg' + i + '.mp3';
-    inputs.push({ name: nm, data: base64ToBytes(audios[i].audio) });
+  for (let j = 0; j < ready.length; j++) {
+    const nm = 'seg' + j + '.mp3';
+    inputs.push({ name: nm, data: base64ToBytes(ready[j].audio.audio) });
     seq.push({ name: nm });
-    if (i < segs.length - 1) {
-      const ops = parseGapExpr(gapList[i]);
+    if (j < ready.length - 1) {
+      const ops = parseGapExpr(gapStrs[j]);
       ops.forEach((op, oi) => {
-        const tag = 'gap' + i + '_' + oi;
+        const tag = 'gap' + j + '_' + oi;
         if (op.t === 'gap') seq.push({ gapSec: op.sec, name: tag + '.mp3' });
         else seq.push({ introUrl: op.url, name: tag + '.mp3' });
       });
@@ -512,7 +539,7 @@ async function runMergeConcat(){
   if (!out || !out.length) throw new Error('合成结果为空');
   const blob = new Blob([out.buffer], { type: 'audio/mp4' });
   await fullAudioSave(id, blob);
-  saveFullMeta(id, { at: Date.now(), size: blob.size, scriptIndex: si, segCount: segs.length, gaps: gapList, scriptName: script.title || null, bgm: bgmSummary(bgmCfg) });
+  saveFullMeta(id, { at: Date.now(), size: blob.size, scriptIndex: si, segCount: ready.length, gaps: gapStrs, scriptName: script.title || null, bgm: bgmSummary(bgmCfg) });
   const player = document.getElementById('mergePlayer');
   if (player) player.src = URL.createObjectURL(blob);
   return blob;
@@ -539,7 +566,7 @@ function fillBgmPanel(id){
   if (!el.enable) return;
   const cfg = loadBgmConfig(id) || {};
   el.enable.checked = !!cfg.enabled;
-  el.fields.style.display = el.enable.checked ? 'block' : 'none';
+  el.fields.style.display = el.enable.checked ? '' : 'none';
   el.url.value = (cfg.src && cfg.src.kind === 'url') ? (cfg.src.url || '') : '';
   clearBgmFileUi();
   if (cfg.enabled && cfg.src && cfg.src.kind === 'file' && cfg.src.file) {
@@ -575,31 +602,66 @@ function readBgmPanelConfig(){
   else return null;                                                                     // 启用但无来源
   return cfg;
 }
+// 页面常驻 BGM 配置条（创作卡底部左侧）当前投稿 id：localStorage 按投稿隔离
+function bgmBarId(){
+  const bar = document.querySelector('.merge-bgm-bar');
+  return (bar && bar.dataset.id) ? bar.dataset.id : null;
+}
+// 配置条改动即持久化（供任意一次「🎬 语音合成」直接使用）
+function persistBgmBar(){
+  const id = bgmBarId();
+  if (!id) return;
+  try { const cfg = readBgmPanelConfig(); if (cfg) saveBgmConfig(id, cfg); } catch (e) {}
+}
+// 创作卡底部左侧：常驻 BGM 配置条（外置出合成弹窗；合成时读它，不再弹配置步）
+function mergeBgmBarHtml(id){
+  return "<div class='merge-bgm-bar' data-id='" + esc(id) + "'>"
+    + "<label class='merge-bgm-enable' title='合成时铺一层低音量背景音乐'><input type='checkbox' class='merge-check' id='bgmEnable' onchange='onBgmEnableToggle();persistBgmBar()'> 🎵 背景音乐</label>"
+    + "<span id='bgmFields' class='merge-bgm-fields' style='display:none'>"
+      + "<input class='merge-input merge-bgm-url' id='bgmUrl' spellcheck='false' placeholder='音乐 URL（需跨域允许）' onchange='persistBgmBar()'>"
+      + "<span class='muted' style='font-size:11px'>或</span>"
+      + "<input type='file' class='merge-file' id='bgmFile' accept='audio/*' onchange='onBgmFile(this)'>"
+      + "<span class='muted' id='bgmFileInfo' style='font-size:11px'></span>"
+      + "<button class='pg' id='bgmFileClear' style='display:none;font-size:11px;padding:2px 10px' onclick='clearBgmFile()'>✕ 清除</button>"
+      + "<span class='muted' style='font-size:11px'>音量</span>"
+      + "<input type='range' class='merge-input' id='bgmVol' min='0.05' max='0.4' step='0.01' value='0.15' oninput='onBgmVol();persistBgmBar()' style='width:110px'>"
+      + "<span id='bgmVolLabel' class='muted' style='font-size:11px;min-width:38px;text-align:right'>15%</span>"
+      + "<label class='muted' style='font-size:11px;display:flex;align-items:center;gap:4px'>淡入 <input type='number' class='merge-input bgm-num' id='bgmFadeIn' min='0' max='15' step='0.5' value='3' onchange='persistBgmBar()'>s</label>"
+      + "<label class='muted' style='font-size:11px;display:flex;align-items:center;gap:4px'>淡出 <input type='number' class='merge-input bgm-num' id='bgmFadeOut' min='0' max='15' step='0.5' value='4' onchange='persistBgmBar()'>s</label>"
+    + "</span>"
+    + "<span class='muted merge-bgm-hint' style='font-size:11px'>（对「🎬 语音合成」生效 · 改动即存）</span>"
+    + "</div>";
+}
 function onBgmEnableToggle(){
   const el = bgmPanelEls();
-  if (el.fields) el.fields.style.display = el.enable.checked ? 'block' : 'none';
+  if (el.fields) el.fields.style.display = el.enable.checked ? '' : 'none';
 }
 function onBgmVol(){
   const el = bgmPanelEls();
   if (el.volLabel) el.volLabel.textContent = Math.round(Number(el.vol.value) * 100) + '%';
 }
 async function onBgmFile(input){
-  if (!mergeCtx || !input || !input.files || !input.files[0]) return;
+  if (!input || !input.files || !input.files[0]) return;
+  const id = bgmBarId() || (mergeCtx ? mergeCtx.id : null);
+  if (!id) { notice('未知投稿，无法保存音乐文件', 'error'); return; }
   const f = input.files[0];
   const buf = await f.arrayBuffer();
-  await bgmBytesSave(mergeCtx.id, new Uint8Array(buf));
+  await bgmBytesSave(id, new Uint8Array(buf));
   const el = bgmPanelEls();
   el.file.dataset.src = JSON.stringify({ name: f.name, size: f.size });
   el.url.value = '';                       // 文件与 URL 互斥：选文件后清 URL
   el.fileInfo.textContent = '已选 ' + f.name + '（' + fmtSize(f.size) + '）';
   el.fileClear.style.display = '';
   el.enable.checked = true;
-  el.fields.style.display = 'block';
+  el.fields.style.display = '';
+  persistBgmBar();
 }
 async function clearBgmFile(){
   const el = bgmPanelEls();
   clearBgmFileUi();
-  if (mergeCtx) await bgmBytesDelete(mergeCtx.id);   // 清除 IndexedDB 字节，防串期
+  const id = bgmBarId() || (mergeCtx ? mergeCtx.id : null);
+  if (id) { try { await bgmBytesDelete(id); } catch {} }   // 清除 IndexedDB 字节，防串期
+  persistBgmBar();
 }
 
 // ---------- BGM 混音滤镜（Wasm 与服务端同一套语义） ----------
@@ -646,58 +708,57 @@ async function bgmForServer(id, cfg){
   return b;
 }
 
-// ---------- 打开合成对话框（先配置 BGM，再开始合成） ----------
+// ---------- 打开合成对话框：读页面 BGM 配置条 → 直接开始合成（弹窗内不再有配置步） ----------
+function showMergeError(msg){
+  const info = document.getElementById('mergeConfigInfo');
+  if (info) info.textContent = msg || '';
+  setMergeMode('error');
+}
 async function openMergeDialog(id, si){
   if (mergeMode !== 'closed') return;
-  mergeCtx = { id, si, bgm: loadBgmConfig(id) };
+  // 直接读创作卡底部左侧的常驻 BGM 配置条（无配置条时视为关 BGM）
+  const cfg = readBgmPanelConfig();
+  if (cfg === null) { notice('已开启背景音乐：请先填写音乐 URL 或选择本地音乐文件', 'error'); return; }
+  try { saveBgmConfig(id, cfg); } catch (e) {}
+  mergeCtx = { id, si, bgm: cfg };
   // 停止预览音频播放并释放资源
   const player = document.getElementById('mergePlayer');
   if (player) { try { player.pause(); } catch {} player.src = ''; player.load(); }
   const overlay = document.getElementById('mergeModal');
   if (overlay) overlay.style.display = 'flex';
-  setMergeMode('config');
-  fillBgmPanel(id);
-  // 面板信息行：显示脚本/段数（拉详情，失败不阻断）
-  const info = document.getElementById('mergeConfigInfo');
-  if (info) info.textContent = '读取脚本…';
-  try {
-    const d = await j('/api/detail/' + id);
-    const script = ((typeof labWorkScriptsOf === 'function' && labWorkScriptsOf(id) && labWorkScriptsOf(id)[si]) ? labWorkScriptsOf(id)[si] : ((d.prodSummary && d.prodSummary.scriptList) || [])[si]);
-    const n = (script && script.segments) ? script.segments.length : 0;
-    if (info) info.textContent = (n ? '第 ' + (si + 1) + ' 个脚本 · ' + n + ' 段语音已就绪' : '脚本为空，无法合成') + '，可配置背景音乐后开始';
-  } catch { if (info) info.textContent = ''; }
+  await startMergeFlow();
 }
-// 配置面板：开始合成
-async function startMergeFromConfig(){
-  if (mergeMode !== 'config' || !mergeCtx) return;
-  const cfg = readBgmPanelConfig();
-  if (cfg === null) { notice('已勾选背景音乐，请填写音乐 URL 或选择本地音乐文件', 'error'); return; }
-  saveBgmConfig(mergeCtx.id, cfg);
-  mergeCtx.bgm = cfg;
+// 直接执行一次合成（loading 进度 → 成功 preview 试听；失败 → error 面板展示原因）
+async function startMergeFlow(){
+  if (!mergeCtx) return;
   setMergeMode('loading');
   try {
     await runMergeConcat();
     setMergeMode('preview');
     setMergeBgmNote();
   } catch (e) {
-    setMergeMode('config');              // 失败回配置面板可调整后重试
-    notice('✗ 语音合成失败: ' + e.message, 'error');
+    showMergeError('✗ 语音合成失败：' + (e && e.message ? e.message : e)
+      + '\n\n可关闭后调整（背景音乐 / 各段语音 / 段间间隔）再点「🎬 语音合成」重试。');
   }
 }
-// 预览态：重新合成 → 回配置面板（可改 BGM 再跑）
+// 预览态：重新合成 → 以当前 BGM 配置条直接再跑一次
 function remergeAudio(){
   if (mergeMode !== 'preview' || !mergeCtx) return;
-  setMergeMode('config');
-  fillBgmPanel(mergeCtx.id);
+  const cfg = readBgmPanelConfig();
+  if (cfg === null) { notice('已开启背景音乐：请先填写音乐 URL 或选择本地音乐文件', 'error'); return; }
+  try { saveBgmConfig(mergeCtx.id, cfg); } catch (e) {}
+  mergeCtx.bgm = cfg;
+  startMergeFlow();
 }
-// 预览 note：本次用了什么 BGM（音量/淡入淡出）
+// 预览 note：本次用了什么 BGM + 跳过了几个未生成语音段
 function setMergeBgmNote(){
   const note = document.getElementById('mergeBgmNote');
   if (!note || !mergeCtx) return;
   const s = bgmSummary(mergeCtx.bgm);
-  note.textContent = s
-    ? '🎵 已铺背景音乐 · 音量 ' + Math.round(Number(s.vol) * 100) + '% · 淡入 ' + (s.fadeIn || 0) + 's / 淡出 ' + (s.fadeOut || 0) + 's · 来源 ' + (s.kind === 'file' ? '本地文件' : 'URL')
-    : '';
+  const parts = [];
+  if (s) parts.push('🎵 背景音乐 · 音量 ' + Math.round(Number(s.vol) * 100) + '% · 淡入 ' + (s.fadeIn || 0) + 's / 淡出 ' + (s.fadeOut || 0) + 's · 来源 ' + (s.kind === 'file' ? '本地文件' : 'URL'));
+  if (mergeCtx.skipped) parts.push('⏭ 已跳过 ' + mergeCtx.skipped + ' 个未生成语音的片段');
+  note.textContent = parts.join(' · ');
 }
 // 预览态：确认 → 上传 R2（uploading 态禁关闭）→ 成功清缓存 + 触发创作完成
 async function confirmMergeUpload(){
@@ -736,11 +797,11 @@ async function confirmMergeUpload(){
     notice('✗ 上传失败: ' + e.message, 'error');
   }
 }
-// 关闭对话框：uploading 禁关闭；preview 直接关闭 = 放弃本次合成（清 IndexedDB 缓存）
+// 关闭对话框：uploading 禁关闭；preview 直接关闭 = 放弃本次合成（清 IndexedDB 缓存）；error 无产物直接关
 async function closeMergeModal(skipCleanup, force){
   if (!force && mergeMode === 'uploading') return;   // 上传中禁关闭（确认成功强制关闭除外）
-  if (!skipCleanup && (mergeMode === 'preview' || mergeMode === 'config') && mergeCtx) {
-    // config/preview 直接关闭 = 放弃本次合成（清本地 full audio 缓存与元数据）
+  if (!skipCleanup && mergeMode === 'preview' && mergeCtx) {
+    // preview 直接关闭 = 放弃本次合成（清本地 full audio 缓存与元数据）
     try { await fullAudioDelete(mergeCtx.id); } catch {}
     try { localStorage.removeItem('fullmeta-' + mergeCtx.id); } catch {}
   }
@@ -776,20 +837,21 @@ function buildMergeSeq(segCount, gapList){
   return seq;
 }
 
-// 服务端 ffmpeg 合并（SAB 不可用时）：段 base64 + 序列(+可选 bgm) → /api/run/full-merge → m4a base64
-async function runServerMerge(id, si, script, audios, gapList, bgmCfg){
-  const segs = script.segments;
+// 服务端 ffmpeg 合并（SAB 不可用时）：已生成段 base64 + 序列(+可选 bgm) → /api/run/full-merge → m4a base64
+async function runServerMerge(id, si, script, ready, gapStrs, bgmCfg){
+  const mergedSegs = ready.map(r => r.seg);
+  const mergedAudios = ready.map(r => r.audio);
   setMergeStep(15, '上传片段到服务端…');
-  const seq = buildMergeSeq(segs.length, gapList);
+  const seq = buildMergeSeq(mergedSegs.length, gapStrs);
   const bgm = await bgmForServer(id, bgmCfg);   // URL / file base64；无 BGM → null
-  const body = { id, si, segs: audios.map(a => a && a.audio), seq, bgm };
+  const body = { id, si, segs: mergedAudios.map(a => a && a.audio), seq, bgm };
   const d = await j('/api/run/full-merge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   if (!(d && d.ok && d.audio)) throw new Error((d && d.error) || '服务端合成失败');
   setMergeStep(85, '服务端拼接完成，接收中…');
   const bytes = base64ToBytes(d.audio);
   const blob = new Blob([bytes.buffer], { type: d.mime || 'audio/mp4' });
   await fullAudioSave(id, blob);
-  saveFullMeta(id, { at: Date.now(), size: blob.size, scriptIndex: si, segCount: segs.length, gaps: gapList, scriptName: script.title || null, bgm: bgmSummary(bgmCfg) });
+  saveFullMeta(id, { at: Date.now(), size: blob.size, scriptIndex: si, segCount: mergedSegs.length, gaps: gapStrs, scriptName: script.title || null, bgm: bgmSummary(bgmCfg) });
   const player = document.getElementById('mergePlayer');
   if (player) player.src = URL.createObjectURL(blob);
   setMergeStep(100, '完成');

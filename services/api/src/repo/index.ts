@@ -67,7 +67,7 @@ export interface SubmissionsRepo {
   } | null>;
   /** 编辑队列：按状态筛选（缺省 submitted），submitted 按提交时间升序（inbox 先到先审）。
    *  附带投稿人信息与采样就绪标记（无采样 = 无法制作主持人克隆音色，先标注） */
-  listQueue(status?: "submitted" | "collected" | "rejected" | "published" | "crafted"): Promise<Array<{
+  listQueue(status?: "submitted" | "collected" | "selected" | "rejected" | "published" | "crafted"): Promise<Array<{
     id: string;
     url: string;
     title: string | null;
@@ -120,10 +120,10 @@ export interface SubmissionsRepo {
   setTitle(id: string, title: string | null): Promise<{ id: string } | null>;
   /** 创作审核决策（rejected=true → review_status=rejected；通过 → 不写 approved，仅记 score） */
   setReview(id: string, review: { rejected: boolean; score: number | null }): Promise<{ id: string } | null>;
-  /** 采纳的审核产物入库（review jsonb 整包；不改状态、不触发决策） */
-  setReviewResult(id: string, review: Record<string, unknown>): Promise<{ id: string } | null>;
+  /** 采纳的审核产物入库（review jsonb 整包；不改状态、不触发决策）；review=null 表示清空已锁定选题（退回审题用） */
+  setReviewResult(id: string, review: Record<string, unknown> | null): Promise<{ id: string } | null>;
   /** 设置投稿主状态（crafted = 节目音频已生成上传，未发布） */
-  setStatus(id: string, status: "submitted" | "collected" | "rejected" | "published" | "crafted"): Promise<{ id: string } | null>;
+  setStatus(id: string, status: "submitted" | "collected" | "selected" | "rejected" | "published" | "crafted"): Promise<{ id: string } | null>;
   /** 采集状态：-1=采集失败 / 0=未采集 / 1=采集成功（R2 key 由 URL 哈希推导，不存库） */
   /** 采集状态写入（-1 失败 / 0 未采集 / 1 成功）——联动投稿主状态：1→collected、0→submitted；-1 仅记失败标记（不拒稿，拒稿由编辑手工 reject） */
   setCollected(id: string, collected: number, reason?: string | null): Promise<{ id: string } | null>;
@@ -1054,8 +1054,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .returning({ id: schema.submissions.id });
         return rows[0]?.id ? { id: rows[0].id } : null;
       },
-      /** 采纳的审核产物入库（review jsonb 整包；不改状态、不触发决策） */
-      async setReviewResult(id: string, review: Record<string, unknown>) {
+      /** 采纳的审核产物入库（review jsonb 整包；不改状态、不触发决策）；传 null 清空（退回审题） */
+      async setReviewResult(id: string, review: Record<string, unknown> | null) {
         const rows = await db.update(schema.submissions)
           .set({ review, updatedAt: new Date() })
           .where(eq(schema.submissions.id, id))
@@ -1063,7 +1063,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return rows[0]?.id ? { id: rows[0].id } : null;
       },
       /** 设置投稿主状态（crafted：节目音频已生成并上传 R2，未发布） */
-      async setStatus(id: string, status: "submitted" | "collected" | "rejected" | "published" | "crafted") {
+      async setStatus(id: string, status: "submitted" | "collected" | "selected" | "rejected" | "published" | "crafted") {
         const rows = await db.update(schema.submissions)
           .set({ status, updatedAt: new Date() })
           .where(eq(schema.submissions.id, id))
@@ -1318,11 +1318,20 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             userId: schema.episodes.userId,
             title: schema.episodes.title,
             description: schema.episodes.description,
+            summary: schema.episodes.summary,
+            references: schema.episodes.references,
+            highlights: schema.episodes.highlights,
+            category: schema.episodes.category,
+            language: schema.episodes.language,
+            durationSeconds: schema.episodes.durationSeconds,
+            transcript: schema.episodes.transcript,
+            guestId: schema.episodes.guestId,
             coverUrl: schema.episodes.coverUrl,
             tags: schema.episodes.tags,
             status: schema.episodes.status,
             number: schema.episodes.number,
             isPicked: schema.episodes.isPicked,
+            isPublic: schema.episodes.isPublic,
             createdAt: schema.episodes.createdAt,
             publishedAt: schema.episodes.publishedAt,
           })

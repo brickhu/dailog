@@ -43,7 +43,9 @@ function initAssets(id, detail, dialogue){
   if (detail && Array.isArray(detail.reviewScripts)) {
     out.productions = { ...(out.productions || {}), scripts: { count: detail.reviewScripts.length, version: (out.productions && out.productions.scripts && out.productions.scripts.version || 0) + 1 } };
     // 工作流输入：脚本（打磨读的是产出物②，也作为创作面板工作流的输入源）
-    out.scripts = detail.reviewScripts;
+    // 本地优先：本地**只要有这个键**（哪怕是空数组，如"重新审题"清空后留下的显式空）就不动它；
+    // 只有本地完全没有这个键时，才用远端回填。否则重新审题删掉的脚本会被远端重新灌回来。
+    if (!Array.isArray(out.scripts)) out.scripts = detail.reviewScripts;
   }
   // 产出物③ 合成音频：状态从 fullmeta 索引（r2Key 存在 = 已上传）
   try {

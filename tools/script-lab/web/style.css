@@ -103,15 +103,17 @@
   .script-seg-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:2px; }
   .script-seg-head .who { font-size:11px; color:#4f8cff; font-weight:600; }
   .script-seg-head .who.who-guest { color:#3fb950; }
+  /* 段删除按钮（段头右侧，默认隐藏，鼠标悬停该段时显示） */
+  .seg-del-btn { background:transparent; border:0; color:#8a91a0; font-size:12px; line-height:1; cursor:pointer; padding:1px 3px; margin-left:8px; opacity:0; transition:opacity .12s,color .12s; flex-shrink:0; }
+  .seg-row:hover .seg-del-btn { opacity:1; }
+  .seg-del-btn:hover { color:#f85149; }
   .seg-tts-btn { background:transparent; border:0; color:#4f8cff; font-size:14px; cursor:pointer; padding:2px 4px; }
   .seg-tts-btn:hover { color:#6aa4ff; }
   .seg-tts-btn:disabled { color:#8a91a0; cursor:not-allowed; }
-  .seg-edit-btn { background:transparent; border:1px solid #262b36; color:#8a91a0; border-radius:4px; padding:1px 10px; font-size:11px; cursor:pointer; opacity:0; transition:opacity .15s; }
-  .script-seg:hover .seg-edit-btn { opacity:1; }
-  .seg-edit-btn:hover { border-color:#4f8cff; color:#fff; }
-  .seg-edit-btn:disabled { opacity:1; color:#8a91a0; cursor:not-allowed; }
   .script-seg-view { font-size:13px; line-height:1.6; white-space:pre-line; word-break:break-word; }
+  .script-seg-view:hover { background:#0d1017; }   /* 双击可编辑的轻提示 */
   .seg-ta { width:100%; box-sizing:border-box; height:90px; background:#0b0d11; border:1px solid #262b36; color:#e6e8ee; border-radius:6px; padding:8px 10px; font-size:12px; font-family:ui-monospace,Menlo,Consolas,monospace; resize:vertical; }
+  .seg-ta:focus { outline:none; border-color:#4f8cff; }
   /* 声音采样播放按钮（圆形图标） */
   .sample-play { background:none; border:0; color:#4f8cff; font-size:16px; cursor:pointer; margin-right:6px; padding:2px 4px; vertical-align:middle; line-height:1; }
   .gv-icon-btn { background:none; border:0; color:#8a91a0; font-size:14px; cursor:pointer; margin-left:4px; padding:2px 4px; vertical-align:middle; }
@@ -264,3 +266,65 @@ input[type=file].merge-file::file-selector-button{
 }
 input[type=file].merge-file::file-selector-button:hover{border-color:#4f8cff;color:#fff}
 
+
+
+/* 段间/段首/段尾 插入槽（＋ 圆形按钮 + 分隔线） */
+.seg-add-slot{display:flex;align-items:center;gap:8px;margin:4px 0 4px 24px}
+.seg-between{display:flex;align-items:center;gap:10px;margin:4px 0 4px 24px}
+.seg-add-line{flex:1;height:1px;background:#232936;transition:background .12s}
+.seg-add-slot:hover .seg-add-line,.seg-between:hover .seg-add-line{background:#33415a}
+.seg-add-btn{
+  flex-shrink:0;width:18px;height:18px;padding:0;
+  border-radius:50%;background:#0f1219;border:1px solid #3a4150;color:#8a91a0;
+  font-size:12px;line-height:1;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:color .12s,border-color .12s,background .12s,box-shadow .12s;
+}
+.seg-add-btn:hover{color:#4f8cff;border-color:#4f8cff;background:#101826;box-shadow:0 0 0 3px rgba(79,140,255,.14)}
+.seg-between .gap-bubble{margin:0}   /* 段间隔气泡并入插入行 */
+
+/* ＋ 插入段落菜单：guest(AI) / host(主持人) 二选 */
+.seg-add-menu{position:fixed;z-index:10060;background:#171a21;border:1px solid #30363d;border-radius:8px;padding:6px;box-shadow:0 8px 24px rgba(0,0,0,.45);min-width:200px}
+.seg-add-menu-t{font-size:11px;color:#8a91a0;padding:2px 8px 6px;white-space:nowrap}
+.seg-add-menu-it{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;width:100%;box-sizing:border-box;
+  background:transparent;border:0;border-radius:6px;color:#e6e8ee;padding:7px 10px;font-size:13px;
+  cursor:pointer;text-align:left;white-space:nowrap;
+}
+.seg-add-menu-it:hover{background:#1f2733}
+.seg-add-menu-it b{font-size:12px}
+.seg-add-menu-it span{font-size:11px;color:#8a91a0}
+.seg-add-menu-it[data-spk="guest"] b{color:#3fb950}
+.seg-add-menu-it[data-spk="host"] b{color:#4f8cff}
+
+/* Fish Audio 标签补全弹层（输入 [ 弹出） */
+.seg-tag-pop{
+  position:fixed;z-index:10070;width:280px;max-height:42vh;overflow:auto;
+  background:#171a21;border:1px solid #30363d;border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.45);padding:4px;box-sizing:border-box;
+}
+.seg-tag-group{font-size:10px;color:#8a91a0;padding:4px 8px 2px;letter-spacing:.05em}
+.seg-tag-item{
+  display:flex;align-items:baseline;justify-content:space-between;gap:10px;width:100%;box-sizing:border-box;
+  background:transparent;border:0;color:#e6e8ee;padding:4px 8px;font-size:12px;cursor:pointer;
+  border-radius:5px;text-align:left;font-family:inherit;
+}
+.seg-tag-item:hover,.seg-tag-item.active{background:#1f2733}
+.seg-tag-item .t{color:#bc8cff;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+.seg-tag-item .n{color:#8a91a0;font-size:11px;margin-left:auto;flex-shrink:0}
+.seg-tag-foot{font-size:10px;color:#6e7681;padding:4px 8px 2px;border-top:1px solid #262b36;margin-top:4px}
+
+/* 创作卡底部左侧：BGM 常驻配置条（外置出合成弹窗；改动即存，供「🎬 语音合成」直接使用） */
+.merge-bgm-bar{
+  display:flex;align-items:center;flex-wrap:wrap;gap:10px;
+  margin-top:12px;padding:8px 12px;
+  background:#0f1219;border:1px dashed #2c3444;border-radius:8px;font-size:12px;
+}
+.merge-bgm-bar:hover{border-color:#3a4150}
+.merge-bgm-enable{
+  display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;
+  white-space:nowrap;flex-shrink:0;
+}
+.merge-bgm-fields{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:12px}
+.merge-bgm-url{width:220px;box-sizing:border-box}
+.merge-bgm-hint{white-space:nowrap}
