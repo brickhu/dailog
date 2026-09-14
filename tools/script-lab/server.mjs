@@ -1406,46 +1406,11 @@ function briefOf(proposal) {
   return { 切片: proposal.carrier || proposal.topic || null, 为什么值得做: proposal.value || null, 受众: proposal.who || null, 禁区: proposal.avoid || [] };
 }
 
-/** R2 新契约（`台词` 一句一条、**按播出顺序**）→ draft 形态：
- *  位置切分开场两句、收尾三句（要求恰好是 主/宾/主 那个形状），中间按 主→宾 成对折成 turns。
- *  这么做是因为「一问一答交替」只能靠在生成时把前一句摊在纸上，落成 JSON 就是一条一条的流水。 */
-function draftFromLines(p) {
-  const lines = Array.isArray(p["台词"]) ? p["台词"] : null;
-  if (!lines || !lines.length) return null;
-  const said = lines.map((l) => ({
-    sp: (l && (l["谁"] === "主" || l["谁"] === "host")) ? "host" : "guest",
-    tx: String((l && (l["话"] || l.text)) || "").replace(/\s+/g, " ").trim(),
-  })).filter((x) => x.tx);
-  if (!said.length) return null;
-  const out = {};
-  if (said.length && said[0].sp === "host") out.hostOpen = said.shift().tx;
-  if (said.length && said[0].sp === "guest") out.guestOpen = said.shift().tx;
-  const n = said.length;
-  if (n >= 3 && said[n - 3].sp === "host" && said[n - 2].sp === "guest" && said[n - 1].sp === "host") {
-    out.hostWrap = said[n - 3].tx; out.guestSum = said[n - 2].tx; out.hostOutro = said[n - 1].tx;
-    said.length = n - 3;
-  }
-  const turns = [];
-  for (let i = 0; i < said.length; i++) {
-    const a = said[i];
-    if (a.sp !== "host") continue;
-    const b = said[i + 1];
-    if (b && b.sp === "guest") { turns.push({ ask: a.tx, answer: b.tx }); i++; }
-    else turns.push({ ask: a.tx, answer: "" });
-  }
-  if (!turns.length) return null;
-  return Object.assign({}, out, { turns });
-}
-
 /** draft R2 输出（hostOpen/guestOpen/turns/hostWrap/guestSum/hostOutro）→ 补出 segments（lab 的 TTS/渲染消费）；
  *  原字段一并保留，供 R3 打磨（分层：壳 + 主体）与 R4 文案消费 */
 function segmentsFromDraftShape(p) {
   if (!p || typeof p !== "object") return null;
   if (Array.isArray(p.segments) && p.segments.length) return p;
-  if (Array.isArray(p["台词"]) && p["台词"].length) {
-    const draft = draftFromLines(p);
-    if (draft) p = Object.assign({}, p, draft);   // 设计/自检/台词 原样留着，只补 draft 字段
-  }
   const turns = Array.isArray(p.turns) ? p.turns : null;
   if (!turns && !p.hostOpen && !p.guestOpen && !p.hostWrap) return null;
   const segs = [];
