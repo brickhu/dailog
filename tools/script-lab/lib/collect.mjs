@@ -525,6 +525,70 @@ async function extractGrok(config, submissionId, url, title = null, tokenOverrid
   }
   return { ok: false, handled: true, error: "Grok \u6E32\u67D3\u540E\u672A\u63D0\u53D6\u5230\u6D88\u606F\uFF08\u53EF\u80FD\u52A0\u8F7D\u8D85\u65F6/\u53CD\u722C\uFF09\u2014\u2014\u53EF console-script \u6D4F\u89C8\u5668\u515C\u5E95" };
 }
+const MICROLINK_TIMEOUT_MS = 6e4;
+function microlinkEnabled() {
+  const flag = (process.env.DAILOG_MICROLINK ?? "").trim().toLowerCase();
+  if (["0", "off", "false", "no"].includes(flag)) return false;
+  if (["1", "on", "true", "yes"].includes(flag)) return true;
+  return Boolean((process.env.MICROLINK_API_KEY ?? "").trim());
+}
+async function fetchViaMicrolink(url, reason) {
+  if (!microlinkEnabled()) return null;
+  const key = (process.env.MICROLINK_API_KEY ?? "").trim();
+  const endpoint = new URL("https://api.microlink.io/");
+  endpoint.searchParams.set("url", url);
+  endpoint.searchParams.set("meta", "false");
+  endpoint.searchParams.set("data.html.attr", "html");
+  try {
+    const res = await fetch(endpoint.href, {
+      headers: key ? { "x-api-key": key } : {},
+      signal: AbortSignal.timeout(MICROLINK_TIMEOUT_MS)
+    });
+    if (!res.ok) {
+      const hint = res.status === 429 ? "\uFF08\u514D\u8D39\u5C42 25 \u6B21/\u5929\u5DF2\u7528\u5C3D\u6216\u8D85\u51FA\u989D\u5EA6\uFF09" : res.status === 401 || res.status === 403 ? "\uFF08API key \u65E0\u6548\uFF09" : "";
+      console.log(`[fetch] microlink \u515C\u5E95\u672A\u547D\u4E2D\uFF1AHTTP ${res.status}${hint}\uFF08\u539F\u56E0\uFF1A${reason}\uFF09`);
+      return null;
+    }
+    const json = await res.json();
+    const html = typeof json?.data?.html === "string" ? json.data.html : "";
+    if (!html) {
+      console.log(`[fetch] microlink \u515C\u5E95\u672A\u547D\u4E2D\uFF1A\u54CD\u5E94\u91CC\u6CA1\u6709 html \u5185\u5BB9\uFF08\u8BE5\u9875\u53EF\u80FD\u4ECD\u9700\u767B\u5F55/\u66F4\u5F3A\u53CD\u722C\uFF1B\u539F\u56E0\uFF1A${reason}\uFF09`);
+      return null;
+    }
+    console.log(`[fetch] microlink \u515C\u5E95\u5DF2\u53D6\u56DE\u6E32\u67D3\u540E HTML\uFF08${html.length} \u5B57\u8282\uFF1B\u539F\u56E0\uFF1A${reason}\uFF09`);
+    return html;
+  } catch (e) {
+    console.log(`[fetch] microlink \u515C\u5E95\u672A\u547D\u4E2D\uFF1A\u8BF7\u6C42\u5931\u8D25/\u8D85\u65F6\uFF08${e instanceof Error ? e.message : String(e)}\uFF1B\u539F\u56E0\uFF1A${reason}\uFF09`);
+    return null;
+  }
+}
+function decodeHtml(html, url, platform) {
+  const $ = loadHtml(html);
+  $("script,style,noscript,template,svg,iframe,link,meta").remove();
+  $("nav,footer,header,[role='navigation'],[role='banner'],[role='dialog'],[class*='cookie'],[class*='Cookie'],[id*='cookie']").remove();
+  const bodyText = normalizeText($("body").text());
+  if (platform?.ssr) {
+    const ssrMsgs = messagesFromChatgptStream(html);
+    if (ssrMsgs && ssrMsgs.length > 0) {
+      return { messages: ssrMsgs, source: "ssr:chatgpt" };
+    }
+    console.log("[fetch] chatgpt SSR \u6D41\u89E3\u7801\u672A\u547D\u4E2D \u2192 \u56DE\u9000\u89C4\u5219/\u55C5\u63A2");
+  }
+  let messages = null;
+  const { rules } = loadRules();
+  const rule = matchRule(rules, url);
+  if (rule) {
+    messages = extractByRule($, rule);
+    bumpHits(rule);
+  }
+  if (!messages || messages.length === 0) {
+    messages = sniffMessages($);
+  }
+  if (messages && messages.length > 0) {
+    return { messages, source: rule ? `rule:${rule.platform}` : "sniff" };
+  }
+  return null;
+}
 function platformOfUrl(url) {
   const p = detectPlatform(url);
   if (!p) return null;
@@ -593,34 +657,33 @@ export async function collectDialogue(url, { title = null } = {}) {
       }
     }
   }
+  let viaMicrolink = false;
+  if (!html) {
+    const rendered = await fetchViaMicrolink(url, fetchError ?? "\u76F4\u8FDE/\u4EE3\u7406\u5747\u62C9\u53D6\u5931\u8D25");
+    if (rendered) {
+      html = rendered;
+      viaMicrolink = true;
+    }
+  }
   if (!html) {
     return { ok: false, error: `${fetchError ?? "\u62C9\u53D6\u5931\u8D25"}\uFF08\u53EF\u7528 console-script \u6D4F\u89C8\u5668\u515C\u5E95\uFF09` };
   }
   if (html.length > MAX_HTML_BYTES) html = html.slice(0, MAX_HTML_BYTES);
-  const $ = loadHtml(html);
-  $("script,style,noscript,template,svg,iframe,link,meta").remove();
-  $("nav,footer,header,[role='navigation'],[role='banner'],[role='dialog'],[class*='cookie'],[class*='Cookie'],[id*='cookie']").remove();
-  const bodyText = normalizeText($("body").text());
   const pageTitle = extractPageTitle(html) || title || null;
-  if (platform?.ssr) {
-    const ssrMsgs = messagesFromChatgptStream(html);
-    if (ssrMsgs && ssrMsgs.length > 0) {
-      return { ok: true, messages: ssrMsgs, title: pageTitle, source: "ssr:chatgpt", sourceUrl: url };
+  const decoded = decodeHtml(html, url, platform);
+  if (decoded) {
+    return { ok: true, messages: decoded.messages, title: pageTitle, source: decoded.source, sourceUrl: url };
+  }
+  if (!viaMicrolink) {
+    const rendered = await fetchViaMicrolink(url, "HTML \u672A\u63D0\u53D6\u5230\u6D88\u606F\uFF08\u58F3\u9875\uFF09");
+    if (rendered) {
+      const retryHtml = rendered.length > MAX_HTML_BYTES ? rendered.slice(0, MAX_HTML_BYTES) : rendered;
+      const retry = decodeHtml(retryHtml, url, platform);
+      if (retry) {
+        console.log("[fetch] \u26A0\uFE0F microlink \u515C\u5E95\u547D\u4E2D \u2192 \u8BE5\u5E73\u53F0\u76F4\u8FDE\u65B9\u5F0F/\u89C4\u5219\u53EF\u80FD\u5DF2\u5931\u6548\uFF0C\u5EFA\u8BAE\u6C89\u6DC0\u89C4\u5219\u5230 .dailog-editor/rules.json");
+        return { ok: true, messages: retry.messages, title: extractPageTitle(retryHtml) || pageTitle, source: retry.source, sourceUrl: url };
+      }
     }
-    console.log("[fetch] chatgpt SSR \u6D41\u89E3\u7801\u672A\u547D\u4E2D \u2192 \u56DE\u9000\u89C4\u5219/\u55C5\u63A2");
-  }
-  let messages = null;
-  const { rules, fromLocal } = loadRules();
-  const rule = matchRule(rules, url);
-  if (rule) {
-    messages = extractByRule($, rule);
-    bumpHits(rule);
-  }
-  if (!messages || messages.length === 0) {
-    messages = sniffMessages($);
-  }
-  if (messages && messages.length > 0) {
-    return { ok: true, messages, title: pageTitle, source: rule ? `rule:${rule.platform}` : "sniff", sourceUrl: url };
   }
   return { ok: false, error: "\u672A\u63D0\u53D6\u5230\u6D88\u606F\uFF08\u65E0\u89C4\u5219\u547D\u4E2D + \u901A\u7528\u55C5\u63A2\u672A\u8BC6\u522B\u2014\u2014\u53EF\u7528 console-script \u6D4F\u89C8\u5668\u515C\u5E95\uFF0C\u6216\u6C89\u6DC0\u89C4\u5219\uFF09" };
 }

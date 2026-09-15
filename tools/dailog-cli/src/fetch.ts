@@ -12,6 +12,9 @@
 //      1. 规则库匹配（host+pathPrefix → user/assistant/content 选择器）；命中 hits+1 写回
 //      2. 无规则命中 → 通用嗅探（data-message-author-role 容器）
 //      3. 都失败 → 提示沉淀新规则（浏览器兜底后直接更新 .dailog-editor/rules.json，下次生效）
+//   ④ 托管渲染兜底（可选，末位，默认关）：直连/代理都拿不到，或拿到壳页提取不到消息时，
+//      交给 microlink 渲染一次再解码。开关 DAILOG_MICROLINK / MICROLINK_API_KEY——见 fetchViaMicrolink。
+//      它只是兜底，不是通道：命中即说明该平台的直连方式/规则需要更新。
 //   首次使用：从工程种子（assets/rules.json）自动初始化复制到 .dailog-editor/rules.json
 import { writeFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -663,6 +666,97 @@ async function extractGrok(config: EditorConfig, submissionId: string, url: stri
 }
 
 
+// ─────────────────────────────────────────────────────────────
+// 托管渲染兜底（microlink，可选、末位、默认关）
+//   直连/代理都拿不到 HTML，或拿到 200 壳页但提取不到消息时，交给 microlink 渲染一次再解码。
+//   · 开关（microlinkEnabled）：DAILOG_MICROLINK=0/off/false 关；=1/on/true 开；
+//     未设置时——配了 MICROLINK_API_KEY 即视为开启（配了 key = 已经决定要用）。
+//   · 额度：免费层 25 次/天（超了回 429）；付费层走 MICROLINK_API_KEY（反爬自动代理也在付费层）。
+//   · 因为托管渲染会把投稿链接交给第三方，默认关；只在需要时开（编辑救急 / 本机无 Chromium）。
+//   · 命中即打印警告：兜底能成 = 该平台的直连方式或规则该更新了（沉淀到 .dailog-editor/rules.json）。
+// ─────────────────────────────────────────────────────────────
+const MICROLINK_TIMEOUT_MS = 60_000; // 托管渲染比直连慢（对方起浏览器渲染），给足超时
+
+/** microlink 兜底是否开启（默认关；见文件头 ④） */
+function microlinkEnabled(): boolean {
+  const flag = (process.env.DAILOG_MICROLINK ?? "").trim().toLowerCase();
+  if (["0", "off", "false", "no"].includes(flag)) return false;
+  if (["1", "on", "true", "yes"].includes(flag)) return true;
+  return Boolean((process.env.MICROLINK_API_KEY ?? "").trim());
+}
+
+/** microlink 渲染 URL → 渲染后的整页 HTML（失败 → null，不抛；reason 只用于日志） */
+async function fetchViaMicrolink(url: string, reason: string): Promise<string | null> {
+  if (!microlinkEnabled()) return null;
+  const key = (process.env.MICROLINK_API_KEY ?? "").trim();
+  const endpoint = new URL("https://api.microlink.io/");
+  endpoint.searchParams.set("url", url);
+  endpoint.searchParams.set("meta", "false");
+  endpoint.searchParams.set("data.html.attr", "html"); // 不写 selector = 整页序列化为 HTML
+  try {
+    const res = await fetch(endpoint.href, {
+      headers: key ? { "x-api-key": key } : {},
+      signal: AbortSignal.timeout(MICROLINK_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      const hint = res.status === 429 ? "（免费层 25 次/天已用尽或超出额度）" : res.status === 401 || res.status === 403 ? "（API key 无效）" : "";
+      console.log(`[fetch] microlink 兜底未命中：HTTP ${res.status}${hint}（原因：${reason}）`);
+      return null;
+    }
+    const json = (await res.json()) as { status?: string; data?: { html?: unknown } };
+    const html = typeof json?.data?.html === "string" ? json.data.html : "";
+    if (!html) {
+      console.log(`[fetch] microlink 兜底未命中：响应里没有 html 内容（该页可能仍需登录/更强反爬；原因：${reason}）`);
+      return null;
+    }
+    console.log(`[fetch] microlink 兜底已取回渲染后 HTML（${html.length} 字节；原因：${reason}）`);
+    return html;
+  } catch (e) {
+    console.log(`[fetch] microlink 兜底未命中：请求失败/超时（${e instanceof Error ? e.message : String(e)}；原因：${reason}）`);
+    return null;
+  }
+}
+
+/** HTML → 消息（③ chatgpt SSR 流解码 → ④ 规则库 → 通用嗅探）。
+ *  直连/代理拿到的 HTML 与 microlink 渲染兜底拿到的 HTML 共用这一套解码；返回 null = 没提取到。 */
+function decodeHtml(
+  html: string,
+  url: string,
+  platform: PlatformInfo | null,
+): { messages: { role: string; content: string }[]; source: string } | null {
+  // 清洗正文（内存处理，不落盘）
+  const $ = loadHtml(html);
+  $("script,style,noscript,template,svg,iframe,link,meta").remove();
+  $("nav,footer,header,[role='navigation'],[role='banner'],[role='dialog'],[class*='cookie'],[class*='Cookie'],[id*='cookie']").remove();
+  const bodyText = normalizeText($("body").text());
+
+  // chatgpt：SSR 流解码优先（对话完整在流数据里，不依赖 DOM 渲染）
+  if (platform?.ssr) {
+    const ssrMsgs = messagesFromChatgptStream(html);
+    if (ssrMsgs && ssrMsgs.length > 0) {
+      return { messages: ssrMsgs, source: "ssr:chatgpt" };
+    }
+    console.log("[fetch] chatgpt SSR 流解码未命中 → 回退规则/嗅探");
+  }
+
+  // 规则 → 通用嗅探
+  let messages: { role: string; content: string }[] | null = null;
+  const { rules } = loadRules();
+  const rule = matchRule(rules, url);
+  if (rule) {
+    messages = extractByRule($, rule);
+    bumpHits(rule);
+  }
+  if (!messages || messages.length === 0) {
+    messages = sniffMessages($);
+  }
+  if (messages && messages.length > 0) {
+    return { messages, source: rule ? `rule:${rule.platform}` : "sniff" };
+  }
+  return null;
+}
+
+
 /** 平台名（url → guests 表 platform 字段：api/ssr 直取平台名，gemini/grok 用品牌名） */
 function platformOfUrl(url: string): string | null {
   const p = detectPlatform(url);
@@ -766,42 +860,40 @@ export async function extractSubmission(
       }
     }
   }
+  // ②.5 托管渲染兜底（可选、默认关）：直连与代理都没拿到 HTML 时才用
+  let viaMicrolink = false;
+  if (!html) {
+    const rendered = await fetchViaMicrolink(url, fetchError ?? "直连/代理均拉取失败");
+    if (rendered) {
+      html = rendered;
+      viaMicrolink = true;
+    }
+  }
   if (!html) {
     return { ok: false, error: `${fetchError ?? "拉取失败"}（可用 console-script 浏览器兜底）` };
   }
   if (html.length > MAX_HTML_BYTES) html = html.slice(0, MAX_HTML_BYTES);
 
-  // 清洗正文（内存处理，不落盘）
-  const $ = loadHtml(html);
-  $("script,style,noscript,template,svg,iframe,link,meta").remove();
-  $("nav,footer,header,[role='navigation'],[role='banner'],[role='dialog'],[class*='cookie'],[class*='Cookie'],[id*='cookie']").remove();
-  const bodyText = normalizeText($("body").text());
-
   // 页面标题（分享页 <title>/og:title）——作为原始对话标题；无则用 detail.title
   const pageTitle = extractPageTitle(html) || detail.title;
 
-  // ③ chatgpt：SSR 流解码优先（对话完整在流数据里，不依赖 DOM 渲染）
-  if (platform?.ssr) {
-    const ssrMsgs = messagesFromChatgptStream(html);
-    if (ssrMsgs && ssrMsgs.length > 0) {
-      return { ok: true, messages: ssrMsgs, title: pageTitle, source: "ssr:chatgpt", sourceUrl: url };
-    }
-    console.log("[fetch] chatgpt SSR 流解码未命中 → 回退规则/嗅探");
+  // ③ chatgpt SSR 流解码 → ④ 规则库 → 通用嗅探（同一套解码，兜底拿回的 HTML 复用）
+  const decoded = decodeHtml(html, url, platform);
+  if (decoded) {
+    return { ok: true, messages: decoded.messages, title: pageTitle, source: decoded.source, sourceUrl: url };
   }
 
-  // ④ 规则 → 通用嗅探
-  let messages: { role: string; content: string }[] | null = null;
-  const { rules, fromLocal } = loadRules();
-  const rule = matchRule(rules, url);
-  if (rule) {
-    messages = extractByRule($, rule);
-    bumpHits(rule);
-  }
-  if (!messages || messages.length === 0) {
-    messages = sniffMessages($);
-  }
-  if (messages && messages.length > 0) {
-    return { ok: true, messages, title: pageTitle, source: rule ? `rule:${rule.platform}` : "sniff", sourceUrl: url };
+  // ④.5 拿到了 HTML 但提取不到消息（多见于客户端渲染的壳页）→ 再让 microlink 渲染一次
+  if (!viaMicrolink) {
+    const rendered = await fetchViaMicrolink(url, "HTML 未提取到消息（壳页）");
+    if (rendered) {
+      const retryHtml = rendered.length > MAX_HTML_BYTES ? rendered.slice(0, MAX_HTML_BYTES) : rendered;
+      const retry = decodeHtml(retryHtml, url, platform);
+      if (retry) {
+        console.log("[fetch] ⚠️ microlink 兜底命中 → 该平台直连方式/规则可能已失效，建议沉淀规则到 .dailog-editor/rules.json");
+        return { ok: true, messages: retry.messages, title: extractPageTitle(retryHtml) || pageTitle, source: retry.source, sourceUrl: url };
+      }
+    }
   }
   return { ok: false, error: "未提取到消息（无规则命中 + 通用嗅探未识别——可用 console-script 浏览器兜底，或沉淀规则）" };
 }
@@ -817,6 +909,7 @@ export async function fetchPage(config: EditorConfig, args: string[]): Promise<v
   if (!result.ok) {
     console.error(`[fetch] 提取失败：${result.error}`);
     console.error("[fetch] 处理：console-script 浏览器兜底 / rule-test 沉淀规则 / 人工核对链接");
+    console.error("[fetch] 或开托管渲染兜底重试：DAILOG_MICROLINK=1（配 MICROLINK_API_KEY 可提额度）");
     process.exit(1);
   }
   const users = result.messages!.filter((m) => m.role === "user").length;

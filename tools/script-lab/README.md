@@ -18,6 +18,10 @@ docker compose up --build
 - **环境目标**：连哪个 services/api —— 内置 local/dev/prod 清单；远程用 `LAB_API_BASE`（+`DAILOG_ENV` 命名）+ `LAB_SITE_URL` 覆盖
 - **提示词**：镜像内置 `prompts/`；开发时用 compose 里的 `./prompts:/app/prompts` bind mount 热改；镜像内直接编辑会随容器重建丢失（后续迁 R2 后由 SPA 管理）
 - **限制**：采集的动态渲染平台（Gemini/Grok 部分页面）需本机 chromium，镜像暂未内置——失败会如实报错；其余平台走 cheerio 规则（R2 `rules/collect.json`，可配）
+- **采集兜底（可选，默认关）**：直连/代理都拿不到、或拿到壳页提取不到消息时，可让 microlink 托管渲染一次再解码
+  （容器里没有 chromium 时的应急通道）。设 `DAILOG_MICROLINK=1` 开启（`MICROLINK_API_KEY` 可选，免费层 25 次/天）。
+  它只是兜底不是通道：因为会把投稿链接交给第三方，默认关；命中即提示「该平台规则/直连方式该更新了」。
+  自测：`pnpm --filter @dailogues/script-lab verify:collect`
 - 本地开发仍可用 `pnpm lab`（同代码）；`Dockerfile`/`docker-compose.yml`/`.dockerignore` 见本目录
 
 ## 用法

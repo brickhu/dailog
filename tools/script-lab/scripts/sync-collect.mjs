@@ -30,6 +30,39 @@ const shims = [
 ].join("\n");
 src = src.replace('import { api, defaultAssetsDir, draftDir, rulesPath } from "./lib.js";', shims);
 
+// —— lab 专属接线：采集规则走「R2 注入态」（server.mjs 采集前 setCollectRules(doc, persistCb)；
+//    容器/远程没有仓库根规则文件，命中计数也走回调持久化到 R2）。CLI 版没有这层，故在同步时注入。——
+const rulesAnchor = "function loadRules() {";
+if (!src.includes(rulesAnchor)) { console.error("[sync-collect] loadRules 锚点缺失"); process.exit(1); }
+src = src.replace(rulesAnchor, [
+  "// R2 注入态：服务端在采集前 setCollectRules(r2Doc) ——容器/远程无仓库根文件依赖；bumpHits 走回调持久化",
+  "let injectedDoc = null;",
+  "let rulesPersistCb = null;",
+  "export function setCollectRules(doc, persistCb) {",
+  "  injectedDoc = doc && Array.isArray(doc.rules) ? doc : null;",
+  "  rulesPersistCb = typeof persistCb === 'function' ? persistCb : null;",
+  "}",
+  rulesAnchor,
+].join("\n"));
+
+const loadAnchor = "function loadRules() {\n  const local = rulesPath();";
+if (!src.includes(loadAnchor)) { console.error("[sync-collect] loadRules 结构变化，同步中止"); process.exit(1); }
+src = src.replace(loadAnchor,
+  "function loadRules() {\n  if (injectedDoc) return { rules: injectedDoc.rules, fromLocal: false };\n  const local = rulesPath();");
+
+const bumpAnchor = "function bumpHits(rule) {\n  const local = rulesPath();";
+if (!src.includes(bumpAnchor)) { console.error("[sync-collect] bumpHits 结构变化，同步中止"); process.exit(1); }
+src = src.replace(bumpAnchor, [
+  "function bumpHits(rule) {",
+  "  if (injectedDoc && rulesPersistCb) {",
+  "    const target = injectedDoc.rules.find((r) => r.platform === rule.platform && r.host === rule.host);",
+  "    if (target) target.hits = (target.hits ?? 0) + 1;",
+  "    try { rulesPersistCb(injectedDoc); } catch { /* 持久化失败不阻断采集 */ }",
+  "    return;",
+  "  }",
+  "  const local = rulesPath();",
+].join("\n"));
+
 const iStart = src.indexOf("async function extractSubmission(");
 const sigEnd = src.indexOf("\n", iStart);
 const dirMark = src.indexOf("  const dir = draftDir(submissionId);", sigEnd);

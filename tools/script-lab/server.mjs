@@ -7,7 +7,7 @@ import { createServer } from "node:http";
 import { readFileSync, existsSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveLlmConfig } from "./lib/config.mjs";
+import { resolveLlmConfig, parseEnvFile } from "./lib/config.mjs";
 import { complete, buildChatBody } from "./lib/llm.mjs";
 import { getPrompt, renderPrompt, promptConfig } from "./lib/prompt.mjs";
 
@@ -22,6 +22,13 @@ function flagValue(name) {
 const port = Number(flagValue("--port") || process.env.PORT || "4173");
 let env = flagValue("--env") || process.env.DAILOG_ENV || null;   // 启动时可为空——登录页选择环境
 const activeEnv = () => env || process.env.DAILOG_ENV || null;
+
+// .env → process.env（只补没设置的键）：采集等底层模块（lib/collect.mjs）直接读 process.env
+// （SOCKS 代理、MICROLINK_API_KEY / DAILOG_MICROLINK 等），让 tools/script-lab/.env 对它们同样生效
+// 优先级：真实环境变量 > tools/script-lab/.env；容器里直接注入环境变量即可（无需 .env）
+for (const [k, v] of Object.entries(parseEnvFile(join(here, ".env")))) {
+  if (process.env[k] === undefined) process.env[k] = v;
+}
 
 // ===== 提示词进化数据（feedback/review.jsonl）=====
 const FB_DIR = join(process.env.LAB_STATE_DIR || here, "feedback");

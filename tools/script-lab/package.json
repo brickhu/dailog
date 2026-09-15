@@ -8,6 +8,7 @@
     "run": "node run.mjs",
     "lab": "node server.mjs",
     "lab:dev": "node server.mjs --env dev",
-    "verify:prompts": "node scripts/verify-prompts.mjs"
+    "verify:prompts": "node scripts/verify-prompts.mjs",
+    "verify:collect": "node scripts/verify-collect-fallback.mjs"
   }
 }
