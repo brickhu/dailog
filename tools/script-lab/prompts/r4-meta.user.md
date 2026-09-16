@@ -66,7 +66,119 @@ Preserve proper nouns, product names, technical terms, and commonly used English
 
 ---
 
-# 3. CATEGORY
+# 3. DIALOG CONTENT GRAMMAR
+
+dailog is not primarily a question-and-answer platform.
+
+Its distinctive content unit is a **cognitive exploration**:
+
+```text
+Thought
+→
+Question or Tension
+→
+Exploration
+→
+Reframing / Discovery / Realization
+```
+
+The metadata should reflect this structure.
+
+> **dailog does not simply ask a question. It opens a thought.**
+
+Traditional knowledge platforms often package content as:
+
+* How to X?
+* Why does X happen?
+* What do you think about X?
+* What is X?
+
+These forms may still be used when they are genuinely the strongest expression of the episode, but they should NOT become the default title grammar for dailog.
+
+Prefer titles and descriptions that communicate one of the following:
+
+* a thought that changed,
+* a tension that became interesting,
+* an assumption that was challenged,
+* an unexpected implication,
+* a realization,
+* a contradiction,
+* a question that became more interesting through exploration,
+* an idea that led somewhere unexpected.
+
+Useful editorial patterns include:
+
+### Thought → Shift
+
+```text
+We thought X. Then we started questioning Y.
+```
+
+```text
+我们原本以为 X，聊到最后却开始怀疑 Y。
+```
+
+### Question → Unexpected Direction
+
+```text
+We asked X. The interesting part was where the question led.
+```
+
+```text
+我们从 X 开始，最后聊成了 Y。
+```
+
+### Assumption → Reframing
+
+```text
+We thought X was the problem. Maybe it was Y.
+```
+
+```text
+我们以为问题是 X，后来发现真正值得讨论的可能是 Y。
+```
+
+### Exploration → Tension
+
+```text
+The more we looked at X, the harder Y became to ignore.
+```
+
+```text
+越往下想 X，Y 这个问题就越无法回避。
+```
+
+### Discovery
+
+```text
+We started with X and ended up somewhere unexpected.
+```
+
+```text
+我们从 X 出发，最后发现了一个没想到的问题。
+```
+
+These are **editorial directions, not templates**.
+
+Do not mechanically reproduce these sentence structures.
+
+Choose the form that best represents the actual cognitive movement of the episode.
+
+The metadata should make the listener feel:
+
+> **“I want to hear how they got from here to there.”**
+
+rather than merely:
+
+> **“I want to know the answer.”**
+
+Do not fabricate a cognitive shift merely to make the metadata sound more interesting.
+
+The shift, tension, or discovery must be supported by the final script.
+
+---
+
+# 4. CATEGORY
 
 `category` represents the **primary value the listener takes away from the episode**, not the subject of the episode.
 
@@ -105,34 +217,69 @@ Do not classify based on topic, industry, or keywords.
 
 ---
 
-# 4. TITLE
+# 5. TITLE
 
 Generate one compelling title.
 
-The title should:
+The title is the **first expression of dailog's editorial grammar**.
 
-* reflect the central question, tension, or idea,
+It should:
+
+* reflect the central cognitive exploration,
+* communicate the central question, tension, shift, or idea,
 * be understandable without the source conversation,
 * create curiosity,
 * feel editorial rather than promotional,
+* feel like an opening into a thought rather than a generic knowledge question,
 * avoid generic podcast language,
 * avoid misleading clickbait.
 
-Do not reveal the entire conclusion when doing so would remove the reason to listen.
-
-Good title directions include:
+A title may be:
 
 * a compelling question,
 * a contradiction,
 * an unresolved tension,
 * a personal realization,
-* an unexpected idea.
+* an unexpected implication,
+* a reframing,
+* a statement that creates a meaningful gap.
 
-Choose the form that best fits the episode.
+Do NOT default to formats such as:
+
+* How to X
+* Why X?
+* What is X?
+* What do you think about X?
+
+unless that form is genuinely the most natural and compelling expression of the episode.
+
+Prefer the **cognitive movement** when one exists.
+
+For example, instead of merely naming the topic:
+
+```text
+Will AI Replace Designers?
+```
+
+a stronger dailog-style direction may express the exploration:
+
+```text
+We Asked AI If It Could Replace Designers. The Answer Wasn't the Interesting Part.
+```
+
+or:
+
+```text
+我们问 AI 会不会取代设计师，真正有意思的却不是答案。
+```
+
+The example illustrates editorial direction only. Do not copy it mechanically.
+
+Do not reveal the entire conclusion when doing so would remove the reason to listen.
 
 ---
 
-# 5. SUMMARY
+# 6. SUMMARY
 
 Generate a short supplementary hook.
 
@@ -142,27 +289,60 @@ Length:
 
 The summary should:
 
-* add context to the title,
+* complement the title rather than repeat it,
+* briefly establish the starting point of the exploration,
+* hint at the tension, turn, or unexpected direction,
 * clarify what makes the conversation interesting,
 * create curiosity,
-* avoid repeating the title word-for-word,
 * avoid revealing the entire conclusion.
+
+Think of the relationship as:
+
+```text
+Title
+= opens the thought
+
+Summary
+= shows where the thought begins and hints at where it goes
+```
+
+The summary should not simply explain the topic.
+
+It should help the listener understand **why this particular conversation is worth hearing**.
 
 ---
 
-# 6. DESCRIPTION
+# 7. DESCRIPTION
 
 Generate an editorial introduction of approximately **100–200 words**.
 
 The description should naturally establish:
 
 1. the starting situation,
-2. the central question,
-3. the tension,
-4. the exploration,
-5. why the conversation is worth hearing.
+2. the initial question, assumption, or idea,
+3. the tension or uncertainty,
+4. the direction of the exploration,
+5. the reason the listener may want to hear the conversation unfold.
 
-The description should read like editorial copy for a podcast, not an article abstract.
+The description should reflect the **cognitive journey**, not merely the subject matter.
+
+Do not write:
+
+> “This episode discusses X, Y, and Z.”
+
+Prefer a structure closer to:
+
+```text
+We started with X.
+A tension appeared around Y.
+The conversation pushed that idea further.
+Something about the original assumption began to change.
+That is what makes the conversation worth hearing.
+```
+
+Do not reproduce this wording literally.
+
+The final description should feel like editorial writing for a show whose value lies in **watching an idea evolve through conversation**.
 
 Do not list every topic discussed.
 
@@ -174,7 +354,7 @@ Create a curiosity gap while remaining truthful to the episode.
 
 ---
 
-# 7. TAGS
+# 8. TAGS
 
 Generate **3–5 tags** describing what the episode is about.
 
@@ -202,7 +382,7 @@ Preserve standard technical terms in their commonly used form.
 
 ---
 
-# 8. COVER KEYWORDS
+# 9. COVER KEYWORDS
 
 Generate **2–4 English visual search phrases** for the episode cover.
 
@@ -232,9 +412,9 @@ These are visual search prompts, not content tags.
 
 ---
 
-# 9. REFERENCES
+# 10. REFERENCES
 
-Identify important external concepts, technologies, products, protocols, companies, people, tools, markets, or specialized terminology that appear in the final episode.
+Identify important external concepts, technologies, products, protocols, companies, people, markets, or specialized terminology that appear in the final episode.
 
 Include a reference when additional context would materially help the listener.
 
@@ -270,7 +450,7 @@ Keep explanations concise and relevant to the episode.
 
 ---
 
-# 10. REFERENCE LINKS
+# 11. REFERENCE LINKS
 
 Never invent a URL.
 
@@ -291,7 +471,7 @@ When no reliable link is available, use:
 
 ---
 
-# 11. HIGHLIGHT
+# 12. HIGHLIGHT
 
 Generate **exactly one** highlight.
 
@@ -316,7 +496,7 @@ Do not translate the quote.
 
 ---
 
-# 12. HIGHLIGHT SELECTION
+# 13. HIGHLIGHT SELECTION
 
 Prefer, in this order:
 
@@ -337,9 +517,11 @@ A strong highlight should:
 
 Avoid generic statements, greetings, definitions, and lines that require extensive missing context.
 
+Prefer a line that lets the listener **feel the thinking** rather than simply learn the topic.
+
 ---
 
-# 13. DO NOT SPOIL THE EPISODE
+# 14. DO NOT SPOIL THE EPISODE
 
 Metadata should reveal enough to make the episode interesting without eliminating the need to listen.
 
@@ -348,7 +530,8 @@ It may reveal:
 * the starting situation,
 * the central question,
 * the tension,
-* an intriguing observation.
+* an intriguing observation,
+* the direction of the exploration.
 
 It should generally preserve some uncertainty around:
 
@@ -358,9 +541,11 @@ It should generally preserve some uncertainty around:
 
 The listener should still have a reason to press play.
 
+Do not manufacture mystery when the episode itself contains no meaningful uncertainty.
+
 ---
 
-# 14. OVERALL EDITORIAL STYLE
+# 15. OVERALL EDITORIAL STYLE
 
 Write like a thoughtful editor, not a marketing copy generator.
 
@@ -370,7 +555,10 @@ The metadata should be:
 * concise,
 * intelligent,
 * natural,
-* intriguing.
+* intriguing,
+* recognizably dailog-like.
+
+dailog should feel like **a place where ideas unfold through conversation**.
 
 Avoid:
 
@@ -379,13 +567,18 @@ Avoid:
 * corporate wording,
 * academic abstracts,
 * empty phrases such as "deep dive" or "explore the fascinating world of",
-* repetitive claims that the conversation is "profound" or "insightful."
+* repetitive claims that the conversation is "profound" or "insightful,"
+* generic question-first packaging when a stronger cognitive shift exists.
 
 Show the value through the writing instead of describing the value.
 
+Do not force every episode into the same title pattern.
+
+**Consistency should come from the underlying editorial grammar, not from identical wording.**
+
 ---
 
-# 15. FINAL QUALITY CHECK
+# 16. FINAL QUALITY CHECK
 
 Before returning the result, verify:
 
@@ -394,18 +587,24 @@ Before returning the result, verify:
 * Is it interesting?
 * Is it grounded in the episode?
 * Does it create curiosity?
+* Does it reflect a question, tension, shift, realization, or intriguing idea?
+* Does it feel like dailog rather than a generic knowledge-platform question?
 * Does it avoid giving away the entire conclusion?
 
 ### Summary
 
 * Does it complement the title?
+* Does it establish the starting point of the exploration?
+* Does it hint at where the conversation goes?
 * Does it give the listener a reason to listen?
 
 ### Description
 
 * Is it approximately 100–200 words?
 * Does it establish context and tension?
+* Does it communicate the cognitive journey?
 * Does it avoid becoming a transcript summary?
+* Does it preserve some curiosity?
 
 ### Category
 
@@ -435,11 +634,20 @@ Before returning the result, verify:
 * Is it copied verbatim from the final script?
 * Is the original language preserved?
 
+### DIALOG SIGNATURE
+
+* Does the metadata package this episode as a **thought in motion**, rather than simply a topic or question?
+* Does it capture the most meaningful cognitive exploration in the script?
+* Does it communicate some sense of **“we started here, and the thinking led somewhere”**?
+* Does it avoid sounding like a rewritten Quora/知乎 question?
+* Does the packaging make the listener curious about **how the thinking unfolds**?
+
 ### Overall
 
 * Would this metadata make someone curious enough to press play?
 * Does it communicate the episode's value without summarizing everything?
 * Does it feel like editorial packaging rather than AI-generated copy?
+* Does it feel recognizably like **dailog** without relying on a rigid template?
 
 ---
 
@@ -447,40 +655,35 @@ Before returning the result, verify:
 
 Return valid JSON only.
 
+```json
 {
-"title": "Episode title",
-
-"summary": "1–2 sentence supplementary hook",
-
-"description": "100–200 word editorial introduction",
-
-"tags": [
-"tag 1",
-"tag 2",
-"tag 3"
-],
-
-"coverKeywords": [
-"visual search phrase 1",
-"visual search phrase 2"
-],
-
-"category": "insight",
-
-"references": [
-{
-"term": "Original term",
-"type": "technology",
-"explanation": "One-sentence explanation",
-"links": [
-"https://..."
-]
+  "title": "Episode title",
+  "summary": "1–2 sentence supplementary hook",
+  "description": "100–200 word editorial introduction",
+  "tags": [
+    "tag 1",
+    "tag 2",
+    "tag 3"
+  ],
+  "coverKeywords": [
+    "visual search phrase 1",
+    "visual search phrase 2"
+  ],
+  "category": "insight",
+  "references": [
+    {
+      "term": "Original term",
+      "type": "technology",
+      "explanation": "One-sentence explanation",
+      "links": [
+        "https://..."
+      ]
+    }
+  ],
+  "highlights": [
+    {
+      "text": "Exact verbatim line from the final script"
+    }
+  ]
 }
-],
-
-"highlights": [
-{
-"text": "Exact verbatim line from the final script"
-}
-]
-}
+```

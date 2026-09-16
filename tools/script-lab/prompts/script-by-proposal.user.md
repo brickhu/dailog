@@ -15,11 +15,11 @@ You are given:
 3. The Host name.
 4. The Guest name.
 
-Your task is to create the final podcast interview script.
+Your task is to turn the source conversation and the approved editorial proposal into a compelling **5–15 minute interview-style podcast episode**.
 
 ---
 
-# 1. THE CONTRACT
+# 1. THE EDITORIAL CONTRACT
 
 The `creative_proposal` is the **complete editorial contract** for this episode.
 
@@ -29,7 +29,7 @@ Do not replace the selected exploration.
 
 Do not introduce a different primary theme.
 
-Use every field of the proposal as part of one cognitive arc:
+Use the proposal as one connected cognitive arc:
 
 ```text
 core_question
@@ -49,162 +49,366 @@ ending_state
 open_question
 ```
 
----
+Each field has a specific role.
 
-# 2. HOW TO USE THE PROPOSAL
+### core_question
 
-## core_question
+The central question of the episode.
 
-This is the central question of the entire episode.
+It determines what the Host is fundamentally trying to understand.
 
-It determines:
+It should drive the conversation from beginning to end.
 
-* what the Host is fundamentally trying to understand,
-* what the interview keeps returning to,
-* what the audience should care about.
-
-Do not replace it with a broader topic.
+Do not broaden it into a general topic.
 
 Do not answer it immediately.
 
-The conversation should progressively investigate it.
+---
+
+### initial_state
+
+The Host's cognitive starting point.
+
+This is what the Host believes, assumes, wants, fears, or finds confusing at the beginning.
+
+Do not rewrite the starting state using knowledge gained later.
 
 ---
 
-## initial_state
+### central_tension
 
-This is the Human's cognitive starting point.
+The reason the question is not easy to answer.
 
-Use it to establish:
-
-* what the Host currently believes,
-* what assumption they are making,
-* what they are trying to solve,
-* what they find confusing.
-
-This is the starting position, not the conclusion rewritten backward.
+It is the contradiction, trade-off, uncertainty, conflict, or unresolved problem that gives the interview momentum.
 
 ---
 
-## central_tension
+### exploration
 
-This is why the core question does not have an obvious answer.
+The relevant reasoning material discovered in the source conversation.
 
-Use it as the intellectual tension that drives the interview.
-
-The conversation should deepen or challenge this tension.
-
----
-
-## exploration
-
-This is the relevant reasoning material discovered in the source conversation.
-
-Use it as source material for:
+Use it as the source for:
 
 * questions,
-* examples,
 * arguments,
 * counterarguments,
+* examples,
 * distinctions,
-* concrete situations.
+* concrete situations,
+* existing disagreements,
+* existing uncertainties.
 
 Do not reproduce it chronologically.
 
 ---
 
-## turning_point
+### turning_point
 
-This is the major cognitive transition.
+The major cognitive transition.
 
 Build toward it.
 
-Do not reveal it immediately.
+Do not announce it at the beginning.
 
-The Host or Guest may trigger it through:
+It may emerge from:
 
+* a challenge,
 * an objection,
-* an example,
 * a contradiction,
-* a reframing,
-* a deeper question.
+* a concrete example,
+* a clarification,
+* or a deeper question.
 
 ---
 
-## possible_discovery
+### possible_discovery
 
-This is the most promising destination identified by the Proposal Detector.
+The strongest insight this exploration appears capable of reaching.
 
-It is NOT the opening thesis.
+It is a **destination**, not an opening thesis.
 
-Do NOT tell the audience this conclusion at the beginning.
+Do not reveal it too early.
 
-The conversation should earn its way toward it.
-
-Do not force a discovery that contradicts the source.
+Do not force the conversation to reach it if doing so would contradict the source.
 
 ---
 
-## ending_state
+### ending_state
 
-This describes the change in understanding actually supported by the source conversation.
+The change in understanding actually supported by the source conversation.
 
 Use it to shape the latter part of the episode.
 
-The ending should feel earned.
+Do not exaggerate it.
 
 ---
 
-## open_question
+### open_question
 
-This describes what remains unresolved.
+What remains unresolved.
 
 Use it when the exploration naturally remains open.
 
-Do not force a neat answer.
-
-A better question can be a stronger ending than a false conclusion.
+A stronger question is often a better ending than an artificial conclusion.
 
 ---
 
-# 3. THE SOURCE CONVERSATION
+# 2. THE SOURCE CONVERSATION
 
-The original conversation is the source material for the episode.
+The original conversation is the **semantic source material** for the episode.
 
 It can provide:
 
 * facts,
 * ideas,
-* examples,
 * arguments,
 * questions,
+* examples,
 * actual Human concerns,
 * actual AI reasoning,
+* disagreements,
 * contradictions,
-* discoveries.
+* discoveries,
+* uncertainty,
+* changes in understanding.
 
 But:
 
 > **The source conversation is a knowledge and evidence repository, not conversational memory.**
 
+The final episode is not a replay of the raw transcript.
+
+It is an editorial reconstruction of the same underlying interaction.
+
 ---
 
-# 4. INTERNAL WORKING MODEL
+# 3. RECONSTRUCT THE CONVERSATION, NOT THE MINDS
 
-Before writing the script, perform this process internally:
+The source conversation is the **semantic ground truth**.
+
+Your task is to reconstruct a more natural, engaging, present-tense interview while preserving the intellectual identity of the original Human and AI participants.
+
+> **Reconstruct the conversation, not the minds.**
+
+The conversational layer may be reconstructed.
+
+The semantic layer must remain faithful.
+
+Preserve:
+
+* beliefs,
+* positions,
+* arguments,
+* factual claims,
+* personal experiences,
+* motivations,
+* values,
+* preferences,
+* disagreements,
+* discoveries,
+* cognitive changes,
+* conclusions,
+* uncertainty.
+
+Do not invent a substantive belief, experience, motivation, value, or position that is not supported by the source conversation.
+
+> **Ideas may move. Ownership must not be fabricated.**
+
+An idea originally expressed by one participant may be naturally rephrased, developed, clarified, or incorporated by the other when the source conversation shows meaningful engagement with that idea.
+
+The goal is not to preserve literal authorship of every sentence. The goal is to preserve meaningful intellectual provenance where attribution matters.
+
+Ideas that emerge through the interaction may be expressed as shared or emerging realizations, but should not be presented as a pre-existing belief of one participant when the source does not support that interpretation.
+
+When a substantive idea is materially tied to a participant's personal belief, experience, judgment, preference, or consequential position, preserve its attribution.
+
+Do not silently transfer a meaningful position from one participant to the other simply because it makes the dialogue smoother.
+
+### SOURCE SUPPORT TEST
+
+For every substantive statement, ask:
+
+> **Is this directly supported, reasonably implied, or genuinely emerging from the source interaction?**
+
+If not, do not invent it.
+
+### POSITION DELTA TEST
+
+After reading the reconstructed script, ask:
+
+> **Would a reasonable listener believe that either participant holds a materially different position from the one supported by the source conversation?**
+
+If yes, rewrite.
+
+The reconstruction may make participants clearer, more concise, reflective, and conversational, but must not manufacture a materially different intellectual identity.
+
+> **New questions may be constructed. New beliefs may not.**
+
+---
+
+# 4. SOURCE-GROUNDED CONVERSATIONAL FRICTION
+
+The final episode should not sound like two people taking turns delivering polished arguments.
+
+It should feel like ideas are **meeting each other in real time**.
+
+Use conversational friction when it is supported by the source.
+
+Useful forms include:
+
+### Immediate reaction
+
+Guest says something:
+
+> Host reacts before moving to the next idea.
+
+### Resistance
+
+Host is not immediately convinced by an existing Guest position.
+
+### Clarification
+
+One participant realizes they may have misunderstood the other.
+
+### Correction
+
+A participant narrows, qualifies, or corrects an earlier statement.
+
+### Contradiction
+
+One existing idea creates pressure on another existing idea.
+
+### Counterexample
+
+An existing claim is tested against an example already supported by the source.
+
+### Reconsideration
+
+A participant realizes their current framing may be incomplete.
+
+### Thought formation
+
+A participant starts with an imperfect formulation and sharpens it during the conversation.
+
+These create the feeling of:
+
+> **"They are thinking through this together."**
+
+not:
+
+> **"They are reading a finished article to each other."**
+
+---
+
+# 5. WHAT MAY BE NEW AND WHAT MAY NOT
+
+## New questions ARE allowed
+
+You may create Host questions that were not explicitly asked in the source.
+
+A new question is valid when it naturally follows from:
+
+* an existing position,
+* an existing argument,
+* an existing contradiction,
+* an existing implication,
+* an existing uncertainty,
+* or the central tension in the proposal.
+
+Example:
+
+Source:
+
+> Host: "CVD divergence isn't exactly a secret."
+
+> Guest: "Knowing it and operationalizing it are different."
+
+Possible reconstruction:
+
+> Host: "Wait. If everyone already knows the pattern, why would operationalizing it make it a moat?"
+
+The exact question is new.
+
+The underlying issue is not.
+
+---
+
+## New substantive answers are NOT allowed
+
+Do not invent a new theory, argument, fact, experience, or conclusion merely because a newly written question creates a gap.
+
+If the source does not contain enough material to answer a question:
+
+1. use an existing source-backed idea,
+2. qualify the answer,
+3. acknowledge uncertainty,
+4. allow the question to remain unresolved,
+5. or let the Host recognize that the answer is incomplete.
+
+Do not invent a better answer simply to make the conversation flow.
+
+> **New questions may be constructed. New beliefs may not.**
+
+---
+
+# 6. SOURCE SUPPORT TEST
+
+For every substantive statement, ask:
+
+> **What in the source conversation supports this statement?**
+
+Support may be:
+
+* direct,
+* implied by multiple exchanges,
+* or a faithful reformulation of an existing idea.
+
+If there is no reasonable source support, remove or rewrite the line.
+
+A line may be conversationally invented.
+
+Its underlying meaning may not be invented.
+
+---
+
+# 7. POSITION DELTA TEST
+
+Before finalizing the script, compare the generated script with the source.
+
+Ask:
+
+> **Would the Host or Guest hold any meaningfully different position after reading this script than they did in the source conversation?**
+
+If yes, revise.
+
+The goal is:
+
+> **same minds, better conversation.**
+
+---
+
+# 8. FORGET THE ORIGINAL TIMELINE
+
+The source conversation provides meaning, not chronology.
+
+Internally perform:
 
 ```text
 Original Conversation
         ↓
 Extract relevant semantic material
         ↓
+Separate semantic substance from conversational form
+        ↓
+Preserve beliefs, positions, facts, experiences, and cognitive states
+        ↓
 FORGET THE ORIGINAL TIMELINE
         ↓
-Ignore when each idea was originally mentioned
+Use the Creative Proposal as the cognitive arc
         ↓
-Retain meaning, evidence, and genuine reasoning
+Reconstruct the interaction
         ↓
-Use Creative Proposal as the cognitive arc
+Create source-grounded conversational friction
         ↓
 Rebuild the conversation in the present
         ↓
@@ -217,7 +421,7 @@ Critical rule:
 
 ---
 
-# 5. TEMPORAL ISOLATION
+# 9. TEMPORAL ISOLATION
 
 The final episode is NOT:
 
@@ -225,13 +429,13 @@ The final episode is NOT:
 * a follow-up,
 * a retrospective,
 * an interview about a previous conversation,
-* a conversation that happens after the source conversation.
+* a conversation happening after the source conversation.
 
 The Host and Guest are having the conversation **now**.
 
-Never imply that they previously discussed the topic.
+Never imply that they previously discussed the subject.
 
-Avoid all language such as:
+Avoid fictional-memory language such as:
 
 * "we talked about this before"
 * "we discussed this earlier"
@@ -246,17 +450,17 @@ Avoid all language such as:
 * "after our conversation..."
 * "that's what you told me before..."
 
-This remains forbidden even when the referenced information genuinely exists in the source.
+This is forbidden even when the referenced information genuinely exists in the source.
 
 ---
 
-# 6. USE SOURCE KNOWLEDGE WITHOUT SOURCE MEMORY
+# 10. USE SOURCE KNOWLEDGE WITHOUT SOURCE MEMORY
 
-Suppose the source conversation contains:
+Suppose the source contains:
 
 > Human: "Does CVD divergence count as a moat?"
 
-The final script may say:
+The final episode may say:
 
 > "Let's take CVD divergence as an example. If I build that into the product, does it actually create a moat?"
 
@@ -264,29 +468,33 @@ It must NOT say:
 
 > "Earlier we talked about CVD divergence. Does that count as a moat?"
 
-The idea may be reused.
+The concept survives.
 
-The fictional history may not.
+The fictional conversational history does not.
 
 ---
 
-# 7. THE EPISODE SHOULD FEEL LIKE "NOW"
+# 11. PRESENT-TENSE CONVERSATION
 
-Every line should sound as though the conversation is happening for the first time in this episode.
+Every line should feel like it is happening for the first time in this episode.
 
 The Host can know things.
 
 The Guest can know things.
 
-The source provides both with semantic material.
+Both may bring up material from the source.
 
-But no one should narrate the source conversation as a past event.
+But nobody should narrate the source conversation as something that happened previously.
+
+The listener should feel:
+
+> **"I am sitting in this conversation right now."**
 
 ---
 
-# 8. COGNITIVE MOVEMENT
+# 12. COGNITIVE MOVEMENT
 
-The episode should let the listener experience:
+The episode should allow the listener to experience movement:
 
 ```text
 Initial understanding
@@ -305,82 +513,93 @@ Deeper exploration
       ↓
 Possible discovery
       ↓
-Ending state / Open question
+Ending state / open question
 ```
 
-Do not jump directly from the initial state to the final discovery.
+Do not jump directly from initial state to final discovery.
+
+The discovery should be earned through interaction.
 
 ---
 
-# 9. DO NOT START FROM THE CONCLUSION
-
-This is one of the strongest constraints.
+# 13. DO NOT START FROM THE CONCLUSION
 
 Do NOT:
 
-1. Decide the final insight.
-2. Make the Guest explain it immediately.
-3. Make the Host ask questions that simply expose it.
-4. Summarize it at the end.
+1. decide the final insight,
+2. make the Guest explain it immediately,
+3. make the Host ask questions that simply expose it,
+4. summarize the same conclusion at the end.
 
-That produces an AI-generated essay disguised as an interview.
+That produces an AI-generated article disguised as an interview.
 
-Instead, let the conversation **earn the insight**.
+Instead:
 
-The listener should not know exactly where the conversation will go.
+> **Let the conversation discover its way there.**
+
+The audience should not know exactly where the conversation is going.
 
 ---
 
-# 10. THE HOST
+# 14. THE HOST
 
 The Host is an active participant, not a question-delivery mechanism.
 
 The Host should:
 
-* ask naturally,
+* react to what the Guest actually says,
 * challenge,
 * doubt,
 * test assumptions,
-* introduce counterexamples,
+* introduce source-grounded counterexamples,
 * notice contradictions,
 * ask for distinctions,
+* misunderstand occasionally when supported by the logic,
 * reconsider,
+* sharpen an unfinished thought,
 * occasionally change their mind.
 
-The Host should be genuinely curious.
+The Host should have a recognizable human voice.
 
-The Host may use conversational reactions such as:
+Use conversational reactions naturally:
 
 * "Wait."
 * "I'm not sure I buy that."
 * "But doesn't that contradict what you just said?"
-* "Let's slow down here."
+* "Hold on."
 * "What do you mean by that?"
-* "Maybe we're asking the wrong question."
+* "I think we're mixing two things."
 * "That doesn't quite explain my situation."
+* "Let me think about that for a second."
+* "I'm not sure that's the right way to put it."
 
-Use such language naturally.
+These are examples of conversational functions, not phrases to insert mechanically.
 
-Do not manufacture drama.
+Do not manufacture emotional drama.
 
 ---
 
-# 11. THE GUEST
+# 15. THE GUEST
 
 The AI Guest is a participant, not an oracle.
 
 The Guest should:
 
+* respond to the Host's actual reaction,
 * answer directly,
 * develop ideas progressively,
-* respond to what the Host actually says,
+* qualify claims,
 * acknowledge uncertainty,
-* challenge the Host when appropriate,
-* revise an earlier position,
+* challenge the Host where source-supported,
+* revise or narrow an earlier claim,
 * make distinctions,
 * recognize contradictions.
 
-The Guest should NOT simply dump complete answers.
+Do not make every answer complete.
+
+Do not make every answer quotable.
+
+Do not make the Guest sound like an essay writer.
 
 Avoid excessive AI language:
 
@@ -391,29 +610,27 @@ Avoid excessive AI language:
 * "I completely understand."
 * "That's a very insightful point."
 
-Do not make every answer sound like a quote.
-
-Natural conversation is more important than aphoristic writing.
+Natural conversation is more important than polished aphorisms.
 
 ---
 
-# 12. HOST ↔ GUEST DYNAMICS
+# 16. HOST ↔ GUEST DYNAMICS
 
-Desired pattern:
+The desired interaction is:
 
 ```text
-Host asks
-    ↓
-Guest answers
-    ↓
-Host reacts to the actual answer
-    ↓
-Guest responds to that reaction
-    ↓
-A new issue appears
-    ↓
-Host follows it
-    ↓
+Host says something
+      ↓
+Guest reacts
+      ↓
+Host responds to what was actually said
+      ↓
+Guest clarifies / resists / refines
+      ↓
+A tension appears
+      ↓
+They follow the tension
+      ↓
 Understanding changes
 ```
 
@@ -421,48 +638,69 @@ Avoid:
 
 ```text
 Host asks prepared question
-    ↓
-Guest delivers complete essay
-    ↓
+      ↓
+Guest delivers complete answer
+      ↓
 Host asks next prepared question
-    ↓
-Guest delivers next essay
+      ↓
+Guest delivers next complete answer
 ```
 
 The next question should often emerge from the previous answer.
 
+The next answer should often respond to the Host's reaction rather than simply advancing the outline.
+
 ---
 
-# 13. USE CONTRADICTION
+# 17. ALLOW HUMAN IMPERFECTION
 
-Where supported by the source and proposal, create at least one meaningful tension.
+Do not make every line perfectly formulated.
+
+Real conversational thinking often contains:
+
+* incomplete thoughts,
+* small corrections,
+* "wait",
+* "I mean...",
+* "I'm not sure",
+* "maybe",
+* "actually...",
+* "let me put that another way",
+* "that's not quite what I meant".
+
+Use these selectively.
+
+The goal is not to simulate randomness.
+
+The goal is to make the **formation of thought audible**.
+
+---
+
+# 18. USE CONTRADICTION
+
+Where supported by the source and proposal, create meaningful tension.
 
 Possible forms:
 
 * Host belief conflicts with Guest interpretation.
-* One solution creates a new problem.
+* A proposed solution creates a new problem.
 * A previous assumption stops working.
-* Two valid perspectives conflict.
-* A practical example exposes a weakness in the theory.
-* The Guest revises an earlier claim.
+* Two valid ideas conflict.
+* A practical example exposes a weakness in an abstract claim.
+* The Guest revises an earlier statement.
+* The Host realizes two ideas have been conflated.
 
-Do not create conflict merely for entertainment.
+Do not manufacture disagreement simply for drama.
+
+> **Friction should reveal thinking, not manufacture conflict.**
 
 ---
 
-# 14. INFORMATION VS INSIGHT
+# 19. INFORMATION VS INSIGHT
 
-Use information only when it helps the listener follow the exploration.
+Use information when it helps the listener understand the exploration.
 
-Prefer:
-
-> explanation that creates a new question
-
-over:
-
-> explanation that closes the discussion.
-
-For example:
+Prefer explanations that **open a new question** over explanations that simply close the discussion.
 
 Weak:
 
@@ -472,13 +710,13 @@ Better:
 
 > "The interesting signal may not be CVD itself. It may be what happens when CVD and price stop telling the same story."
 
-The point is not to manufacture clever language.
+Do not manufacture clever phrasing merely to create quotes.
 
-The point is to create cognitive movement.
+The purpose is cognitive movement.
 
 ---
 
-# 15. AVOID ARTICLE-LIKE STRUCTURE
+# 20. AVOID ARTICLE-LIKE STRUCTURE
 
 Do not turn the interview into:
 
@@ -487,17 +725,21 @@ Do not turn the interview into:
 * "Let me break this down..."
 * "First... second... third..."
 
-unless absolutely necessary.
+unless genuinely necessary.
 
 The program should sound like a conversation, not an article outline.
 
 Prefer:
 
-> answer → reaction → challenge → refinement → new question
+> answer → reaction → friction → clarification → new question
+
+over:
+
+> point 1 → point 2 → point 3 → conclusion
 
 ---
 
-# 16. PERSONAL STAKES
+# 21. PERSONAL STAKES
 
 Preserve genuine personal stakes from the source.
 
@@ -517,58 +759,91 @@ over:
 
 > "The AI era is changing product development."
 
-Personal specificity makes the conversation feel real.
+Personal specificity creates authenticity.
 
-Do not invent personal experiences or emotions.
-
----
-
-# 17. AUDIENCE
-
-The audience is part of the program.
-
-The Host and Guest are speaking to one another while also allowing listeners to follow the exploration.
-
-The listener should not need access to the raw conversation.
-
-Provide enough context when necessary.
-
-The Host may occasionally connect a specific issue to listeners:
-
-> "I suspect a lot of people have run into the same thing."
-
-But do not repeatedly address "you, the listener".
+Do not invent personal experiences, emotions, or motivations.
 
 ---
 
-# 18. PROGRAM WRAPPER
+# 22. AUDIENCE
 
-The script must feel like a real podcast program.
+The audience is an **invisible third participant** in the conversation.
 
-## Opening
+The Host and Guest are primarily talking to each other, but both should remain naturally aware that people are listening.
 
 The Host should:
 
-* greet the audience,
-* introduce dailog,
-* introduce themselves,
-* introduce the Guest,
-* establish the subject,
-* create curiosity.
+* greet and orient the audience at the beginning,
+* provide context when the conversation becomes difficult to follow,
+* occasionally connect a specific insight or tension to a broader human experience,
+* bring the listener into the exploration when a moment naturally deserves it.
 
-The Guest may briefly greet the audience.
+The Guest should:
 
-The opening should be concise.
+* acknowledge the audience naturally during the opening,
+* occasionally speak in a way that includes the listener when appropriate,
+* remain a participant in the conversation rather than turning into a narrator or lecturer.
 
-Do not mention:
+Audience connection should feel **natural and incidental**, not like scheduled presenter segments.
 
-* the production pipeline,
-* "user submission",
-* internal editorial processing,
-* raw conversation,
-* prompt generation.
+Do not repeatedly use phrases such as:
 
-The audience should simply experience a podcast.
+* "for those of you listening..."
+* "you might be wondering..."
+* "as you can hear..."
+* "to our listeners..."
+
+The listener should feel like they are **inside the room with the Host and Guest**, not being spoken to from a stage.
+
+Audience connection should always serve the exploration by helping with:
+
+* context,
+* clarity,
+* broader resonance,
+* or reflection.
+
+Do not add audience-facing lines merely to make the episode sound more like a podcast.
+
+---
+
+
+# 23. PROGRAM WRAPPER
+
+The script must feel like a complete podcast program.
+
+## Opening
+
+The opening is a real program opening, not the beginning of a private conversation.
+
+The Host MUST:
+
+- greet the audience,
+- introduce dailog,
+- introduce themselves,
+- introduce the Guest,
+- establish the subject,
+- create curiosity.
+
+The Guest MUST:
+
+- acknowledge the audience with a natural greeting or brief response,
+- then enter the conversation.
+
+Do not skip the Guest's audience acknowledgement.
+
+## Closing
+
+The Host should:
+
+- briefly reflect on where the exploration arrived,
+- reconnect the thought to the audience,
+- leave a thought, tension, question, or implication,
+- thank the Guest,
+- say goodbye.
+
+The Guest may participate in the closing.
+
+Do not turn the ending into a generic inspirational speech.
 
 ---
 
@@ -576,7 +851,7 @@ The audience should simply experience a podcast.
 
 The Host should:
 
-* briefly reflect on where the conversation arrived,
+* briefly reflect on where the exploration arrived,
 * leave the audience with a thought, tension, or question,
 * thank the Guest,
 * say goodbye.
@@ -585,9 +860,11 @@ The Guest may participate.
 
 Do not turn the ending into a generic inspirational speech.
 
+Do not mechanically summarize all the points discussed.
+
 ---
 
-# 19. CONTENT SELECTION
+# 24. CONTENT SELECTION
 
 Use only material that contributes to the selected `creative_proposal`.
 
@@ -600,113 +877,173 @@ Remove:
 * dead ends,
 * duplicate examples,
 * AI verbosity,
-* material belonging to secondary threads.
+* secondary exploration threads.
 
-Do not preserve content merely because it was interesting in the raw source.
+Do not preserve content simply because it was interesting in the raw source.
+
+Prioritize the strongest cognitive path.
 
 ---
 
-# 20. ONE EPISODE = ONE COGNITIVE ARC
+# 25. TECHNICAL CONTENT
+
+The final episode is an **audio-first medium**.
+
+When technical material contributes to the selected `creative_proposal`, preserve the **reasoning behind the implementation**, not the implementation itself.
+
+> **Never narrate code. Narrate the thinking behind the code.**
+
+Prefer spoken explanations of:
+
+* intent,
+* mechanism,
+* trade-offs,
+* failure,
+* consequence,
+* architecture,
+* technical reasoning.
+
+Avoid reading:
+
+* long code,
+* variable or function names,
+* file paths,
+* stack traces,
+* syntax,
+* repetitive implementation details,
+
+unless the exact technical detail is essential to understanding the exploration.
+
+Translate code into the conceptual meaning a listener can understand without seeing the screen.
+
+The listener should understand:
+
+> **what happened, why it mattered, and what was learned.**
+
+Not necessarily:
+
+> **exactly how every line of code was written.**
+
+---
+
+# 26. ONE EPISODE = ONE COGNITIVE ARC
 
 The episode should normally contain:
 
 1. Opening
 2. Hook
-3. Minimal Context
-4. Initial Question
+3. Minimal context
+4. Initial question
 5. Exploration
-6. Turning Point
-7. Deeper Exploration
-8. Discovery / Changed Understanding
-9. Brief Reflection
-10. Audience Connection
+6. Turning point
+7. Deeper exploration
+8. Discovery / changed understanding
+9. Brief reflection
+10. Audience connection
 11. Closing
 
 These are functional stages, not equal sections.
 
 Use only the amount of structure necessary.
 
+Do not artificially create every stage when the exploration does not require it.
+
 ---
 
-# 21. LENGTH
+# 27. LENGTH
 
 The final episode MUST be between **5 and 15 minutes**.
 
-**The target length comes from the proposal.** The proposal carries:
+The target length comes from:
 
 ```text
-recommended_duration
-├── category: short | standard | deep
-└── minutes: e.g. "8–10"
+creative_proposal.recommended_duration
 ```
 
-| category | target | Chinese character budget |
-| --- | --- | --- |
-| `short` | 5–7 min | 1,100–1,820 |
-| `standard` | 8–10 min | 1,760–2,600 |
-| `deep` | 11–15 min | 2,640–3,900 |
+The proposal carries:
 
-Build to that category. If `recommended_duration` is missing, use `standard` (8–10 minutes).
+```text
+category: short | standard | deep
+minutes: "5–7" | "8–10" | "11–15"
+```
 
-Approximate Chinese spoken-word budget:
+Use it as the editorial target.
 
-* 5 min → 1,100–1,300 Chinese characters
-* 8 min → 1,760–2,080
-* 10 min → 2,200–2,600
-* 12 min → 2,640–3,120
-* 15 min → 3,300–3,900
+If `recommended_duration` is missing, default to:
 
-If the script exceeds its category's upper bound:
+```text
+standard
+8–10 minutes
+```
 
-**rewrite and compress it before returning it.**
+### Target ranges
 
-Do not add filler to reach the target.
+| Category | Target    |
+| -------- | --------- |
+| short    | 5–7 min   |
+| standard | 8–10 min  |
+| deep     | 11–15 min |
+
+For duration estimation:
+
+* Chinese speech: approximately 220–260 Chinese characters per minute.
+* English speech: approximately 130–160 words per minute.
+
+The output script may contain either language.
+
+If the draft exceeds the selected category's upper bound, **rewrite and compress it before returning it**.
+
+Never add filler to reach the target.
 
 ---
 
-# 22. COMPRESSION PRIORITY
+# 28. COMPRESSION PRIORITY
 
-When shortening the episode:
-
-First remove:
+When shortening, remove in this order:
 
 1. repetition,
 2. secondary arguments,
 3. duplicate examples,
 4. generic explanations,
 5. unnecessary transitions,
-6. long Guest monologues.
+6. long Guest monologues,
+7. conversational filler that does not add interaction value.
 
 Preserve:
 
-1. core question,
-2. strongest challenge,
-3. turning point,
-4. strongest concrete example,
-5. possible discovery,
-6. ending thought.
+1. the core question,
+2. meaningful Host reactions,
+3. the strongest friction,
+4. the turning point,
+5. the strongest concrete example,
+6. the core discovery,
+7. the final thought.
 
-Do not cut the cognitive turning point merely to shorten the episode.
+Do not remove conversational texture merely because it carries little factual information.
+
+Some low-information lines are valuable when they make the interaction feel real.
 
 ---
 
-# 23. QUESTION DENSITY
+# 29. QUESTION DENSITY
 
-Aim for approximately **8–15 major Host questions** for a standard episode.
+For a standard 8–10 minute episode, aim for approximately **8–15 major Host questions**.
 
 A single question may generate several conversational exchanges.
 
 Do not introduce a new topic every time the Guest finishes speaking.
 
+Questions should emerge from the conversation rather than functioning as section headers.
+
 ---
 
-# 24. STOP CONDITION
+# 30. STOP CONDITION
 
 Once the selected cognitive exploration reaches its natural destination:
 
 **STOP.**
 
-Do not continue into adjacent topics merely because they exist in the source.
+Do not continue into adjacent topics because they exist in the source.
 
 A concise, complete exploration is better than an exhaustive discussion.
 
@@ -720,7 +1057,7 @@ not:
 
 ---
 
-# 25. FINAL QUALITY CHECK
+# 31. FINAL QUALITY CHECK
 
 Before returning the script, silently verify all of the following.
 
@@ -728,50 +1065,76 @@ Before returning the script, silently verify all of the following.
 
 1. Does the episode clearly follow `core_question`?
 2. Does it begin from `initial_state`?
-3. Does it use `central_tension`?
+3. Does `central_tension` drive the exploration?
 4. Does the main material come from `exploration`?
-5. Does it build toward `turning_point`?
+5. Does the conversation build toward `turning_point`?
 6. Is `possible_discovery` treated as a destination rather than an opening thesis?
 7. Does the latter part reflect `ending_state`?
-8. Is `open_question` used when appropriate?
+8. Is `open_question` used naturally when appropriate?
+
+## SEMANTIC FIDELITY
+
+9. Can every substantive Host position be traced to the source?
+10. Can every substantive Guest position be traced to the source?
+11. Has any new belief, fact, experience, motivation, or conclusion been invented?
+12. Has any existing position been strengthened, weakened, or reversed without source support?
+13. Does the Host remain the same person intellectually?
+14. Does the Guest remain the same intellectual participant?
+
+## IDEA ATTRIBUTION
+
+15. Did any substantive idea silently move from one participant to the other?
+16. If it moved, is that transfer supported by the source interaction?
+17. Is an emerging idea presented as an emerging idea rather than a pre-existing belief?
+18. Are materially personal, professional, moral, or consequential positions still properly attributed?
+19. Does either participant appear to believe something the source does not support?
+
+## CONVERSATIONAL FRICTION
+
+20. Do the participants react to each other rather than merely alternate speeches?
+21. Does at least some friction emerge naturally?
+22. Are there moments of clarification, resistance, reconsideration, or correction where appropriate?
+23. Do some questions emerge directly from previous answers?
+24. Does the dialogue contain enough human imperfection to feel alive?
+25. Does the friction remain source-grounded?
 
 ## COGNITIVE
 
-9. Does the Host begin without already knowing the final conclusion?
-10. Does the Guest avoid solving the problem too early?
-11. Does each major exchange create movement?
-12. Is there a meaningful challenge or contradiction?
-13. Does the conversation become deeper?
-14. Is the final insight earned?
+26. Does the Host begin without already knowing the final conclusion?
+27. Does the Guest avoid solving the problem too early?
+28. Does each major exchange create cognitive movement?
+29. Is there a meaningful challenge or contradiction?
+30. Does the conversation become deeper?
+31. Is the final insight earned?
 
 ## TEMPORAL
 
-15. Does any line imply a previous conversation?
-16. Does any line contain fictional memory such as "before", "last time", or "as we discussed"?
-17. Is the source timeline completely absent from the final narrative?
+32. Does any line imply a previous conversation?
+33. Does any line contain fictional memory such as "before", "last time", or "as we discussed"?
+34. Is the original source timeline absent from the narrative?
 
 ## CONVERSATION
 
-18. Is the Host intellectually active?
-19. Is the Guest responding rather than lecturing?
-20. Do answers create natural follow-up questions?
-21. Does the dialogue feel plausible and present-tense?
+35. Is the Host intellectually active?
+36. Is the Guest responding rather than lecturing?
+37. Do answers create natural follow-up questions?
+38. Does the dialogue feel plausible and present-tense?
 
 ## AUDIENCE
 
-22. Does the opening feel like a real podcast?
-23. Are Host, Guest, and Audience established?
-24. Can a listener follow without seeing the source?
-25. Does the closing reconnect naturally with the audience?
+39. Does the opening feel like a real podcast?
+40. Are Host, Guest, and Audience established?
+41. Can the listener follow without seeing the raw conversation?
+42. Does the closing reconnect naturally with the audience?
 
 ## AI QUALITY
 
-26. Are there too many polished AI "wisdom" statements?
-27. Has the interview become an article in dialogue form?
-28. Is the Host merely setting up the Guest to explain?
-29. Does it feel like "AI teaches Human"?
+43. Are there too many polished AI "wisdom" statements?
+44. Has the interview become an article in dialogue form?
+45. Is the Host merely setting up the Guest to explain?
+46. Does it feel like "AI teaches Human"?
 
-If YES to 29:
+If YES to 41:
 
 **Rewrite.**
 
@@ -782,6 +1145,18 @@ The desired relationship is:
 not:
 
 > **Human interviews AI for answers.**
+
+## FINAL FIDELITY TEST
+
+Ask:
+
+> **Did we reconstruct the conversation, or did we reconstruct the minds?**
+
+The correct answer must be:
+
+> **We reconstructed the conversation.**
+>
+> **The minds remained faithful to the source.**
 
 ---
 
@@ -798,9 +1173,9 @@ Return valid JSON only.
 
 "production": {
 "category": "standard",
-"target_minutes": 9,
+"target_minutes": "8–10",
 "estimated_minutes": 8.7,
-"estimated_chinese_characters": 2250
+"estimated_words_or_characters": 2250
 },
 
 "script": [

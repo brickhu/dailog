@@ -30,8 +30,6 @@ for (const [k, v] of Object.entries(parseEnvFile(join(here, ".env")))) {
   if (process.env[k] === undefined) process.env[k] = v;
 }
 
-// ===== 提示词进化数据（feedback/review.jsonl）=====
-const FB_SIG_FILES = ["prompts.json", "material.system.md", "r1-review.user.md", "r2-script.user.md"];
 
 // ===== 音频合成：BGM 混音滤镜（与 web/js/merge.js 的 bgmMixFilter 保持同一套语义）=====
 // 干声 dry.wav(44100 mono) + BGM(stream_loop 无限循环) → amix(duration=first)；
@@ -50,12 +48,6 @@ function serverBgmFilter(cfg, durSec) {
   bg += "[bg]";
   // normalize=0：amix 默认会按输入数归一化（人声减半），必须关掉让人声 1:1 保留
   return "[0:a]aformat=sample_rates=44100:channel_layouts=mono[a0];" + bg + ";[a0][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[out]";
-}
-/** 提示词版本指纹（md mtime）——回溯"哪版规则产生了这个结果" */
-function promptSig() {
-  return FB_SIG_FILES
-    .map((f) => { try { return statSync(join(here, "prompts", f)).mtimeMs; } catch { return 0; } })
-    .join(":");
 }
 
 // 标准化 usage：token 消耗 + 缓存命中（供控制台历史展示）
@@ -1140,6 +1132,70 @@ if (path === "/api/run/console-import" && req.method === "POST") {
  *  这里以前有 splitScriptShell / rejoinShell 一整套"拆壳—磨主体—拼回壳"的机制，
  *  那是 r3 旧草稿的遗留（那时开场收尾是固定品牌句式，所以不磨）；
  *  现在外壳是"部件必须有、话自己说"，开场收尾也是要磨的台词 → 整套拆拼机制删掉。 */
+/** 素材主语言（确定性判定，不交给模型猜）：逐条消息比「中文字数 vs 拉丁词数」，多数派胜出。
+ *  为什么要算：提示词是英文长文档，模型偶尔把整篇分析/脚本也写成英文——实测同一篇中文稿重跑会在中英之间摆动。
+ *  所以把「这篇素材是什么语言」当成**事实**钉在 system 末尾。 */
+function contentLanguageOf(dialogue) {
+  const msgs = (dialogue && Array.isArray(dialogue.messages)) ? dialogue.messages : [];
+  let zh = 0, en = 0;
+  for (const m of msgs) {
+    const t = String((m && m.content) || "");
+    const c = (t.match(/[\u4e00-\u9fff]/g) || []).length;
+    const w = Math.round(((t.match(/[A-Za-z]/g) || []).length) / 5);   // 拉丁字母数 ÷ 5 ≈ 词数
+    if (!c && !w) continue;
+    if (c >= w) zh++; else en++;
+  }
+  return zh >= en ? "Simplified Chinese (简体中文)" : "English";
+}
+
+/** 维度标签 → 字段名（提示词 §9/§10 用的是人话标签） */
+const DIM_KEY_BY_LABEL = {
+  "cognitive delta": "cognitive_delta",
+  "exploration depth": "exploration_depth",
+  "tension / stakes": "tension_stakes",
+  "surprise": "surprise",
+  "audience resonance": "audience_resonance",
+  "source integrity": "source_integrity",
+};
+/** 兜底权重（提示词里那张表解析不出来时用；正常永远走解析结果） */
+const SCORE_WEIGHTS_FALLBACK = { cognitive_delta: 7, exploration_depth: 5, tension_stakes: 3, surprise: 2, audience_resonance: 1, source_integrity: 2 };
+
+/** 从提案提示词 §10 那张表里解析六维权重——"Cognitive Delta      × 7 = /35" → { cognitive_delta: 7, … }。
+ *  这样权重**只维护在提示词一处**：改 §9/§10 的系数，服务端自动跟着变，不用两头同步。 */
+function scoreWeightsFromPrompt(p) {
+  const doc = ((p && p.messages) || []).map((m) => String(m.content || "")).join("\n");
+  const out = {};
+  doc.replace(/^([A-Za-z][A-Za-z \/]*?)\s*×\s*(\d+)\s*=\s*\/\s*(\d+)\s*$/gm, (all, label, w) => {
+    const key = DIM_KEY_BY_LABEL[String(label).trim().toLowerCase().replace(/\s+/g, " ")];
+    if (key) out[key] = Number(w);
+    return all;
+  });
+  const keys = Object.values(DIM_KEY_BY_LABEL);
+  return keys.every((k) => Number.isFinite(out[k])) ? out : null;
+}
+
+/** 六维加权总分（0–100）；六个维度分不齐就返回 null（不猜） */
+function computeOverall(sc, weights) {
+  if (!sc || typeof sc !== "object") return null;
+  let sum = 0;
+  for (const k of Object.keys(weights)) {
+    const v = Number(sc[k]);
+    if (!Number.isFinite(v)) return null;
+    sum += v * weights[k];
+  }
+  return Math.round(sum * 10) / 10;
+}
+
+/** 把语言事实追加到 system 末尾（渲染之后调用；不改提示词文档本身，也不占占位符） */
+function withLanguageFact(msgs, dialogue) {
+  const lang = contentLanguageOf(dialogue);
+  const note = "\n\n## Content language (fixed fact for this submission)\n\n"
+    + "The original conversation above is written in **" + lang + "**. "
+    + "Write every string value in your JSON output in **" + lang + "** — JSON field names stay English, and proper nouns, product names and code identifiers keep their original form. "
+    + "Do not switch the language of the analysis or the script because these task instructions are written in English.";
+  return (Array.isArray(msgs) ? msgs : []).map((m, i) => (i === 0 && m && m.role === "system") ? { role: m.role, content: String(m.content) + note } : m);
+}
+
 function polishInputView(target) {
   return { segments: (target && Array.isArray(target.segments)) ? target.segments : [] };
 }
@@ -1147,10 +1203,9 @@ function polishInputView(target) {
 
 
 
-/** 提案 v2 六维权重（提示词 §10：×6 / ×4 / ×3 / ×2 / ×2 / ×3）——和为 20，每维 0–5 ⇒ 满分 100。
- * 用途**只有核对**：模型算乘法加法会错，服务端独立算一遍 score.overall，差 >2 就出 warning。
- * 通过 / 拒绝的判定权在编辑（提示词 §12：score is NOT the final decision），代码不拿它做自动决定。 */
-const SCORE_WEIGHTS = { cognitive_delta: 6, exploration_depth: 4, tension_stakes: 3, surprise: 2, audience_resonance: 2, source_integrity: 3 };   // = 20
+// 评分唯一来源 = 模型输出里的 score.overall（提示词 §9/§10 定义权重与算法）。
+// 服务端**不再**重算总分：权重表只存在于提示词一处，改权重不必两头同步。
+// 下面只做「形态检查」——分在不在、是不是 0–100 的数——不判断它对不对。
 
 
 /** 提案锁定的素材轮次：优先 覆盖turns 数组，否则从「t3–t9、t13」这类人话里解析 */
@@ -1204,58 +1259,8 @@ function dialogueBlockFor(dialogue, hostName, guestName, onlyTurns) {
 }
 
 
-/** 文本归一（去标记/标点/空白）——保真标注用 */
-function normTxt2(s) {
-  return String(s || '').toLowerCase().replace(/\[[^\]]*\]/g, '').replace(/[\s\p{P}\p{S}]+/gu, '');
-}
 
-/** 最长公共子序列长度 */
-function lcsLen(a, b) {
-  const n = a.length, m = b.length;
-  if (!n || !m) return 0;
-  const dp = new Array(m + 1).fill(0);
-  let best = 0;
-  for (let i = 1; i <= n; i++) {
-    let prev = 0;
-    for (let j = 1; j <= m; j++) {
-      const cur = dp[j];
-      if (a[i - 1] === b[j - 1]) { dp[j] = prev + 1; if (dp[j] > best) best = dp[j]; } else dp[j] = 0;
-      prev = cur;
-    }
-  }
-  return best;
-}
 
-/** 原话保真标注（编辑选稿依据，确定性、无 LLM）：host 段 → original（原话）/ rewrite（改写）/ new（接话） */
-function labelScripts(scripts, dialogue) {
-  const dlgUsers = (dialogue && Array.isArray(dialogue.messages) ? dialogue.messages : []).map((m, mi) => ({ mi, t: normTxt2(m && m.content) }));
-  (Array.isArray(scripts) ? scripts : []).forEach((sc) => {
-    if (!sc || !Array.isArray(sc.segments)) return;
-    let hostOriginal = 0, hostRewrite = 0, hostNew = 0;
-    sc.segments.forEach((seg) => {
-      if (!seg || seg.speaker !== 'host') return;
-      const t = normTxt2(seg.text);
-      if (!t) { seg.src = 'new'; seg.origRatio = 0; hostNew++; return; }
-      let best = null;
-      dlgUsers.forEach((u) => {
-        if (!u.t) return;
-        const len = lcsLen(t, u.t);
-        const cov = len / t.length;
-        if (!best || cov > best.cov || (cov === best.cov && len > best.len)) best = { cov, len, mi: u.mi };
-      });
-      const cov = best ? best.cov : 0;
-      let src = 'new';
-      if (best && best.len >= 6 && cov >= 0.9) src = 'original';
-      else if (best && best.len >= 4 && cov >= 0.5) src = 'rewrite';
-      seg.src = src;
-      if (best) seg.fromTurn = best.mi;
-      seg.origRatio = Math.round(cov * 100);
-      if (src === 'original') hostOriginal++; else if (src === 'rewrite') hostRewrite++; else hostNew++;
-    });
-    const contentTotal = hostOriginal + hostRewrite;
-    sc.fidelity = { hostOriginal, hostRewrite, hostNew, contentTotal, originalRate: contentTotal ? Math.round((hostOriginal / contentTotal) * 100) : 0 };
-  });
-}
 
 
 /** draft R2 输出（hostOpen/guestOpen/turns/hostWrap/guestSum/hostOutro）→ 补出 segments（lab 的 TTS/渲染消费）；
@@ -1349,11 +1354,11 @@ function segmentsFromDraftShape(p) {
       // 实测 30 条以上的对话，路径证据的原话和 tN 会整段错位（原话在 t15，标成 t9），编辑核对直接对不上；
       // 而且 dialogue 是字符串时 {{dialogue.sourceUrl}} 永远渲染成空。
       const dlgBlock = dialogueBlockFor(dialogue, "Human", "AI", null);   // 与提案提示词里的 Human/AI 一致
-      const defaultMsgs = renderPrompt(p, {
+      const defaultMsgs = withLanguageFact(renderPrompt(p, {
         dialogue: { messages: dlgBlock, sourceUrl: (dialogue && dialogue.sourceUrl) || "" },
         turns: ((dialogue && dialogue.messages) || []).length,
         suggestion: "",
-      });
+      }), dialogue);
       const cfgOverride = {};
       if (body && Array.isArray(body.messages) && body.messages.length) {
         const cfg = (body && body.config) || {};
@@ -1368,27 +1373,38 @@ function segmentsFromDraftShape(p) {
       }
       const msgs = (body && Array.isArray(body.messages) && body.messages.length) ? body.messages : defaultMsgs;
       console.log("[round1] 消息来源=" + (msgs === defaultMsgs ? "defaultMsgs(最新渲染)" : "body.messages(快照 " + msgs.length + " 条)"));
-      let r = await llmComplete(null, null, cfgOverride, withRevision(msgs, (body && body.revision) || ""), p.config, stopAC.signal);
-      let result = extractJson(r.content);
-      // 空出稿自动重试一次：稿子不合格时模型偶尔只回一句话或空对象（实测约一半概率），
-      // 不重试的话编辑看到的是「契约异常」而不是「这篇不合格」——重试一次基本能拿到规范的 NOT-ELIGIBLE 对象。
+      // 出稿 + 兜底（实测 24 篇样本里 4 篇需要兜底）：
+      //   ① 解析失败（模型偶尔截断/格式错）→ 以前直接抛错，现在带提示重试一次；
+      //   ② 空对象（不合格稿子常见）→ 同上；
+      //   ③ 被包了一层信封 {"type":"json_object","content":{真正的契约…}} → 直接拆开用（provider 的 json_object 模式偶发）。
+      const unwrapEnvelope = (v) => (v && typeof v === "object" && !Array.isArray(v)
+        && v.content && typeof v.content === "object" && !v.exploration_threads && !v.eligibility) ? v.content : v;
+      const parseOnce = async (m) => {
+        const rr = await llmComplete(null, null, cfgOverride, m, p.config, stopAC.signal);
+        let parsed = null;
+        try { parsed = extractJson(rr.content); } catch { parsed = null; }   // 解析失败不立刻抛，留给重试
+        return { rr, parsed: unwrapEnvelope(parsed) };
+      };
+      let { rr: r, parsed: result } = await parseOnce(withRevision(msgs, (body && body.revision) || ""));
       const isEmptyResult = (v) => !v || typeof v !== "object" || !Object.keys(v).length;
       if (isEmptyResult(result)) {
         // 重试不能原样重发（同样的输入大概率同样为空）：按 round2 的老办法带一条明确要求重发。
-        console.log("[round1] 出稿为空（" + JSON.stringify(String(r.content).slice(0, 80)) + "），带提示重试一次…");
+        console.log("[round1] 出稿不可解析（" + JSON.stringify(String(r.content).slice(0, 80)) + "），带提示重试一次…");
         const nudgeR1 = "你上一轮没有返回可解析的 JSON。请只输出那一个 JSON 对象——即使这篇稿子不合格（eligible=false），也必须按契约输出 { eligibility: { eligible: false, reason: \"…\" }, exploration_threads: [], recommended_thread_id: null, creative_proposal: null }；不要解释、不要多余文字。";
         const retryMsgs = (String(r.content || "").trim() ? msgs.concat([{ role: "assistant", content: r.content }]) : msgs)
           .concat([{ role: "user", content: nudgeR1 }]);
-        const r2try = await llmComplete(null, null, cfgOverride, retryMsgs, p.config, stopAC.signal);
-        const parsed2 = extractJson(r2try.content);
-        if (!isEmptyResult(parsed2)) { result = parsed2; r = r2try; }
-        else console.log("[round1] 重试仍为空：" + JSON.stringify(String(r2try.content).slice(0, 120)));
+        const again = await parseOnce(retryMsgs);
+        if (!isEmptyResult(again.parsed)) { result = again.parsed; r = again.rr; }
+        else console.log("[round1] 重试仍不可解析：" + JSON.stringify(String(again.rr.content).slice(0, 120)));
       }
+
       // 出稿校验（不阻断，仅报告）——按「提案 v2」契约（eligibility + 加权分 + recommended_thread_id）：
       //   ① eligible=false ⇒ 必须 threads=[] 且 creative_proposal=null（旧结果没这字段时按 eligible 处理）
       //   ② eligible=true  ⇒ creative_proposal 九字段齐、每条线八字段齐、有 evidence、recommended_thread_id 能对上号
-      //   ③ score.overall 只做核对：模型算乘法加法会错，服务端按 6/4/3/2/2/3 独立算一遍，差 >2 分就报（不改结果——判定权在编辑）
+      //   ③ score 只查形态（overall 是不是 0–100 的数字）——总分以模型输出为准，服务端不重算（权重只在提示词一处）
       const warnings = [];
+      const WEIGHTS = scoreWeightsFromPrompt(p) || SCORE_WEIGHTS_FALLBACK;
+      if (!scoreWeightsFromPrompt(p)) console.warn("[proposal-validate] 提示词 §10 的权重表没解析出来，用了兜底权重 " + JSON.stringify(SCORE_WEIGHTS_FALLBACK));
       const CP_FIELDS = ["core_question", "initial_state", "central_tension", "exploration", "turning_point", "possible_discovery", "ending_state", "open_question", "recommended_duration"];
       const filled = (v) => (typeof v === "string" ? !!v.trim() : !!v);
       const elig = (result && result.eligibility && typeof result.eligibility === "object") ? result.eligibility : null;
@@ -1412,19 +1428,18 @@ function segmentsFromDraftShape(p) {
         const miss = ["title", "core_question", "initial_state", "central_tension", "turning_point", "possible_discovery", "ending_state", "open_question"].filter((k) => !filled(t[k]));
         if (miss.length) warnings.push(`T${ti + 1} 缺字段：${miss.join("、")}`);
         if (!Array.isArray(t.evidence) || !t.evidence.length) warnings.push(`T${ti + 1} 缺 evidence（这条线没有原文出处）`);
-        // 加权总分核对（0–100；权重 6/4/3/2/2/3 与提示词 §10 一致）
+        // 总分由服务端按提示词 §10 的权重实算（权重每次都从提示词那张表里解析，不另存一份）：
+        //   编辑要的是一个**可比的总分 + 明细**，而模型算六次乘法经常错（实测 24 篇里 11 篇偏高 4–13 分）。
+        //   模型自报的 score.overall 原样留着，只用来核对；对不上就报一条 warning。
         const sc = (t && t.score && typeof t.score === "object") ? t.score : null;
         if (!sc) { warnings.push(`T${ti + 1} 缺 score（编辑没法比较各条线）`); return; }
-        let sum = 0, complete = true;
-        for (const k of Object.keys(SCORE_WEIGHTS)) {
-          const v = Number(sc[k]);
-          if (!Number.isFinite(v)) { complete = false; warnings.push(`T${ti + 1} 缺维度分 ${k}`); break; }
-          sum += v * SCORE_WEIGHTS[k];
-        }
-        if (!complete) return;
+        const computed = computeOverall(sc, WEIGHTS);
+        if (computed === null) { warnings.push(`T${ti + 1} 六维分不齐，算不出总分（拿到 ${JSON.stringify(sc)}）`); return; }
+        sc.overall_computed = computed;
+        sc.weights = Object.assign({}, WEIGHTS);
         const claimed = Number(sc.overall);
-        if (!Number.isFinite(claimed)) warnings.push(`T${ti + 1} score.overall 缺失（服务端算得 ${sum}）`);
-        else if (Math.abs(claimed - sum) > 2) warnings.push(`T${ti + 1} overall=${claimed} 与服务端加权和 ${sum} 不一致`);
+        if (!Number.isFinite(claimed)) warnings.push(`T${ti + 1} 模型没给 score.overall（服务端实算 ${computed}）`);
+        else if (Math.abs(claimed - computed) > 2) warnings.push(`T${ti + 1} 模型自报 overall=${claimed} 与实算 ${computed} 差 ${Math.round((claimed - computed) * 10) / 10} 分（以实算为准）`);
       });
       if (eligible && threads.length) {
         const recId = result && result.recommended_thread_id;
@@ -1433,9 +1448,9 @@ function segmentsFromDraftShape(p) {
       }
       if (warnings.length) console.warn("[proposal-validate]", warnings.join(" | "));
       console.log("[review-debug] round1 result: eligible=" + eligible + " | threads x" + threads.length + " | recommended=" + ((result && result.recommended_thread_id) || "（无）") + " | creative_proposal=" + (cpOut ? "有" : "无"));
-      sendJson(res, { ok: true, result, warnings, usage: fmtUsage(r.usage) });
+      sendJson(res, { ok: true, result, weights: WEIGHTS, warnings, usage: fmtUsage(r.usage) });
     } catch (err) {
-      if (stopAC.signal.aborted) { console.log("[round1] 客户端停止——已中止生成"); return; }
+      if (stopAC.signal.aborted) { console.log("[round1] 客户端已停止——已中止生成"); return; }
       sendJson(res, { ok: false, error: String((err && err.message) || err) });
     }
     return;
@@ -1474,10 +1489,10 @@ function segmentsFromDraftShape(p) {
         GUEST_NAME: guestName,
       });
       // 素材给全篇：弧（creative_proposal）决定聚焦哪条线，对话原文提供素材
-      const defaultMsgs = [
+      const defaultMsgs = withLanguageFact([
         rendered[0],         // system：本期上下文（对话原文 + creative_proposal + 名字）
         rendered[1],         // user：脚本提示词（原样）
-      ];
+      ], dialogue);
       console.log("[round2] " + hostName + " ↔ " + guestName + " | core_question=" + String(cp.core_question || "（无）").slice(0, 40) + " | 原文 " + dlgTotal + " 条 | 上下文=" + rendered[0].content.length + "字 + 规则=" + rendered[1].content.length + "字");
       const cfgOverride = {};
       if (body && Array.isArray(body.messages) && body.messages.length) {
@@ -1528,7 +1543,6 @@ function segmentsFromDraftShape(p) {
         const segs = toSegments(obj.script);
         if (!segs.length) return null;
         const out = Object.assign({}, obj, { segments: segs });
-        labelScripts([out], dialogue);   // 原话保真标注（编辑选稿依据，只做显示用）
         return out;
       };
       const parseScript = (content) => { try { return buildOut(extractJson(content)); } catch (e) { return null; } };
@@ -1654,7 +1668,6 @@ function segmentsFromDraftShape(p) {
         try {
           const fixed = segmentsFromDraftShape(parsed.script);
           if (fixed && Array.isArray(fixed.segments) && fixed.segments.length) {
-            if (dialogue) labelScripts([fixed], dialogue);
             scriptOut = fixed;
           }
         } catch (err) { console.log("[agent] script 解析失败：" + String((err && err.message) || err)); }
@@ -1675,7 +1688,7 @@ function segmentsFromDraftShape(p) {
   // （拒审理由已并入 review-agent：agent 返回 action=reject + reason）
   // POST /api/feedback/review → 质量标记落盘（提示词自我进化的数据源）：追加到 feedback/review.jsonl
   //   body: { submissionId, score: 1-10, types: string[], note?, revision?, sample? }
-  //   服务端补：env + 提示词版本指纹（md mtime）——回溯"哪版规则产生了这个结果"
+  //   服务端只补 env。提示词版本指纹（promptSig）已按编辑要求撤掉——需要"回溯哪版提示词"时再加回来。
   if (path === "/api/feedback/review" && req.method === "POST") {
     const cred = reqCred(req);
     if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
@@ -1689,13 +1702,9 @@ function segmentsFromDraftShape(p) {
     try {
       const dir = join(here, "feedback");
       mkdirSync(dir, { recursive: true });
-      const sigFiles = ["prompts.json", "material.system.md", "r1-review.user.md", "r2-script.user.md"];
-      const sig = sigFiles
-        .map((f) => { try { return statSync(join(here, "prompts", f)).mtimeMs; } catch { return 0; } })
-        .join(":");
       const row = {
         ts: Date.now(), iso: new Date().toISOString(),
-        env: cred.env || null, promptKey: "r2-script", promptSig: sig,
+        env: cred.env || null,
         submissionId: sid, score,
         verdict: score >= 7 ? "ok" : "problem",   // 派生，便于按二值聚合
         kind: body.kind === "adopt" ? "adopt" : null,   // 控制台采纳记录（可选）
@@ -1822,10 +1831,9 @@ function segmentsFromDraftShape(p) {
       // 结果：只把打磨结果**回传**给控制台，服务端**绝不写 R2**。
       // 脚本的提交点只有一个：「确认生成语音」（merge.js 把本地终稿 PUT 到 R2 scripts）。
       if (!Array.isArray(segs)) { sendJson(res, { ok: false, error: "打磨结果缺少 segments 数组" }); return; }
-      // 只留 segments（+ fidelity 供界面提示"接话 N 段"）：design/turns/hostOpen… 是 R2 出稿时的形态，
+      // 只留 segments：design/turns/hostOpen… 是 R2 出稿时的形态，
       // 编辑之后就过期了，带出来只会让人看到"20 个回合"这种对不上的旧话。
       const polished = { segments: segs };
-      if (target && target.fidelity) polished.fidelity = target.fidelity;
       sendJson(res, { ok: true, local: true, result: polished, usage: fmtUsage(r.usage) });
     } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
     return;

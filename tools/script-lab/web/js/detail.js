@@ -169,9 +169,26 @@ function proposalDetailRows(r, opts) {
       if (r.ending_state) r0.push(row('终点', e(r.ending_state)));
       if (r.open_question) r0.push(row('留下的问题', e(r.open_question)));
       if (r.recommended_duration) r0.push(row('建议时长', e((r.recommended_duration.category || '') + ' 约 ' + (r.recommended_duration.minutes || ''))));
+      // 总分 = 服务端按提示词 §10 权重实算的（可比）；模型自报的 overall 只在对不上时标一下
       const sc0 = r.score || {};
-      const chips0 = Object.keys(sc0).map(function (k) { return k + ' ' + sc0[k]; }).join(' · ');
-      if (chips0) r0.push(row('评分', chips0));
+      const wOf = (sc0.weights && typeof sc0.weights === 'object') ? sc0.weights : {};
+      const total = (typeof sc0.overall_computed === 'number') ? sc0.overall_computed : ((typeof sc0.overall === 'number') ? sc0.overall : null);
+      if (total !== null) {
+        const claimed = Number(sc0.overall);
+        const note = (typeof sc0.overall_computed === 'number' && Number.isFinite(claimed) && Math.abs(claimed - sc0.overall_computed) > 2)
+          ? " <span style='color:#d29922;font-size:11px'>（模型自报 " + claimed + "）</span>" : '';
+        r0.push(row('总分', "<span style='font-size:18px;font-weight:700;color:#3fb950'>" + total + "</span><span style='color:#8a91a0;font-size:11px'> / 100</span>" + note));
+      }
+      const dimKeys = Object.keys(wOf);
+      if (dimKeys.length) {
+        r0.push(row('评分明细', dimKeys.map(function (k) {
+          const v = Number(sc0[k]);
+          return Number.isFinite(v) ? (k + ' ' + v + '×' + wOf[k] + ' = ' + (v * wOf[k])) : (k + ' —');
+        }).join(' · ')));
+      } else {
+        const chips0 = Object.keys(sc0).map(function (k) { return k + ' ' + sc0[k]; }).join(' · ');
+        if (chips0) r0.push(row('评分', chips0));
+      }
       if (Array.isArray(r.evidence) && r.evidence.length) r0.push(row('原文出处', r.evidence.map(function (x) { return e(x && x.speaker) + '：' + e(x && x.quote); }).join('\n')));
       if (r.editorial_reason) r0.push(row('编辑理由', e(r.editorial_reason)));
       return r0.join('');
@@ -403,7 +420,6 @@ function renderProposalCards(id, proposals, totalTurns){
           const canMerge = (typeof segCanMerge === 'function') ? segCanMerge(id, s.segments) : false;   // ≥2 段（或全部）有语音即可合成，未生成段会跳过
           // 打磨按钮：脚本区里**没有可磨的台词**（没段、或全是空文本）就禁用——点它没有任何东西可磨
           const canPolish = (s.segments || []).some(function (x) { return String((x && x.text) || '').trim(); });
-          const fid = (s && s.fidelity) ? (" · 接话 " + (s.fidelity.hostNew || 0) + " 段") : '';
           const qHints = (function (sc) {
             const segs = (sc && sc.segments) || [];
             const long = segs.filter(function (x) { return String(x.text || '').length > 100; }).length;
@@ -416,7 +432,7 @@ function renderProposalCards(id, proposals, totalTurns){
           })(s);
           return "<div style='margin-bottom:10px'>"
             + "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:4px'>"
-            + "<div style='display:flex;align-items:center;gap:8px'><span class='who' style='font-size:11px;color:#d29922'>脚本 " + (si + 1) + "（" + (s.segments || []).length + " 段" + fid + qHints + "）</span>" + actBtn('打磨控制台', 'polish', "data-si='" + si + "' style='font-size:12px' " + (canPolish ? '' : "disabled title='脚本区里还没有台词——先创作或载入脚本' ")).replace("class='ac-act'", "class='pg'") + "</div>"
+            + "<div style='display:flex;align-items:center;gap:8px'><span class='who' style='font-size:11px;color:#d29922'>脚本 " + (si + 1) + "（" + (s.segments || []).length + " 段" + qHints + "）</span>" + actBtn('打磨控制台', 'polish', "data-si='" + si + "' style='font-size:12px' " + (canPolish ? '' : "disabled title='脚本区里还没有台词——先创作或载入脚本' ")).replace("class='ac-act'", "class='pg'") + "</div>"
             + "<span style='display:flex;align-items:center;gap:8px'><label class='muted' style='font-size:11px;display:flex;align-items:center;gap:3px;cursor:pointer'><input type='checkbox' class='seg-select-all' data-si='" + si + "' onchange='toggleSelectAllSegs(" + si + ", this.checked)'>全选</label><button class='pg seg-batch-tts' data-act='tts' data-id='" + id + "' data-si='" + si + "' disabled>批量生成语音</button></span>"
             + "</div>"
             + "<div class='script-segs' data-si='" + si + "'>" + renderSegsHtml(s, id, si) + "</div>"
@@ -1096,18 +1112,10 @@ function renderSegsHtml(script, id, si){
   parts.push("<div class='seg-add-slot'><i class='seg-add-line'></i><button type='button' class='seg-add-btn' onclick='openSegAddMenu(this,\"" + id + "\"," + si + ",0)' title='在开头插入段落'>+</button><i class='seg-add-line'></i></div>");
   segs.forEach((seg, segi) => {
     const spk = seg.speaker === 'guest' ? 'guest' : 'host';
-    // 新方法论口径：host 段命中 chain = 原话/改写；没命中 = 现场的接话（不是缺陷）
-    const talkBadge = "<span style='color:#58a6ff;font-size:10px;border:1px solid #58a6ff66;border-radius:8px;padding:0 6px;margin-left:6px'>接话</span>";
-    const badge = (spk === 'host')
-      ? (seg.chain === false ? talkBadge
-        : seg.src === 'original' ? "<span style='color:#3fb950;font-size:10px;border:1px solid #3fb95066;border-radius:8px;padding:0 6px;margin-left:6px'>原话</span>"
-        : seg.src === 'rewrite' ? "<span style='color:#d29922;font-size:10px;border:1px solid #d2992266;border-radius:8px;padding:0 6px;margin-left:6px'>改写</span>"
-        : talkBadge)
-      : '';
     parts.push(`<div class='seg-row' data-si='${si}' data-segi='${segi}' data-segkey='${segKey(id, seg)}'>`
       + `<input type='checkbox' class='seg-check' data-si='${si}' data-segi='${segi}' onchange='updateBatchTtsBtn(${si})' style='align-self:center;flex-shrink:0'>`
       + `<div class='script-seg seg-${spk}'>`
-        + `<div class='script-seg-head'><span class='who who-${spk}'>${esc(seg.speaker)}</span>${badge}<button type='button' class='seg-del-btn' title='删除该段' onclick='deleteSeg(\"${id}\",${si},${segi})'>🗑</button></div>`
+        + `<div class='script-seg-head'><span class='who who-${spk}'>${esc(seg.speaker)}</span><button type='button' class='seg-del-btn' title='删除该段' onclick='deleteSeg(\"${id}\",${si},${segi})'>🗑</button></div>`
         + `<div class='script-seg-view' id='sgsv-${id}-${si}-${segi}' ondblclick='openSegEdit(\"${id}\",${si},${segi})' title='双击编辑（失焦自动保存）' style='cursor:text'>${fmtSeg(seg.text)}</div>`
         + `<div class='script-seg-edit' id='sgse-${id}-${si}-${segi}' style='display:none'>`
           + `<textarea class='seg-ta' spellcheck='false' data-id='${id}' data-si='${si}' data-segi='${segi}' oninput='segTagInput(this)' onkeydown='segTaKey(this,event)' onblur='segEditBlur(this)'>${esc(seg.text)}</textarea>`
@@ -1226,7 +1234,6 @@ function segSaveText(id, si, segi, text){
   const seg = current[si].segments[segi];
   if (seg.text !== text) {
     seg.text = text;
-    delete seg.src; delete seg.fromTurn; delete seg.origRatio; delete seg.chain;   // 手工改过 → 不再标 原话/改写/接话
   }
   saveScripts(id, current);
   const els = segEditEls(id, si, segi);

@@ -115,8 +115,8 @@ dailog/
    **语感打磨**（r3-polish：顺口/放大/停顿/情绪标签）→
    **逐段 TTS**（host = 投稿人采样 / guest = 品牌声线）→ **合成**（浏览器 ffmpeg.wasm，段间间隔 / intro / BGM 可配）→
    **节目信息 + 封面** → **发布 / 拒审**
-3. 提示词工程：`tools/script-lab/prompts/*.md` 即改即生效；服务端按 promptSig（md mtime 指纹）随输出落
-   `feedback/review.jsonl`——可回溯“哪版规则产生了这个结果”，构成提示词反馈闭环
+3. 提示词工程：`tools/script-lab/prompts/*.md` 即改即生效；编辑的质量标记落 `feedback/review.jsonl`
+   （**暂不带提示词版本指纹 promptSig**——已按编辑要求撤掉，需要“回溯哪版提示词”时再加回来）
 4. 产物与恢复：关键产物即时 R2/入库（审题采纳 → submission review jsonb；脚本定稿 → R2 `scripts/{id}.json`；
    成品音频 → R2 `episodes/{userId}/{id}.m4a`），浏览器 localStorage/IndexedDB 只存可再生工作副本——换浏览器/清缓存不丢已落产物
 5. 服务端（server.mjs）接口入口 `/api/run/*`：fetch/batch · review · script · polish · tts-seg · full-merge · full-upload · publish-submit · reject；

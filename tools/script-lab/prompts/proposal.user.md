@@ -412,7 +412,7 @@ Use six dimensions.
 
 ---
 
-## A. Cognitive Delta — 30 points
+## A. Cognitive Delta — 35 points
 
 How much did the Human's understanding change?
 
@@ -428,16 +428,16 @@ Score from 0–5:
 Convert to:
 
 ```text
-score × 6
+score × 7
 ```
 
-Maximum: **30**
+Maximum: **35**
 
 This is the most important dimension.
 
 ---
 
-## B. Exploration Depth — 20 points
+## B. Exploration Depth — 25 points
 
 How deeply does the conversation investigate the question?
 
@@ -453,10 +453,10 @@ Score from 0–5:
 Convert to:
 
 ```text
-score × 4
+score × 5
 ```
 
-Maximum: **20**
+Maximum: **25**
 
 ---
 
@@ -506,7 +506,7 @@ Maximum: **10**
 
 ---
 
-## E. Audience Resonance — 10 points
+## E. Audience Resonance — 5 points
 
 How easily can another listener recognize their own version of the underlying question?
 
@@ -522,10 +522,10 @@ Score from 0–5:
 Convert to:
 
 ```text
-score × 2
+score × 1
 ```
 
-Maximum: **10**
+Maximum: **5**
 
 Do not penalize specialized material simply because it is specialized.
 
@@ -533,7 +533,7 @@ Evaluate resonance relative to the likely audience for that subject.
 
 ---
 
-## F. Source Integrity — 15 points
+## F. Source Integrity — 10 points
 
 How strongly is the proposed exploration supported by the actual conversation?
 
@@ -549,10 +549,10 @@ Score from 0–5:
 Convert to:
 
 ```text
-score × 3
+score × 2
 ```
 
-Maximum: **15**
+Maximum: **10**
 
 Source Integrity is especially important because AI may produce interpretations that sound insightful but were never genuinely explored by the Human.
 
@@ -563,12 +563,12 @@ Source Integrity is especially important because AI may produce interpretations 
 Calculate:
 
 ```text
-Cognitive Delta      × 6 = /30
-Exploration Depth    × 4 = /20
+Cognitive Delta      × 7 = /35
+Exploration Depth    × 5 = /25
 Tension / Stakes     × 3 = /15
 Surprise             × 2 = /10
-Audience Resonance   × 2 = /10
-Source Integrity     × 3 = /15
+Audience Resonance   × 1 = /5
+Source Integrity     × 2 = /10
 --------------------------------
 TOTAL                         /100
 ```

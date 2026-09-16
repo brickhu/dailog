@@ -140,7 +140,7 @@ covers/{submissionId}.jpg                  ← 封面（lab 发布时上传，�
   浏览器 localStorage（`assets-{id}` 素材 store：review/scripts/metadata 工作流输入槽 + dialogue 快照）与 IndexedDB（seg 音频/full/BGM）
   只作工作副本——**无本地草稿目录**（dailog-editor 的 `.dailog-editor/drafts` 依赖已去除）
 - **提示词工程**：`prompts/*.md`（r1-review → 审题；r2-script handoff+user → 创作；r3-polish → 打磨；r4-meta → 节目信息）+ prompts.json；
-  服务端 promptSig（md mtime 指纹）随每轮输出落 `feedback/review.jsonl`——可回溯“哪版规则产生了这个结果”，构成提示词反馈闭环
+  编辑的质量标记落 `feedback/review.jsonl`（暂不带提示词版本指纹 promptSig——已撤掉，需要时再加）
 - **采集**：lib/collect.mjs 自包含（不依赖 CLI）——分享链接解码 → dialogue.json → R2（URL 哈希 key）；
   服务端标记 collected；批量并发（/api/run/batch）
 - **LLM 编排（lab 服务端直连，配置 lib/config.mjs + .env）**：DeepSeek 默认；审题、创作（多候选）、打磨（scope=all/one/line）、meta——

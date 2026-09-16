@@ -88,7 +88,7 @@
   "description": "提案检测：system=对话原文，user=提案提示词 → exploration_threads + creative_proposal（R1→R2 的唯一接口）",
   "config": {
    "temperature": 0.3,
-   "maxTokens": 8192,
+   "maxTokens": 16384,
    "thinking": "disabled",
    "seed": 41,
    "responseFormat": {

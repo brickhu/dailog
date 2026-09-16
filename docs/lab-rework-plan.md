@@ -67,7 +67,7 @@
 
 ### Stage 3 · 试跑与迭代
 - 拿 1-2 篇真实投稿（对话含多事件候选的优先）跑 review.score 提案版 → 人工看提案墙可区分度/链回溯正确性 → 调提示词；
-- 对选定提案跑 script → 用"验收三问"回检；反馈进 feedback/review.jsonl（promptSig 已自动带版本指纹）。
+- 对选定提案跑 script → 用"验收三问"回检；反馈进 feedback/review.jsonl（暂不带提示词版本指纹 promptSig——已撤掉，需要时再加）。
 
 ## 6. 不做（本轮边界）
 - 不改 meta / TTS / merge / publish 流程与存储路径；

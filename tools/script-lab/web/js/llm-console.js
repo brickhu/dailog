@@ -201,20 +201,17 @@
       else s += ' · 缓存命中 n/a';
       return s;
     }
-    function summary(resp) { try { const r = resp && resp.result; if (r && Array.isArray(r.scripts)) return 'scripts × ' + r.scripts.length + fidScoreSuffix(r.scripts); if (r && r.score !== undefined) return 'score=' + r.score; if (r) return 'ok'; } catch {} return 'ok'; }
-    // 脚本质量摘要：接话 = host 现场补的话（不是缺陷）；超长段 = 一口气说不完的段
-    function fidScoreSuffix(scripts) {
-      let talk = 0, long = 0;
+    function summary(resp) { try { const r = resp && resp.result; if (r && Array.isArray(r.scripts)) return 'scripts × ' + r.scripts.length + scriptQualitySuffix(r.scripts); if (r && r.score !== undefined) return 'score=' + r.score; if (r) return 'ok'; } catch {} return 'ok'; }
+    // 脚本质量摘要：超长段 = 一口气说不完的段
+    function scriptQualitySuffix(scripts) {
+      let long = 0;
       (Array.isArray(scripts) ? scripts : []).forEach((sc) => {
-        if (sc && sc.fidelity) { /* 保真标注仍在 sc.fidelity 里（原话/改写/接话），标题只露接话段数 */ }
         if (sc && Array.isArray(sc.segments)) sc.segments.forEach((seg) => {
           if (!seg || seg.speaker !== 'host') return;
-          if (seg.chain === false || (!seg.chain && seg.src && seg.src === 'new')) talk++;
           if (String(seg.text || '').length > 100) long++;
         });
       });
       const parts = [];
-      if (talk) parts.push('接话 ' + talk + ' 段');
       if (long) parts.push('超长段 ' + long);
       return parts.length ? ' · ' + parts.join(' · ') : '';
     }

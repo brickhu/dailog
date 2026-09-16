@@ -104,11 +104,10 @@
         const sc = (d && d.result && Array.isArray(d.result.scripts) && d.result.scripts[0]) || null;
         if (!sc || !Array.isArray(sc.segments) || !sc.segments.length) throw new Error('这一次没有返回脚本');
         // 只写本地工作副本；入库时机 = 语音合成确认（merge.js 提交远程 scripts）。
-        // 存的是"播出的话"这一份真相：segments（+ fidelity）；六字段那套出稿形态不留（编辑后会过期打架）。
+        // 存的是"播出的话"这一份真相：segments；六字段那套出稿形态不留（编辑后会过期打架）。
         const kept = { segments: sc.segments };
         if (sc.episode) kept.episode = sc.episode;          // R4 meta 要用（title/logline/hook）
         if (sc.production) kept.production = sc.production;  // R4 meta 要用（时长档位/估算）
-        if (sc.fidelity) kept.fidelity = sc.fidelity;
         try { setWorkflowInput(id, 'scripts', [kept]); } catch (e) {}
         try { if (!window.__workScripts) window.__workScripts = {}; window.__workScripts[id] = [kept]; } catch (e) {}
         clearInterval(timer);
