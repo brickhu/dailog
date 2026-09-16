@@ -107,4 +107,18 @@ function validate(entry) {
     }
   }
   if (entry.params && typeof entry.params !== "object") throw new Error("提示词字典 params 必须是对象: " + (entry.name || entry.key || "?"));
+  // 占位符 ↔ params 一致性（在**加载时**就查，而不是等到 renderPrompt 那一刻才炸）：
+  //   用了没声明 → 直接抛错（白名单机制，不声明渲染必炸，早报早改）；
+  //   声明了没用 → 只 warn（params 是整个条目共享的白名单，system 素材与 user 提示词各用各的，属于正常）。
+  const declared = new Set(Object.keys(entry.params || {}));
+  const used = new Set();
+  for (const m of entry.messages) {
+    const re = /\{\{([\w.]+)\}\}/g;
+    let hit;
+    while ((hit = re.exec(String(m.content || "")))) used.add(hit[1].split(".")[0]);
+  }
+  const undeclared = [...used].filter((k) => !declared.has(k));
+  if (undeclared.length) throw new Error("提示词占位符未在 params 声明: " + undeclared.map((k) => "{{" + k + "}}").join("、") + "（" + (entry.name || entry.key || "?") + "）");
+  const unused = [...declared].filter((k) => !used.has(k));
+  if (unused.length) console.warn("[prompt] " + (entry.name || entry.key || "?") + " 有声明但没用到的 params: " + unused.join("、") + "（可清理）");
 }

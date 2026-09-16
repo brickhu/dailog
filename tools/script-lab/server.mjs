@@ -1428,7 +1428,6 @@ function segmentsFromDraftShape(p) {
       const dlgBlock = (fold.folded.length ? foldLegend(fold.folded) + "\n\n" : "") + dialogueBlockFor(fold.dialogue, "Human", "AI", null);   // 与提案提示词里的 Human/AI 一致
       const defaultMsgs = withLanguageFact(renderPrompt(p, {
         dialogue: { messages: dlgBlock, sourceUrl: (dialogue && dialogue.sourceUrl) || "" },
-        turns: ((dialogue && dialogue.messages) || []).length,
         suggestion: "",
       }), fold.dialogue);
       if (fold.folded.length) console.log("[round1] 外部粘贴/成品折叠 " + fold.folded.length + " 处（省 " + fold.savedChars + " 字）：" + fold.folded.map((f) => "t" + f.n + "(" + f.chars + ")").join(" "));
@@ -1558,7 +1557,6 @@ function segmentsFromDraftShape(p) {
       if (fold2.folded.length) console.log("[round2] 外部粘贴/成品折叠 " + fold2.folded.length + " 处（省 " + fold2.savedChars + " 字）：" + fold2.folded.map((f) => "t" + f.n + "(" + f.chars + ")").join(" "));
       const rendered = renderPrompt(pScript, {
         dialogue: { messages: (fold2.folded.length ? foldLegend(fold2.folded) + "\n\n" : "") + dialogueBlockFor(fold2.dialogue, hostName, guestName, null), sourceUrl: (dialogue && dialogue.sourceUrl) || "" },
-        turns: dlgTotal,
         suggestion: (detail && detail.suggestion) || "（无）",
         creative_proposal: JSON.stringify(cp, null, 1),
         HOST_NAME: hostName,
@@ -1583,15 +1581,16 @@ function segmentsFromDraftShape(p) {
       // 人工修改意见（llm-box 重试输入框）：附带上一版脚本，追加到最后一条 user 消息
       const _rev = body && typeof body.revision === "string" ? body.revision.trim() : "";
       const _prev = (body && Array.isArray(body.previousScript) && body.previousScript.length) ? body.previousScript[0] : null;
+      const _reroll = !!(body && body.reroll);   // 编辑在弹窗里显式点了「重摇一版」：不带上一版、不写意见，走全新生成
       // 「必填」在服务端也挡一道：带上一版却不写意见 = 静默重摇一版并把上一版覆盖掉（前端已拦，直调 API 也能拦住）
-      if (!_rev && _prev && !(body && body.preview)) {
-        sendJson(res, { ok: false, error: "改稿必须写修改意见——不写意见会重摇一版并覆盖上一版" }, 400);
+      if (!_rev && !_reroll && _prev && !(body && body.preview)) {
+        sendJson(res, { ok: false, error: "改稿必须写修改意见——不写意见会重摇一版并覆盖上一版（要主动重摇，请用「重摇一版」）" }, 400);
         return;
       }
       if (_rev) {
         // 真·多轮改稿：上一版作为 assistant 回灌（模型是在改自己的稿，不是拿参考稿重写）；
         // 只带最近一版，不做无限历史——思考模式每轮都要重新想，上下文越长越贵越慢。
-        if (_prev) {
+        if (_prev && !_reroll) {
           msgs = msgs.concat([
             { role: "assistant", content: JSON.stringify({ episode: _prev.episode || null, script: Array.isArray(_prev.script) ? _prev.script : null, segments: Array.isArray(_prev.segments) ? _prev.segments : null }, null, 1) },
             { role: "user", content: "编辑修改意见：\n" + _rev + "\n\n按意见改这一版：只改意见点到的地方，其余保持原样；仍然输出同一个 JSON 对象（不要解释、不要多余文字）。" },
@@ -1605,6 +1604,8 @@ function segmentsFromDraftShape(p) {
         const _arr = retryDefects.get(_rk) || [];
         if (_arr.length < 20) _arr.push(_rev.slice(0, 500));
         retryDefects.set(_rk, _arr);   // 内存累积，入库时一并落盘
+      } else if (_reroll) {
+        console.log("[round2] 重摇一版（编辑显式要求）：不带上一版、不算改稿，也不进改稿缺陷数据");
       }
       // 预览放在追加之后：编辑在「预览 JSON」里看到的就是真正会发出去的输入（含那条修改意见）
       if (body && body.preview) {

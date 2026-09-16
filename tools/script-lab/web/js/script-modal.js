@@ -51,12 +51,14 @@
       + '</div>'
       + '<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid #262b36">'
       + '<span id="smStatus" style="font-size:12px;color:#8a91a0"></span><span style="flex:1"></span>'
+      + (isRedo ? '<button type="button" id="smReroll" title="不带上一版、不用写意见，用新采样重新生成一版（会覆盖当前这一版）" style="cursor:pointer;background:#0b0d11;border:1px solid #6e7681;color:#8a91a0;border-radius:6px;padding:6px 12px;font-size:12px">重摇一版</button>' : '')
       + '<button type="button" id="smOk" style="cursor:pointer;background:#0b0d11;border:1px solid #3fb950;color:#3fb950;border-radius:6px;padding:6px 20px;font-size:13px">确认创作</button>'
       + '</div>';
     ov.append(win); document.body.append(ov);
     const note = win.querySelector('#smNote');
     const status = win.querySelector('#smStatus');
     const okBtn = win.querySelector('#smOk');
+    const rerollBtn = win.querySelector('#smReroll');
     // 重新创作 = 改稿：必须写一条意见。
     // 否则空提交会走服务端的「全新生成」分支（server.mjs 只在 revision 非空时回灌上一版），
     // 看起来是「重新创作」，实际是「重摇一版并把上一版覆盖掉」。
@@ -134,10 +136,16 @@
     ov.addEventListener('click', (e) => { if (e.target === ov && !busy) close(); });
 
     let busy = false, timer = null;
-    async function run() {
+    // mode='reroll'：编辑显式要求「不写意见、重摇一版」——不带上一版、不带意见，走服务端全新生成
+    async function run(mode) {
+      const isReroll = mode === 'reroll';
       if (busy) return;
-      // 兜底（含 Ctrl/Cmd+Enter 与按钮点击）：重新创作没写意见就不发请求
-      if (isRedo && !String(note.value || '').trim()) {
+      // 「重摇」要先过确认（覆盖不可撤销；已生成的语音要对不上）
+      if (isReroll) {
+        if (!confirm('重摇一版：不带上一版、不用写意见，用新采样重新生成一版。\n\n· 会覆盖当前这一版（不可撤销）\n· 已生成的语音需要重跑\n\n继续？')) return;
+      }
+      // 兜底（含 Ctrl/Cmd+Enter 与按钮点击）：重新创作没写意见就不发请求（重摇模式除外）
+      if (!isReroll && isRedo && !String(note.value || '').trim()) {
         status.textContent = needNote; status.style.color = '#d29922';
         okBtn.disabled = true; okBtn.style.opacity = '.45';
         return;
@@ -150,16 +158,20 @@
         if (typeof openDetail === 'function') openDetail(id);
       } catch (e) {}
       // 「创作中」= 本地有稿（或正在生成），不需要写远程；远程提交点在「确认生成语音」
-      okBtn.disabled = true; okBtn.textContent = '创作中…'; okBtn.style.opacity = '.6';
+      okBtn.disabled = true; okBtn.textContent = isReroll ? '重摇中…' : '创作中…'; okBtn.style.opacity = '.6';
+      if (rerollBtn) { rerollBtn.disabled = true; rerollBtn.style.opacity = '.45'; }
       note.disabled = true;
       const t0 = Date.now();
-      const tick = () => { status.textContent = '脚本创作中…（' + Math.round((Date.now() - t0) / 1000) + 's · 思考模式通常 40-90 秒）'; status.style.color = '#4f8cff'; };
+      const tick = () => { status.textContent = (isReroll ? '重摇中…（' : '脚本创作中…（') + Math.round((Date.now() - t0) / 1000) + 's · 思考模式通常 40-90 秒）'; status.style.color = '#4f8cff'; };
       tick(); timer = setInterval(tick, 1000);
       try {
         const revision = String(note.value || '').trim();
         const body = { id: id, review: chosen, score: (chosen && typeof chosen.score === 'number') ? chosen.score : null };
-        if (revision) body.revision = revision;
-        if (prev) body.previousScript = [prev];
+        if (isReroll) body.reroll = true;   // 显式重摇：不带 previousScript、不带 revision
+        else {
+          if (revision) body.revision = revision;
+          if (prev) body.previousScript = [prev];
+        }
         const d = await j('/api/run/review/round2', { method: 'POST', headers: H(), body: JSON.stringify(body) });
         const sc = (d && d.result && Array.isArray(d.result.scripts) && d.result.scripts[0]) || null;
         if (!sc || !Array.isArray(sc.segments) || !sc.segments.length) throw new Error('这一次没有返回脚本');
@@ -174,7 +186,7 @@
         try { window.__creating[id] = false; } catch (e) {}   // 生成结束 → 卡片回「创作中（脚本展示）」
         status.textContent = '✓ 完成（' + Math.round((Date.now() - t0) / 1000) + 's）· 本地工作副本（语音合成确认时入库）';
         status.style.color = '#3fb950';
-        notice('✓ 脚本已' + (isRedo ? '更新' : '注入') + '到创作卡片（' + sc.segments.length + ' 段）', 'success');
+        notice('✓ 脚本已' + (isReroll ? '重摇并覆盖上一版' : (isRedo ? '更新' : '注入')) + '到创作卡片（' + sc.segments.length + ' 段）', 'success');
         setTimeout(function () { close(); if (typeof openDetail === 'function') openDetail(id); }, 600);
         return;
       } catch (err) {
@@ -190,8 +202,9 @@
         note.disabled = false;
       }
     }
-    okBtn.onclick = run;
-    note.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') run(); });
+    okBtn.onclick = () => run('normal');
+    if (rerollBtn) rerollBtn.onclick = () => run('reroll');
+    note.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') run('normal'); });
     note.focus();
     return { close: close };
   }

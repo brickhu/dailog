@@ -881,21 +881,6 @@ The Guest may participate in the closing.
 
 Do not turn the ending into a generic inspirational speech.
 
----
-
-## Closing
-
-The Host should:
-
-* briefly reflect on where the exploration arrived,
-* leave the audience with a thought, tension, or question,
-* thank the Guest,
-* say goodbye.
-
-The Guest may participate.
-
-Do not turn the ending into a generic inspirational speech.
-
 Do not mechanically summarize all the points discussed.
 
 ---
