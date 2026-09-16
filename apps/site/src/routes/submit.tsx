@@ -198,13 +198,20 @@ export default function SubmitPage() {
   // 投稿区（zone = 目标语言）：一投稿 = 一语言区 = 一期节目。由导入弹框选定（?zone=），
   // 本页可改；占用状态以服务端 check 为权威（已投过的区不可再投）。
   const [zone, setZone] = createSignal<string>(isSupportedSampleLanguage(params.zone) ? params.zone! : "zh");
-  const [zoneInfo, setZoneInfo] = createSignal<Record<string, { submitted: boolean; canSubmit: boolean; status: string | null }> | null>(null);
+  const [zoneInfo, setZoneInfo] = createSignal<Record<string, { submitted: boolean; canSubmit: boolean; status: string | null; hasSample: boolean }> | null>(null);
   // 他人已投稿（check.owner=other）：同一对话的投递权归首个投稿人 → 整条投稿流程不可用
   const [claimed, setClaimed] = createSignal(false);
 
-  /** 该投稿区的采样（**按语种取**：投稿区决定用哪条采样，避免拿中文采样读英文）：
-   *  有 → 自动填充预览；无 → 引导录制该区语种（提交按钮置灰） */
-  const refreshZoneSample = async (lang: string) => {
+  /** 按"该区是否已有采样"决定是否回读：有 → 取该语种那条的 id/时长（预览条用）；
+   *  无 → 直接清空。**缺采样时不发请求**——`/v1/me/voice-sample` 无记录返回 404，
+   *  页面加载时刷一串 404 会被误读成"音频挂了"（真值来源见 refreshZoneInfo 的 check）。 */
+  const applyZoneSample = async (lang: string, exists: boolean) => {
+    if (!exists) {
+      setHasVoiceSample(false);
+      setVoiceSampleId(null);
+      setSampleDuration(0);
+      return;
+    }
     try {
       const res = await fetch(`/v1/me/voice-sample?language=${encodeURIComponent(lang)}`);
       if (!res.ok) {
@@ -232,29 +239,33 @@ export default function SubmitPage() {
       if (!res.ok) return;
       const d = (await res.json()) as {
         owner?: string;
-        zones?: Record<string, { submitted: boolean; canSubmit: boolean; status: string | null }>;
+        zones?: Record<string, { submitted: boolean; canSubmit: boolean; status: string | null; hasSample: boolean }>;
       } | null;
       const zones = d?.zones ?? null;
       setClaimed(d?.owner === "other");
       setZoneInfo(zones);
       // 当前区已被占、但还有可投的区 → 自动切过去（避免一进页面就撞"已投稿"）
-      if (zones && zones[zone()]?.submitted) {
+      let target = zone();
+      if (zones && zones[target]?.submitted) {
         const free = ENABLED_SAMPLE_LANGUAGES.find((z) => zones[z]?.canSubmit);
-        if (free && free !== zone()) {
+        if (free && free !== target) {
           setZone(free);
           setVoiceSampleId(null);
-          void refreshZoneSample(free);
+          target = free;
         }
       }
+      // 采样就绪以 check(zones[].hasSample) 为权威；确有其物才回读该语种那条
+      await applyZoneSample(target, !!zones?.[target]?.hasSample);
     } catch { /* 静默 */ }
   };
 
-  /** 切换投稿区：采样随之切换到该区语种（能不能提交由该区采样决定） */
+  /** 切换投稿区：采样随之切换到该区语种（能不能提交由该区采样决定）；
+   *  采样有无直接用已拉到的 check 结果判定，不再多发请求 */
   const changeZone = (z: string) => {
     if (z === zone()) return;
     setZone(z);
     setVoiceSampleId(null);
-    void refreshZoneSample(z);
+    void applyZoneSample(z, !!zoneInfo()?.[z]?.hasSample);
   };
 
   // 响应 ?id=/?url= 变化（原生路由导航到相同路径不同 query 时也会触发——
@@ -275,8 +286,7 @@ export default function SubmitPage() {
         void probeReachable(check.url)
           .then(setReachable)
           .catch(() => setReachable("unknown"));
-        void refreshZoneInfo(check.url);      // 投稿区占用（权威）
-        void refreshZoneSample(zone());        // 当前投稿区的采样
+        void refreshZoneInfo(check.url);      // 投稿区占用 + 该区采样就绪（权威，200 不会 404）
         return;
       }
       setUrlState("empty");
@@ -300,7 +310,6 @@ export default function SubmitPage() {
       .then(setReachable)
       .catch(() => setReachable("unknown"));
     void refreshZoneInfo(prefill);
-    void refreshZoneSample(zone());
   });
 
   // 进入确认投稿态时拉取已有人设/采样（此时 AuthGate 已放行、必然登录；避免未登录 401 噪音）
@@ -315,7 +324,7 @@ export default function SubmitPage() {
           if (profile.displayName) setCallName(profile.displayName);
         }
       } catch { /* 静默 */ }
-      await refreshZoneSample(zone());   // 采样按投稿区语种取（详见 refreshZoneSample）
+      if (url()) await refreshZoneInfo(url());   // 投稿区占用 + 采样就绪（登录后权威拉取一次）
     })();
   });
 
@@ -330,8 +339,8 @@ export default function SubmitPage() {
     setSampleDuration(s.duration);
     setHasVoiceSample(true);
     setRecorderOpen(false);
-    // 复核该投稿区语种：弹窗内可能改过语种，录了别的语种不算数
-    void refreshZoneSample(zone());
+    // 复核该投稿区语种：弹窗内可能改过语种，录了别的语种不算数（重新走 check，权威）
+    if (url()) void refreshZoneInfo(url());
   };
 
   /** 确认投稿：提交投稿（URL + 本次称呼 + 投稿使用的采样 id） */

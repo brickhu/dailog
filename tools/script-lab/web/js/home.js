@@ -89,6 +89,7 @@ async function loadApp(){
             ? `<a href='${esc(r.url)}' target='_blank' rel='noopener' title='${esc(r.title)}' style='font-size:13px;display:inline-block;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>${esc(r.title)}</a>`
             : (r.url ? `<a class='mono url' href='${esc(r.url)}' target='_blank' rel='noopener'>${esc(r.url)}</a>` : '—')}
           ${r.dialogueCount && r.dialogueCount.messages ? `<span class='tag' title='消息数'>${r.dialogueCount.messages} 条</span>` : ''}
+          ${r.reusable ? `<span class='tag' title='同一对话的另一版本已采集，采集时将直接复用（不再抓取）' style='border-color:#4f8cff;color:#4f8cff'>⚡ 同源</span>` : ''}
           </div>
         </td>
         <td>${esc(r.displayName||'?')} <span class='muted mono'>(${esc(r.userEmail||'')})</span></td>
@@ -112,6 +113,8 @@ function fetchIcon(r){
   }
   if (fetchingIds.has(r.id)) return `<span class='cicon fetching' title='采集中'><span class='spin'></span></span>`;
   if (c === -1) return `<span class='cicon failed' data-fetch-id='${r.id}' title='采集失败，点击重试'>✗</span>`;
+  // 同源已采集（同一对话的另一语言版本已采集过）：点一下即复用，不再抓取
+  if (r.reusable) return `<span class='cicon' data-fetch-id='${r.id}' title='同一对话已采集——点击直接复用（不再抓取）' style='color:#4f8cff'>⚡</span>`;
   return `<span class='cicon pending' data-fetch-id='${r.id}' title='点击采集'>⇩</span>`;
 }
 

@@ -477,6 +477,8 @@ async function handleApi(path, res, req) {
     ]);
     const sub = await apiWithToken(e, token, "/v1/editor/submissions").catch(() => []);
     const all = [...sub, ...col, ...pub, ...rej, ...crafted, ...sel];
+    // 同源复用标记：同一 URL 的另一条投稿已采集 → 本条采集时可跳过抓取（R2 对话按 URL 哈希共享）
+    const collectedUrls = new Set(all.filter((r) => r.collected === 1 && r.url).map((r) => r.url));
     const rows = all.map((r) => {
       // 列表状态与详情页对齐：直接展示状态值（submitted/collected/crafted/published/rejected）
       const stage = r.status || "submitted";
@@ -485,6 +487,7 @@ async function handleApi(path, res, req) {
         displayName: r.displayName || r.userEmail || "?", userEmail: r.userEmail,
         createdAt: r.createdAt, hasVoiceSample: r.hasVoiceSample, stage,
         language: r.language || "zh",   // 投稿区（目标语言）：列表徽标用
+        reusable: r.collected !== 1 && !!r.url && collectedUrls.has(r.url),   // 同源已采集 → 一键复用
       };
     });
     rows.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
@@ -589,18 +592,30 @@ async function handleApi(path, res, req) {
     const { env: e, token } = cred;
     const lib = await loadCliLib();
     const q = await apiWithToken(e, token, "/v1/editor/submissions").catch(() => []);
-    // 未采集的投稿（服务端 collected !== 1 且不在 fetching）→ 异步逐个采集（并发 4）
+    // 未采集的投稿（服务端 collected !== 1 且不在 fetching）→ 采集（并发 4）
     const pending = q.filter((row) => row.collected !== 1 && !fetchingSet.has(e + ":" + row.id));
-    let idx = 0;
+    // **同 URL 分组**：对话原文的 R2 key 是 URL 哈希（dialogues/{sha256(url)}.json），同一篇对话只需抓一次。
+    // 组内按序执行（第一条真抓 → 其余命中 R2 缓存直接复用），组间并发 4。
+    // 不分组的话，同一 URL 的两条投稿会被不同 worker 同时抓 —— 白抓一次（claude 分享页还会起两个有头 Chrome）。
+    const groups = new Map();
+    for (const row of pending) {
+      const key = row.url || row.id;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(row);
+    }
+    const queue = [...groups.values()];
+    let gi = 0;
     const worker = async () => {
-      while (idx < pending.length) {
-        const row = pending[idx++];
-        await runSingleFetch(e, token, row.id, row.url || null, row.title || null);
+      while (gi < queue.length) {
+        const group = queue[gi++];
+        for (const row of group) {
+          await runSingleFetch(e, token, row.id, row.url || null, row.title || null);
+        }
       }
     };
     // 异步启动，不等待（返回已入队数量；进度由 /api/status/fetch 轮询）
-    Promise.all(Array.from({ length: Math.min(4, Math.max(pending.length, 1)) }, worker)).catch(() => {});
-    sendJson(res, { ok: true, queued: pending.length, total: q.length });
+    Promise.all(Array.from({ length: Math.min(4, Math.max(queue.length, 1)) }, worker)).catch(() => {});
+    sendJson(res, { ok: true, queued: pending.length, conversations: queue.length, total: q.length });
     return;
   }
 
@@ -1086,12 +1101,14 @@ if (path === "/api/run/console-import" && req.method === "POST") {
         const bytes = await apiFetchBytes(config, e, token, "/v1/editor/samples/guest/" + encodeURIComponent((detail && detail.guest && detail.guest.id) || "") + "/audio?language=" + encodeURIComponent(row.language || ""));
         ref = { audio: bytes, text: row.transcript || null };
       } else {
+        // 主持人采样**严格按投稿区语种**：英文区必须用投稿人的英文采样（投稿门禁已保证存在），
+        // 找不到就报错——绝不用别的语种兜底（中文采样读英文 = 口音/身份都不对，且静默出戏）。
         const samples = (detail && detail.voiceSamples) || [];
-        const sample = samples.find((x) => x.language === zone)
-          || (zone !== "en" ? samples.find((x) => x.language === "en") : null)
-          || samples.find((x) => x.status === "ready") || samples[0];
-        if (!sample || !sample.audioUrl) { sendJson(res, { ok: false, error: "主持人无声样" }); return; }
-        if (sample.language !== zone) console.warn("[seg-tts] 主持人无 " + zone + " 采样——回退 " + sample.language + "（投稿 " + id + "）");
+        const sample = samples.find((x) => x.language === zone);
+        if (!sample || !sample.audioUrl) {
+          sendJson(res, { ok: false, error: "该投稿区（" + zone + "）没有主持人采样——请投稿人先录一段 " + zone + " 采样；现有采样语种：" + (samples.map((x) => x.language).join("/") || "无") + "（不允许用别的语种兜底）" });
+          return;
+        }
         const bytes = await apiFetchBytes(config, e, token, "/v1/editor/samples/host/" + encodeURIComponent((detail && detail.userId) || "") + "/audio?language=" + encodeURIComponent(sample.language || ""));
         ref = { audio: bytes, text: sample.transcript || null };
       }

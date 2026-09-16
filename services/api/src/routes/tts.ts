@@ -106,13 +106,12 @@ export function ttsRoutes(deps: TtsDeps) {
     const detail = await deps.repo.submissions.getDetail(submissionId);
     if (!detail) return c.json({ error: "not_found" }, 404);
 
-    // host 参考（投稿人采样）：按脚本语言匹配 → 英文采样兜底 → 最近一条采样兜底
-    // （架构支持多语种；无对应语种时降级，保证能出声音）
+    // host 参考（投稿人采样）**严格按请求语种**：不跨语种兜底——宁可按 422 让投稿人补采样，
+    // 也不能让英文节目静默用中文采样（口音/身份都不对）。lab 侧同规则（server.mjs tts-seg）。
     const samples = detail.voiceSamples; // getDetail 已过滤 ready、按最近排序
-    const byLang = (lang: string) => samples.find((s) => s.language === lang) ?? null;
-    const hostSample = byLang(language) ?? (language !== "en" ? byLang("en") : null) ?? samples[0] ?? null;
+    const hostSample = samples.find((s) => s.language === language) ?? null;
     if (!hostSample) {
-      return c.json({ error: "no_voice_sample", detail: `投稿人无声音采样` }, 422);
+      return c.json({ error: "no_voice_sample", detail: `投稿人没有 ${language} 采样（现有：${samples.map((s) => s.language).join("/") || "无"}）——请先在投稿页录一段 ${language} 采样` }, 422);
     }
     const hostBytes = await deps.storage.get(hostSample.audioUrl).then((r) => r.data).catch(() => null);
     if (!hostBytes) return c.json({ error: "no_voice_sample", detail: "采样音频读取失败" }, 422);

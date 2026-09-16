@@ -227,6 +227,26 @@ describe("POST /v1/editor/tts（multi speaker 整集合成）", () => {
     expect(synthesizeMultiSpeaker).not.toHaveBeenCalled();
   });
 
+  it("主持人没有该语种采样 → 422（不跨语种兜底：英文节目绝不静默用中文采样）", async () => {
+    const app = makeApp({
+      ...baseDeps(),
+      repo: fakeRepo({
+        // 投稿人只有 zh 采样；请求 en → 必须 422，而不是拿 zh 采样读英文
+        submissions: { ...fakeRepo().submissions, getDetail: async () => SUBMITTED_DETAIL },
+        guests: {
+          ...fakeRepo().guests,
+          voiceSampleByLanguage: async () => ({ id: "gvs-en", guestId: "claude", language: "en", audioKey: "guests/claude/en.mp3", transcript: "Hello" }),
+        },
+      }),
+    });
+    const res = await postJson(app, { submissionId: "sub-1", language: "en", guestId: "claude", segments: SEGMENTS });
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error: string; detail: string };
+    expect(body.error).toBe("no_voice_sample");
+    expect(body.detail).toContain("en");   // 说清缺哪个语种
+    expect(body.detail).toContain("zh");   // 并列出现有语种，编辑知道该补哪条
+  });
+
   it("guest 未定义语种 → 英文声线兜底（只配了 en 采样也出声音）", async () => {
     // 嘉宾只配了 en 采样；请求 ja → 应落到 en，合成成功而非 422
     const synthesizeMultiSpeaker = vi.fn(async () => new Uint8Array([7, 7, 7]));
@@ -234,8 +254,14 @@ describe("POST /v1/editor/tts（multi speaker 整集合成）", () => {
       ...baseDeps(),
       fish: { synthesizeSingle: async () => new Uint8Array([1]), synthesizeMultiSpeaker },
       repo: fakeRepo({
-        submissions: { ...fakeRepo().submissions, getDetail: async () => SUBMITTED_DETAIL },
-        episodes: { ...fakeRepo().episodes, getVoiceSampleByLanguage: async () => ({ userId: "user-1", language: "zh", audioUrl: "v", transcript: "t", duration: 5, status: "ready" }) },
+        submissions: {
+          ...fakeRepo().submissions,
+          // 主持人给 ja 采样：主持人侧严格按语种（不跨语种兜底）——本用例只验证**嘉宾**的 en 兜底
+          getDetail: async () => ({
+            ...SUBMITTED_DETAIL,
+            voiceSamples: [{ audioUrl: "voices/user-1/ja.webm", transcript: "こんにちは", language: "ja", status: "ready", duration: 5 }],
+          }),
+        },
         guests: {
           ...fakeRepo().guests,
           voiceSampleByLanguage: async (_g: string, lang: string) =>
@@ -247,7 +273,7 @@ describe("POST /v1/editor/tts（multi speaker 整集合成）", () => {
     expect(res.status).toBe(200);
     expect(await res.arrayBuffer()).toEqual(new Uint8Array([7, 7, 7]).buffer);
     expect(synthesizeMultiSpeaker).toHaveBeenCalledWith(expect.objectContaining({
-      transcripts: ["大家好", "Hello"],
+      transcripts: ["こんにちは", "Hello"],
     }));
   });
 
