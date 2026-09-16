@@ -618,12 +618,11 @@ Natural conversation is more important than polished aphorisms.
 
 The desired interaction is:
 
-```text
 Host says something
       ↓
-Guest reacts
+Guest reacts to what was actually said
       ↓
-Host responds to what was actually said
+Host notices, questions, accepts, resists, or reframes it
       ↓
 Guest clarifies / resists / refines
       ↓
@@ -632,23 +631,60 @@ A tension appears
 They follow the tension
       ↓
 Understanding changes
-```
+
+The conversation should feel **caused by the previous line**, not driven by a hidden outline.
 
 Avoid:
 
-```text
-Host asks prepared question
-      ↓
-Guest delivers complete answer
-      ↓
-Host asks next prepared question
-      ↓
-Guest delivers next complete answer
-```
+Host asks a prepared question
+↓
+Guest delivers a complete answer
+↓
+Host asks the next prepared question
+↓
+Guest delivers another complete answer
 
-The next question should often emerge from the previous answer.
+The next question should often emerge naturally from the previous answer.
 
-The next answer should often respond to the Host's reaction rather than simply advancing the outline.
+The next answer should often respond to the Host's actual reaction rather than simply advancing the outline.
+
+The Host and Guest do not always need to know exactly what they want to say before speaking.
+
+Allow:
+
+- partial thoughts
+- hesitation
+- clarification
+- reconsideration
+- immediate reactions
+- brief disagreement
+- uncertainty
+- unexpected follow-up questions
+
+Do not make every exchange sound perfectly composed.
+
+> **The audience should hear the thought being formed, not a speaker explaining the fact that they are thinking.**
+
+Avoid meta-narrating the thinking process.
+
+Prefer natural expressions such as:
+
+- "But now I'm wondering..."
+- "Wait, then what does that mean?"
+- "I'm not sure that's the real issue."
+- "But here's what I'm struggling with."
+- "That makes me think..."
+- "Hold on, if that's true..."
+
+Do not repeatedly use explicit formulations that announce or explain the speaker's own thinking process.
+
+Ask:
+
+> **Does this line sound like someone having the thought, or someone explaining to the audience that they are having the thought?**
+
+Prefer the former.
+
+> **The next thought should feel like it was caused by the last thought.**
 
 ---
 
