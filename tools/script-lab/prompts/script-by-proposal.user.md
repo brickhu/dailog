@@ -926,7 +926,40 @@ Not necessarily:
 
 ---
 
-# 26. ONE EPISODE = ONE COGNITIVE ARC
+# 26. CONTEXT BEFORE EXPLORATION
+
+The selected cognitive exploration may originate from the middle of a longer Human–AI conversation.
+
+The episode does **not** need to reproduce the original conversation from the beginning, but the listener must have enough context to understand the situation in which the exploration is happening.
+
+Before entering the main cognitive arc, establish the minimum necessary context:
+
+* What are the Human and Guest talking about?
+* What is the Human currently working on, thinking about, or trying to understand?
+* What does the key subject, project, person, or concept refer to?
+* Why does this question matter in the current situation?
+
+Do not assume the audience has access to the source conversation.
+
+Do not dump background information or summarize the entire history.
+
+> **Give the listener enough context to understand the question, then enter the exploration.**
+
+Context should feel like part of the conversation, not an editorial briefing.
+
+The Host may naturally establish context through:
+
+* a brief explanation,
+* a reminder,
+* a concrete situation,
+* a clarification,
+* or a short setup question.
+
+Do not introduce facts that are not supported by the source conversation.
+
+---
+
+# 27. ONE EPISODE = ONE COGNITIVE ARC
 
 The episode should normally contain:
 
@@ -950,7 +983,7 @@ Do not artificially create every stage when the exploration does not require it.
 
 ---
 
-# 27. LENGTH
+# 28. LENGTH
 
 The final episode MUST be between **5 and 15 minutes**.
 
@@ -997,7 +1030,7 @@ Never add filler to reach the target.
 
 ---
 
-# 28. COMPRESSION PRIORITY
+# 29. COMPRESSION PRIORITY
 
 When shortening, remove in this order:
 
@@ -1025,7 +1058,7 @@ Some low-information lines are valuable when they make the interaction feel real
 
 ---
 
-# 29. QUESTION DENSITY
+# 30. QUESTION DENSITY
 
 For a standard 8–10 minute episode, aim for approximately **8–15 major Host questions**.
 
@@ -1037,7 +1070,7 @@ Questions should emerge from the conversation rather than functioning as section
 
 ---
 
-# 30. STOP CONDITION
+# 31. STOP CONDITION
 
 Once the selected cognitive exploration reaches its natural destination:
 
@@ -1057,7 +1090,7 @@ not:
 
 ---
 
-# 31. FINAL QUALITY CHECK
+# 32. FINAL QUALITY CHECK
 
 Before returning the script, silently verify all of the following.
 

@@ -1197,7 +1197,15 @@ function withLanguageFact(msgs, dialogue) {
 }
 
 function polishInputView(target) {
-  return { segments: (target && Array.isArray(target.segments)) ? target.segments : [] };
+  const segs = (target && Array.isArray(target.segments)) ? target.segments : [];
+  // 只喂 speaker + text。老脚本里可能残留历史字段（src / origRatio / fromTurn / chain / type / name），
+  // 对模型没用：白占 token，还会被原样回显、跟着写进新脚本。顺序与条数保持不变（提示词要求一一对应）。
+  return {
+    segments: segs.map((s) => ({
+      speaker: String((s && s.speaker) || "").toLowerCase() === "guest" ? "guest" : "host",
+      text: String((s && s.text) || ""),
+    })),
+  };
 }
 
 
@@ -1244,6 +1252,69 @@ function turnsLabel(nums) {
 
 /** 对话原文 → tN 编号素材（原文照录：一条消息一块，行首 tN + 说话人，正文不改一字）
  *  onlyTurns 给了就只放这些轮次——**锁定素材范围**，别把无关段落喂给 R2。 */
+// ===== 外部粘贴/成品折叠（审题 & 创作共用一套口径）=====
+/** 判定阈值。两类才算"被投进对话的成品"：
+ *  ① 体型像文档：≥ 6000 字，且 ≥ 全文消息长度中位数的 4 倍；
+ *  ② 身上带成品特征（剧本标记 **[01 opening]**、整份提示词 You are the **、≥3 个 Markdown 标题、两处以上代码围栏）且 ≥ 1200 字。
+ *  为什么要在注入前折掉：这类内容会稀释注意力（实测一篇 53 万字投稿里，模型放着 86% 的正文不看，
+ *  去给 t19 那条被贴进来的成品剧本建了三条线索），也白烧 token。
+ *  为什么不只看长度：聊天里 AI 动辄回 3-5 千字，那是它自己的话，不是成品——所以必须先看特征。 */
+const PASTE_HARD_CHARS = 12000;     // 单条 ≥1.2 万字：基本一定是被搬进来的文档
+const PASTE_DOC_CHARS = 6000;       // 文档尺度下限（且要比这篇对话的常态长得多）
+const PASTE_DOC_RATIO = 6;
+const PASTE_SIG_MIN_CHARS = 1500;   // 剧本标记的有效长度下限
+const PASTE_SIG_RE = /\*\*\[\s*\d{1,2}\s+[a-z]/i;   // 剧本标记：**[01 opening]
+
+/** 像"整份文档/提示词"的形态（不是 AI 平常那种带小标题的回答——所以要 ≥5 个标题或提示词开头） */
+function looksLikeDocument(t) {
+  if (/^You are the \*\*/m.test(t)) return true;              // 整份提示词文档
+  if (/^#\s*\d+\.\s/m.test(t)) return true;                  // 编号章节的规范文档
+  return (t.match(/^#{1,3} \S/gm) || []).length >= 5;          // 多级标题的成文
+}
+
+/** 找出"像成品"的消息，返回 [{n, role, chars, head, tail, why}] */
+function findPastedArtifacts(dialogue) {
+  const msgs = (dialogue && Array.isArray(dialogue.messages)) ? dialogue.messages : [];
+  const lens = msgs.map((m) => String((m && m.content) || "").length).filter((n) => n > 0).sort((a, b) => a - b);
+  if (!lens.length) return [];
+  const median = lens[Math.floor(lens.length / 2)] || 1;
+  const out = [];
+  msgs.forEach((m, i) => {
+    const t = String((m && m.content) || "");
+    const huge = t.length >= PASTE_HARD_CHARS;
+    const docish = t.length >= PASTE_DOC_CHARS && t.length >= median * PASTE_DOC_RATIO && looksLikeDocument(t);
+    const sigish = t.length >= PASTE_SIG_MIN_CHARS && PASTE_SIG_RE.test(t);
+    if (!huge && !docish && !sigish) return;
+    out.push({ n: i + 1, role: (m && m.role) || "user", chars: t.length, head: t.slice(0, 60), why: sigish ? "剧本" : (huge ? "超长" : "文档/提示词") });
+  });
+  return out;
+}
+
+/** 折叠：把成品的正文换成"桩"（留首尾，便于编辑核对是哪一份），返回新 dialogue + 折叠清单 */
+function foldPastedArtifacts(dialogue) {
+  const msgs = (dialogue && Array.isArray(dialogue.messages)) ? dialogue.messages : [];
+  const found = findPastedArtifacts(dialogue);
+  if (!found.length) return { dialogue, folded: [], savedChars: 0 };
+  const byN = new Map(found.map((f) => [f.n, f]));
+  let saved = 0;
+  const messages = msgs.map((m, i) => {
+    const f = byN.get(i + 1);
+    if (!f) return m;
+    const raw = String((m && m.content) || "");
+    saved += raw.length - f.head.length;
+    const stub = "〔外部粘贴/成品：" + f.chars + " 字（" + f.why + "），已折叠；开头 60 字仅供辨认：" + f.head.replace(/\s+/g, " ") + " …〕";
+    return Object.assign({}, m, { content: stub });
+  });
+  return { dialogue: Object.assign({}, dialogue, { messages }), folded: found, savedChars: saved };
+}
+
+/** 折叠说明（拼在素材最前面，让模型知道那些桩是什么） */
+function foldLegend(folded) {
+  return "（说明：本素材有 " + folded.length + " 处〔外部粘贴/成品〕已折叠——它们是投进这段对话的成品或外部内容"
+    + "（剧本、文章、提示词、报告、代码、别的对话）。**折叠处的内容、以及对话中围绕它们的复述与点评，都只算这段工作过程，不得作为探索线索，也不得作为 evidence 引用。**"
+    + "如果去掉这些成品与外部内容之后，剩下的只是「帮我改提示词 / 评审这份成品」这类工作过程，请按 §4 判为不合格（eligible=false）。）";
+}
+
 function dialogueBlockFor(dialogue, hostName, guestName, onlyTurns) {
   const msgs = Array.isArray(dialogue && dialogue.messages) ? dialogue.messages : [];
   const keep = (Array.isArray(onlyTurns) && onlyTurns.length) ? new Set(onlyTurns.map((x) => Number(x))) : null;
@@ -1307,7 +1378,7 @@ function segmentsFromDraftShape(p) {
       const cfg = llmConfig();
       // 第1轮：system=打分规则文本（字典静态部分），user1=仅对话 json
       const scoreSystem = (pScore.messages.find(m => m.role === "system") || {}).content || "";
-      // 第2轮：scriptRule = 渲染后的续接指令（r2-script handoff + user：规则 + 数据；评分由 review 运行时注入）
+      // 第2轮：scriptRule = 渲染后的续接指令（script-material.system 素材 + script-by-proposal.user 提示词；提案由 review 运行时注入）
       const rendered = renderPrompt(pScript, {
         score: null,
         review: null,
@@ -1353,12 +1424,14 @@ function segmentsFromDraftShape(p) {
       // 曾经这里塞的是 JSON.stringify(dialogue)（原始 JSON 大数组），模型得自己在 JSON 里数位置推 tN——
       // 实测 30 条以上的对话，路径证据的原话和 tN 会整段错位（原话在 t15，标成 t9），编辑核对直接对不上；
       // 而且 dialogue 是字符串时 {{dialogue.sourceUrl}} 永远渲染成空。
-      const dlgBlock = dialogueBlockFor(dialogue, "Human", "AI", null);   // 与提案提示词里的 Human/AI 一致
+      const fold = foldPastedArtifacts(dialogue);   // 成品/外部内容先折叠，再进提示词
+      const dlgBlock = (fold.folded.length ? foldLegend(fold.folded) + "\n\n" : "") + dialogueBlockFor(fold.dialogue, "Human", "AI", null);   // 与提案提示词里的 Human/AI 一致
       const defaultMsgs = withLanguageFact(renderPrompt(p, {
         dialogue: { messages: dlgBlock, sourceUrl: (dialogue && dialogue.sourceUrl) || "" },
         turns: ((dialogue && dialogue.messages) || []).length,
         suggestion: "",
-      }), dialogue);
+      }), fold.dialogue);
+      if (fold.folded.length) console.log("[round1] 外部粘贴/成品折叠 " + fold.folded.length + " 处（省 " + fold.savedChars + " 字）：" + fold.folded.map((f) => "t" + f.n + "(" + f.chars + ")").join(" "));
       const cfgOverride = {};
       if (body && Array.isArray(body.messages) && body.messages.length) {
         const cfg = (body && body.config) || {};
@@ -1446,6 +1519,7 @@ function segmentsFromDraftShape(p) {
         if (!recId) warnings.push("缺 recommended_thread_id（提案墙标不出推荐线）");
         else if (!threads.some((t) => t && t.id === recId)) warnings.push("recommended_thread_id=" + recId + " 不在 exploration_threads 里");
       }
+      if (fold.folded.length) warnings.push("素材里有 " + fold.folded.length + " 处外部粘贴/成品已折叠（省 " + fold.savedChars + " 字）：" + fold.folded.map((f) => "t" + f.n + "(" + f.chars + "字)").join("、"));
       if (warnings.length) console.warn("[proposal-validate]", warnings.join(" | "));
       console.log("[review-debug] round1 result: eligible=" + eligible + " | threads x" + threads.length + " | recommended=" + ((result && result.recommended_thread_id) || "（无）") + " | creative_proposal=" + (cpOut ? "有" : "无"));
       sendJson(res, { ok: true, result, weights: WEIGHTS, warnings, usage: fmtUsage(r.usage) });
@@ -1480,8 +1554,10 @@ function segmentsFromDraftShape(p) {
       const hostName = (hostSnap && hostSnap.callName) || "主持人";
       const guestName = (guestSnap && guestSnap.name) || "AI";
       const dlgTotal = ((dialogue && dialogue.messages) || []).length;
+      const fold2 = foldPastedArtifacts(dialogue);   // 与审题同一套口径：成品/外部内容先折叠
+      if (fold2.folded.length) console.log("[round2] 外部粘贴/成品折叠 " + fold2.folded.length + " 处（省 " + fold2.savedChars + " 字）：" + fold2.folded.map((f) => "t" + f.n + "(" + f.chars + ")").join(" "));
       const rendered = renderPrompt(pScript, {
-        dialogue: { messages: dialogueBlockFor(dialogue, hostName, guestName, null), sourceUrl: (dialogue && dialogue.sourceUrl) || "" },
+        dialogue: { messages: (fold2.folded.length ? foldLegend(fold2.folded) + "\n\n" : "") + dialogueBlockFor(fold2.dialogue, hostName, guestName, null), sourceUrl: (dialogue && dialogue.sourceUrl) || "" },
         turns: dlgTotal,
         suggestion: (detail && detail.suggestion) || "（无）",
         creative_proposal: JSON.stringify(cp, null, 1),
@@ -1492,7 +1568,7 @@ function segmentsFromDraftShape(p) {
       const defaultMsgs = withLanguageFact([
         rendered[0],         // system：本期上下文（对话原文 + creative_proposal + 名字）
         rendered[1],         // user：脚本提示词（原样）
-      ], dialogue);
+      ], fold2.dialogue);
       console.log("[round2] " + hostName + " ↔ " + guestName + " | core_question=" + String(cp.core_question || "（无）").slice(0, 40) + " | 原文 " + dlgTotal + " 条 | 上下文=" + rendered[0].content.length + "字 + 规则=" + rendered[1].content.length + "字");
       const cfgOverride = {};
       if (body && Array.isArray(body.messages) && body.messages.length) {
@@ -1502,19 +1578,19 @@ function segmentsFromDraftShape(p) {
         if (cfg.maxTokens !== undefined && cfg.maxTokens !== "") cfgOverride.maxTokens = Number(cfg.maxTokens);
         if (cfg.thinking !== undefined) cfgOverride.thinking = cfg.thinking;
       }
-      if (body && body.preview) {
-        sendJson(res, { ok: true, apiBody: previewApiBody("r2-script", defaultMsgs), preview: { messages: defaultMsgs, config: pScript.config || {}, name: pScript.name || key, description: pScript.description || "" } });
-        return;
-      }
       let msgs = (body && Array.isArray(body.messages) && body.messages.length) ? body.messages : defaultMsgs;
       console.log("[round2] 消息来源=" + (msgs === defaultMsgs ? "defaultMsgs(最新渲染)" : "body.messages(快照 " + msgs.length + " 条)"));
-      retryAttempts.set(cred.env + ":" + id, (retryAttempts.get(cred.env + ":" + id) || 0) + 1);   // 实际生成计数（重试次数=该值-1）
       // 人工修改意见（llm-box 重试输入框）：附带上一版脚本，追加到最后一条 user 消息
       const _rev = body && typeof body.revision === "string" ? body.revision.trim() : "";
+      const _prev = (body && Array.isArray(body.previousScript) && body.previousScript.length) ? body.previousScript[0] : null;
+      // 「必填」在服务端也挡一道：带上一版却不写意见 = 静默重摇一版并把上一版覆盖掉（前端已拦，直调 API 也能拦住）
+      if (!_rev && _prev && !(body && body.preview)) {
+        sendJson(res, { ok: false, error: "改稿必须写修改意见——不写意见会重摇一版并覆盖上一版" }, 400);
+        return;
+      }
       if (_rev) {
         // 真·多轮改稿：上一版作为 assistant 回灌（模型是在改自己的稿，不是拿参考稿重写）；
         // 只带最近一版，不做无限历史——思考模式每轮都要重新想，上下文越长越贵越慢。
-        const _prev = (body && Array.isArray(body.previousScript) && body.previousScript.length) ? body.previousScript[0] : null;
         if (_prev) {
           msgs = msgs.concat([
             { role: "assistant", content: JSON.stringify({ episode: _prev.episode || null, script: Array.isArray(_prev.script) ? _prev.script : null, segments: Array.isArray(_prev.segments) ? _prev.segments : null }, null, 1) },
@@ -1530,6 +1606,12 @@ function segmentsFromDraftShape(p) {
         if (_arr.length < 20) _arr.push(_rev.slice(0, 500));
         retryDefects.set(_rk, _arr);   // 内存累积，入库时一并落盘
       }
+      // 预览放在追加之后：编辑在「预览 JSON」里看到的就是真正会发出去的输入（含那条修改意见）
+      if (body && body.preview) {
+        sendJson(res, { ok: true, apiBody: previewApiBody("r2-script", msgs), preview: { messages: msgs, config: pScript.config || {}, name: pScript.name || key, description: pScript.description || "", files: (pScript.messages || []).map((m) => ({ role: m.role, file: m.file || "" })) } });
+        return;
+      }
+      retryAttempts.set(cred.env + ":" + id, (retryAttempts.get(cred.env + ":" + id) || 0) + 1);   // 实际生成计数（重试次数=该值-1）
       let r = await llmComplete(null, null, cfgOverride, msgs, pScript.config, stopAC.signal);
       console.log("[round2] 模型原始输出开头:", JSON.stringify(String(r.content).slice(0, 100)));
       // 新契约输出 { episode, production, script[{type,speaker,name,text}] }

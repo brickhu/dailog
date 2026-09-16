@@ -32,6 +32,7 @@
       + '<span style="font-size:14px;font-weight:600;color:#e6e8ee">' + (isRedo ? '重新创作' : '脚本创作') + '</span>'
       + '<span style="font-size:11px;color:#8a91a0">' + (isRedo ? '在上一版基础上修改' : '按选定的提案写一期脚本') + ' · 思考模式</span>'
       + '<span style="flex:1"></span>'
+      + '<button type="button" id="smPreview" title="看这一次实际会发出去的完整提示词（素材 + 提示词文档 + 上一版 + 修改意见）" style="cursor:pointer;background:#0b0d11;border:1px solid #4f8cff;color:#4f8cff;border-radius:6px;padding:4px 10px;font-size:12px">提示词预览</button>'
       + '<button type="button" id="smClose" style="cursor:pointer;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;padding:4px 10px;font-size:12px">关闭</button>'
       + '</div>'
       + '<div style="padding:12px 16px;border-bottom:1px solid #262b36;max-height:34vh;overflow:auto">'
@@ -71,6 +72,65 @@
     if (isRedo) { note.addEventListener('input', syncOk); syncOk(); }
     const close = () => ov.remove();
     win.querySelector('#smClose').onclick = close;
+
+    // ===== 提示词预览：按「这次真正会发出去的形状」问服务端要一份合成结果 =====
+    //   为什么要有它：点「重新创作」后，实际注入的是
+    //   system(素材：对话原文 + 提案) → user(提示词文档原文) → assistant(上一版脚本) → user(编辑修改意见)，
+    //   光看这个弹窗看不出来。这里把服务端预览原样摊开，并标出注入的是哪几个提示词文件。
+    function openPromptPreview() {
+      const po = document.createElement('div');
+      po.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1100;display:flex;align-items:center;justify-content:center';
+      const pw = document.createElement('div');
+      pw.style.cssText = 'width:min(1000px,94vw);height:min(86vh,900px);background:#0d1117;border:1px solid #262b36;border-radius:10px;display:flex;flex-direction:column;overflow:hidden';
+      pw.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #262b36">'
+        + '<span style="font-size:13px;font-weight:600;color:#e6e8ee">提示词预览</span>'
+        + '<span id="ppMeta" style="font-size:11px;color:#8a91a0">加载中…</span>'
+        + '<span style="flex:1"></span>'
+        + '<button type="button" id="ppCopy" style="cursor:pointer;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;padding:4px 10px;font-size:12px">复制全文</button>'
+        + '<button type="button" id="ppClose" style="cursor:pointer;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;padding:4px 10px;font-size:12px">关闭</button>'
+        + '</div>'
+        + '<div id="ppFiles" style="padding:8px 14px;border-bottom:1px solid #262b36;font-size:11px;color:#8a91a0;line-height:1.7"></div>'
+        + '<div id="ppBody" style="flex:1;overflow:auto;padding:10px 14px"></div>';
+      po.append(pw); document.body.append(po);
+      const meta = pw.querySelector('#ppMeta'), filesEl = pw.querySelector('#ppFiles'), bodyEl = pw.querySelector('#ppBody');
+      let full = '';
+      pw.querySelector('#ppClose').onclick = () => po.remove();
+      po.addEventListener('click', (e) => { if (e.target === po) po.remove(); });
+      pw.querySelector('#ppCopy').onclick = async () => {
+        try { await navigator.clipboard.writeText(full); pw.querySelector('#ppCopy').textContent = '已复制'; setTimeout(() => { pw.querySelector('#ppCopy').textContent = '复制全文'; }, 1200); }
+        catch (e) { notice('复制失败，请手动选择文本', 'error'); }
+      };
+      (async () => {
+        // 与服务端 run() 用同一份入参：这样预览 = 真正会发出去的东西
+        const revision = String(note.value || '').trim();
+        const body = { id: id, review: chosen, preview: true };
+        if (revision) body.revision = revision;
+        if (prev) body.previousScript = [prev];
+        try {
+          const d = await j('/api/run/review/round2', { method: 'POST', headers: H(), body: JSON.stringify(body) });
+          if (!d || !d.ok || !d.preview) throw new Error((d && d.error) || '预览失败');
+          const msgs = d.preview.messages || [];
+          const files = d.preview.files || [];
+          meta.textContent = (d.preview.name || 'r2-script') + ' · ' + msgs.length + ' 条消息' + (revision ? ' · 含修改意见' : (isRedo ? ' · 还没写修改意见' : ''));
+          filesEl.innerHTML = '注入的提示词文件：'
+            + (files.length ? files.map((f) => esc(f.role) + ' = <code style="color:#9fb0c8">' + esc(f.file) + '</code>').join('　') : '（字典未声明 file）')
+            + '<br>实际顺序：' + msgs.map((m) => esc(m.role)).join(' → ');
+          bodyEl.innerHTML = msgs.map((m, i) => {
+            const c = String(m.content == null ? '' : m.content);
+            const color = m.role === 'system' ? '#4f8cff' : (m.role === 'assistant' ? '#d29922' : '#3fb950');
+            return '<div style="margin-bottom:14px">'
+              + '<div style="font-size:11px;color:' + color + ';margin-bottom:4px">[' + (i + 1) + '] ' + esc(m.role) + ' · ' + c.length.toLocaleString() + ' 字</div>'
+              + '<pre style="margin:0;white-space:pre-wrap;word-break:break-word;background:#0b0d11;border:1px solid #262b36;border-radius:6px;padding:10px;font-size:11.5px;line-height:1.65;color:#c9d1d9;max-height:52vh;overflow:auto">' + esc(c) + '</pre>'
+              + '</div>';
+          }).join('');
+          full = msgs.map((m) => '=== ' + m.role + ' ===\n' + String(m.content || '')).join('\n\n');
+        } catch (err) {
+          meta.textContent = '✗ ' + ((err && err.message) || err);
+          meta.style.color = '#f85149';
+        }
+      })();
+    }
+    win.querySelector('#smPreview').onclick = openPromptPreview;
     ov.addEventListener('click', (e) => { if (e.target === ov && !busy) close(); });
 
     let busy = false, timer = null;

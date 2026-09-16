@@ -55,8 +55,8 @@ pnpm meta <input>            # = node tools/script-lab/run.mjs meta --input <inp
 ## 示例
 
 ```bash
-# 只测选题：改 prompts/r1-review.system.md 后跑（输入为任意 dialogue JSON 文件）
-node tools/script-lab/run.mjs r1-review.system --input <dialogue.json> --as dialogue
+# 只测提示词：<名称> = prompts/ 下任意 .md（现行：proposal.user = 审题提示词 / script-by-proposal.user = 创作提示词）
+node tools/script-lab/run.mjs proposal.user --input <dialogue.json> --as dialogue
 
 # 注入投稿信息（嘉宾/主持人/节目建议）：dialogue + info.json 两个输入自动合并成一个信封
 #   info.json = {"suggestion": "...", "host": {"callName": "飞", ...}, "guests": [{"name": "DeepSeek", ...}]}

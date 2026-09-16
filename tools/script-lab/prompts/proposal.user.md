@@ -46,7 +46,51 @@ Not:
 
 ---
 
-# 2. INTERNAL WORKING MODEL
+# 2. SOURCE BOUNDARY
+
+The input may contain text that is **not part of the actual Human–AI exploration**, including:
+
+* pasted articles,
+* existing scripts,
+* prompts,
+* code,
+* documentation,
+* notes,
+* examples,
+* quotations,
+* previously generated content,
+* reference material.
+
+Do not automatically treat all text appearing in the conversation as conversational source material.
+
+> **Only analyze what the Human and AI actually contribute to the current interaction.**
+
+Embedded, quoted, pasted, or referenced material is not itself a cognitive exploration.
+
+Treat it as external or supporting material unless the current Human or AI explicitly engages with it and:
+
+* reacts to it,
+* interprets it,
+* challenges it,
+* accepts it,
+* develops it,
+* or incorporates it into their own reasoning.
+
+A pasted or quoted statement does not become the current speaker's belief merely because it appears inside their message.
+
+Previously generated scripts, proposals, prompts, metadata, examples, and other output artifacts must **never be treated as fresh source material** for discovering an episode when they are merely being provided for review, critique, or reference.
+
+### SOURCE BOUNDARY TEST
+
+Before identifying an Exploration Thread, ask:
+
+> **If all pasted, quoted, referenced, and previously generated material were removed, would the remaining Human–AI interaction still contain the cognitive movement being proposed?**
+
+If no, do not create a proposal from it.
+
+---
+
+# 3. INTERNAL WORKING MODEL
 
 Treat the source conversation as an **Exploration Graph**, not one linear topic.
 
@@ -54,6 +98,8 @@ Internally perform this process:
 
 ```text
 Raw Conversation
+        ↓
+Source Boundary
         ↓
 Understand entire conversation
         ↓
@@ -82,7 +128,7 @@ Do NOT manufacture a proposal from an ineligible conversation.
 
 ---
 
-# 3. ELIGIBILITY GATE
+# 4. ELIGIBILITY GATE
 
 The Eligibility Gate determines whether the conversation contains enough **cognitive exploration potential** to proceed to thread analysis.
 
@@ -180,7 +226,7 @@ normally does not satisfy this condition.
 
 ---
 
-# 4. INELIGIBLE CONVERSATIONS
+# 5. INELIGIBLE CONVERSATIONS
 
 If the conversation's primary character is:
 
@@ -204,7 +250,7 @@ An AI-generated "deep" sentence is not sufficient evidence.
 
 ---
 
-# 5. ELIGIBILITY OUTPUT
+# 6. ELIGIBILITY OUTPUT
 
 The Eligibility Gate should return:
 
@@ -234,7 +280,7 @@ The final editorial decision remains with the human editor.
 
 ---
 
-# 6. IDENTIFY EXPLORATION THREADS
+# 7. IDENTIFY EXPLORATION THREADS
 
 When eligible, identify distinct cognitive exploration threads.
 
@@ -268,7 +314,7 @@ Do not split merely because a topic or example changes.
 
 ---
 
-# 7. TRACE EACH THREAD
+# 8. TRACE EACH THREAD
 
 For every candidate thread, identify:
 
@@ -367,7 +413,7 @@ Do not force closure.
 
 ---
 
-# 8. HUMAN DISCOVERY VS AI SUGGESTION
+# 9. HUMAN DISCOVERY VS AI SUGGESTION
 
 This distinction is critical.
 
@@ -398,7 +444,7 @@ Cognitive movement must be grounded in the interaction.
 
 ---
 
-# 9. SCORING MODEL
+# 10. SCORING MODEL
 
 Score every identified Exploration Thread on a **100-point scale**.
 
@@ -558,7 +604,7 @@ Source Integrity is especially important because AI may produce interpretations 
 
 ---
 
-# 10. TOTAL SCORE
+# 11. TOTAL SCORE
 
 Calculate:
 
@@ -585,7 +631,7 @@ The editor will interpret the score.
 
 ---
 
-# 11. SCORE INTERPRETATION
+# 12. SCORE INTERPRETATION
 
 Use these ranges only as editorial guidance.
 
@@ -617,7 +663,7 @@ These ranges describe **editorial quality**, not automatic approval or rejection
 
 ---
 
-# 12. IMPORTANT: SCORE IS NOT THE FINAL DECISION
+# 13. IMPORTANT: SCORE IS NOT THE FINAL DECISION
 
 Do NOT output:
 
@@ -641,7 +687,7 @@ If no, return zero proposals.
 
 ---
 
-# 13. SELECT THE RECOMMENDED THREAD
+# 14. SELECT THE RECOMMENDED THREAD
 
 If multiple threads exist, identify the strongest one based on the overall score and editorial reasoning.
 
@@ -660,7 +706,7 @@ The recommendation should consider:
 
 ---
 
-# 14. RECOMMENDED DURATION
+# 15. RECOMMENDED DURATION
 
 For the recommended thread, estimate the appropriate episode duration:
 
@@ -676,7 +722,7 @@ Do not use raw conversation length as the basis for duration.
 
 ---
 
-# 15. CREATIVE PROPOSAL CONTRACT
+# 16. CREATIVE PROPOSAL CONTRACT
 
 If the conversation passes the Eligibility Gate, generate a `creative_proposal` for the highest-scoring thread.
 
@@ -700,7 +746,7 @@ The Creative Proposal is a **recommended editorial direction**, not a final prod
 
 ---
 
-# 16. OUTPUT CONTRACT
+# 17. OUTPUT CONTRACT
 
 Return valid JSON only.
 
@@ -797,7 +843,7 @@ Do not invent exploration threads merely to populate the output.
 
 ---
 
-# 17. FINAL ANALYSIS CHECK
+# 18. FINAL ANALYSIS CHECK
 
 Before returning the result, verify:
 
