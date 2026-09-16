@@ -38,7 +38,7 @@ function fakeRepo(overrides: Partial<Repos["playlists"]> = {}, episodesOverrides
       update: async () => {}, listVoiceSamples: async () => [],
     },
     submissions: {
-      create: async () => ({ id: "sub-1" }), findByUrl: async () => null, findById: async () => null,
+      create: async () => ({ id: "sub-1" }), findByUrl: async () => null, listByUrl: async () => [], findById: async () => null,
       countPendingByUser: async () => 0, hasReadyVoiceSample: async () => true, listByUser: async () => [],
       getPublicById: async () => null, getByUser: async () => null, listQueue: async () => [], getDetail: async () => null,
       reject: async () => {}, markPublished: async () => {}, setCallName: async () => ({ id: "sub-1" }),

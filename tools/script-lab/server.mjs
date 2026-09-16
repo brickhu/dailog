@@ -484,6 +484,7 @@ async function handleApi(path, res, req) {
         id: r.id, url: r.url, title: r.title, collected: r.collected, dialogueCount: r.dialogueCount,
         displayName: r.displayName || r.userEmail || "?", userEmail: r.userEmail,
         createdAt: r.createdAt, hasVoiceSample: r.hasVoiceSample, stage,
+        language: r.language || "zh",   // 投稿区（目标语言）：列表徽标用
       };
     });
     rows.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
@@ -1067,20 +1068,31 @@ if (path === "/api/run/console-import" && req.method === "POST") {
       const config = await configFor(e);
       const { synthesizeSingle } = await import("./lib/fish.mjs");
       // 参考音频：host = voiceSamples（R2 直取 + 转 wav）；guest = guests 声线（R2 audioKey + 转 wav）
+      // 语种 = **投稿区**（detail.language）。兜底链与服务端 TTS **逐条对齐**，保证「试听听到的」=「最终合成的」：
+      //   · 嘉宾：该语种 → en → **任意语种**（英文区没有 en 声线 → 用中文声线兜底；仍是这位嘉宾自己的音色）
+      //   · 主持人：该语种 → en → 任意 ready 采样
+      // 回退到非投稿区语种时打 warn（不静默）；选中的采样语种随音频一起下载（多语种时音频/文案不能错配）。
+      const zone = (detail && detail.language) || "zh";
       let ref;
       if (seg.speaker === "guest") {
         const samples = await apiWithToken(e, token, "/v1/editor/guests/voice-samples").catch(() => []);
         const guestId = (detail && detail.guest && detail.guest.id) || null;
         const mine = (Array.isArray(samples) ? samples : []).filter((x) => x.guestId === guestId);
-        const row = mine.find((x) => x.language === "zh") || mine[0];
-        if (!row || !row.audioKey) { sendJson(res, { ok: false, error: "嘉宾 " + (guestId || "?") + " 无声线（guest-voice 上传）" }); return; }
-        const bytes = await apiFetchBytes(config, e, token, "/v1/editor/samples/guest/" + encodeURIComponent((detail && detail.guest && detail.guest.id) || "") + "/audio");
+        // 兜底链（与服务端 TTS 同规则）：该语种 → en → **任意语种**（英文区没有 en 声线时用中文声线兜底）
+        const row = mine.find((x) => x.language === zone) || mine.find((x) => x.language === "en") || mine[0];
+        if (!row || !row.audioKey) { sendJson(res, { ok: false, error: "嘉宾 " + (guestId || "?") + " 无声线（用 guest-voice 上传后再试听）" }); return; }
+        if (row.language !== zone) console.warn("[seg-tts] 嘉宾 " + guestId + " 无 " + zone + " 声线——回退 " + row.language + "（投稿 " + id + "）");
+        // 音频按**选中的采样语种**下载：否则多语种嘉宾会拿到另一语种的音频（与 transcript 不匹配）
+        const bytes = await apiFetchBytes(config, e, token, "/v1/editor/samples/guest/" + encodeURIComponent((detail && detail.guest && detail.guest.id) || "") + "/audio?language=" + encodeURIComponent(row.language || ""));
         ref = { audio: bytes, text: row.transcript || null };
       } else {
         const samples = (detail && detail.voiceSamples) || [];
-        const sample = samples.find((x) => x.status === "ready") || samples[0];
+        const sample = samples.find((x) => x.language === zone)
+          || (zone !== "en" ? samples.find((x) => x.language === "en") : null)
+          || samples.find((x) => x.status === "ready") || samples[0];
         if (!sample || !sample.audioUrl) { sendJson(res, { ok: false, error: "主持人无声样" }); return; }
-        const bytes = await apiFetchBytes(config, e, token, "/v1/editor/samples/host/" + encodeURIComponent((detail && detail.userId) || "") + "/audio");
+        if (sample.language !== zone) console.warn("[seg-tts] 主持人无 " + zone + " 采样——回退 " + sample.language + "（投稿 " + id + "）");
+        const bytes = await apiFetchBytes(config, e, token, "/v1/editor/samples/host/" + encodeURIComponent((detail && detail.userId) || "") + "/audio?language=" + encodeURIComponent(sample.language || ""));
         ref = { audio: bytes, text: sample.transcript || null };
       }
       // ffmpeg 转 44100Hz 单声道 wav（Fish 参考格式）
@@ -1186,12 +1198,29 @@ function computeOverall(sc, weights) {
   return Math.round(sum * 10) / 10;
 }
 
-/** 把语言事实追加到 system 末尾（渲染之后调用；不改提示词文档本身，也不占占位符） */
-function withLanguageFact(msgs, dialogue) {
-  const lang = contentLanguageOf(dialogue);
+/** 投稿区（submissions.language）→ 提示词里的语言标签；未知区回退 null（退回"跟随原文语言"的旧行为） */
+const ZONE_LABELS = { zh: "Simplified Chinese (简体中文)", en: "English" };
+function zoneLabel(zone) {
+  return ZONE_LABELS[String(zone || "").toLowerCase()] || null;
+}
+
+/** 把语言事实追加到 system 末尾（渲染之后调用；不改提示词文档本身，也不占占位符）。
+ *  目标语言 = **投稿区**（submissions.language）——不是原文语言：
+ *    · 目标 == 原文 → 与旧行为一致（"用原文语言写"）；
+ *    · 目标 ≠ 原文 → 明确声明这是**译写**：保意义/事实/回合顺序/引文实质，全部用目标语言输出。
+ *  为什么钉成事实：提示词是英文长文档，模型偶尔把整篇分析/脚本也写成英文——实测同一篇中文稿重跑会在中英之间摆动。 */
+function withLanguageFact(msgs, dialogue, zone) {
+  const sourceLang = contentLanguageOf(dialogue);
+  const targetLang = zoneLabel(zone) || sourceLang;
+  const translating = targetLang !== sourceLang;
   const note = "\n\n## Content language (fixed fact for this submission)\n\n"
-    + "The original conversation above is written in **" + lang + "**. "
-    + "Write every string value in your JSON output in **" + lang + "** — JSON field names stay English, and proper nouns, product names and code identifiers keep their original form. "
+    + "The original conversation above is written in **" + sourceLang + "**. "
+    + "This submission's target zone is **" + targetLang + "**. "
+    + "Write every string value in your JSON output in **" + targetLang + "**"
+    + (translating
+        ? " — this is a **translation/adaptation** task: keep the meaning, the facts, the order of the conversation and the substance of every quote, but render everything in " + targetLang + ". Never output " + sourceLang + " text."
+        : "")
+    + " JSON field names stay English, and proper nouns, product names and code identifiers keep their original form. "
     + "Do not switch the language of the analysis or the script because these task instructions are written in English.";
   return (Array.isArray(msgs) ? msgs : []).map((m, i) => (i === 0 && m && m.role === "system") ? { role: m.role, content: String(m.content) + note } : m);
 }
@@ -1419,6 +1448,7 @@ function segmentsFromDraftShape(p) {
     try {
       const dialogue = await loadDialogue(e, token, id);
       if (!dialogue) { sendJson(res, { ok: false, error: "未采集——请先采集对话" }); return; }
+      const detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null);   // 投稿区（目标语言）来源
       const p = getPrompt("r1-review");
       // 素材必须与 R2 同款渲染：行首 tN + 说话人 + 逐字正文。
       // 曾经这里塞的是 JSON.stringify(dialogue)（原始 JSON 大数组），模型得自己在 JSON 里数位置推 tN——
@@ -1429,7 +1459,7 @@ function segmentsFromDraftShape(p) {
       const defaultMsgs = withLanguageFact(renderPrompt(p, {
         dialogue: { messages: dlgBlock, sourceUrl: (dialogue && dialogue.sourceUrl) || "" },
         suggestion: "",
-      }), fold.dialogue);
+      }), fold.dialogue, detail && detail.language);
       if (fold.folded.length) console.log("[round1] 外部粘贴/成品折叠 " + fold.folded.length + " 处（省 " + fold.savedChars + " 字）：" + fold.folded.map((f) => "t" + f.n + "(" + f.chars + ")").join(" "));
       const cfgOverride = {};
       if (body && Array.isArray(body.messages) && body.messages.length) {
@@ -1566,8 +1596,9 @@ function segmentsFromDraftShape(p) {
       const defaultMsgs = withLanguageFact([
         rendered[0],         // system：本期上下文（对话原文 + creative_proposal + 名字）
         rendered[1],         // user：脚本提示词（原样）
-      ], fold2.dialogue);
-      console.log("[round2] " + hostName + " ↔ " + guestName + " | core_question=" + String(cp.core_question || "（无）").slice(0, 40) + " | 原文 " + dlgTotal + " 条 | 上下文=" + rendered[0].content.length + "字 + 规则=" + rendered[1].content.length + "字");
+      ], fold2.dialogue, detail && detail.language);
+      const zoneTag = zoneLabel(detail && detail.language) || contentLanguageOf(fold2.dialogue);
+      console.log("[round2] " + hostName + " ↔ " + guestName + " | 目标语言=" + zoneTag + " | core_question=" + String(cp.core_question || "（无）").slice(0, 40) + " | 原文 " + dlgTotal + " 条 | 上下文=" + rendered[0].content.length + "字 + 规则=" + rendered[1].content.length + "字");
       const cfgOverride = {};
       if (body && Array.isArray(body.messages) && body.messages.length) {
         const cfg = (body && body.config) || {};
@@ -2125,8 +2156,24 @@ function segmentsFromDraftShape(p) {
     return;
   }
 
-  // GET /api/audio/host?userId= → 主持人采样音频（转发服务端 samples/host/:userId/audio）
-  // GET /api/audio/guest?platform= → 嘉宾声线音频（转发服务端 samples/guest/:guestId/audio）
+  // GET /api/guest-voices?guestId= → 该嘉宾**已配置声线的语种清单**（声线管理弹窗展示"缺哪个语种"）
+  //   注：必须注册在下面的通用 /api/audio/ 之前（那个分支不判 method）
+  if (path.split("?")[0] === "/api/guest-voices" && req.method === "GET") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const guestId = new URL(path, "http://x").searchParams.get("guestId");
+    const all = await apiWithToken(e, token, "/v1/editor/guests/voice-samples").catch(() => []);
+    const samples = (Array.isArray(all) ? all : [])
+      .filter((x) => !guestId || x.guestId === guestId)
+      .map((x) => ({ guestId: x.guestId, language: x.language, transcript: x.transcript || null }));
+    sendJson(res, { ok: true, samples });
+    return;
+  }
+
+  // GET /api/audio/host?userId=&lang= → 主持人采样音频（转发服务端 samples/host/:userId/audio）
+  // GET /api/audio/guest?platform=&lang= → 嘉宾声线音频（转发服务端 samples/guest/:guestId/audio）
+  //   lang：取该语种那条（多语种时避免"播出来的语种和你看到的不是同一条"）；缺省/该语种不存在 → 服务端回退
   // 参数均来自投稿数据（detail.userId / detail.guest.id）；服务端读 R2 返回音频流
   if (path.startsWith("/api/audio/")) {
     // audio 标签无法带 X-Lab-Env 头——env 从 query 取，会话用服务端 cookie/token
@@ -2139,14 +2186,16 @@ function segmentsFromDraftShape(p) {
     const kind = path.replace("/api/audio/", "").split("?")[0];
     try {
       let fwd;
+      const lang = qs.get("lang") || "";
+      const langQ = /^[a-z]{2,3}$/i.test(lang) ? "?language=" + encodeURIComponent(lang.toLowerCase()) : "";
       if (kind === "host") {
         const userId = qs.get("userId");
         if (!userId) { sendJson(res, { ok: false, error: "需 userId" }, 400); return; }
-        fwd = "/v1/editor/samples/host/" + encodeURIComponent(userId) + "/audio";
+        fwd = "/v1/editor/samples/host/" + encodeURIComponent(userId) + "/audio" + langQ;
       } else if (kind === "guest") {
         const platform = qs.get("platform");
         if (!platform) { sendJson(res, { ok: false, error: "需 platform" }, 400); return; }
-        fwd = "/v1/editor/samples/guest/" + encodeURIComponent(platform) + "/audio";
+        fwd = "/v1/editor/samples/guest/" + encodeURIComponent(platform) + "/audio" + langQ;
       } else if (kind === "full") {
         const fid = qs.get("id");
         if (!fid) { sendJson(res, { ok: false, error: "需 id" }, 400); return; }

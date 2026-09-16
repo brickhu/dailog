@@ -24,9 +24,13 @@ function renderPublishCard(id, dt, rawStatus, labEnvVal, scripts){
   const guestId = (dt && dt.guest && dt.guest.id) || null;
   try { window.__pubCoverNames = { host: hostName, guest: guestName, guestId }; } catch {}
   try { window.__pubUserId = (dt && dt.userId) || null; } catch {}
-  // 确定性数据自动携带（无输入框）：语言 = 脚本定稿语言（打磨时确定），无则 zh
+  // 确定性数据自动携带（无输入框）：语言以**投稿区**为准（submissions.language——投稿人选的区，权威），
+  // 其次脚本自带的 language，最后兜底 zh。脚本 language 只是模型回显（提示词契约里没有该字段），
+  // 不能当权威——否则英文区投稿会被打成 zh 上架、进错 feed。
+  const zoneLang = (dt && typeof dt.language === 'string') ? dt.language : null;
   const scriptLang = (Array.isArray(scripts) && scripts[0] && scripts[0].language) || null;
-  try { window.__pubLang = /^[a-z]{2,3}$/i.test(scriptLang || '') ? scriptLang.toLowerCase() : 'zh'; } catch { window.__pubLang = 'zh'; }
+  const pubLang = [zoneLang, scriptLang].find((x) => /^[a-z]{2,3}$/i.test(x || '')) || 'zh';
+  try { window.__pubLang = pubLang.toLowerCase(); } catch { window.__pubLang = 'zh'; }
   const LANG_LABELS = { zh: 'zh · 中文', en: 'en · English', ja: 'ja · 日本語' };
   const langDisplay = LANG_LABELS[window.__pubLang] || window.__pubLang;
   return '<div class="pub-grid">'

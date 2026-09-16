@@ -45,7 +45,7 @@ void repo.episodes.syncAdminRoles?.(
 
 const voice: VoiceDeps = {
   saveVoiceSample: (row) => repo.episodes.saveVoiceSample(row),
-  getVoiceSample: (userId) => repo.episodes.getVoiceSample(userId),
+  getVoiceSample: (userId, language) => (language ? repo.episodes.getVoiceSampleByLanguage(userId, language) : repo.episodes.getVoiceSample(userId)),
   storage,
 };
 

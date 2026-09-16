@@ -117,18 +117,27 @@ export function ttsRoutes(deps: TtsDeps) {
     const hostBytes = await deps.storage.get(hostSample.audioUrl).then((r) => r.data).catch(() => null);
     if (!hostBytes) return c.json({ error: "no_voice_sample", detail: "采样音频读取失败" }, 422);
 
-    // guest 参考（声线服务端配置）：同语种优先 → en 兜底 → **系统内其他嘉宾音色替换**
-    // （替换音色、不替换嘉宾名字——嘉宾无声线时用系统内存在音色兜底，响应头 X-Guest-Voice-Note 注明）
+    // guest 参考（声线服务端配置）兜底链（顺序固定，lab 端同规则）：
+    //   ① 本嘉宾该语种 → ② 本嘉宾 en（非 en 时）→ ③ **本嘉宾任意语种**（英文区没有 en 声线时用中文声线兜底）
+    //   → ④ 系统内其他嘉宾该语种 → ⑤ 其他嘉宾 en → ⑥ 422
+    // ①②③ 保持嘉宾自己的音色（只换语言）；④⑤ 是"替换音色、不替换嘉宾名字"，响应头 X-Guest-Voice-Note 注明。
     let guestSample: { audioKey: string; transcript: string | null } | null = null;
     let guestVoiceNote: string | null = null;
     if (hasGuest) {
       guestSample = (await deps.repo.guests.voiceSampleByLanguage(guestId!, language).catch(() => null))
         ?? (language !== "en" ? await deps.repo.guests.voiceSampleByLanguage(guestId!, "en").catch(() => null) : null);
       if (!guestSample) {
+        const ownAny = await deps.repo.guests.voiceSampleAny(guestId!).catch(() => null);   // ③ 本嘉宾任意语种
+        if (ownAny) {
+          guestSample = ownAny;
+          if (ownAny.language !== language) guestVoiceNote = `guest-voice-language-fallback:${guestId}:${ownAny.language}`;
+        }
+      }
+      if (!guestSample) {
         const fallback = (await deps.repo.guests.anyVoiceSampleByLanguage(language, guestId!).catch(() => null))
           ?? (language !== "en" ? await deps.repo.guests.anyVoiceSampleByLanguage("en", guestId!).catch(() => null) : null);
         if (!fallback) {
-          return c.json({ error: "no_guest_voice", detail: `嘉宾 ${guestId} 无 ${language}（或 en）声线，且系统内无其他可用音色（用 guest-voice 上传）` }, 422);
+          return c.json({ error: "no_guest_voice", detail: `嘉宾 ${guestId} 无任何声线（${language}/en/其他语种均无），且系统内无其他可用音色（用 guest-voice 上传）` }, 422);
         }
         guestSample = fallback;
         // 头部值必须 ASCII（HTTP 头不允许非 ASCII）——CLI 按结构化值格式化中文提示

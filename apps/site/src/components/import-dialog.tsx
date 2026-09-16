@@ -7,10 +7,22 @@ import { Button, Dialog, TextInput } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
 import { confirmLoggedIn } from "../lib/auth-guard";
 import { checkUrlAndStore, isSubmittedUrl } from "../lib/url-check";
+import { ENABLED_SAMPLE_LANGUAGES } from "../lib/languages";
+import { ZonePicker } from "./zone-picker";
 import * as stylex from "@stylexjs/stylex";
 import { colors, dimensions, typography } from "@dailogues/ui/theme.stylex";
 
-type DialogState = "input" | "checking" | "error" | "duplicate";
+type DialogState = "input" | "checking" | "error" | "duplicate" | "zone";
+
+/** 服务端 check 返回的单区状态（zones[zone]） */
+interface ZoneState {
+  submitted: boolean;
+  status: string | null;
+  hasSample: boolean;
+  canSubmit: boolean;
+  submissionId: string | null;
+  episode: { slug?: string; title?: string | null } | null;
+}
 
 /** 支持的 AI 对话平台分享链接（仅这些平台的分享页 URL 才算合法投稿链接） */
 const SHARE_HOSTS = [
@@ -57,6 +69,10 @@ export function openImportDialog(): void {
 // 同一 URL 不重复请求 check 端点：已投稿 24h / 未投稿 10min（投稿状态不回退，未投稿
 // 可能随后被投）。localStorage 持久（跨刷新）+ 内存 Map（快读）。
 interface CheckCacheEntry {
+  /** 归属：self=自己的对话（可投未占用的区）/ other=他人的（一律拒绝）/ none=尚无投稿 */
+  owner: "self" | "other" | "none";
+  /** 各投稿区占用与采样就绪（zone → 状态） */
+  zones: Record<string, ZoneState>;
   existing: boolean;
   submissionId?: string;
   episode?: { slug?: string; title?: string | null } | null;
@@ -88,7 +104,15 @@ async function checkSubmission(url: string): Promise<CheckCacheEntry> {
   const cached = checkCache.get(url) ?? readCheckStore()[url];
   if (cached) {
     const ttl = cached.existing ? CHECK_TTL_EXISTING : CHECK_TTL_NONE;
-    if (Date.now() - cached.ts < ttl) return cached;
+    if (Date.now() - cached.ts < ttl) {
+      // 归一化：旧版缓存（本次改版前写入）没有 owner/zones 字段——按"已投稿=自己的"处理，
+      // 不能留 undefined（下游会按区判断，解引用会炸）
+      return {
+        ...cached,
+        owner: cached.owner ?? (cached.existing ? "self" : "none"),
+        zones: cached.zones ?? {},
+      };
+    }
   }
   try {
     const res = await fetch("/v1/submissions/check", {
@@ -98,10 +122,14 @@ async function checkSubmission(url: string): Promise<CheckCacheEntry> {
     });
     const data = (await res.json().catch(() => null)) as {
       existing?: boolean;
+      owner?: "self" | "other" | "none";
+      zones?: Record<string, ZoneState>;
       submissionId?: string;
       episode?: { slug?: string; title?: string | null } | null;
     } | null;
     const entry: CheckCacheEntry = {
+      owner: data?.owner ?? "none",
+      zones: data?.zones ?? {},
       existing: !!data?.existing,
       submissionId: data?.submissionId ?? undefined,
       episode: data?.episode ?? null,
@@ -119,7 +147,7 @@ async function checkSubmission(url: string): Promise<CheckCacheEntry> {
     writeCheckStore(store);
     return entry;
   } catch {
-    return { existing: false, ts: 0 }; // 检测失败：不缓存（调用方走兜底）
+    return { owner: "none", zones: {}, existing: false, ts: 0 }; // 检测失败：不缓存（调用方走兜底）
   }
 }
 
@@ -141,9 +169,11 @@ async function tryOpenFromClipboard(): Promise<void> {
     // 只对合法平台分享链接自动弹（不要什么 URL 都弹）；已提交过的 URL 不再弹
     if (!url || !isShareUrl(url) || url === lastClipboardUrl || isSubmittedUrl(url)) return;
     lastClipboardUrl = url; // 记录（无论是否弹，避免重复检测/重复打扰）
-    // 已投稿过的 URL（重复导入）→ 不弹（弹框内确认投稿时仍有重复兜底；本地缓存命中不请求）
+    // 该 URL 已无可投的区（本人两个区都投过 / 他人已投稿）→ 不弹；
+    // 只投了部分区仍要弹——否则用户永远发现不了"还能补投另一个语言区"（本地缓存命中不请求）。
+    // ts === 0 表示检测失败（无有效结果）：按可弹处理，走弹框内确认时的兜底判定。
     const check = await checkSubmission(url);
-    if (check.existing) return;
+    if (check.ts !== 0 && (check.owner === "other" || !ENABLED_SAMPLE_LANGUAGES.some((z) => check.zones[z]?.canSubmit))) return;
     setDialogUrl?.(url);
     setDialogState?.("input");
     setDialogFail?.("");
@@ -199,6 +229,10 @@ export function ImportDialog() {
   // 重复投稿信息（已投稿 → 提示 + 跳转投稿详情 /submission/<id>）
   const [dupSubmissionId, setDupSubmissionId] = createSignal<string | null>(null);
   const [dupEpisode, setDupEpisode] = createSignal<{ slug: string; title: string | null } | null>(null);
+  // 投稿区占用（zone → 状态）：进 zone 态后渲染选择器
+  const [zoneInfo, setZoneInfo] = createSignal<Record<string, ZoneState> | null>(null);
+  // 他人已投稿：**不做跳转**（也不暴露对方的投稿/节目信息），只在 URL 输入框下方给状态提示
+  const [blockedMsg, setBlockedMsg] = createSignal<string | null>(null);
   // 剪贴板监控预填通道（组件挂载期间生效）
   setDialogUrl = setUrl;
   setDialogState = setState;
@@ -215,31 +249,57 @@ export function ImportDialog() {
     setFailMsg("");
     setDupSubmissionId(null);
     setDupEpisode(null);
+    setZoneInfo(null);
+    setBlockedMsg(null);
   };
   const backToInput = () => {
     setState("input");
     setFailMsg("");
   };
 
-  // 确认投稿：重复检测（已投稿直接提示跳转，可靠门槛）→ 存检测结果 → 跳 /submit?id=…（第二步）。
+  // 确认投稿：归属判定 + 投稿区占用（可靠门槛）→ 选投稿区 → 存检测结果 → 跳 /submit?id=…&zone=…（第二步）。
   // 可达性**不阻断**：格式已由 isShareUrl 校验（可靠门槛），链接有效性由编辑端采集时验证；
   // 可达性探测受 CORP/网络/反爬影响会误判，不能当作投稿门槛（后端投稿端点也不校验可达性）。
   const handleConfirm = async () => {
     setState("checking");
+    setBlockedMsg(null);
     try {
-      // 1) 重复检测：URL 已投稿过 → 提示 + 跳转投稿详情（不再走导入；本地缓存命中不请求）
       const checkData = await checkSubmission(url().trim());
-      if (checkData.existing) {
+      // 0) 检测无有效结果（网络失败 / 未登录 401）：不拦——格式已本地校验，改由 /submit 的权威 check 把关
+      if (checkData.ts === 0) {
+        setZoneInfo({});
+        setState("zone");
+        return;
+      }
+      // 1) 他人已投稿：同一对话的投递权归首个投稿人 → 不跳转，输入框下方内联提示（不暴露对方信息）
+      if (checkData.owner === "other") {
+        setBlockedMsg(t("importDialog.claimed"));
+        setState("input");
+        return;
+      }
+      // 2) 自己的对话（或首次投稿）：还有可投的区 → 选投稿区；全部已投 → 重复提示
+      const free = ENABLED_SAMPLE_LANGUAGES.filter((z) => checkData.zones[z]?.canSubmit);
+      if (free.length === 0) {
         setDupSubmissionId(checkData.submissionId ?? null);
         const ep = checkData.episode;
         setDupEpisode(ep && ep.slug ? { slug: ep.slug, title: ep.title ?? null } : null);
         setState("duplicate");
         return;
       }
-      // 2) 存检测结果（localStorage，key = 确定性投稿 ID）→ 跳 /submit?id=…（无论可达性）
+      setZoneInfo(checkData.zones);
+      setState("zone");
+    } catch {
+      setFailMsg(t("importDialog.unreachable"));
+      setState("error");
+    }
+  };
+
+  /** 选定投稿区 → 存检测结果（localStorage，key = 确定性投稿 ID）→ 跳 /submit?id=…&zone=… */
+  const pickZone = async (zone: string) => {
+    try {
       const { id } = await checkUrlAndStore(url().trim());
       close();
-      const target = `/submit?id=${encodeURIComponent(id)}`;
+      const target = `/submit?id=${encodeURIComponent(id)}&zone=${encodeURIComponent(zone)}`;
       if (window.location.pathname.startsWith("/submit")) {
         // 已在 /submit（如 empty 态点 Submit again）：整页刷新，
         // 重新挂载并读取 localStorage 中的检测结果（客户端 navigate 不重跑 onMount）
@@ -268,6 +328,9 @@ export function ImportDialog() {
     <Dialog isOpen={dialogOpen()} onOpenChange={(v) => !v && close()} width={480} purpose="form">
       <div {...stylex.props(styles.wrap)}>
         <Show
+          when={state() === "zone"}
+          fallback={
+            <Show
           when={state() === "duplicate"}
           fallback={
             <Show
@@ -292,11 +355,16 @@ export function ImportDialog() {
                 type="url"
                 size="lg"
                 value={url()}
-                onChange={setUrl}
+                onChange={(v) => { setUrl(v); setBlockedMsg(null); }}
                 placeholder={t("submit.urlPlaceholder")}
                 isDisabled={state() === "checking"}
                 hasClear
-                status={urlInvalid() ? { type: "error", message: t("submit.urlUnsupported") } : undefined}
+                status={
+                  // 他人已投稿的内联状态优先（改 URL 即清除）
+                  blockedMsg() ? { type: "error", message: blockedMsg()! }
+                    : urlInvalid() ? { type: "error", message: t("submit.urlUnsupported") }
+                    : undefined
+                }
                 onEnter={() => { if (canSubmit() && state() === "input") void handleConfirm(); }}
                 statusVariant="attached"
               />
@@ -316,7 +384,7 @@ export function ImportDialog() {
             </Show>
           }
         >
-          {/* duplicate：URL 已投稿 → 提示 + 查看投稿详情 */}
+          {/* duplicate：本人已投过该 URL 的可投区 → 提示 + 查看投稿详情 */}
           <p {...stylex.props(styles.title)}>{t("importDialog.duplicate")}</p>
           <p {...stylex.props(styles.desc)}>{t("importDialog.duplicateHint")}</p>
           <Show when={dupEpisode()}>
@@ -325,6 +393,27 @@ export function ImportDialog() {
           <div {...stylex.props(styles.actions)}>
             <Button onClick={goSubmission}>{t("importDialog.viewSubmission")}</Button>
             <Button variant="neutral" appear="ghost" onClick={close}>
+              {t("common.cancel")}
+            </Button>
+          </div>
+            </Show>
+          }
+        >
+          {/* zone：选择投稿区（一投稿 = 一语言区 = 一期节目；已投过的区 disabled） */}
+          <p {...stylex.props(styles.title)}>{t("importDialog.zone")}</p>
+          <p {...stylex.props(styles.desc)}>{t("importDialog.zoneDesc")}</p>
+          <ZonePicker
+            options={ENABLED_SAMPLE_LANGUAGES.map((z) => ({
+              zone: z,
+              label: t(`lang.${z}` as never),
+              taken: !!zoneInfo()?.[z]?.submitted,
+            }))}
+            value=""
+            takenLabel={t("submit.zoneTaken")}
+            onChange={(z) => void pickZone(z)}
+          />
+          <div {...stylex.props(styles.actions)}>
+            <Button variant="neutral" appear="ghost" onClick={backToInput}>
               {t("common.cancel")}
             </Button>
           </div>

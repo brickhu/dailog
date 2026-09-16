@@ -67,11 +67,17 @@
     <div class='modal-head'><b>嘉宾声线</b><button class='modal-close' onclick='closeGuestVoiceModal()'>✕</button></div>
     <div class='modal-body'>
       <div class='muted' style='font-size:12px;margin-bottom:8px' id='guestVoiceGuestLabel'>—</div>
+      <label style='display:block;font-size:12px;color:#8a91a0;margin-bottom:4px'>声线语种（中英各存一条，互不覆盖）</label>
+      <select id='guestVoiceLang' style='width:100%;box-sizing:border-box;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;padding:6px 8px;font-size:12px;margin-bottom:4px'>
+        <option value='zh'>中文（zh）</option>
+        <option value='en'>English（en）</option>
+      </select>
+      <div class='muted' id='guestVoiceExisting' style='font-size:11px;margin-bottom:8px'>—</div>
       <label style='display:block;font-size:12px;color:#8a91a0;margin-bottom:4px'>朗读文本（用于声线克隆参考）</label>
       <textarea id='guestVoiceTranscript' spellcheck='false' style='width:100%;box-sizing:border-box;height:80px;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;padding:8px 10px;font-size:12px;resize:vertical;font-family:ui-monospace,Menlo,monospace' placeholder='输入该声线朗读的参考文本…'></textarea>
       <label style='display:block;font-size:12px;color:#8a91a0;margin:10px 0 4px'>声音文件（mp3）</label>
       <input type='file' id='guestVoiceFile' accept='audio/mpeg,audio/mp3' style='font-size:12px;color:#e6e8ee'>
-      <div class='muted' style='font-size:11px;margin-top:4px'>20MB 以内；上传后 TTS 的 guest 段将使用此声线</div>
+      <div class='muted' style='font-size:11px;margin-top:4px'>20MB 以内；同语种重传会覆盖，中英各存一条。试听/合成按投稿区语种取，缺该语种声线时回退中文声线</div>
     </div>
     <div class='modal-foot'>
       <span id='guestVoiceStatus' class='muted' style='font-size:12px'></span>

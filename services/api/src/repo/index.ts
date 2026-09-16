@@ -18,22 +18,27 @@ function randomSlug(): string {
 // ---------------------------------------------------------------------------
 
 export interface SubmissionsRepo {
-  /** 投稿入库（唯一约束 url 全局唯一；重复提交由路由层查 findById/findByUrl）。
+  /** 投稿入库（唯一约束 (url, language)：同 URL 同语言区只能一条；跨语言区由 owner 追加）。
    *  callNameInEpisode：本次节目称呼（可为 null，脚本生成时按脚本语言改写）；
    *  personaInfo：主持人档案快照（路由层从 getPersonaSnapshot 取，编辑侧免查库）；
    *  voiceSampleId：投稿时使用的采样（仅记录，TTS 仍按语言匹配）；
-   *  suggestion：投稿人节目建议（可为 null；编辑生成脚本时仅供选题视角参考） */
-  create(id: string, userId: string, url: string, title: string | null, suggestion?: string | null, guest?: { id: string; name: string; intro?: string | null } | null, host?: { callName: string | null; personaInfo: PersonaSnapshot | null; voiceSampleId: string | null } | null): Promise<{ id: string }>;
-  /** 重复投稿检测（URL 全局唯一：任何人提交过同一分享链接都算重复） */
+   *  suggestion：投稿人节目建议（可为 null；编辑生成脚本时仅供选题视角参考）；
+   *  language：投稿区（目标语言，缺省 zh）——决定脚本/节目语言与 feed 归属 */
+  create(id: string, userId: string, url: string, title: string | null, suggestion?: string | null, guest?: { id: string; name: string; intro?: string | null } | null, host?: { callName: string | null; personaInfo: PersonaSnapshot | null; voiceSampleId: string | null } | null, language?: string): Promise<{ id: string }>;
+  /** 重复投稿检测（旧接口，取任一命中；归属判定请用 listByUrl） */
   findByUrl(url: string): Promise<{ id: string; status: string } | null>;
+  /** 同一分享 URL 的**全部**投稿（跨用户、跨语言区，按提交时间倒序）——
+   *  投稿区归属判定用：owner = 首个提交人；同一 URL 可有多条（owner 的不同语言区） */
+  listByUrl(url: string): Promise<Array<{ id: string; userId: string; language: string; status: string; createdAt: Date }>>;
   /** 按确定性投稿 ID 查（主键索引；同 URL 同 ID → 已存在即重复，含他人投稿） */
   findById(id: string): Promise<{ id: string; status: string } | null>;
   /** 待审核投稿数（status=submitted）——投稿并发限制（pending_limit）用 */
   countPendingByUser(userId: string): Promise<number>;
   /** 声音采样严格要求：投稿必须关联一条属于该用户的 ready 采样。
    *  sampleId 给定时 → 校验该采样属于该用户且 ready（防引用他人采样）；
-   *  未给定时 → 用户须至少拥有一条 ready 采样（任意语种）。 */
-  hasReadyVoiceSample(userId: string, sampleId?: string | null): Promise<boolean>;
+   *  未给定时 → 用户须至少拥有一条 ready 采样（任意语种）；
+   *  language 给定时 → 追加语种约束（投稿区采样：英文区必须有 en 采样，防静默用中文采样读英文）。 */
+  hasReadyVoiceSample(userId: string, sampleId?: string | null, language?: string | null): Promise<boolean>;
   /** 我的投稿列表（submitted/rejected/published + 最新节目状态 + 本次称呼）；按投稿时间倒序 */
   listByUser(userId: string): Promise<Array<{
     id: string;
@@ -70,6 +75,8 @@ export interface SubmissionsRepo {
   listQueue(status?: "submitted" | "collected" | "selected" | "rejected" | "published" | "crafted"): Promise<Array<{
     id: string;
     url: string;
+    /** 投稿区（目标语言） */
+    language: string;
     title: string | null;
     status: string;
     createdAt: Date;
@@ -82,6 +89,8 @@ export interface SubmissionsRepo {
     id: string;
     userId: string;
     url: string;
+    /** 投稿区（目标语言）：决定脚本语言与节目语言（lab 提示词据此注入目标语言事实） */
+    language: string;
     title: string | null;
     /** 采集状态：-1 失败 / 0 未采集 / 1 成功 */
     collected: number;
@@ -741,13 +750,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
     },
 
     submissions: {
-      /** 投稿入库（唯一约束 user×url 兜底；重复提交由路由层查 existing） */
-      async create(id, userId, url, title, suggestion, guest = null, host = null) {
+      /** 投稿入库（唯一约束 (url, language) 兜底；同区并发由本约束拦截，跨语言区由路由层判 owner） */
+      async create(id, userId, url, title, suggestion, guest = null, host = null, language = "zh") {
         try {
           const rows = await db.insert(schema.submissions).values({
             id,
             userId,
             url,
+            language,
             title: title ?? null,
             suggestion: suggestion ?? null,
             host: host ?? null,
@@ -776,6 +786,20 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .limit(1);
         return rows[0] ?? null;
       },
+      /** 同一 URL 的全部投稿（跨用户跨语言区，新到旧）——路由层据此判 owner 与各语言区占用 */
+      async listByUrl(url) {
+        return db
+          .select({
+            id: schema.submissions.id,
+            userId: schema.submissions.userId,
+            language: schema.submissions.language,
+            status: schema.submissions.status,
+            createdAt: schema.submissions.createdAt,
+          })
+          .from(schema.submissions)
+          .where(eq(schema.submissions.url, url))
+          .orderBy(desc(schema.submissions.createdAt));
+      },
       async countPendingByUser(userId) {
         const rows = await db
           .select({ n: count() })
@@ -783,11 +807,15 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .where(and(eq(schema.submissions.userId, userId), eq(schema.submissions.status, "submitted")));
         return rows[0]?.n ?? 0;
       },
-      /** 声音采样严格要求（投稿前置校验）——sampleId 给定须归属且 ready；否则须有任意 ready 采样 */
-      async hasReadyVoiceSample(userId, sampleId) {
-        const cond = sampleId
-          ? and(eq(schema.voiceSamples.userId, userId), eq(schema.voiceSamples.id, sampleId), eq(schema.voiceSamples.status, "ready"))
-          : and(eq(schema.voiceSamples.userId, userId), eq(schema.voiceSamples.status, "ready"));
+      /** 声音采样严格要求（投稿前置校验）——sampleId 给定须归属且 ready；否则须有任意 ready 采样；
+       *  language 给定则追加语种约束（投稿区：英文区必须有英文采样） */
+      async hasReadyVoiceSample(userId, sampleId, language) {
+        const cond = and(
+          eq(schema.voiceSamples.userId, userId),
+          eq(schema.voiceSamples.status, "ready"),
+          ...(sampleId ? [eq(schema.voiceSamples.id, sampleId)] : []),
+          ...(language ? [eq(schema.voiceSamples.language, language)] : []),
+        );
         const rows = await db
           .select({ id: schema.voiceSamples.id })
           .from(schema.voiceSamples)
@@ -917,6 +945,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .select({
             id: schema.submissions.id,
             url: schema.submissions.url,
+            language: schema.submissions.language,
             title: schema.submissions.title,
             collected: schema.submissions.collected,
             dialogueCount: schema.submissions.dialogueCount,
@@ -942,6 +971,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             id: schema.submissions.id,
             userId: schema.submissions.userId,
             url: schema.submissions.url,
+            language: schema.submissions.language,
             title: schema.submissions.title,
             collected: schema.submissions.collected,
             dialogueCount: schema.submissions.dialogueCount,
@@ -978,6 +1008,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           id: row.id,
           userId: row.userId,
           url: row.url,
+          language: row.language,
           title: row.title,
           collected: row.collected,
           dialogueCount: row.dialogueCount,

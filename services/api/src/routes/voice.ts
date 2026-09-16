@@ -17,13 +17,19 @@ export interface VoiceSampleRow {
 export interface VoiceDeps {
   /** 保存采样（user×language upsert）；返回 id（投稿时记录 voiceSampleId 用） */
   saveVoiceSample(row: VoiceSampleRow): Promise<{ id: string }>;
-  /** 工作台回读最新样本（onboarding 守卫/设置页）；无记录返回 null */
-  getVoiceSample?(userId: string): Promise<VoiceSampleRow | null>;
+  /** 工作台回读样本（onboarding 守卫/设置页）：language 给定时取该语种那条（投稿区采样），否则取最新一条 */
+  getVoiceSample?(userId: string, language?: string | null): Promise<VoiceSampleRow | null>;
   storage: AudioStorage;
 }
 
 // 自带 /api 前缀（与 polish/generate/job 路由一致，见 app.ts 挂载说明）：测试对裸 app 请求 /api/...
 // 样本直传模式：上传只保存录音文件，不训练音色模型；生成时由 TTS 管线以 referenceAudio 零样本方式使用
+/** ?language=xx —— 取指定语种的采样（投稿区采样回读：中文区取 zh、English 区取 en）；非法/缺失 → 取最新一条 */
+function sampleLanguage(c: Context): string | null {
+  const raw = c.req.query("language");
+  return typeof raw === "string" && /^[a-z]{2,3}$/i.test(raw) ? raw.toLowerCase() : null;
+}
+
 export function voiceRoutes(deps: VoiceDeps) {
   const app = new OpenAPIHono<{ Variables: { userId: string } }>();
   const Err = z.object({ error: z.string() });
@@ -39,7 +45,7 @@ export function voiceRoutes(deps: VoiceDeps) {
   });
   app.openapi(r1, (async (c: Context) => {
     const userId = c.get("userId") as string;
-    const row = await deps.getVoiceSample?.(userId);
+    const row = await deps.getVoiceSample?.(userId, sampleLanguage(c));
     if (!row) return c.json({ error: "not_found" }, 404);
     return c.json({
       id: row.id ?? null,
@@ -63,7 +69,7 @@ export function voiceRoutes(deps: VoiceDeps) {
   });
   app.openapi(r2, (async (c: Context) => {
     const userId = c.get("userId") as string;
-    const row = await deps.getVoiceSample?.(userId);
+    const row = await deps.getVoiceSample?.(userId, sampleLanguage(c));
     if (!row) return c.json({ error: "not_found" }, 404);
     const { data: bytes } = await deps.storage.get(row.audioUrl);
     if (!bytes) return c.json({ error: "not_found" }, 404);

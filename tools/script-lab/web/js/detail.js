@@ -488,12 +488,15 @@ function renderProposalCards(id, proposals, totalTurns){
     subBody.push(row('投稿人', esc((dt.host && dt.host.personaInfo && dt.host.personaInfo.displayName) || '?') + ' · ' + esc(dt.userEmail || '')));
     subBody.push(row('称呼', esc((dt.host && dt.host.callName) || '（无，用「主持人」）')));
     subBody.push(row('建议', esc(dt.suggestion || '—')));
+    // 投稿区（目标语言）：试听与声线管理都按它取语种（多语种时避免"听到的/配的"不是同一条）
+    const zoneV = dt.language || 'zh';
+    const langQ = "&lang=" + encodeURIComponent(zoneV);
     const hostBtn = (hostSampleV && hostUserIdV)
-      ? "<button class='sample-play' data-src='/api/audio/host?env=" + encodeURIComponent(labEnv || '') + "&userId=" + encodeURIComponent(hostUserIdV) + "' onclick='toggleSampleAudio(this)'>▶</button><span style='font-size:12px'>" + esc(hostNameV) + "</span>"
+      ? "<button class='sample-play' data-src='/api/audio/host?env=" + encodeURIComponent(labEnv || '') + "&userId=" + encodeURIComponent(hostUserIdV) + langQ + "' onclick='toggleSampleAudio(this)'>▶</button><span style='font-size:12px'>" + esc(hostNameV) + "</span>"
       : "<span class='muted' style='font-size:12px'>主持人无声样</span>";
     const guestBtn = guestIdV
-      ? "<button class='sample-play' data-src='/api/audio/guest?env=" + encodeURIComponent(labEnv || '') + "&platform=" + encodeURIComponent(guestIdV) + "' onclick='toggleSampleAudio(this)'>▶</button><span style='font-size:12px'>" + esc(guestNameV) + "</span> <button class='gv-icon-btn' title='管理声线' data-act='guestvoice' data-id='" + id + "' data-gid='" + esc(guestIdV) + "' data-gname='" + esc(guestNameV) + "'>⚙</button>"
-      : "<span class='muted' style='font-size:12px'>嘉宾无声线</span> <button class='gv-icon-btn' title='配置声线' data-act='guestvoice' data-id='" + id + "' data-gname='" + esc(guestNameV) + "'>🎙</button>";
+      ? "<button class='sample-play' data-src='/api/audio/guest?env=" + encodeURIComponent(labEnv || '') + "&platform=" + encodeURIComponent(guestIdV) + langQ + "' onclick='toggleSampleAudio(this)'>▶</button><span style='font-size:12px'>" + esc(guestNameV) + "</span> <button class='gv-icon-btn' title='管理声线' data-act='guestvoice' data-id='" + id + "' data-gid='" + esc(guestIdV) + "' data-gname='" + esc(guestNameV) + "' data-zone='" + esc(zoneV) + "'>⚙</button>"
+      : "<span class='muted' style='font-size:12px'>嘉宾无声线</span> <button class='gv-icon-btn' title='配置声线' data-act='guestvoice' data-id='" + id + "' data-gname='" + esc(guestNameV) + "' data-zone='" + esc(zoneV) + "'>🎙</button>";
     subBody.push(row('音色采样', hostBtn + "&nbsp;&nbsp;&nbsp;" + guestBtn));
     // 拒稿动作放投稿卡头部（发布前可用）；data-act 委托分发
     // 首尾默认展开：首=投稿卡 → 直接置 open；尾=最后一张非空卡片
@@ -560,7 +563,7 @@ document.addEventListener('click', function (e) {
   else if (act === 'tts') batchGenSegAudio(sid, si);
   else if (act === 'merge') openMergeDialog(sid, si);
   else if (act === 'browser-fallback') openBrowserFallback(sid);
-  else if (act === 'guestvoice') openGuestVoiceModal(b.getAttribute('data-gid') || '', b.getAttribute('data-gname') || '');
+  else if (act === 'guestvoice') openGuestVoiceModal(b.getAttribute('data-gid') || '', b.getAttribute('data-gname') || '', b.getAttribute('data-zone') || 'zh');
 });
 // 创作入口（创作卡「重新创作」）：带上一版脚本打开脚本创作弹窗 —— 相当于在上一版基础上修改
 function openCreateFlow(id){
@@ -1467,14 +1470,33 @@ document.addEventListener('click', function (e) {
 
 // 嘉宾声线弹窗：新增/修改（上传 mp3 + 朗读文本）
 let guestVoiceCtx = { guestId: null, guestName: null };
-function openGuestVoiceModal(guestId, guestName){
+/** 已配置声线的语种 → 中文名（弹窗里告诉编辑"缺哪个语种"） */
+const GUEST_VOICE_LANGS = [['zh', '中文'], ['en', 'English']];
+async function renderGuestVoiceExisting(guestId){
+  const el = document.getElementById('guestVoiceExisting');
+  if (!el || !guestId) { if (el) el.textContent = ''; return; }
+  el.textContent = '已有声线：读取中…';
+  try {
+    const d = await j('/api/guest-voices?guestId=' + encodeURIComponent(guestId));
+    const have = new Set(((d && d.samples) || []).map((x) => x.language));
+    el.textContent = '已有声线：' + GUEST_VOICE_LANGS.map(([code, name]) => name + (have.has(code) ? ' ✓' : ' —')).join(' · ')
+      + (have.size ? '' : '（该嘉宾还没有任何声线）');
+  } catch (e) {
+    el.textContent = '已有声线：读取失败（不影响上传）';
+  }
+}
+function openGuestVoiceModal(guestId, guestName, zone){
   guestVoiceCtx = { guestId, guestName };
   const label = document.getElementById('guestVoiceGuestLabel');
   if (label) label.textContent = '嘉宾：' + (guestName || guestId || '?');
+  // 语种默认 = 本投稿的投稿区（正要做的那一期需要哪个语种，就默认传哪个）
+  const sel = document.getElementById('guestVoiceLang');
+  if (sel) sel.value = (zone === 'en' ? 'en' : 'zh');
   document.getElementById('guestVoiceTranscript').value = '';
   document.getElementById('guestVoiceFile').value = '';
   const st = document.getElementById('guestVoiceStatus');
   if (st) st.textContent = '';
+  void renderGuestVoiceExisting(guestId);
   document.getElementById('guestVoiceModal').style.display = 'flex';
 }
 function closeGuestVoiceModal(){
@@ -1487,15 +1509,19 @@ async function submitGuestVoice(){
   if (!guestVoiceCtx.guestId) { if (st) st.textContent = '❌ 未知嘉宾'; return; }
   if (!file) { if (st) st.textContent = '❌ 请选择 mp3 文件'; return; }
   if (file.size > 20 * 1024 * 1024) { if (st) st.textContent = '❌ 文件超过 20MB'; return; }
+  // 语种由弹窗选择（zh/en；服务端按 guest×language 唯一 upsert，中英各存一条互不覆盖）
+  const langSel = document.getElementById('guestVoiceLang');
+  const lang = (langSel && langSel.value === 'en') ? 'en' : 'zh';
   const fd = new FormData();
   fd.append('audio', file);
-  fd.append('language', 'zh');
+  fd.append('language', lang);
   if (transcript) fd.append('transcript', transcript);
   if (st) st.textContent = '上传中...';
   try {
     await j('/api/audio/guest-voice?guestId=' + encodeURIComponent(guestVoiceCtx.guestId), { method:'POST', body: fd });
-    if (st) st.textContent = '✅ 声线已保存';
-    notice('嘉宾声线已保存', 'success');
+    if (st) st.textContent = '✅ ' + (lang === 'en' ? 'English' : '中文') + '声线已保存';
+    notice('嘉宾声线已保存（' + lang + '）', 'success');
+    void renderGuestVoiceExisting(guestVoiceCtx.guestId);
     // 刷新当前投稿（播放可用）
     const id = location.pathname.slice(1);
     if (id) openDetail(id);

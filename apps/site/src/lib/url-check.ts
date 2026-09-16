@@ -5,6 +5,7 @@
 // 设计说明：可达性探测不可靠（CORP/网络/反爬均会误判），且后端投稿端点不校验可达性——
 // 因此 reachable 仅作展示参考，不作为投稿门槛；内容有效性由编辑端采集时验证。
 import { isShareUrl } from "../components/import-dialog";
+import { ENABLED_SAMPLE_LANGUAGES } from "./languages";
 
 // 与后端 submissionIdFromUrl 一致的命名空间与算法（sha1 + UUID v5 位标记）
 const SUBMISSION_NS = "d6a5c441-58e7-4b1c-9a2d-3f0e1b2c3d4e";
@@ -65,9 +66,11 @@ function writeStore(store: Record<string, UrlCheckEntry>): void {
   }
 }
 
-// —— 已提交 URL 记录（提交成功后标记：剪贴板检测不再弹该 URL）——
+// —— 已提交记录（提交成功后标记：剪贴板检测不再弹该 URL）——
+// **按 (url, 投稿区) 记**：同一篇对话投了中文区后，仍应允许补投 English 区，
+// 所以只有**所有开放区都投过**才算"已提交"（否则剪贴板提示会被永久吞掉、用户发现不了补投入口）。
 const SUBMITTED_KEY = "dailog.submittedUrls";
-const SUBMITTED_MAX = 100;
+const SUBMITTED_MAX = 200;
 
 function readSubmitted(): string[] {
   try {
@@ -78,17 +81,20 @@ function readSubmitted(): string[] {
   }
 }
 
-/** 是否已提交过该 URL（提交成功后标记；剪贴板自动弹窗跳过） */
+/** 是否已提交过该 URL（所有开放投稿区都投过才算；提交成功后标记；剪贴板自动弹窗跳过） */
 export function isSubmittedUrl(url: string): boolean {
-  return readSubmitted().includes(url);
+  const list = readSubmitted();
+  if (list.includes(url)) return true; // 旧版记录（无分区信息）：保守视为已投，不重复打扰
+  return ENABLED_SAMPLE_LANGUAGES.every((zone) => list.includes(`${url}|${zone}`));
 }
 
-/** 标记 URL 已提交（提交成功时调用） */
-export function markSubmitted(url: string): void {
+/** 标记 (URL, 投稿区) 已提交（提交成功时调用） */
+export function markSubmitted(url: string, zone: string): void {
   try {
+    const key = `${url}|${zone}`;
     const list = readSubmitted();
-    if (list.includes(url)) return;
-    list.push(url);
+    if (list.includes(key)) return;
+    list.push(key);
     if (list.length > SUBMITTED_MAX) list.splice(0, list.length - SUBMITTED_MAX);
     localStorage.setItem(SUBMITTED_KEY, JSON.stringify(list));
   } catch {

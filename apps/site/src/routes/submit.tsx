@@ -9,6 +9,8 @@ import { useI18n } from "@dailogues/i18n";
 import { AuthGate } from "../components/auth-gate";
 import { isShareUrl } from "../components/import-dialog";
 import { getUrlCheck, markSubmitted, probeReachable, type Reachability } from "../lib/url-check";
+import { ENABLED_SAMPLE_LANGUAGES, isSupportedSampleLanguage } from "../lib/languages";
+import { ZonePicker } from "../components/zone-picker";
 import { env } from "../lib/env";
 import { openImportDialog } from "../components/import-dialog";
 import VoiceSamplePreview from "../components/voice-sample-preview";
@@ -163,7 +165,7 @@ const styles = stylex.create({
 
 export default function SubmitPage() {
   const { t } = useI18n();
-  const [params] = useSearchParams<{ id?: string; url?: string }>();
+  const [params] = useSearchParams<{ id?: string; url?: string; zone?: string }>();
   const [step, setStep] = createSignal<Step>("confirm");
   const [url, setUrl] = createSignal("");
   // 当前检测结果 id（localStorage 的 json key；用于展示检测信息区块）
@@ -193,6 +195,67 @@ export default function SubmitPage() {
   const [submitting, setSubmitting] = createSignal(false);
   // 提交成功响应里的投稿 id（done 态“投稿详情”按钮跳 /submission/<id> 用）
   const [submissionId, setSubmissionId] = createSignal<string | null>(null);
+  // 投稿区（zone = 目标语言）：一投稿 = 一语言区 = 一期节目。由导入弹框选定（?zone=），
+  // 本页可改；占用状态以服务端 check 为权威（已投过的区不可再投）。
+  const [zone, setZone] = createSignal<string>(isSupportedSampleLanguage(params.zone) ? params.zone! : "zh");
+  const [zoneInfo, setZoneInfo] = createSignal<Record<string, { submitted: boolean; canSubmit: boolean; status: string | null }> | null>(null);
+  // 他人已投稿（check.owner=other）：同一对话的投递权归首个投稿人 → 整条投稿流程不可用
+  const [claimed, setClaimed] = createSignal(false);
+
+  /** 该投稿区的采样（**按语种取**：投稿区决定用哪条采样，避免拿中文采样读英文）：
+   *  有 → 自动填充预览；无 → 引导录制该区语种（提交按钮置灰） */
+  const refreshZoneSample = async (lang: string) => {
+    try {
+      const res = await fetch(`/v1/me/voice-sample?language=${encodeURIComponent(lang)}`);
+      if (!res.ok) {
+        setHasVoiceSample(false);
+        setVoiceSampleId(null);
+        setSampleDuration(0);
+        return;
+      }
+      const s = (await res.json()) as { id?: string | null; language?: string; duration?: number } | null;
+      setHasVoiceSample(true);
+      if (s?.language) setVoiceLang(s.language);
+      setVoiceSampleId(s?.id ?? null);
+      setSampleDuration(s?.duration ?? 0);
+    } catch { /* 静默 */ }
+  };
+
+  /** 服务端 check：投稿区占用（已投过的区 disabled）+ 归属（他人已投稿 → 整条流程提示不可用） */
+  const refreshZoneInfo = async (u: string) => {
+    try {
+      const res = await fetch("/v1/submissions/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: u }),
+      });
+      if (!res.ok) return;
+      const d = (await res.json()) as {
+        owner?: string;
+        zones?: Record<string, { submitted: boolean; canSubmit: boolean; status: string | null }>;
+      } | null;
+      const zones = d?.zones ?? null;
+      setClaimed(d?.owner === "other");
+      setZoneInfo(zones);
+      // 当前区已被占、但还有可投的区 → 自动切过去（避免一进页面就撞"已投稿"）
+      if (zones && zones[zone()]?.submitted) {
+        const free = ENABLED_SAMPLE_LANGUAGES.find((z) => zones[z]?.canSubmit);
+        if (free && free !== zone()) {
+          setZone(free);
+          setVoiceSampleId(null);
+          void refreshZoneSample(free);
+        }
+      }
+    } catch { /* 静默 */ }
+  };
+
+  /** 切换投稿区：采样随之切换到该区语种（能不能提交由该区采样决定） */
+  const changeZone = (z: string) => {
+    if (z === zone()) return;
+    setZone(z);
+    setVoiceSampleId(null);
+    void refreshZoneSample(z);
+  };
 
   // 响应 ?id=/?url= 变化（原生路由导航到相同路径不同 query 时也会触发——
   // 弹框确认投稿后 navigate('/submit?id=…') 无需整页刷新）：
@@ -212,6 +275,8 @@ export default function SubmitPage() {
         void probeReachable(check.url)
           .then(setReachable)
           .catch(() => setReachable("unknown"));
+        void refreshZoneInfo(check.url);      // 投稿区占用（权威）
+        void refreshZoneSample(zone());        // 当前投稿区的采样
         return;
       }
       setUrlState("empty");
@@ -234,6 +299,8 @@ export default function SubmitPage() {
     void probeReachable(prefill)
       .then(setReachable)
       .catch(() => setReachable("unknown"));
+    void refreshZoneInfo(prefill);
+    void refreshZoneSample(zone());
   });
 
   // 进入确认投稿态时拉取已有人设/采样（此时 AuthGate 已放行、必然登录；避免未登录 401 噪音）
@@ -248,16 +315,7 @@ export default function SubmitPage() {
           if (profile.displayName) setCallName(profile.displayName);
         }
       } catch { /* 静默 */ }
-      try {
-        const voiceRes = await fetch("/v1/me/voice-sample");
-        if (voiceRes.ok) {
-          const vs = (await voiceRes.json()) as { id?: string | null; language?: string; duration?: number } | null;
-          setHasVoiceSample(true);
-          if (vs?.language) setVoiceLang(vs.language);
-          if (vs?.id) setVoiceSampleId(vs.id);
-          if (vs?.duration) setSampleDuration(vs.duration);
-        }
-      } catch { /* 静默 */ }
+      await refreshZoneSample(zone());   // 采样按投稿区语种取（详见 refreshZoneSample）
     })();
   });
 
@@ -272,12 +330,19 @@ export default function SubmitPage() {
     setSampleDuration(s.duration);
     setHasVoiceSample(true);
     setRecorderOpen(false);
+    // 复核该投稿区语种：弹窗内可能改过语种，录了别的语种不算数
+    void refreshZoneSample(zone());
   };
 
   /** 确认投稿：提交投稿（URL + 本次称呼 + 投稿使用的采样 id） */
   const confirmSubmit = async () => {
     setError(null);
-    // 声音采样：无采样才拦截（按钮已禁用，双保险）
+    // 他人已投稿：同一对话的投递权归首个投稿人（按钮已禁用，双保险）
+    if (claimed()) {
+      setError(t("submit.error.already_claimed"));
+      return;
+    }
+    // 声音采样：该投稿区无采样才拦截（按钮已禁用，双保险）
     if (!hasVoiceSample()) {
       setError(t("submit.error.needVoice"));
       return;
@@ -290,6 +355,7 @@ export default function SubmitPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           url: url().trim(),
+          language: zone(),   // 投稿区（目标语言）——决定脚本语言与节目 feed 归属
           callNameInEpisode: callName().trim().slice(0, 20) || undefined,
           suggestion: suggestion().trim().slice(0, 500) || undefined,
           voiceSampleId: voiceSampleId() || undefined,
@@ -307,12 +373,14 @@ export default function SubmitPage() {
       if (!res.ok) {
         // 错误码映射友好文案；未知码显示后端 detail
         const code = String(data?.error ?? res.status);
+        // 他人已投稿（并发/换标签页时才会走到）：同步为不可用态，避免用户反复重试
+        if (code === "already_claimed") setClaimed(true);
         const mapped = t(`submit.error.${code}` as never);
         const detail = (data as { detail?: string | { message?: string } })?.detail;
         setError(detail && typeof detail === "string" ? detail : (mapped.startsWith("submit.error.") ? String(code) : mapped));
         return;
       }
-      markSubmitted(url().trim()); // 已提交：剪贴板自动弹窗不再弹该 URL
+      markSubmitted(url().trim(), zone()); // 已提交（该投稿区）：剪贴板自动弹窗不再弹该 URL
       if (typeof data?.submissionId === "string") setSubmissionId(data.submissionId);
       setStep("done");
     } catch {
@@ -374,6 +442,27 @@ export default function SubmitPage() {
                   </Show>
                 </div>
 
+                {/* 区块 1.5：投稿区（目标语言）——一投稿 = 一语言区 = 一期节目；
+                    已投过的区 disabled（同一篇对话可分别投到不同区，但同区不可重复投） */}
+                <div {...stylex.props(layouts.fullRow, styles.card, styles.cardBlock)}>
+                  <p {...stylex.props(styles.stepTitle)}>{t("submit.zone")}</p>
+                  <p {...stylex.props(styles.stepDesc)}>{t("submit.zoneDesc")}</p>
+                  <ZonePicker
+                    options={ENABLED_SAMPLE_LANGUAGES.map((z) => ({
+                      zone: z,
+                      label: t(`lang.${z}` as never),
+                      taken: !!zoneInfo()?.[z]?.submitted,
+                    }))}
+                    value={zone()}
+                    takenLabel={t("submit.zoneTaken")}
+                    disabled={claimed()}
+                    onChange={changeZone}
+                  />
+                  <Show when={claimed()}>
+                    <p {...stylex.props(styles.error)}>{t("submit.error.already_claimed")}</p>
+                  </Show>
+                </div>
+
                 {/* 区块 2：② Set up your host persona（主持人 + 声音采样） */}
                 <div {...stylex.props(layouts.fullRow, styles.card, styles.cardBlock)}>
                   <p {...stylex.props(styles.stepTitle)}>{t("submit.step2")}</p>
@@ -390,7 +479,7 @@ export default function SubmitPage() {
                     <VoiceSamplePreview
                       duration={sampleDuration()}
                       language={voiceLang()}
-                      audioUrl="/v1/me/voice-sample/audio"
+                      audioUrl={`/v1/me/voice-sample/audio?language=${encodeURIComponent(zone())}`}
                       onReRecord={() => {
                         setRecorderMode("edit");
                         setRecorderOpen(true);
@@ -398,6 +487,10 @@ export default function SubmitPage() {
                     />
                   </Show>
                   <Show when={!hasVoiceSample()}>
+                    {/* 该投稿区还没有对应语种的采样——录一段即可投这一区 */}
+                    <p {...stylex.props(styles.hint)}>
+                      {t("submit.zoneNoSample", { zone: t(`lang.${zone()}` as never) })}
+                    </p>
                     <p {...stylex.props(styles.hint)}>{t("submit.voiceHint")}</p>
                     <Button onClick={() => { setRecorderMode("add"); setRecorderOpen(true); }}>
                       {t("recorder.recordAction")}
@@ -442,7 +535,7 @@ export default function SubmitPage() {
 
                 {/* 确认/取消（区块外） */}
                 <div {...stylex.props(layouts.fullRow, styles.actions)}>
-                  <Button onClick={confirmSubmit} disabled={submitting() || !hasSample() || !urlReady()}>
+                  <Button onClick={confirmSubmit} disabled={submitting() || !hasSample() || !urlReady() || claimed()}>
                     {submitting() ? t("submit.submitting") : t("submit.confirm")}
                   </Button>
                   <A href="/"><Button appear="ghost">{t("common.cancel")}</Button></A>
@@ -476,7 +569,7 @@ export default function SubmitPage() {
         <VoiceSampleRecorderDialog
           open={recorderOpen()}
           mode={recorderMode()}
-          defaultLanguage={voiceLang()}
+          defaultLanguage={zone()}
           hostName={callName().trim() || undefined}
           onClose={() => setRecorderOpen(false)}
           onCancel={() => setRecorderOpen(false)}

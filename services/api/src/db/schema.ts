@@ -133,6 +133,9 @@ export const submissions = pgTable(
     userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
     /** 用户提交的对话分享链接（仅做合法性 + 触达性检查，不做内容采集） */
     url: text("url").notNull(),
+    /** 投稿区（目标语言）：一篇对话可分别投递到不同语言区（一投稿 = 一语言 = 一期节目）。
+     *  决定脚本语言、episodes.language 与 feed 归属（当前 zh|en，见 routes/submissions.ts ZONES）。 */
+    language: text("language").notNull().default("zh"),
     /** 投稿人节目建议（可选；编辑脚本生成时仅供选题视角参考，无参考价值可忽略） */
     suggestion: text("suggestion"),
     /** 主持人快照（投稿时定格：callName 称呼 + personaInfo 画像 + voiceSampleId 采样——preview/脚本直接取） */
@@ -164,8 +167,9 @@ export const submissions = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  // 同 URL 全局唯一（确定性 ID 同 URL 同 ID；任何人重复提交同一分享链接都拒绝）
-  (t) => [uniqueIndex("submissions_url").on(t.url)],
+  // 同一对话在**同一语言区**只能有一条投稿：owner 可跨语言区追加，他人（任意语言区）一律拒绝——
+  // 归属判定在路由层（routes/submissions.ts），本索引只兜住同区并发的唯一性。
+  (t) => [uniqueIndex("submissions_url_language").on(t.url, t.language)],
 );
 
 /** AI 平台嘉宾库：品牌声线宿主（跨期统一的 AI 受访嘉宾）。

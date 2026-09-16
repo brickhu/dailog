@@ -71,6 +71,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
     submissions: {
       create: async () => ({ id: "sub-1" }),
       findByUrl: async () => null,
+      listByUrl: async () => [],
       findById: async () => null,
       countPendingByUser: async () => 0,
       hasReadyVoiceSample: async () => true,
@@ -247,6 +248,37 @@ describe("POST /v1/editor/tts（multi speaker 整集合成）", () => {
     expect(await res.arrayBuffer()).toEqual(new Uint8Array([7, 7, 7]).buffer);
     expect(synthesizeMultiSpeaker).toHaveBeenCalledWith(expect.objectContaining({
       transcripts: ["大家好", "Hello"],
+    }));
+  });
+
+  it("English 区 + 嘉宾只有中文声线 → 中文声线兜底（不再 422；响应头注明语种回退）", async () => {
+    const synthesizeMultiSpeaker = vi.fn(async () => new Uint8Array([6, 6]));
+    const app = makeApp({
+      ...baseDeps(),
+      fish: { synthesizeSingle: async () => new Uint8Array([1]), synthesizeMultiSpeaker },
+      repo: fakeRepo({
+        submissions: {
+          ...fakeRepo().submissions,
+          // 主持人有英文采样（TTS 的主持人参考取 detail.voiceSamples）→ 不触发回退，只有嘉宾侧走语种回退
+          getDetail: async () => ({
+            ...SUBMITTED_DETAIL,
+            voiceSamples: [{ audioUrl: "voices/user-1/en.webm", transcript: "Hello, this is my voice", language: "en", status: "ready", duration: 5 }],
+          }),
+        },
+        guests: {
+          ...fakeRepo().guests,
+          voiceSampleByLanguage: async (_g: string, lang: string) =>
+            lang === "zh" ? { id: "gvs-zh", guestId: "claude", language: "zh", audioKey: "guests/claude/zh.mp3", transcript: "你好，我是嘉宾" } : null,
+          voiceSampleAny: async () => ({ id: "gvs-zh", guestId: "claude", language: "zh", audioKey: "guests/claude/zh.mp3", transcript: "你好，我是嘉宾" }),
+        },
+      }),
+    });
+    const res = await postJson(app, { submissionId: "sub-1", language: "en", guestId: "claude", segments: SEGMENTS });
+    expect(res.status).toBe(200);
+    // 仍是这位嘉宾自己的音色（只换语言），用专门的头注明语种回退（区别于"换音色"的 guest-voice-replacement）
+    expect(res.headers.get("x-guest-voice-note")).toBe("guest-voice-language-fallback:claude:zh");
+    expect(synthesizeMultiSpeaker).toHaveBeenCalledWith(expect.objectContaining({
+      transcripts: ["Hello, this is my voice", "你好，我是嘉宾"],
     }));
   });
 

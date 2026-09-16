@@ -31,6 +31,7 @@ function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
     submissions: {
       create: async () => ({ id: "sub-1" }),
       findByUrl: async () => null,
+      listByUrl: async () => [],
       findById: async () => null,
       countPendingByUser: async () => 0,
       hasReadyVoiceSample: async () => true,

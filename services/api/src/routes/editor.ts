@@ -48,6 +48,12 @@ interface PublishMeta {
 // 成品音频大小上限（100MB——单期 5-10 分钟 MP3 远小于此，纯防滥用）
 const MAX_AUDIO_BYTES = 100 * 1024 * 1024;
 
+/** ?language=xx（编辑端采样下载用）：非法/缺失 → null（回退默认取法） */
+function sampleLangQuery(c: Context): string | null {
+  const raw = c.req.query("language");
+  return typeof raw === "string" && /^[a-z]{2,3}$/i.test(raw) ? raw.toLowerCase() : null;
+}
+
 /** 解析 publish/republish 的 meta JSON（multipart 的 meta 字段）→ 清洗后的发布元数据。
  *  返回 null = 非法 JSON 或结构错误（调用方返回 400 invalid_meta）。
  *  publish 与 republish 共用同一套字段清洗规则（title/description/summary/references/
@@ -890,7 +896,12 @@ export function editorRoutes(deps: EditorDeps) {
     },
   });
   app.openapi(r11, (async (c: Context) => {
-    const sample = await deps.repo.guests.voiceSampleAny(c.req.param("guestId")!);
+    // ?language=xx：取该语种声线；无该语种 → 回退该嘉宾任意语种（与 TTS 的兜底链同规则——
+    // 否则试听听到的音频与选中的 transcript 语种不一致）
+    const guestId = c.req.param("guestId")!;
+    const lang = sampleLangQuery(c);
+    const sample = (lang ? await deps.repo.guests.voiceSampleByLanguage(guestId, lang).catch(() => null) : null)
+      ?? await deps.repo.guests.voiceSampleAny(guestId);
     if (!sample) return c.json({ error: "not_found" }, 404);
     const bytes = await deps.storage.get(sample.audioKey).then((r) => r.data).catch(() => null);
     if (!bytes) return c.json({ error: "not_found" }, 404);
@@ -910,7 +921,11 @@ export function editorRoutes(deps: EditorDeps) {
     },
   });
   app.openapi(r12, (async (c: Context) => {
-    const sample = await deps.repo.episodes.getVoiceSample(c.req.param("userId")!);
+    // ?language=xx：取该语种采样；无 → 回退最新一条（与 TTS 的主持人兜底链同规则）
+    const userId = c.req.param("userId")!;
+    const lang = sampleLangQuery(c);
+    const sample = (lang ? await deps.repo.episodes.getVoiceSampleByLanguage(userId, lang).catch(() => null) : null)
+      ?? await deps.repo.episodes.getVoiceSample(userId);
     if (!sample) return c.json({ error: "not_found" }, 404);
     const bytes = await deps.storage.get(sample.audioUrl).then((r) => r.data).catch(() => null);
     if (!bytes) return c.json({ error: "not_found" }, 404);
