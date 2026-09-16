@@ -16,10 +16,11 @@ function proposalDirOf(r){
   const v11 = r['创作指引'];
   return (typeof v11 === 'string') ? v11.trim() : '';
 }
-/** 一条提案是否成形（v4 任一特征字段在即算；v11 的选题说明也算） */
+/** 一条提案是否成形（旧契约：v4/v5/v11 特征字段；新契约：creative_proposal 九字段） */
 function isProposal(r){
-  return !!(r && typeof r === 'object'
-    && (r['提案陈述'] || proposalDirOf(r) || r['立场'] || r['钥匙'] || r['听众钥匙'] || r['解题思路'] || r['对话总结'] || r['选题说明'] || r['切片']));
+  if (!r || typeof r !== 'object') return false;
+  if (r.core_question && (r.central_tension || r.possible_discovery)) return true;   // 新契约（creative_proposal / thread）
+  return !!(r['提案陈述'] || proposalDirOf(r) || r['立场'] || r['钥匙'] || r['听众钥匙'] || r['解题思路'] || r['对话总结'] || r['选题说明'] || r['切片']);
 }
 /** 最近一次从服务端取到的详情快照（内存，每次打开详情页刷新）。
  *  用途：锁定选题 / 审题结果这类**状态**，一律以服务端为准——绝不拿浏览器缓存当判据。 */
@@ -155,6 +156,26 @@ function proposalDetailRows(r, opts) {
     const e = function (s) { return String(s == null ? "" : s); };
     const rows = [];
     if (!r) return '';
+    // ⓪ 新契约（creative_proposal / exploration thread）：core_question → 张力 → 转折 → 发现 → 终点 → 遗留问题
+    if (r.core_question && (r.central_tension || r.possible_discovery)) {
+      const r0 = [];
+      if (r.thread_id || r.title) r0.push(row('这条线', e(r.thread_id) + (r.title ? ' · ' + e(r.title) : '')));
+      r0.push(row('主问题', e(r.core_question)));
+      if (r.initial_state) r0.push(row('起点', e(r.initial_state)));
+      if (r.central_tension) r0.push(row('张力', e(r.central_tension)));
+      if (r.exploration) r0.push(row('中段素材', e(r.exploration)));
+      if (r.turning_point) r0.push(row('转折', e(r.turning_point)));
+      if (r.possible_discovery) r0.push(row('可能的发现', e(r.possible_discovery)));
+      if (r.ending_state) r0.push(row('终点', e(r.ending_state)));
+      if (r.open_question) r0.push(row('留下的问题', e(r.open_question)));
+      if (r.recommended_duration) r0.push(row('建议时长', e((r.recommended_duration.category || '') + ' 约 ' + (r.recommended_duration.minutes || ''))));
+      const sc0 = r.score || {};
+      const chips0 = Object.keys(sc0).map(function (k) { return k + ' ' + sc0[k]; }).join(' · ');
+      if (chips0) r0.push(row('评分', chips0));
+      if (Array.isArray(r.evidence) && r.evidence.length) r0.push(row('原文出处', r.evidence.map(function (x) { return e(x && x.speaker) + '：' + e(x && x.quote); }).join('\n')));
+      if (r.editorial_reason) r0.push(row('编辑理由', e(r.editorial_reason)));
+      return r0.join('');
+    }
     // ① R1 v4 契约：**LLM 直接给一句成稿的提案陈述**，卡片照原样显示（不做拼接）
     if (r['提案陈述'] || r['创作意见'] || r['创作建议'] || r['立场'] || r['认知探索'] || r['听众钥匙'] || r['解题思路'] || r['对话总结']) {
       const rows4 = [];
@@ -320,6 +341,7 @@ function renderProposalCards(id, proposals, totalTurns){
       + "<div style='display:flex;align-items:baseline;gap:10px;flex-wrap:wrap'>"
       + "<span class='prop-mark' style='font-size:15px;color:" + (on ? "#4f8cff" : "#8a91a0") + "'>" + (on ? "☑" : "☐") + "</span>"
       + "<b style='font-size:13px'>提案 " + (i + 1) + "</b>"
+      + (p && p.__recommended ? "<span class='tag' style='color:#3fb950;border-color:#3fb950'>推荐</span>" : "")
       + (p && p.category ? "<span class='tag'>" + esc(p.category) + "</span>" : "")
       + "</div>"
       + (det ? "<div style='margin-top:6px'>" + det + "</div>" : "")
@@ -569,13 +591,37 @@ async function runReview(id){
     var d = await j('/api/run/review/round1', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: id }) });
     var r = d && d.result;
     if (!r || typeof r !== 'object') throw new Error('没有审题结果');
-    try { setWorkflowInput(id, 'proposals', r); } catch (e) {}   // 只写本地；确认提案时才连同选题一起提交远程
-    var n = (r.proposals && r.proposals.length) || 0;
-    if (n) notice('✓ 审题完成：' + n + ' 条提案——勾一条，点「确认提案」', 'success');
-    else {
-      var rej = (Array.isArray(r.rejection) && r.rejection.length) ? String(r.rejection[0]) : '';
-      notice('审题完成：无合适提案' + (rej ? '——' + rej.slice(0, 60) : ''), 'error');
+    // 新契约（exploration_threads + creative_proposal）→ 前端既有机制：
+    //   每条线取八字段 + recommended_duration，组成一条可直接锁定的 creative_proposal
+    var stored = r;
+    if (Array.isArray(r.exploration_threads)) {
+      var CPF = ['core_question','initial_state','central_tension','exploration','turning_point','possible_discovery','ending_state','open_question'];
+      var rec = r.creative_proposal || null;
+      // 推荐线：契约 v2 在顶层给 recommended_thread_id（旧版靠 creative_proposal.thread_id 兜底）
+      var recId = r.recommended_thread_id || (rec && rec.thread_id) || '';
+      var list = r.exploration_threads.map(function (t) {
+        var cp = {};
+        CPF.forEach(function (k) { cp[k] = t[k] || ''; });
+        cp.title = t.title || '';
+        cp.thread_id = t.id || '';
+        cp.score = t.score || null;
+        cp.evidence = t.evidence || null;
+        cp.editorial_reason = t.editorial_reason || '';
+        cp.recommended_duration = (rec && rec.recommended_duration) || { category: 'standard', minutes: '8–10' };
+        cp.__recommended = !!(recId && t.id === recId);
+        return cp;
+      });
+      // eligibility：不合格（eligible=false）时契约要求 threads=[] + proposal=null ——
+      // 理由一并落槽，拒稿时「填写拒稿原因」直接带出来（detail.js 的 proposalsRejected 读 stored.rejection）
+      var elig = r.eligibility || null;
+      var notEligible = !!(elig && elig.eligible === false);
+      stored = { proposals: list, creative_proposal: rec, eligibility: elig, conversation_summary: r.conversation_summary || '', secondary_threads: r.secondary_threads || [], recommended_thread_id: recId };
+      if (notEligible && elig.reason) stored.rejection = [String(elig.reason)];
     }
+    try { setWorkflowInput(id, 'proposals', stored); } catch (e) {}   // 只写本地；确认提案时才连同选题一起提交远程
+    var n = (stored.proposals && stored.proposals.length) || 0;
+    if (n) notice('✓ 审题完成：' + n + ' 条探索线——勾一条，点「确认提案」', 'success');
+    else notice('审题完成：这篇没过准入闸门——' + (stored.eligibility && stored.eligibility.reason ? String(stored.eligibility.reason).slice(0, 120) : '没有可用的探索线'), 'error');
   } catch (err) { notice('审题失败：' + ((err && err.message) || err), 'error'); }
   window.__reviewBusy[id] = false;
   try { await openDetail(id); } catch (e) {}

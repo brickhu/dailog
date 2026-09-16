@@ -73,10 +73,10 @@ Preserve proper nouns, product names, technical terms, and commonly used English
 Choose exactly ONE:
 
 ```text
-insight
-advice
-experience
-inspiration
+Insight
+Advice
+Experience
+Inspiration
 ```
 
 ### Insight
@@ -465,7 +465,7 @@ Return valid JSON only.
 "visual search phrase 2"
 ],
 
-"category": "insight",
+"category": "Insight",
 
 "references": [
 {

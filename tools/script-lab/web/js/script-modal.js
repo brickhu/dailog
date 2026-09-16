@@ -19,6 +19,10 @@
       : ((chosen && typeof chosen['认知探索'] === 'string') ? chosen['认知探索'] : '');   // 立场（这条线的起点）
     const aud = brief['受众'] || (chosen && chosen['目标听众']) || '';
     const zone = Array.isArray(brief['禁区']) ? brief['禁区'] : [];
+    // 新契约（creative_proposal）：主问题 / 张力 / 可能的发现（旧契约这几个为空，自动不显示）
+    const cpQ = (chosen && typeof chosen.core_question === 'string') ? chosen.core_question.trim() : '';
+    const cpT = (chosen && typeof chosen.central_tension === 'string') ? chosen.central_tension.trim() : '';
+    const cpD = (chosen && typeof chosen.possible_discovery === 'string') ? chosen.possible_discovery.trim() : '';
 
     const ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center';
@@ -32,6 +36,9 @@
       + '</div>'
       + '<div style="padding:12px 16px;border-bottom:1px solid #262b36;max-height:34vh;overflow:auto">'
       + '<div style="font-size:12px;color:#8a91a0;margin-bottom:6px">本次选题</div>'
+      + (cpQ ? '<div style="font-size:13px;color:#e6e8ee;line-height:1.6"><span style="color:#8a91a0">主问题：</span>' + esc(cpQ) + '</div>' : '')
+      + (cpT ? '<div style="font-size:12px;color:#9fb0c8;line-height:1.6;margin-top:4px"><span style="color:#8a91a0">张力：</span>' + esc(cpT) + '</div>' : '')
+      + (cpD ? '<div style="font-size:12px;color:#9fb0c8;line-height:1.6;margin-top:4px"><span style="color:#8a91a0">可能的发现：</span>' + esc(cpD) + '</div>' : '')
       + (line ? '<div style="font-size:13px;color:#e6e8ee;line-height:1.6"><span style="color:#8a91a0">立场：</span>' + esc(line) + '</div>' : '')
       + (dir ? '<div style="font-size:13px;color:#e6e8ee;line-height:1.6;margin-top:6px;border-left:3px solid #4f8cff;padding:4px 0 4px 8px;background:#0f1420;border-radius:4px">' + esc(dir) + '</div>' : '')
       + (aud ? '<div style="font-size:12px;color:#8a91a0;margin-top:6px">受众：' + esc(aud) + '</div>' : '')
@@ -99,6 +106,8 @@
         // 只写本地工作副本；入库时机 = 语音合成确认（merge.js 提交远程 scripts）。
         // 存的是"播出的话"这一份真相：segments（+ fidelity）；六字段那套出稿形态不留（编辑后会过期打架）。
         const kept = { segments: sc.segments };
+        if (sc.episode) kept.episode = sc.episode;          // R4 meta 要用（title/logline/hook）
+        if (sc.production) kept.production = sc.production;  // R4 meta 要用（时长档位/估算）
         if (sc.fidelity) kept.fidelity = sc.fidelity;
         try { setWorkflowInput(id, 'scripts', [kept]); } catch (e) {}
         try { if (!window.__workScripts) window.__workScripts = {}; window.__workScripts[id] = [kept]; } catch (e) {}

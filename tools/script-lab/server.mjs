@@ -31,8 +31,6 @@ for (const [k, v] of Object.entries(parseEnvFile(join(here, ".env")))) {
 }
 
 // ===== 提示词进化数据（feedback/review.jsonl）=====
-const FB_DIR = join(process.env.LAB_STATE_DIR || here, "feedback");
-const FB_FILE = join(FB_DIR, "review.jsonl");
 const FB_SIG_FILES = ["prompts.json", "material.system.md", "r1-review.user.md", "r2-script.user.md"];
 
 // ===== 音频合成：BGM 混音滤镜（与 web/js/merge.js 的 bgmMixFilter 保持同一套语义）=====
@@ -58,13 +56,6 @@ function promptSig() {
   return FB_SIG_FILES
     .map((f) => { try { return statSync(join(here, "prompts", f)).mtimeMs; } catch { return 0; } })
     .join(":");
-}
-/** 追加一行反馈（不抛错） */
-function appendFeedback(row) {
-  try {
-    mkdirSync(FB_DIR, { recursive: true });
-    writeFileSync(FB_FILE, JSON.stringify(row) + "\n", { flag: "a" });
-  } catch { /* 反馈落盘失败不阻塞主流程 */ }
 }
 
 // 标准化 usage：token 消耗 + 缓存命中（供控制台历史展示）
@@ -115,9 +106,6 @@ async function configFor(name) {
 
 /** LLM 审题实时状态（诊断用：前端 footer 轮询显示注入/生成/解码各阶段） */
 const reviewState = new Map();   // env:id → { phase, detail, at }
-function setReviewState(envName, id, phase, detail) {
-  reviewState.set(envName + ":" + id, { phase, detail: detail || null, at: Date.now() });
-}
 
 /** 超时包装：防沙箱/网络异常导致请求挂死 */
 function withTimeout(promise, ms, label) {
@@ -140,9 +128,6 @@ async function r2Get(envName, token, key) {
 }
 async function r2Put(envName, token, key, content) {
   await withTimeout(apiWithToken(envName, token, "/v1/editor/storage/put", { method: "POST", body: { key, content } }), 30000, "R2 写入");
-}
-async function r2Delete(envName, token, key) {
-  await withTimeout(apiWithToken(envName, token, "/v1/editor/storage/delete", { method: "POST", body: { key } }), 30000, "R2 删除");
 }
 
 /** 读对话：内存缓存 → 服务端/R2（按 URL 哈希）——不读本地草稿目录（彻底解耦） */
@@ -191,8 +176,6 @@ async function saveProduction(envName, token, id, patch) {
   return cur;
 }
 
-/** 已废弃：webui 登录态完全在浏览器 localStorage（请求头携带），不再读 CLI session.json */
-async function envLoggedIn(name) { return false; }
 
 /** 密码登录的 cookie 会话（按 env 存文件——重启不丢；webui 登录后后续 API 调用带此 cookie） */
 const COOKIE_FILE = join(process.env.LAB_STATE_DIR || here, ".lab-cookies.json");
@@ -1163,72 +1146,12 @@ function polishInputView(target) {
 
 
 
-/** R1 评审权重（**和为 10**）：模型只给三个维度分（各 0-10），总分由这里算——
- *  乘法和加总不交给模型（它会算错，而且权重一改就要重跑提示词）。
- *  改权重只改这一行；改完新出的提案自动按新权重重排，存量提案用的是当时存的 score。 */
-const REVIEW_WEIGHTS = { "受众基础": 2, "立场共鸣度": 3, "思辨张力": 2, "钥匙的锐度": 3 };   // = 10
-/** 按权重算总分（0-10）。缺维度的按现有维度归一化，不把总分压低。 */
-function weightedScoreOf(proposal) {
-  const dims = Array.isArray(proposal && proposal["score-detail"]) ? proposal["score-detail"] : [];
-  let sum = 0, wsum = 0;
-  for (const d of dims) {
-    if (!d || typeof d !== "object") continue;
-    const name = String(d.dimension || d.d || "").trim();
-    const w = Number(REVIEW_WEIGHTS[name]);
-    const s = Number(d.score != null ? d.score : d.s);
-    if (!Number.isFinite(w) || !w || !Number.isFinite(s)) continue;
-    d.weight = w;                       // 顺手把权重盖到卡上，编辑能看到"这个分是怎么来的"
-    sum += s * w; wsum += w;
-  }
-  if (!wsum) return null;
-  return Math.round((sum / wsum) * 10) / 10;   // 权重和为 10 → 总分与维度同刻度（0-10）
-}
 
-/** 听众钥匙（新字段名；「解题思路」是存量旧名） */
-function proposalKeyOf(p) {
-  if (!p || typeof p !== "object") return "";
-  const v = p["钥匙"] || p["尖"] || p["听众钥匙"] || p["解题思路"];
-  return (typeof v === "string") ? v.trim() : "";
-}
+/** 提案 v2 六维权重（提示词 §10：×6 / ×4 / ×3 / ×2 / ×2 / ×3）——和为 20，每维 0–5 ⇒ 满分 100。
+ * 用途**只有核对**：模型算乘法加法会错，服务端独立算一遍 score.overall，差 >2 就出 warning。
+ * 通过 / 拒绝的判定权在编辑（提示词 §12：score is NOT the final decision），代码不拿它做自动决定。 */
+const SCORE_WEIGHTS = { cognitive_delta: 6, exploration_depth: 4, tension_stakes: 3, surprise: 2, audience_resonance: 2, source_integrity: 3 };   // = 20
 
-/** 提案 → R2 能读的台阶文本。v7 契约：立场 → 思辨 → 钥匙。
- *  存量老提案（认知探索/探索结构）走下面的兜底分支，别让老卡片拿到空简报。 */
-function structureTextOf(p, total) {
-  if (!p || typeof p !== "object") return "";
-  const cap = Number(total) > 0 ? Number(total) : null;
-  const okN = (n) => Number.isInteger(n) && n >= 1 && (!cap || n <= cap);
-  const one = (x) => (Array.isArray(x) ? x.map(Number).filter(okN) : (okN(Number(x)) ? [Number(x)] : []));
-  const str = (v) => (typeof v === "string" ? v.trim() : "");
-  const lines = [];
-  const stance = str(p["立场"] || p["刺"] || p["认知探索"]);              // v7 立场；v6 旧名「刺」；v4 旧名「认知探索」
-  const key = str(p["钥匙"] || p["尖"] || p["听众钥匙"] || p["解题思路"]);  // v7 钥匙；v6 旧名「尖」
-  const topic = str(p["话题"]);
-  const toward = str(p["对手"] || p["刺向"]);
-  const flowRaw = p["思辨"] || p["思辨过程"];
-  const flowTxt = (typeof flowRaw === "string") ? str(flowRaw)
-    : (flowRaw && typeof flowRaw === "object") ? [str(flowRaw["从"]), str(flowRaw["到"])].filter(Boolean).join(" → ") : "";
-  if (stance) lines.push("· 立场（他开口带的那个立场）：「" + stance + "」");
-  if (key) lines.push("· 钥匙（听众要带走的那一句）：「" + key + "」" + (toward ? "　— 对手：" + toward : ""));
-  if (topic) lines.push("· 话题：" + topic);
-  if (flowTxt) lines.push("· 思辨（这一期要走的台阶，按顺序走、不许重排）：" + flowTxt);
-  if (lines.length) return lines.join("\n");
-  // ↓ 存量提案兜底（v4 及更早：认知探索 + 探索结构）
-  const oldLine = str(p["认知探索"]);
-  if (oldLine) lines.push("· 立场（他站在哪个位置看这件事）：" + oldLine);
-  const st = (typeof p["探索结构"] === "object" && p["探索结构"]) ? p["探索结构"] : null;
-  if (!st) return lines.join("\n");
-  const fmt = (v) => {
-    if (!Array.isArray(v) || !v.length) return "";
-    // 起点/终点是一个问答组（平铺编号）；过程是多组（数组的数组）
-    if (v.every((x) => !Array.isArray(x))) return one(v).map((n) => "t" + n).join("、");
-    return v.map((x) => one(x).map((n) => "t" + n).join("、")).filter(Boolean).join(" ／ ");
-  };
-  const start = fmt(st["起点问答"]), mid = fmt(st["过程问答"]), end = fmt(st["终点问答"]);
-  if (start) lines.push("· 起点问答：" + start + "（他问什么、AI 怎么答）");
-  if (mid) lines.push("· 过程问答（一组一组按顺序走）：" + mid);
-  if (end) lines.push("· 终点问答：" + end + "（他最后落到哪）");
-  return lines.join("\n");
-}
 
 /** 提案锁定的素材轮次：优先 覆盖turns 数组，否则从「t3–t9、t13」这类人话里解析 */
 function coveredTurnsOf(proposal) {
@@ -1280,40 +1203,6 @@ function dialogueBlockFor(dialogue, hostName, guestName, onlyTurns) {
   return kept.join("\n\n");
 }
 
-/** 取脚本的「六字段」（回灌成 assistant 消息用）：segments 是派生的，不回灌；
- *  老数据没有 turns 时，从 segments 反推（前两段=壳头，后三段=壳尾，中间按 host/guest 成对）。 */
-function sixFieldsOf(sc) {
-  if (!sc || typeof sc !== "object") return {};
-  // **segments 是唯一真相**：卡片显示、编辑、打磨、TTS 改的都是它；
-  // 六字段（hostOpen/turns/…）是 R2 出稿时的形态，编辑之后就不再同步了——
-  // 所以只要 segments 在，就一律从它现算，避免把陈旧版本回灌给模型（曾经踩过）。
-  const hasSegs = Array.isArray(sc.segments) && sc.segments.length > 0;
-  const out = {
-    design: sc.design || "",
-    hostOpen: hasSegs ? "" : (sc.hostOpen || ""),
-    guestOpen: hasSegs ? "" : (sc.guestOpen || ""),
-    turns: hasSegs ? [] : (Array.isArray(sc.turns) ? sc.turns : []),
-    hostWrap: hasSegs ? "" : (sc.hostWrap || ""),
-    guestSum: hasSegs ? "" : (sc.guestSum || ""),
-    hostOutro: hasSegs ? "" : (sc.hostOutro || ""),
-  };
-  if (hasSegs) {
-    const segs = sc.segments;
-    const t = (i) => (segs[i] && segs[i].text) || "";
-    out.hostOpen = out.hostOpen || t(0);
-    out.guestOpen = out.guestOpen || t(1);
-    out.hostOutro = out.hostOutro || t(segs.length - 1);
-    out.guestSum = out.guestSum || t(segs.length - 2);
-    out.hostWrap = out.hostWrap || t(segs.length - 3);
-    const body = segs.slice(2, Math.max(2, segs.length - 3));
-    for (let i = 0; i + 1 < body.length; i += 2) {
-      if (body[i] && body[i].speaker === "host" && body[i + 1] && body[i + 1].speaker === "guest") {
-        out.turns.push({ ask: body[i].text, answer: body[i + 1].text });
-      }
-    }
-  }
-  return out;
-}
 
 /** 文本归一（去标记/标点/空白）——保真标注用 */
 function normTxt2(s) {
@@ -1368,50 +1257,6 @@ function labelScripts(scripts, dialogue) {
   });
 }
 
-/** R1 → R2 的唯一输入：一句话创作指引（起点 → 走向 → 终点）。
- *  存量老提案没有这个字段时，用它的结论拼一句话兜底，保证过渡期 R2 仍有方向可用。 */
-function directionOf(proposal) {
-  if (!proposal || typeof proposal !== "object") return "（无指引——按素材里投稿人自己的探索方向走）";
-  const d = proposal["创作意见"] || proposal["创作建议"] || proposal["创作指引"] || proposal.direction;
-  if (typeof d === "string" && d.trim()) return d.trim();
-  const bits = [];
-  if (proposal.value) bits.push(String(proposal.value));
-  const steps = (Array.isArray(proposal.process) ? proposal.process : []).filter((p) => p && p.step).map((p) => String(p.step));
-  if (steps.length) bits.push("中间依次走到：" + steps.join("、"));
-  if (proposal.solve) bits.push("最后落到「" + String(proposal.solve) + "」");
-  return bits.length ? bits.join("；") : "（无指引——按素材里投稿人自己的探索方向走）";
-}
-
-/** R1 → 编辑/文案：选题说明（新契约；老提案按字段兜底） */
-function briefOf(proposal) {
-  if (!proposal || typeof proposal !== "object") return null;
-  const b = proposal["选题说明"];
-  if (b && typeof b === "object") return b;
-  if (typeof b === "string") return b;
-  // 卡片字段在提案顶层。v7 = 立场/钥匙/话题/思辨/创作意见；旧名一起认。
-  const keyOf = (p) => p["钥匙"] || p["尖"] || p["听众钥匙"] || p["解题思路"] || null;
-  const stanceOf = (p) => p["立场"] || p["刺"] || p["认知探索"] || null;
-  const dirOf = (p) => p["创作意见"] || p["创作建议"] || p["创作指引"] || null;
-  if (stanceOf(proposal) || proposal["目标听众"] || keyOf(proposal) || dirOf(proposal)) {
-    const out = {
-      对话总结: proposal["对话总结"] || null,
-      立场: stanceOf(proposal),
-      钥匙: keyOf(proposal),
-      话题: proposal["话题"] || null,
-      思辨: proposal["思辨"] || null,
-      覆盖turns: Array.isArray(proposal["覆盖turns"]) ? proposal["覆盖turns"] : null,
-      受众: proposal["目标听众"] || null,
-      创作意见: dirOf(proposal),
-    };
-    // 旧名只在对应新字段缺失时补（给还在读旧名的老模板兜底）——
-    // 否则简报里同一件事会出现两个名字，模型会当成两个字段各自脑补。
-    if (!out.立场) out.认知探索 = stanceOf(proposal);
-    if (!out.钥匙) { out.听众钥匙 = keyOf(proposal); out.解题思路 = keyOf(proposal); }
-    if (!out.创作意见) out.创作建议 = dirOf(proposal);
-    return out;
-  }
-  return { 切片: proposal.carrier || proposal.topic || null, 为什么值得做: proposal.value || null, 受众: proposal.who || null, 禁区: proposal.avoid || [] };
-}
 
 /** draft R2 输出（hostOpen/guestOpen/turns/hostWrap/guestSum/hostOutro）→ 补出 segments（lab 的 TTS/渲染消费）；
  *  原字段一并保留，供 R3 打磨（分层：壳 + 主体）与 R4 文案消费 */
@@ -1435,107 +1280,6 @@ function segmentsFromDraftShape(p) {
   return Object.assign({}, p, { segments: segs });
 }
 
-/** 提案结构归一化（旧审题契约 → 新收敛契约）：兼容历史已选提案（main_topic/confusion/storyline.beats/event...）渲染新提示词模板
- *  新契约：{ topic, chain:[{question,turns}], storyline(一句话), takeaway }
- *  旧结构转换：topic=main_topic；chain 由旧节型链（confusion/pursuit/reframe/event 含 turns+quote）折成 user 问题序列——取 user 节的原话为 question，
- *  非 user 节并入前一问的 turns（AI 回合是素材，不进问题本身）；storyline=storyline.topic 的人话（去外壳）或 storyline.event；takeaway=storyline.takeaway。 */
-function normalizeProposal(proposal) {
-  if (!proposal || typeof proposal !== "object") return proposal;
-  // 新契约（v7）：{ 立场, 钥匙, 话题, 思辨, 覆盖turns, 目标听众, 创作意见, score-detail } —— 原样直通
-  if (proposal["创作意见"] || proposal["立场"] || proposal["钥匙"] || proposal["创作建议"] || proposal["创作指引"] || proposal["选题说明"] || proposal.direction) return proposal;
-  // draft 契约（R1 判别先行版）：who/value/carrier/endpoint/solve/process —— 原样直通，另补 lab 消费的等价字段
-  const isDraft = ("who" in proposal) || ("value" in proposal) || ("solve" in proposal) || (Array.isArray(proposal.process) && proposal.process.length > 0);
-  if (isDraft) {
-    const copy = Object.assign({}, proposal);
-    if (!copy.topic) copy.topic = copy.carrier || copy.who || null;
-    if (!copy.takeaway) copy.takeaway = copy.solve || null;
-    if (!copy.storyline) copy.storyline = copy.value || null;
-    if (!Array.isArray(copy.chain)) {
-      copy.chain = (Array.isArray(proposal.process) ? proposal.process : []).map(function (x) {
-        return {
-          type: "ask",
-          text: (x && (x.quote || x.step)) || "",
-          step: (x && x.step) || "",
-          turns: Array.isArray(x && x.turns) ? x.turns.slice() : [],
-        };
-      });
-    }
-    if (typeof copy.chainText !== "string" && copy.chain.length) {
-      copy.chainText = copy.chain.map(function (c, i) {
-        const ts = Array.isArray(c && c.turns) ? c.turns : [];
-        const range = ts.length ? (ts.length === 1 ? String(ts[0]) : String(ts[0]) + "-" + String(ts[ts.length - 1])) : "";
-        return "步骤" + (i + 1) + (range ? "（回合 " + range + "）" : "") + "：" + String((c && c.text) || "").replace(/\n+/g, " ");
-      }).join("\n");
-    }
-    return copy;
-  }
-  const hasNew = Array.isArray(proposal.chain) && proposal.chain.length > 0 && proposal.chain[0] && typeof proposal.chain[0] === "object" && (("question" in proposal.chain[0]) || ("text" in proposal.chain[0]));
-  if (hasNew && proposal.topic) {
-    // 已是新契约：原样直通，但确保 chainText 已生成（R2 user.md 直接消费人话问题链）
-    if (typeof proposal.chainText !== "string") {
-      const copy = Object.assign({}, proposal);
-      if (Array.isArray(copy.chain) && copy.chain.length) {
-        copy.chainText = copy.chain.map(function (c, i) {
-          const ts = Array.isArray(c && c.turns) ? c.turns : [];
-          const range = ts.length ? (ts.length === 1 ? String(ts[0]) : String(ts[0]) + "-" + String(ts[ts.length - 1])) : "";
-          const txt = (c && typeof c.text === "string") ? c.text : (c && typeof c.question === "string") ? c.question : (c && c.quote) || "";
-          const tag = (c && c.type === "reaction") ? "反应" : "问题";
-          return tag + (i + 1) + (range ? "（回合 " + range + "）" : "") + "：" + String(txt).replace(/\n+/g, " ");
-        }).join("\n");
-      }
-      return copy;
-    }
-    return proposal;
-  }
-  const n = {};
-  n.topic = proposal.topic || proposal.main_topic || (proposal.storyline && proposal.storyline.topic) || null;
-  // chain 归一
-  const oldChain = Array.isArray(proposal.chain) ? proposal.chain : [];
-  if (oldChain.length > 0 && !hasNew) {
-    const chain = [];
-    let lastUser = null;
-    for (const c of oldChain) {
-      const q = (c && typeof c.question === "string") ? c.question : (c && c.quote) || "";
-      const turns = Array.isArray(c && c.turns) ? c.turns : [];
-      if (c && (c.speaker === "user" || c.type === "confusion" || c.type === "event" || c.type === "pursuit") && q) {
-        // 是 user 的推进问题 → 开新节点
-        chain.push({ question: q, turns: turns.slice() });
-        lastUser = chain[chain.length - 1];
-      } else if (lastUser && turns.length) {
-        // AI 回合/reframe → 并入前一问素材范围
-        for (const t of turns) if (!lastUser.turns.includes(t)) lastUser.turns.push(t);
-      } else if (!q && turns.length && lastUser) {
-        for (const t of turns) if (!lastUser.turns.includes(t)) lastUser.turns.push(t);
-      }
-    }
-    n.chain = chain;
-  } else if (Array.isArray(proposal.chain)) {
-    n.chain = proposal.chain;
-  }
-  n.storyline = proposal.storyline && typeof proposal.storyline === "string"
-    ? proposal.storyline
-    : (proposal.storyline && typeof proposal.storyline === "object")
-      ? ((proposal.storyline.topic || "").replace(/^这是关于「|」的对话$/g, "") || proposal.storyline.event || "")
-      : (proposal.main_topic || null);
-  n.takeaway = (proposal.takeaway && typeof proposal.takeaway === "string") ? proposal.takeaway
-    : (proposal.storyline && typeof proposal.storyline === "object" && proposal.storyline.takeaway) || null;
-  n.angle = (proposal.angle && typeof proposal.angle === "string") ? proposal.angle : null;   // 叙事主线分类（五种打造视角取一）
-  n.chain_type = n.angle;   // 兼容：R1 新契约输出字段为 chain_type，旧结构用 angle 兜底
-  // chainText：人话行格式（Q1 (回合4-5): 问题原话）——给 R2 user.md 直接读，避免 JSON 多行
-  if (Array.isArray(n.chain) && n.chain.length) {
-    n.chainText = n.chain.map(function (c, i) {
-      const ts = Array.isArray(c && c.turns) ? c.turns : [];
-      const range = ts.length ? (ts.length === 1 ? String(ts[0]) : String(ts[0]) + "-" + String(ts[ts.length - 1])) : "";
-      const txt = (c && typeof c.text === "string") ? c.text : (c && typeof c.question === "string") ? c.question : (c && c.quote) || "";
-      const tag = (c && c.type === "reaction") ? "反应" : "问题";
-      return tag + (i + 1) + (range ? "（回合 " + range + "）" : "") + "：" + String(txt).replace(/\n+/g, " ");
-    }).join("\n");
-  }
-  n.score = (typeof proposal.score === "number") ? proposal.score : null;
-  n.category = proposal.category || null;
-  n['score-detail'] = Array.isArray(proposal['score-detail']) ? proposal['score-detail'] : null;
-  return n;
-}
 
   // POST /api/run/review/preview → 状态0：两轮 LLM 调用输入预览（可编辑后发送）
   //   第1轮 system=打分规则 + user=仅对话；第2轮 追加 assistant=脚本规则 + user=参数（suggestion/host/guests）
@@ -1604,7 +1348,7 @@ function normalizeProposal(proposal) {
       // 曾经这里塞的是 JSON.stringify(dialogue)（原始 JSON 大数组），模型得自己在 JSON 里数位置推 tN——
       // 实测 30 条以上的对话，路径证据的原话和 tN 会整段错位（原话在 t15，标成 t9），编辑核对直接对不上；
       // 而且 dialogue 是字符串时 {{dialogue.sourceUrl}} 永远渲染成空。
-      const dlgBlock = dialogueBlockFor(dialogue, "用户", "AI", null);
+      const dlgBlock = dialogueBlockFor(dialogue, "Human", "AI", null);   // 与提案提示词里的 Human/AI 一致
       const defaultMsgs = renderPrompt(p, {
         dialogue: { messages: dlgBlock, sourceUrl: (dialogue && dialogue.sourceUrl) || "" },
         turns: ((dialogue && dialogue.messages) || []).length,
@@ -1624,40 +1368,71 @@ function normalizeProposal(proposal) {
       }
       const msgs = (body && Array.isArray(body.messages) && body.messages.length) ? body.messages : defaultMsgs;
       console.log("[round1] 消息来源=" + (msgs === defaultMsgs ? "defaultMsgs(最新渲染)" : "body.messages(快照 " + msgs.length + " 条)"));
-      const r = await llmComplete(null, null, cfgOverride, withRevision(msgs, (body && body.revision) || ""), p.config, stopAC.signal);
-      const result = extractJson(r.content);
-      // 总分由服务端按权重算（模型只给三个维度分）——算完直接盖到提案上，编辑按它排序
-      if (result && Array.isArray(result.proposals)) {
-        result.proposals.forEach((pp) => {
-          const ws = weightedScoreOf(pp);
-          if (ws != null) pp.score = ws;
-        });
+      let r = await llmComplete(null, null, cfgOverride, withRevision(msgs, (body && body.revision) || ""), p.config, stopAC.signal);
+      let result = extractJson(r.content);
+      // 空出稿自动重试一次：稿子不合格时模型偶尔只回一句话或空对象（实测约一半概率），
+      // 不重试的话编辑看到的是「契约异常」而不是「这篇不合格」——重试一次基本能拿到规范的 NOT-ELIGIBLE 对象。
+      const isEmptyResult = (v) => !v || typeof v !== "object" || !Object.keys(v).length;
+      if (isEmptyResult(result)) {
+        // 重试不能原样重发（同样的输入大概率同样为空）：按 round2 的老办法带一条明确要求重发。
+        console.log("[round1] 出稿为空（" + JSON.stringify(String(r.content).slice(0, 80)) + "），带提示重试一次…");
+        const nudgeR1 = "你上一轮没有返回可解析的 JSON。请只输出那一个 JSON 对象——即使这篇稿子不合格（eligible=false），也必须按契约输出 { eligibility: { eligible: false, reason: \"…\" }, exploration_threads: [], recommended_thread_id: null, creative_proposal: null }；不要解释、不要多余文字。";
+        const retryMsgs = (String(r.content || "").trim() ? msgs.concat([{ role: "assistant", content: r.content }]) : msgs)
+          .concat([{ role: "user", content: nudgeR1 }]);
+        const r2try = await llmComplete(null, null, cfgOverride, retryMsgs, p.config, stopAC.signal);
+        const parsed2 = extractJson(r2try.content);
+        if (!isEmptyResult(parsed2)) { result = parsed2; r = r2try; }
+        else console.log("[round1] 重试仍为空：" + JSON.stringify(String(r2try.content).slice(0, 120)));
       }
-      // 提案版出稿校验（不阻断，仅报告）：链节 turns 越界 / event 引文未在原文找到 → 人工核对
+      // 出稿校验（不阻断，仅报告）——按「提案 v2」契约（eligibility + 加权分 + recommended_thread_id）：
+      //   ① eligible=false ⇒ 必须 threads=[] 且 creative_proposal=null（旧结果没这字段时按 eligible 处理）
+      //   ② eligible=true  ⇒ creative_proposal 九字段齐、每条线八字段齐、有 evidence、recommended_thread_id 能对上号
+      //   ③ score.overall 只做核对：模型算乘法加法会错，服务端按 6/4/3/2/2/3 独立算一遍，差 >2 分就报（不改结果——判定权在编辑）
       const warnings = [];
-      const dlgMsgs = Array.isArray(dialogue && dialogue.messages) ? dialogue.messages : [];
-      if (result && Array.isArray(result.proposals)) {
-        result.proposals.forEach((pp, pi) => {
-          // R1 v7 契约：立场 → 思辨 → 钥匙 + 话题 + 目标听众 + 创作意见
-          const need = ["立场", "钥匙", "话题", "目标听众", "创作意见"];
-          const miss = need.filter((k) => !(typeof pp[k] === "string" && pp[k].trim()));
-          if (miss.length) warnings.push(`P${pi + 1} 缺字段：${miss.join("、")}`);
-          if (!Array.isArray(pp["覆盖turns"]) || !pp["覆盖turns"].length) warnings.push(`P${pi + 1} 缺「覆盖turns」（这条线用了原文哪几条）`);
-          // 覆盖turns 的编号必须落在原文范围内（超出 = 模型把轮次算错了，实测出现过 t8）
-          const nums = [];
-          if (Array.isArray(pp["覆盖turns"])) pp["覆盖turns"].forEach((x) => nums.push(Number(x)));
-          const total = dlgMsgs.length;
-          const bad = Array.from(new Set(nums)).filter((n) => Number.isInteger(n) && (n < 1 || n > total));
-          if (bad.length) warnings.push(`P${pi + 1} 编号超出原文（原文 ${total} 条）：${bad.map((n) => "t" + n).join("、")}`);
-          const dir = (typeof pp["创作意见"] === "string") ? pp["创作意见"].trim() : "";
-          if (dir) {
-            if (!/[「『"]/.test(dir)) warnings.push(`P${pi + 1} 创作意见里没有引原文（立场/钥匙要用「」把原话写出来）`);
-            if (/who|value|endpoint|solve|process/.test(dir)) warnings.push(`P${pi + 1} 创作意见里混进了字段名`);
-          }
-        });
+      const CP_FIELDS = ["core_question", "initial_state", "central_tension", "exploration", "turning_point", "possible_discovery", "ending_state", "open_question", "recommended_duration"];
+      const filled = (v) => (typeof v === "string" ? !!v.trim() : !!v);
+      const elig = (result && result.eligibility && typeof result.eligibility === "object") ? result.eligibility : null;
+      const eligible = elig ? elig.eligible !== false : true;
+      const threads = Array.isArray(result && result.exploration_threads) ? result.exploration_threads : [];
+      const cpOut = (result && result.creative_proposal) || null;
+      if (!eligible) {
+        if (threads.length) warnings.push("eligibility.eligible=false 却仍返回 " + threads.length + " 条探索线（应为空数组）");
+        if (cpOut) warnings.push("eligibility.eligible=false 却仍给了 creative_proposal（应为 null）");
+      } else {
+        if (cpOut) {
+          const miss = CP_FIELDS.filter((k) => !filled(cpOut[k]));
+          if (miss.length) warnings.push("creative_proposal 缺字段：" + miss.join("、"));
+        } else if (result) {
+          warnings.push("没有 creative_proposal（提案环节没交付接口对象）");
+        }
+        if (!elig) warnings.push("返回体缺 eligibility（新契约必须给这个对象；缺了就当成契约异常）");
+        if (Object.keys(result || {}).length && !threads.length) warnings.push("eligible=true 却没有探索线");
       }
-      if (warnings.length) console.warn("[proposals-validate]", warnings.join(" | "));
-      console.log("[review-debug] round1 result:", Array.isArray(result && result.proposals) ? ("proposals x" + result.proposals.length) : (result && result.score !== undefined ? "single score=" + result.score : "?"));
+      threads.forEach((t, ti) => {
+        const miss = ["title", "core_question", "initial_state", "central_tension", "turning_point", "possible_discovery", "ending_state", "open_question"].filter((k) => !filled(t[k]));
+        if (miss.length) warnings.push(`T${ti + 1} 缺字段：${miss.join("、")}`);
+        if (!Array.isArray(t.evidence) || !t.evidence.length) warnings.push(`T${ti + 1} 缺 evidence（这条线没有原文出处）`);
+        // 加权总分核对（0–100；权重 6/4/3/2/2/3 与提示词 §10 一致）
+        const sc = (t && t.score && typeof t.score === "object") ? t.score : null;
+        if (!sc) { warnings.push(`T${ti + 1} 缺 score（编辑没法比较各条线）`); return; }
+        let sum = 0, complete = true;
+        for (const k of Object.keys(SCORE_WEIGHTS)) {
+          const v = Number(sc[k]);
+          if (!Number.isFinite(v)) { complete = false; warnings.push(`T${ti + 1} 缺维度分 ${k}`); break; }
+          sum += v * SCORE_WEIGHTS[k];
+        }
+        if (!complete) return;
+        const claimed = Number(sc.overall);
+        if (!Number.isFinite(claimed)) warnings.push(`T${ti + 1} score.overall 缺失（服务端算得 ${sum}）`);
+        else if (Math.abs(claimed - sum) > 2) warnings.push(`T${ti + 1} overall=${claimed} 与服务端加权和 ${sum} 不一致`);
+      });
+      if (eligible && threads.length) {
+        const recId = result && result.recommended_thread_id;
+        if (!recId) warnings.push("缺 recommended_thread_id（提案墙标不出推荐线）");
+        else if (!threads.some((t) => t && t.id === recId)) warnings.push("recommended_thread_id=" + recId + " 不在 exploration_threads 里");
+      }
+      if (warnings.length) console.warn("[proposal-validate]", warnings.join(" | "));
+      console.log("[review-debug] round1 result: eligible=" + eligible + " | threads x" + threads.length + " | recommended=" + ((result && result.recommended_thread_id) || "（无）") + " | creative_proposal=" + (cpOut ? "有" : "无"));
       sendJson(res, { ok: true, result, warnings, usage: fmtUsage(r.usage) });
     } catch (err) {
       if (stopAC.signal.aborted) { console.log("[round1] 客户端停止——已中止生成"); return; }
@@ -1684,46 +1459,26 @@ function normalizeProposal(proposal) {
       const hostSnap = (detail && detail.host) || null;
       const guestSnap = (detail && detail.guest) || null;
       const pScript = getPrompt("r2-script");
-      // 原则①：round2 输入从 store 取（前端随请求带 round1 审核采纳结果 review；兼容旧 selection 键）
-      const review = (body && body.review && typeof body.review === "object") ? body.review : ((body && body.selection && typeof body.selection === "object") ? body.selection : null);
-      // R1 交下来的两样东西：一句话创作指引（R2 唯一的输入）+ 选题说明（编辑挑选用、R4 文案用）
-      const reviewObj = (review && typeof review === "object") ? review : null;
-      const direction = directionOf(normalizeProposal(reviewObj));   // 一句话创作指引（兼容存量提案）
-      const hostParam = hostSnap ? { callName: hostSnap.callName || "主持人", personaInfo: hostSnap.personaInfo || undefined } : { callName: "主持人" };
-      const guestParam = guestSnap ? [{ name: guestSnap.name, platform: guestSnap.id, intro: guestSnap.intro || null }] : [{ name: "AI" }];
-      // 素材范围由 R1 的提案锁定（覆盖turns / 覆盖轮次）：只喂这一段，别把无关段落塞进稿子
+      // R1→R2 的唯一接口：编辑锁定的 creative_proposal（新契约九字段）
+      const review = (body && body.review && typeof body.review === "object") ? body.review : null;
+      const cp = review || {};
+      const hostName = (hostSnap && hostSnap.callName) || "主持人";
+      const guestName = (guestSnap && guestSnap.name) || "AI";
       const dlgTotal = ((dialogue && dialogue.messages) || []).length;
-      const coveredRaw = coveredTurnsOf(reviewObj);
-      const covered = coveredRaw ? coveredRaw.filter((n) => n >= 1 && n <= dlgTotal) : null;
-      if (coveredRaw && covered && covered.length !== coveredRaw.length) console.warn("[round2] 提案里的覆盖轮次超出原文（原文 " + dlgTotal + " 条）：" + coveredRaw.join(","));
-      const scope = covered && covered.length ? (turnsLabel(covered) + "（共 " + covered.length + " 条）") : "全部原文";
-      // R1 的字段**分开传**（不拼成一段 structure）：任务描述由 user 模板自己组织
-      const P0 = (reviewObj && typeof reviewObj === "object") ? reviewObj : {};
-      const s0 = (v) => (typeof v === "string" ? v.trim() : "");
       const rendered = renderPrompt(pScript, {
-        direction: direction,
-        stance: s0(P0["立场"] || P0["刺"] || P0["认知探索"]),
-        thought: s0(P0["思辨"] || P0["思辨过程"]),
-        key: proposalKeyOf(reviewObj),
-        topic: s0(P0["话题"]),
-        audience: s0(P0["目标听众"]),
-        scope: scope,
-        suggestion: (detail && detail.suggestion) || "（无）",
+        dialogue: { messages: dialogueBlockFor(dialogue, hostName, guestName, null), sourceUrl: (dialogue && dialogue.sourceUrl) || "" },
         turns: dlgTotal,
-        host: hostParam,
-        guests: guestParam,
-        // 素材给**全篇**：R2 要能自己从原文里取上下文（谁、什么事），覆盖范围只作为"这条线用哪几条"的提示
-        dialogue: { messages: dialogueBlockFor(dialogue, hostParam.callName, guestParam[0] && guestParam[0].name, null), sourceUrl: (dialogue && dialogue.sourceUrl) || "" },
+        suggestion: (detail && detail.suggestion) || "（无）",
+        creative_proposal: JSON.stringify(cp, null, 1),
+        HOST_NAME: hostName,
+        GUEST_NAME: guestName,
       });
-      console.log("[round2] 素材范围=" + scope + " | 原文 " + ((dialogue && dialogue.messages) || []).length + " 条 → 喂 " + (covered ? covered.length : "全部") + " 条");
-      // R2 单发（与 harness 一致）：规则 + 素材与契约两条消息，对话原文只以 tN.M 编号块出现一次。
-      // 早前挂 R1 的 system+user 前缀（为命中前缀缓存）会把同一份原文注入两遍——原始 JSON 一次、编号块一次，
-      // 既多花一份全价 token，又让模型面对两套指认口径（JSON 序号 vs tN.M）。
+      // 素材给全篇：弧（creative_proposal）决定聚焦哪条线，对话原文提供素材
       const defaultMsgs = [
-        rendered[0],         // system：R2 创作规则
-        rendered[1],         // user：契约 + tN.M 素材 + 投稿建议
+        rendered[0],         // system：本期上下文（对话原文 + creative_proposal + 名字）
+        rendered[1],         // user：脚本提示词（原样）
       ];
-      console.log("[round2] 指引=" + (direction || "无").slice(0, 40) + " | 规则=" + rendered[0].content.length + "字 | 素材与方向=" + rendered[1].content.length + "字 | 输入合计=" + (rendered[0].content.length + rendered[1].content.length) + "字");
+      console.log("[round2] " + hostName + " ↔ " + guestName + " | core_question=" + String(cp.core_question || "（无）").slice(0, 40) + " | 原文 " + dlgTotal + " 条 | 上下文=" + rendered[0].content.length + "字 + 规则=" + rendered[1].content.length + "字");
       const cfgOverride = {};
       if (body && Array.isArray(body.messages) && body.messages.length) {
         const cfg = (body && body.config) || {};
@@ -1747,7 +1502,7 @@ function normalizeProposal(proposal) {
         const _prev = (body && Array.isArray(body.previousScript) && body.previousScript.length) ? body.previousScript[0] : null;
         if (_prev) {
           msgs = msgs.concat([
-            { role: "assistant", content: JSON.stringify(sixFieldsOf(_prev), null, 1) },
+            { role: "assistant", content: JSON.stringify({ episode: _prev.episode || null, script: Array.isArray(_prev.script) ? _prev.script : null, segments: Array.isArray(_prev.segments) ? _prev.segments : null }, null, 1) },
             { role: "user", content: "编辑修改意见：\n" + _rev + "\n\n按意见改这一版：只改意见点到的地方，其余保持原样；仍然输出同一个 JSON 对象（不要解释、不要多余文字）。" },
           ]);
           console.log("[round2] 多轮改稿：上一版作为 assistant 回灌（意见 " + _rev.length + " 字）");
@@ -1762,36 +1517,35 @@ function normalizeProposal(proposal) {
       }
       let r = await llmComplete(null, null, cfgOverride, msgs, pScript.config, stopAC.signal);
       console.log("[round2] 模型原始输出开头:", JSON.stringify(String(r.content).slice(0, 100)));
-      let scripts = [];
-      const parseScripts = (content) => {
-        try {
-          const p = extractJson(content);
-          const arr = Array.isArray(p) ? p : (Array.isArray(p && p.scripts) ? p.scripts : (p && typeof p === "object" ? [p] : null));
-          if (!arr) return null;
-          // 兼容 draft 契约（hostOpen/guestOpen/turns/hostWrap/guestSum/hostOutro）→ 补出 segments
-          const out = arr.map(segmentsFromDraftShape).filter(Boolean);
-          return out.length ? out : [];
-        } catch (e) { /* 解析失败按空处理 */ }
-        return null;   // null = 解析失败/结构不对；[] = 明确空数组
+      // 新契约输出 { episode, production, script[{type,speaker,name,text}] }
+      // → 在出口桥接成下游认识的 segments[{speaker: host|guest, text}]（r3 打磨 / TTS / 合成 / 发布只认它）
+      const toSegments = (arr) => (Array.isArray(arr) ? arr : []).map((x) => ({
+        speaker: String((x && x.speaker) || "").toLowerCase() === "host" ? "host" : "guest",
+        text: String((x && x.text) || ""),
+      })).filter((x) => x.text.trim());
+      const buildOut = (obj) => {
+        if (!obj || typeof obj !== "object") return null;
+        const segs = toSegments(obj.script);
+        if (!segs.length) return null;
+        const out = Object.assign({}, obj, { segments: segs });
+        labelScripts([out], dialogue);   // 原话保真标注（编辑选稿依据，只做显示用）
+        return out;
       };
-      let parsedKind = parseScripts(r.content);
-      if (parsedKind !== null) scripts = parsedKind;
-      else console.error("[review-debug] round2 无 scripts:", String(r.content).slice(0, 120));
-      // 兜底：空 scripts 自动重试一次（模型偶发沿用第1轮"判断型输出"或输出空数组）
-      if (!scripts.length) {
-        console.log("[round2] scripts 为空，自动重试一次…");
-        const nudge = "你返回的脚本为空。注意：这是审题第2轮的脚本创作任务（第1轮判断已通过、审题流程已结束），必须实际创作并输出完整的脚本对象（segments 含全部台词，直接输出脚本对象、不要包 scripts 数组、不得为空）。请重新创作。";
+      const parseScript = (content) => { try { return buildOut(extractJson(content)); } catch (e) { return null; } };
+      let out = parseScript(r.content);
+      if (!out) {
+        console.error("[review-debug] round2 无 script:", String(r.content).slice(0, 120));
+        console.log("[round2] 出稿为空，自动重试一次…");
+        const nudge = "你返回的内容里没有可用的 script 数组。这是脚本创作任务：必须输出完整 JSON 对象 { episode, production, script: [{type, speaker, name, text}] }，script 不得为空。请重新创作。";
         const retryMsgs = msgs.concat([{ role: "assistant", content: r.content }, { role: "user", content: nudge }]);
         const rr = await llmComplete(null, null, cfgOverride, retryMsgs, pScript.config, stopAC.signal);
-        const again = parseScripts(rr.content);
-        if (again !== null && again.length) scripts = again;
+        out = parseScript(rr.content);
         r = rr;
       }
-      // 原话保真标注（编辑选稿依据，只做显示用）：给每个 host 段标 原话/改写/接话
-      labelScripts(scripts, dialogue);
-      console.log("[review-debug] round2 scripts:", scripts.length);
+      if (!out) { sendJson(res, { ok: false, error: "这次没有出稿（模型输出里没有可用的 script 数组）——可重试" }); return; }
+      console.log("[review-debug] round2 segments:", out.segments.length);
       sendJson(res, {
-        ok: true, result: { scripts },
+        ok: true, result: { scripts: [out], episode: out.episode || null, production: out.production || null },
         usage: fmtUsage(r.usage),
         raw: String(r.content).slice(0, 400),   // 供质量标记样本（不落生产）
       });
@@ -2099,7 +1853,11 @@ function normalizeProposal(proposal) {
       // preview 模式：返回渲染后的 messages+config（llm-box 填入可编辑输入框），不执行
       if (body && body.preview) {
         const p = getPrompt("r4-meta");
-        const msgs = renderPrompt(p, { script: script, direction: directionOf(normalizeProposal(inSel)), brief: JSON.stringify(briefOf(normalizeProposal(inSel)) || {}, null, 1) });
+        const msgs = renderPrompt(p, {
+          episode: JSON.stringify(script.episode || {}, null, 1),
+          production: JSON.stringify(script.production || {}, null, 1),
+          script: JSON.stringify(Array.isArray(script.segments) ? script.segments : (Array.isArray(script.script) ? script.script : []), null, 1),
+        });
         sendJson(res, { ok: true, apiBody: previewApiBody("r4-meta", msgs), preview: { messages: msgs, config: p.config || {}, name: p.name || "r4-meta", description: p.description || "" } });
         return;
       }
@@ -2114,7 +1872,11 @@ function normalizeProposal(proposal) {
         if (cfg.thinking !== undefined) cfgOverride.thinking = cfg.thinking;
       } else {
         const p = getPrompt("r4-meta");
-        msgs = renderPrompt(p, { script: script, direction: directionOf(normalizeProposal(inSel)), brief: JSON.stringify(briefOf(normalizeProposal(inSel)) || {}, null, 1) });
+        msgs = renderPrompt(p, {
+          episode: JSON.stringify(script.episode || {}, null, 1),
+          production: JSON.stringify(script.production || {}, null, 1),
+          script: JSON.stringify(Array.isArray(script.segments) ? script.segments : (Array.isArray(script.script) ? script.script : []), null, 1),
+        });
       }
       const r = await llmComplete(null, null, cfgOverride, withRevision(msgs, (body && body.revision) || ""), getPrompt("r4-meta").config);
       const parsed = extractJson(r.content);
