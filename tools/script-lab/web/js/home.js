@@ -92,18 +92,25 @@ async function loadApp(){
           ${r.reusable ? `<span class='tag' title='同一对话的另一版本已采集，采集时将直接复用（不再抓取）' style='border-color:#4f8cff;color:#4f8cff'>⚡ 同源</span>` : ''}
           </div>
         </td>
+        <td><span class='tag' title='投稿区（目标语言）——决定脚本语言与节目 feed 归属'>${esc(zoneNameOf(r.language))}</span></td>
         <td>${esc(r.displayName||'?')} <span class='muted mono'>(${esc(r.userEmail||'')})</span></td>
         <td class='mono muted'>${fmtDate(r.createdAt)}</td>
         <td><span class='tag ${esc(r.stage)}'>${esc(r.stage)}</span></td>
         <td><a class='detail-link' href='/${r.id}' onclick='event.preventDefault();goDetail("${r.id}")'>进入 →</a></td>
-      </tr>`).join('') || "<tr><td colspan='5' class='muted'>暂无投稿</td></tr>";
+      </tr>`).join('') || "<tr><td colspan='8' class='muted'>暂无投稿</td></tr>";
   }catch(e){
-    document.getElementById('rows').innerHTML="<tr><td colspan='5' class='muted'>加载失败: "+esc(e.message)+"</td></tr>";
+    document.getElementById('rows').innerHTML="<tr><td colspan='8' class='muted'>加载失败: "+esc(e.message)+"</td></tr>";
   }
   if(ld) ld.style.display='none';
   if(sb) sb.style.display='flex';
   if(lw) lw.style.display='block';
   if(pg) pg.style.display='flex';
+}
+
+// 投稿区名（与详情页同口径）：zh → 中文区 / en → English 区；未知码原样显示
+function zoneNameOf(code){
+  const c = String(code || 'zh').toLowerCase();
+  return ({ zh: '中文区', en: 'English 区' })[c] || c;
 }
 
 function fetchIcon(r){

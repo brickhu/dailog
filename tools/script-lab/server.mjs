@@ -1970,6 +1970,82 @@ function segmentsFromDraftShape(p) {
     return;
   }
 
+  // POST /api/run/compare → 同批对比评审（跨投稿的"绝对分"）：body { ids:[2–3 个投稿 id], file?, preview? }
+  //   为什么要有它：逐篇独立打分拿不到跨篇可比的分——模型每读一篇就自己重新校准一次（实测浅稿 52–78 / 正稿 82 完全重叠）。
+  //   把 2–3 篇放进**同一次调用**里评，模型天然共用一把尺子 → 跨篇可比由构造保证。
+  //   提示词文件默认用字典里 r1-review 的 user 文件；可用 file 覆盖（用来试 proposal.user.2.md 而**不改** prompts.json）。
+  if (path === "/api/run/compare" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const body = await readBody(req);
+    const ids = Array.isArray(body && body.ids) ? body.ids.filter((x) => typeof x === "string" && x) : [];
+    if (ids.length < 2 || ids.length > 3) { sendJson(res, { ok: false, error: "需 2–3 个投稿 id" }, 400); return; }
+    try {
+      const p = getPrompt("r1-review");
+      const dictUserFile = ((p.messages.find((m) => m.role === "user") || {}).file) || "";
+      const userFile = (body && typeof body.file === "string" && body.file) ? body.file : dictUserFile;
+      const userMsg = userFile === dictUserFile
+        ? String(((p.messages.find((m) => m.role === "user") || {}).content) || "")
+        : readFileSync(join(here, "prompts", userFile), "utf8");
+      const LABELS = ["A", "B", "C"];
+      const FENCE = String.fromCharCode(96).repeat(3);
+      const parts = [];
+      const meta = [];
+      for (let i = 0; i < ids.length; i++) {
+        const dlg = await loadDialogue(cred.env, cred.token, ids[i]);
+        if (!dlg) { sendJson(res, { ok: false, error: "投稿 " + ids[i] + " 未采集——请先采集对话" }, 400); return; }
+        const fo = foldPastedArtifacts(dlg);
+        const dlgBlock = dialogueBlockFor(fo.dialogue, "Human", "AI", null);
+        const lang = contentLanguageOf(fo.dialogue);
+        const tur = ((fo.dialogue && fo.dialogue.messages) || []).length;
+        parts.push("## Submission " + LABELS[i] + "  (id: " + ids[i] + ")\n\nLanguage: " + lang + " · turns: " + tur
+          + (fo.folded.length ? " · folded pasted artifacts: " + fo.folded.length : "")
+          + "\n\n" + FENCE + "text\n" + dlgBlock + "\n" + FENCE);
+        meta.push({ ref: LABELS[i], id: ids[i], turns: tur, chars: dlgBlock.length, language: lang, folded: fo.folded.length });
+      }
+      const system = "# INPUT — batch comparison\n\n" + parts.join("\n\n---\n\n");
+      const batchTask = [
+        "", "", "---", "", "# APPENDED TASK — BATCH COMPARISON", "",
+        "You are given " + ids.length + " different submissions, labelled " + LABELS.slice(0, ids.length).join(", ") + ".",
+        "",
+        "Score them **against each other, in this single pass**. The point of this task is cross-submission comparability:",
+        "all scores must live on the same scale, so that a gap of N points means the same thing everywhere in this list.",
+        "",
+        "For each submission:",
+        "",
+        "1. pick its single strongest Thinking Scene (ignore the rest),",
+        "2. score that scene on the six dimensions of §14 using the same anchors, and compute the total out of 100,",
+        "3. label the scene type (§7), whether the thinking is private or public (§5), and state its Perspective in one sentence (§13),",
+        "4. give the single strongest reason it is *not* better than the submission ranked above it.",
+        "",
+        "Then rank the submissions from strongest to weakest and justify the gaps — especially the borderline ones.",
+        "Do not spread the scores artificially, and do not compress them: if they are genuinely close, say so with close scores.",
+        "",
+        "Return JSON only:",
+        "",
+        FENCE + "json",
+        "{",
+        "  \"submissions\": [",
+        "    { \"ref\": \"A\", \"id\": \"...\", \"score\": 0, \"band\": \"strong|promising|borderline|weak\",",
+        "      \"dims\": { \"cognitive_delta\": 0, \"thinking_depth\": 0, \"tension_stakes\": 0, \"perspective_potential\": 0, \"surprise\": 0, \"source_integrity\": 0 },",
+        "      \"scene_type\": \"decision|creation|understanding|reframing|reflection\",",
+        "      \"public_or_private\": \"public|private\", \"perspective\": \"...\",",
+        "      \"strongest_reason\": \"...\", \"why_not_above_next\": \"...\" }",
+        "  ],",
+        "  \"ranking\": [\"A\", \"B\"], \"gap_notes\": \"...\", \"confidence\": 0.0",
+        "}",
+        FENCE,
+      ].join("\n");
+      const cmpMsgs = [{ role: "system", content: system }, { role: "user", content: userMsg + batchTask }];
+      if (body && body.preview) { sendJson(res, { ok: true, preview: { messages: cmpMsgs, ids: ids, meta: meta } }); return; }
+      const r = await llmComplete(null, null, {}, cmpMsgs, Object.assign({}, p.config, { maxTokens: 8192 }), null);
+      const parsed = extractJson(r.content);
+      console.log("[compare] n=" + ids.length + " | input " + ((r.usage && r.usage.prompt_tokens) || "?") + " tok | ranking=" + JSON.stringify(parsed && parsed.ranking));
+      sendJson(res, { ok: true, result: parsed, meta: meta, usage: fmtUsage(r.usage) });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
   // POST /api/run/publish → 发布元信息：script + meta 提示词（写 production.json.metadata）
   if (path === "/api/run/publish" && req.method === "POST") {
     const cred = reqCred(req);

@@ -25,6 +25,11 @@ function isProposal(r){
 /** 最近一次从服务端取到的详情快照（内存，每次打开详情页刷新）。
  *  用途：锁定选题 / 审题结果这类**状态**，一律以服务端为准——绝不拿浏览器缓存当判据。 */
 function srvOf(id){ return (window.__srv && window.__srv[id]) || null; }
+// 投稿区名（与列表同口径）：zh → 中文区 / en → English 区；未知码原样显示
+function zoneNameOf(code){
+  const c = String(code || 'zh').toLowerCase();
+  return ({ zh: '中文区', en: 'English 区' })[c] || c;
+}
 /** 取「已锁定的提案」——服务端 submissions.review，没有则 null（创作入口的唯一前置条件） */
 function lockedProposalOf(id){
   const s = srvOf(id);
@@ -483,6 +488,8 @@ function renderProposalCards(id, proposals, totalTurns){
     const guestNameV = (dt.guest && dt.guest.name) || '嘉宾';
     const subBody = [];
     subBody.push(row('标题', dt.title ? esc(dt.title) : "<span class='muted'>加载中...</span>"));
+    // 投稿区（目标语言）：脚本语言/合成采样/feed 归属都跟随它（主持人采样严格按该语种）
+    subBody.push(row('投稿区', "<span class='tag' title='目标语言——脚本/合成采样/feed 归属都跟随它'>" + esc(zoneNameOf(dt.language)) + "</span>"));
     subBody.push(row('投稿时间', fmtDate(dt.createdAt)));
     subBody.push(row('对话链接', "<a href='" + esc(dt.url || '') + "' target='_blank' rel='noopener'>" + esc(dt.url || '—') + "</a>"));
     subBody.push(row('投稿人', esc((dt.host && dt.host.personaInfo && dt.host.personaInfo.displayName) || '?') + ' · ' + esc(dt.userEmail || '')));
