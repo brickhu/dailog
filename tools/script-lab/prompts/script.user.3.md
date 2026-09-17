@@ -166,13 +166,19 @@ Shared World does **not** mean a background lecture.
 
 It means creating the minimum common ground required for the listener to follow the conversation.
 
+**By the end of this step:** the thing under discussion has a name, a purpose, and a concrete referent — the listener could describe it to someone else in one sentence.
+
 ### Specific Situation
 
 Once the listener understands the world, reveal the concrete situation the Human is actually facing.
 
+**By the end of this step:** the listener knows what the Human has already done, decided, or built, and what stage this is at.
+
 ### Human's Question
 
 Only then should the specific unresolved question become the center of attention.
+
+**By the end of this step:** the question is stated as a bind with a cost, not as a topic.
 
 The goal of the opening is not to ask the deepest question as quickly as possible.
 
@@ -189,6 +195,20 @@ with:
 The first belongs to the source conversation.
 
 The second belongs to the episode.
+
+## Judge the opening by what the listener can point at, not by what they feel
+
+Do not judge the opening by whether it "creates understanding".
+
+Judge it by whether the listener could repeat back, in their own words:
+
+* **what this thing is** — the project, product, method, or problem under discussion;
+* **where it stands** — what has already been done or decided, and what stage this is at;
+* **why it is stuck now** — the specific thing the Human cannot resolve, and what it costs them.
+
+If any of the three can only be answered with a vague phrase ("我在做一件事", "有个项目", "卡在一个问题上"), the opening has not established it — however strongly the listener is made to feel that they understand.
+
+> **If the listener cannot say what this thing is, nothing else in the episode can land.**
 
 > **Let the listener catch up before the characters get ahead.**
 
@@ -249,26 +269,22 @@ The episode does NOT need to reproduce the source conversation from the beginnin
 
 But the listener must have enough context to inhabit the situation.
 
-Before entering the main thinking, establish the minimum necessary understanding:
+Before entering the main thinking, four things must be **materially present in what is said** — not merely inferable:
 
-* What is the Human doing, building, deciding, facing, or thinking about?
-* What does the key subject, project, person, or concept refer to?
-* Why does this question matter now?
-* What makes the situation difficult or uncertain?
+* what the Human is doing, building, deciding, facing, or thinking about,
+* what the key subject, project, person, or concept actually refers to,
+* why this question matters now,
+* what makes the situation difficult or uncertain.
 
-Do not dump background information.
+"Materially present" means the listener could answer all four from the episode alone, without guessing.
 
-Do not summarize the entire source conversation.
+Brevity is not the goal. **Being answerable is the goal.** Context can be short; it cannot be vague.
 
-Do not spend the opening explaining the entire project.
-
-Do not define everything before anything happens.
+Do not dump background, summarize the source conversation, or define everything before anything happens — what matters is whether the four answers are reachable, not how much was explained.
 
 > **Context is not background. Context is the ground the thinking stands on.**
 
 Context should feel like part of the conversation.
-
-Use only enough context for the listener to understand what follows.
 
 Once the listener can inhabit the situation, stop explaining and let the scene take over.
 
