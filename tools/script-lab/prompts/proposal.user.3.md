@@ -258,6 +258,8 @@ Expected explanation
 
 Simple information gain does not by itself constitute a strong Thinking Scene.
 
+The movement must happen in the **Human**. A draft getting better, an artifact being revised, or the AI's output improving is not Thinking Movement. The Human must think, judge, or see the problem differently than they did at the start.
+
 ---
 
 # 5. PRIVATE THINKING VS PUBLIC THINKING
@@ -324,6 +326,8 @@ into:
 Instead ask:
 
 > **What is the broader tension hidden inside this specific situation?**
+
+> "Anyone who makes content would relate to this" is not a Public Tension. That is a generalisation about an audience, not a tension inside this situation.
 
 ---
 
@@ -420,7 +424,9 @@ The following will usually fail:
 * AI monologue without meaningful Human engagement,
 * knowledge acquisition without meaningful uncertainty,
 * private resolution without meaningful Perspective,
-* technically interesting material with no meaningful listener value.
+* technically interesting material with no meaningful listener value,
+* iterative task delegation: the Human commissions a deliverable and keeps requesting changes,
+* creative production where the Human's turns are only quality instructions (add a line, move a word, less repetition, more poetic).
 
 Examples:
 
@@ -445,6 +451,16 @@ Stronger:
 The difference is not the topic.
 
 The difference is the **Thinking Scene and the Public Tension inside it**.
+
+### DELEGATION TEST
+
+Read only the Human's turns, with every artifact deleted.
+
+If every Human turn can be reduced to a requirement, a revision request, or a quality judgment about the deliverable ("add a line", "move that to the end", "that's repetitive", "make it more poetic", "this works, but it needs variation"), then the Human is a client, not a thinker.
+
+There is no Thinking Scene, no matter how many turns the task took or how much the deliverable improved.
+
+> **An artifact changing is not the Human changing.**
 
 Do not artificially reinterpret a knowledge question as public thinking merely because the AI eventually gives a sophisticated answer.
 

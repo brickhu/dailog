@@ -579,7 +579,53 @@ Natural conversation is more important than polished aphorisms.
 
 ---
 
-# 17. HOST ↔ GUEST DYNAMICS
+# 17. CONVERSATIONAL PRESENCE
+
+The finished episode is the listener's first and only experience of the Thinking Scene.
+
+The audience was not present for the source conversation.
+
+Never assume the listener knows what the Human and Guest already know.
+
+> The source conversation is available to the editor, not to the audience.
+
+Every important reference, situation, or premise needed to understand the current thought must emerge naturally within the episode.
+
+At the same time, the Host and Guest are not performing isolated speeches.
+
+They are physically and psychologically present with each other.
+
+Listening is part of the conversation.
+
+A listener should occasionally hear that the other person is:
+
+- following,
+- reacting,
+- surprised,
+- agreeing,
+- confused,
+- amused,
+- or simply staying with the thought.
+
+Brief low-information responses may therefore be created when they make the interaction feel genuinely shared.
+
+These responses do not need to advance the argument.
+
+They exist to make the presence of the other person audible.
+
+Finally, the conversation should end because the Thinking Scene has reached a natural resting point, not because the Host has switched into presenter mode.
+
+> **End the scene, don't summarize the scene.**
+
+Do not turn the ending into a recap, lesson, or artificial question for the audience unless that expression genuinely belongs to the conversation.
+
+The goal is not to make the audience feel that a program has been formally concluded.
+
+The goal is to make them feel that they have just left a real conversation.
+
+---
+
+# 18. HOST ↔ GUEST DYNAMICS
 
 The desired interaction is:
 
@@ -655,7 +701,7 @@ Prefer the former.
 
 ---
 
-# 18. ALLOW HUMAN IMPERFECTION
+# 19. ALLOW HUMAN IMPERFECTION
 
 Do not make every line perfectly formulated.
 
@@ -676,7 +722,7 @@ The goal is:
 
 ---
 
-# 19. USE CONTRADICTION
+# 20. USE CONTRADICTION
 
 Where supported by the source and proposal, create meaningful tension.
 
@@ -696,7 +742,7 @@ Do not manufacture disagreement simply for drama.
 
 ---
 
-# 20. INFORMATION VS PERSPECTIVE
+# 21. INFORMATION VS PERSPECTIVE
 
 Information is useful when it helps the listener enter and follow the Thinking Scene.
 
@@ -724,7 +770,7 @@ Do not manufacture clever phrasing merely to create quotable lines.
 
 ---
 
-# 21. AVOID ARTICLE-LIKE STRUCTURE
+# 22. AVOID ARTICLE-LIKE STRUCTURE
 
 Do not turn the interview into:
 
@@ -759,7 +805,7 @@ point 1
 
 ---
 
-# 22. PERSONAL STAKES
+# 23. PERSONAL STAKES
 
 Preserve genuine personal stakes from the source.
 
@@ -771,7 +817,7 @@ Do not invent personal experiences, emotions, or motivations.
 
 ---
 
-# 23. AUDIENCE
+# 24. AUDIENCE
 
 The audience is an **invisible third participant**.
 
@@ -800,11 +846,13 @@ Do not repeatedly use phrases such as:
 * "as you can hear..."
 * "to our listeners..."
 
+Avoiding the phrases above is not enough: audience-facing address belongs in the opening and in occasional mid-episode moments — not in the closing. In the closing, do not address the listener as an audience at all.
+
 The listener should feel like they are **inside the Thinking Scene**, not being spoken to from a stage.
 
 ---
 
-# 24. PROGRAM WRAPPER
+# 25. PROGRAM WRAPPER
 
 The script must feel like a complete podcast program.
 
@@ -854,11 +902,12 @@ Do not skip the Guest's audience acknowledgement.
 
 ## Closing
 
+The scene ends inside the conversation, between the Host and the Guest. The audience is listening, not being addressed.
+
 The Host should:
 
-* briefly reflect on where the Thinking Scene arrived,
-* reconnect the Perspective or remaining question to the audience,
-* leave a thought, tension, question, or implication,
+* briefly acknowledge where the Thinking Scene arrived,
+* name whatever question, tension, or implication is still open between the two of them,
 * thank the Guest,
 * say goodbye.
 
@@ -866,9 +915,17 @@ The Guest may participate.
 
 Do not turn the ending into a generic inspirational speech.
 
+Do not mechanically summarize every point discussed.
+
+Do not turn to the audience at the end: no closing question for the listener, no "if you're also struggling with this, try asking yourself…", no task, no takeaway handed to them.
+
+> **End the scene, don't summarize the scene.**
+
+> **The listener overhears the ending. The ending is not delivered to the listener.**
+
 ---
 
-# 25. CONTENT SELECTION
+# 26. CONTENT SELECTION
 
 Use only material that contributes to the selected Thinking Scene and its Public Tension.
 
@@ -905,7 +962,7 @@ Every selected exchange should serve at least one of these functions.
 
 ---
 
-# 26. TECHNICAL CONTENT
+# 27. TECHNICAL CONTENT
 
 The final episode is an **audio-first medium**.
 
@@ -938,7 +995,7 @@ Translate code into conceptual meaning the listener can understand without seein
 
 ---
 
-# 27. ONE EPISODE = ONE THINKING SCENE
+# 28. ONE EPISODE = ONE THINKING SCENE
 
 The episode should normally contain **one coherent Thinking Scene**.
 
@@ -980,7 +1037,7 @@ The purpose is:
 
 ---
 
-# 28. LENGTH
+# 29. LENGTH
 
 The final episode MUST be between **5 and 15 minutes**.
 
@@ -1015,7 +1072,7 @@ Never add filler.
 
 ---
 
-# 29. COMPRESSION PRIORITY
+# 30. COMPRESSION PRIORITY
 
 When shortening, remove in this order:
 
@@ -1043,7 +1100,7 @@ Do not remove conversational texture merely because it carries little factual in
 
 ---
 
-# 30. QUESTION DENSITY
+# 31. QUESTION DENSITY
 
 For a standard 8–10 minute episode, aim for approximately **8–15 major Host questions**.
 
@@ -1055,7 +1112,7 @@ Questions should emerge from the Thinking Scene rather than functioning as secti
 
 ---
 
-# 31. STOP CONDITION
+# 32. STOP CONDITION
 
 Once the selected Thinking Scene reaches its natural destination:
 
@@ -1075,7 +1132,7 @@ not:
 
 ---
 
-# 32. FINAL QUALITY CHECK
+# 33. FINAL QUALITY CHECK
 
 Before returning the script, silently verify all of the following.
 
@@ -1154,7 +1211,7 @@ Before returning the script, silently verify all of the following.
 
 45. Does the listener feel inside the Thinking Scene?
 46. Is the audience present without being constantly addressed?
-47. Does the closing reconnect naturally with the Perspective or remaining question?
+47. Does the closing let the conversation come to rest, rather than addressing the listener or assigning them something?
 
 ## AI QUALITY
 
