@@ -606,14 +606,13 @@ async function runReview(id){
     var d = await j('/api/run/review/round1', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: id }) });
     var r = d && d.result;
     if (!r || typeof r !== 'object') throw new Error('没有审题结果');
-    // 新契约（exploration_threads + creative_proposal）→ 前端既有机制：
-    //   每条线取八字段 + recommended_duration，组成一条可直接锁定的 creative_proposal
+    // 新契约：八字段住在每条 exploration_thread 里；顶层 creative_proposal 只提供 recommended_duration
+    //   → 每条线重建为一条可直接锁定的提案
     var stored = r;
     if (Array.isArray(r.exploration_threads)) {
       var CPF = ['core_question','initial_state','central_tension','exploration','turning_point','possible_discovery','ending_state','open_question'];
-      var rec = r.creative_proposal || null;
-      // 推荐线：契约 v2 在顶层给 recommended_thread_id（旧版靠 creative_proposal.thread_id 兜底）
-      var recId = r.recommended_thread_id || (rec && rec.thread_id) || '';
+      var rec = r.creative_proposal || null;   // 顶层只承载 recommended_duration，内容字段在各条线里
+      var recId = r.recommended_thread_id || '';
       var list = r.exploration_threads.map(function (t) {
         var cp = {};
         CPF.forEach(function (k) { cp[k] = t[k] || ''; });

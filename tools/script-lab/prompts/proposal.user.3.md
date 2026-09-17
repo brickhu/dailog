@@ -973,61 +973,17 @@ Do not use raw conversation length as the basis for duration.
 
 # 20. CREATIVE PROPOSAL CONTRACT
 
-If the conversation passes the Eligibility Gate, generate a `creative_proposal` for the highest-scoring Thinking Scene.
+Every Thinking Scene in `exploration_threads` carries the eight content fields defined in §12. The editor locks one of them.
 
-The proposal MUST contain exactly these fields:
+The top-level `creative_proposal` carries one thing only:
 
 ```text
-core_question
-initial_state
-central_tension
-exploration
-turning_point
-possible_discovery
-ending_state
-open_question
 recommended_duration
 ```
 
-Interpret them as follows:
-
-`core_question`
-
-The underlying question inside the Thinking Scene.
-
-It should be specific enough to preserve the real situation, but broad enough that an audience can enter it without already knowing the source conversation.
-
-`initial_state`
-
-The Human's actual starting situation and cognitive state.
-
-`central_tension`
-
-The difficulty, uncertainty, contradiction, trade-off, and, when present, the Public Tension.
-
-`exploration`
-
-How the thinking moves through the issue.
-
-`turning_point`
-
-Where the framing or understanding changes.
-
-`possible_discovery`
-
-The Perspective the listener may gain.
-
-`ending_state`
-
-The Human's actual changed understanding or remaining position.
-
-`open_question`
-
-What remains unresolved.
-
 `recommended_duration`
 
-The appropriate time for the Thinking Scene to unfold.
+The appropriate time for the recommended Thinking Scene to unfold.
 
 The Creative Proposal is a **recommended editorial direction**, not a final production decision.
 
@@ -1085,14 +1041,6 @@ The output structure MUST remain unchanged.
   ],
   "recommended_thread_id": "thread_01",
   "creative_proposal": {
-    "core_question": "...",
-    "initial_state": "...",
-    "central_tension": "...",
-    "exploration": "...",
-    "turning_point": "...",
-    "possible_discovery": "...",
-    "ending_state": "...",
-    "open_question": "...",
     "recommended_duration": {
       "category": "standard",
       "minutes": "8–10"
@@ -1169,11 +1117,11 @@ Before returning the result, verify:
 
 ### Proposal
 
-22. Does `creative_proposal` exactly match the selected Thinking Scene?
-23. Does `initial_state` contain enough context for Interview Director?
-24. Does `central_tension` capture the Public Tension when one exists?
-25. Does `possible_discovery` describe a potential listener Perspective?
-26. Is the proposal specific enough to reconstruct the Thinking Scene and public entry?
+22. Does the scene named by `recommended_thread_id` carry all eight content fields?
+23. Does its `initial_state` contain enough context for Interview Director?
+24. Does its `central_tension` capture the Public Tension when one exists?
+25. Does its `possible_discovery` describe a potential listener Perspective?
+26. Is it specific enough to reconstruct the Thinking Scene and public entry?
 
 ### Editorial responsibility
 

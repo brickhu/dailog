@@ -85,7 +85,7 @@
  },
  "r1-review": {
   "version": 5,
-  "description": "提案检测：system=对话原文，user=提案提示词 → exploration_threads + creative_proposal（R1→R2 的唯一接口）",
+  "description": "提案检测：system=对话原文，user=提案提示词 → exploration_threads（八字段各自成线）+ recommended_thread_id + 顶层 creative_proposal（只承载 recommended_duration）",
   "config": {
    "temperature": 0.3,
    "maxTokens": 32768,
@@ -126,7 +126,7 @@
   "params": {
    "dialogue": "素材：对话原文（messages 是 [tN 说话人] 编号块；sourceUrl 是原文地址）",
    "suggestion": "投稿人建议（可空）",
-   "creative_proposal": "Editorial Discovery Director 选定的 creative_proposal JSON（R1→R2 的唯一接口）",
+   "creative_proposal": "编辑锁定的那条探索线（八字段 + recommended_duration）——R1→R2 的唯一输入",
    "HOST_NAME": "主持人名（投稿快照 host.callName）",
    "GUEST_NAME": "嘉宾名（投稿快照 guest.name）"
   },

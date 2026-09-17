@@ -1525,7 +1525,8 @@ function segmentsFromDraftShape(p) {
       const warnings = [];
       const WEIGHTS = scoreWeightsFromPrompt(p) || SCORE_WEIGHTS_FALLBACK;
       if (!scoreWeightsFromPrompt(p)) console.warn("[proposal-validate] 提示词 §15 的权重表没解析出来，评分明细改用兜底权重 " + JSON.stringify(SCORE_WEIGHTS_FALLBACK));
-      const CP_FIELDS = ["core_question", "initial_state", "central_tension", "exploration", "turning_point", "possible_discovery", "ending_state", "open_question", "recommended_duration"];
+      // 八字段住在 exploration_threads 里（每条线自带）；顶层 creative_proposal 只承载 recommended_duration（提示词 §20）
+      const THREAD_FIELDS = ["title", "core_question", "initial_state", "central_tension", "exploration", "turning_point", "possible_discovery", "ending_state", "open_question"];
       const filled = (v) => (typeof v === "string" ? !!v.trim() : !!v);
       const elig = (result && result.eligibility && typeof result.eligibility === "object") ? result.eligibility : null;
       const eligible = elig ? elig.eligible !== false : true;
@@ -1536,16 +1537,15 @@ function segmentsFromDraftShape(p) {
         if (cpOut) warnings.push("eligibility.eligible=false 却仍给了 creative_proposal（应为 null）");
       } else {
         if (cpOut) {
-          const miss = CP_FIELDS.filter((k) => !filled(cpOut[k]));
-          if (miss.length) warnings.push("creative_proposal 缺字段：" + miss.join("、"));
+          if (!filled(cpOut.recommended_duration)) warnings.push("creative_proposal 缺 recommended_duration（顶层只承载时长；八字段应在 exploration_threads 里）");
         } else if (result) {
-          warnings.push("没有 creative_proposal（提案环节没交付接口对象）");
+          warnings.push("没有 creative_proposal（提案环节没交付 recommended_duration）");
         }
         if (!elig) warnings.push("返回体缺 eligibility（新契约必须给这个对象；缺了就当成契约异常）");
         if (Object.keys(result || {}).length && !threads.length) warnings.push("eligible=true 却没有探索线");
       }
       threads.forEach((t, ti) => {
-        const miss = ["title", "core_question", "initial_state", "central_tension", "turning_point", "possible_discovery", "ending_state", "open_question"].filter((k) => !filled(t[k]));
+        const miss = THREAD_FIELDS.filter((k) => !filled(t[k]));
         if (miss.length) warnings.push(`T${ti + 1} 缺字段：${miss.join("、")}`);
         if (!Array.isArray(t.evidence) || !t.evidence.length) warnings.push(`T${ti + 1} 缺 evidence（这条线没有原文出处）`);
         // 总分**以模型输出为准**：提示词 §14/§15 要求它自己按 6/4/3/3/2/2 加权求和写进 score.overall，
