@@ -241,208 +241,7 @@ Do not force the episode to reproduce the exact point where the source conversat
 
 ---
 
-# 4. THE THOUGHT MUST HAPPEN NOW
-
-The source conversation contains many thoughts that have already happened.
-
-The Human may have:
-
-* considered a solution,
-* tried an approach,
-* rejected an idea,
-* formed an opinion,
-* discovered a problem,
-* reached a conclusion,
-* or already discussed the question with the AI.
-
-These are valid source materials.
-
-But they are not automatically valid **moments of thinking in the episode**.
-
-> **Do not make the Human narrate completed thinking. Reconstruct the thinking as it unfolds.**
-
-A common failure mode is:
-
-```text
-"I previously thought about X."
-
-"I tried Y."
-
-"Then I realized Z."
-
-"So I want to ask you..."
-```
-
-This makes the Human sound like someone reporting a previous thought process.
-
-The Guest then becomes someone being asked to validate an already-developed position.
-
-That is not the desired interaction.
-
-Instead, use the source material to reconstruct a situation in which the unresolved thought can happen **now**.
-
-Prefer:
-
-```text
-Situation
-
-↓
-
-Current tension
-
-↓
-
-A possible interpretation / approach
-
-↓
-
-Guest response
-
-↓
-
-Human reaction
-
-↓
-
-New uncertainty
-
-↓
-
-Further exploration
-
-↓
-
-Changed understanding
-```
-
-The Human should not arrive with the entire intellectual path already narrated.
-
-The conversation should reveal the path.
-
-### PAST FACTS VS PAST THINKING
-
-Past events may still be relevant.
-
-A previous attempt can be mentioned when the attempt itself is part of the current situation.
-
-For example:
-
-> "I tried this approach, and it created a different problem."
-
-This is useful when the failed attempt establishes the current tension.
-
-But avoid turning that history into a retrospective explanation of the entire thought process:
-
-> "I originally thought X, then I considered Y, then I tried Z, and eventually I realized..."
-
-The first establishes the situation.
-
-The second tells the audience the answer before the conversation has explored it.
-
-> **Past actions can establish the problem. Past reasoning should not prematurely resolve it.**
-
-### DO NOT TURN THE HUMAN INTO A REPORTER OF THEIR OWN THINKING
-
-Avoid repeated patterns such as:
-
-* "I was thinking..."
-* "I had been wondering..."
-* "I previously thought..."
-* "I realized earlier..."
-* "I tried..."
-* "I found that..."
-* "Then I decided..."
-* "What I eventually discovered was..."
-
-when they are used primarily to summarize cognition that the episode should allow the audience to experience.
-
-These expressions are not forbidden.
-
-Use them only when the past event itself is necessary to understand the present situation.
-
-### THE HUMAN SHOULD HAVE SOMETHING AT STAKE NOW
-
-At the beginning of the Thinking Scene, the Human should have an unresolved tension, not a finished intellectual position waiting for confirmation.
-
-This does not mean the Human must be ignorant.
-
-The Human may already have:
-
-* an intuition,
-* a hypothesis,
-* a preference,
-* an assumption,
-* an attempted solution,
-* or a partial conclusion.
-
-But something important should still be unsettled.
-
-The unresolved part is what the conversation explores.
-
-> **Do not make the Human ask the Guest to validate a conclusion. Make them test an uncertainty together.**
-
-### DO NOT FAKE DISCOVERY
-
-Do not create artificial surprise merely to make the conversation feel spontaneous.
-
-If the source shows that the Human already knew something, do not make the Human suddenly "discover" it.
-
-If the source shows that a decision was already settled, do not pretend that the characters are deciding it for the first time.
-
-Instead, find what remains genuinely unresolved around it.
-
-For example:
-
-```text
-Already settled:
-"We decided to use X."
-
-Still unresolved:
-"Why does X actually matter?"
-"Does X solve the real problem?"
-"What new problem does X create?"
-"Does the assumption behind X still hold?"
-```
-
-The episode should dramatize the **remaining uncertainty**, not fabricate uncertainty that no longer exists.
-
-### THE CURRENT QUESTION MUST BE ALIVE
-
-The strongest question is not necessarily the most important question in the source.
-
-It is the question that is still alive **inside the reconstructed scene**.
-
-Before every major question, ask:
-
-> **Is this question opening something, or merely asking the Guest to explain something the Human already believes?**
-
-Prefer questions that open the next piece of thinking.
-
-> **The Guest should have something to respond to.
-> The Human should have something to reconsider.**
-
-### LIVE THINKING TEST
-
-After writing the episode, ask:
-
-> **If I removed every sentence beginning with "I previously thought...", "I tried...", "I later realized...", and similar retrospective framing, would the Thinking Scene still work?**
-
-If not, the script is probably reporting the thinking rather than performing it.
-
-The desired feeling is:
-
-> **"They are figuring this out together."**
-
-not:
-
-> **"He already figured this out and is asking the AI to comment on it."**
-
-> **The source contains the history of the thinking.
-> The episode contains the experience of thinking.**
-
----
-
-# 5. CONTEXT IS THE GROUND, NOT THE BACKGROUND
+# 4. CONTEXT IS THE GROUND, NOT THE BACKGROUND
 
 The selected Thinking Scene may originate from the middle of a longer Human–AI conversation.
 
@@ -475,7 +274,7 @@ Once the listener can inhabit the situation, stop explaining and let the scene t
 
 ---
 
-# 6. THE SOURCE CONVERSATION
+# 5. THE SOURCE CONVERSATION
 
 The original conversation is the **semantic source material** for the episode.
 
@@ -504,7 +303,7 @@ It is an editorial reconstruction of the same underlying interaction and Thinkin
 
 ---
 
-# 7. RECONSTRUCT THE CONVERSATION, NOT THE MINDS
+# 6. RECONSTRUCT THE CONVERSATION, NOT THE MINDS
 
 The source conversation is the **semantic ground truth**.
 
@@ -566,7 +365,7 @@ If yes, rewrite.
 
 ---
 
-# 8. SOURCE-GROUNDED CONVERSATIONAL FRICTION
+# 7. SOURCE-GROUNDED CONVERSATIONAL FRICTION
 
 The final episode should not sound like two people taking turns delivering polished arguments.
 
@@ -595,7 +394,7 @@ not:
 
 ---
 
-# 9. WHAT MAY BE NEW AND WHAT MAY NOT
+# 8. WHAT MAY BE NEW AND WHAT MAY NOT
 
 ## New questions ARE allowed
 
@@ -638,7 +437,7 @@ If the source does not contain enough material to answer a question:
 
 ---
 
-# 10. FORGET THE ORIGINAL TIMELINE
+# 9. FORGET THE ORIGINAL TIMELINE
 
 The source conversation provides meaning, not chronology.
 
@@ -698,11 +497,11 @@ Write the podcast episode
 
 Critical rule:
 
-> **Preserve WHAT was discovered. Reconstruct HOW the unresolved thought unfolds..**
+> **Preserve WHAT was said. Forget WHEN it was said.**
 
 ---
 
-# 11. TEMPORAL ISOLATION
+# 10. TEMPORAL ISOLATION
 
 The final episode is NOT:
 
@@ -736,7 +535,7 @@ The fictional conversational history does not.
 
 ---
 
-# 12. USE SOURCE KNOWLEDGE WITHOUT SOURCE MEMORY
+# 11. USE SOURCE KNOWLEDGE WITHOUT SOURCE MEMORY
 
 Suppose the source contains:
 
@@ -756,7 +555,7 @@ The fictional conversational history does not.
 
 ---
 
-# 13. PRESENT-TENSE CONVERSATION
+# 12. PRESENT-TENSE CONVERSATION
 
 Every line should feel like it is happening for the first time in this episode.
 
@@ -774,7 +573,7 @@ The listener should feel:
 
 ---
 
-# 14. DO NOT START FROM THE PERSPECTIVE
+# 13. DO NOT START FROM THE PERSPECTIVE
 
 Do NOT:
 
@@ -793,7 +592,7 @@ The Perspective is a destination, not the opening thesis.
 
 ---
 
-# 15. COGNITIVE MOVEMENT
+# 14. COGNITIVE MOVEMENT
 
 The Thinking Scene should contain meaningful movement in:
 
@@ -848,7 +647,7 @@ The Perspective should be earned through interaction.
 
 ---
 
-# 16. THE HOST
+# 15. THE HOST
 
 The Host is an active participant in the Thinking Scene, not a question-delivery mechanism.
 
@@ -886,7 +685,7 @@ Do not manufacture emotional drama.
 
 ---
 
-# 17. THE GUEST
+# 16. THE GUEST
 
 The AI Guest is a participant in the Thinking Scene, not an oracle.
 
@@ -921,7 +720,7 @@ Natural conversation is more important than polished aphorisms.
 
 ---
 
-# 18. CONVERSATIONAL PRESENCE
+# 17. CONVERSATIONAL PRESENCE
 
 The finished episode is the listener's first and only experience of the Thinking Scene.
 
@@ -967,7 +766,7 @@ The goal is to make them feel that they have just left a real conversation.
 
 ---
 
-# 19. HOST ↔ GUEST DYNAMICS
+# 18. HOST ↔ GUEST DYNAMICS
 
 The desired interaction is:
 
@@ -1061,7 +860,7 @@ Prefer the former.
 
 ---
 
-# 20. ALLOW HUMAN IMPERFECTION
+# 19. ALLOW HUMAN IMPERFECTION
 
 Do not make every line perfectly formulated.
 
@@ -1082,7 +881,7 @@ The goal is:
 
 ---
 
-# 21. USE CONTRADICTION
+# 20. USE CONTRADICTION
 
 Where supported by the source and proposal, create meaningful tension.
 
@@ -1102,7 +901,7 @@ Do not manufacture disagreement simply for drama.
 
 ---
 
-# 22. INFORMATION VS PERSPECTIVE
+# 21. INFORMATION VS PERSPECTIVE
 
 Information is useful when it helps the listener enter and follow the Thinking Scene.
 
@@ -1130,7 +929,7 @@ Do not manufacture clever phrasing merely to create quotable lines.
 
 ---
 
-# 23. AVOID ARTICLE-LIKE STRUCTURE
+# 22. AVOID ARTICLE-LIKE STRUCTURE
 
 Do not turn the interview into:
 
@@ -1173,7 +972,7 @@ point 1
 
 ---
 
-# 24. PERSONAL STAKES
+# 23. PERSONAL STAKES
 
 Preserve genuine personal stakes from the source.
 
@@ -1185,7 +984,7 @@ Do not invent personal experiences, emotions, or motivations.
 
 ---
 
-# 25. AUDIENCE
+# 24. AUDIENCE
 
 The audience is an **invisible third participant**.
 
@@ -1224,7 +1023,7 @@ The listener should feel like they are **inside the Thinking Scene**, not being 
 
 ---
 
-# 26. PROGRAM WRAPPER
+# 25. PROGRAM WRAPPER
 
 The script must feel like a complete podcast program.
 
@@ -1312,7 +1111,7 @@ No final lesson handed to the audience.
 
 ---
 
-# 27. CONTENT SELECTION
+# 26. CONTENT SELECTION
 
 Use only material that contributes to the selected Thinking Scene and its Public Tension.
 
@@ -1363,7 +1162,7 @@ Every selected exchange should serve at least one of these functions.
 
 ---
 
-# 28. TECHNICAL CONTENT
+# 27. TECHNICAL CONTENT
 
 The final episode is an **audio-first medium**.
 
@@ -1396,7 +1195,7 @@ Translate code into conceptual meaning the listener can understand without seein
 
 ---
 
-# 29. ONE EPISODE = ONE THINKING SCENE
+# 28. ONE EPISODE = ONE THINKING SCENE
 
 The episode should normally contain **one coherent Thinking Scene**.
 
@@ -1464,7 +1263,7 @@ The purpose is:
 
 ---
 
-# 30. LENGTH
+# 29. LENGTH
 
 The final episode MUST be between **5 and 15 minutes**.
 
@@ -1500,7 +1299,7 @@ Never add filler.
 
 ---
 
-# 31. COMPRESSION PRIORITY
+# 30. COMPRESSION PRIORITY
 
 When shortening, remove in this order:
 
@@ -1529,7 +1328,7 @@ Do not remove conversational texture merely because it carries little factual in
 
 ---
 
-# 32. QUESTION DENSITY
+# 31. QUESTION DENSITY
 
 For a standard 8–10 minute episode, aim for approximately **8–15 major Host questions**.
 
@@ -1545,7 +1344,7 @@ Allow the current thought to develop when the interaction naturally remains ther
 
 ---
 
-# 33. STOP CONDITION
+# 32. STOP CONDITION
 
 Once the selected Thinking Scene reaches its natural destination:
 
@@ -1565,7 +1364,7 @@ not:
 
 ---
 
-# 34. FINAL QUALITY CHECK
+# 33. FINAL QUALITY CHECK
 
 Before returning the script, silently verify all of the following.
 
