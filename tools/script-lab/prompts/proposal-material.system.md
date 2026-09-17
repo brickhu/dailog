@@ -16,12 +16,8 @@
 
 ## Language
 
-Write the whole response in the **same language as the original conversation above** — the language the Human and the AI actually used.
+Write every string value in the target language named in the `## Content language` block at the end of this message — not the conversation's language, not the language of these instructions. If that block is missing, use the conversation's language.
 
-* Conversation mainly in Simplified Chinese → write in Simplified Chinese.
-* Conversation mainly in English → write in English.
-* Mixed conversation → use the language that dominates the actual content.
+Target ≠ conversation language → translate: keep the meaning, facts, order and the substance of every quote, and leave no source-language text. Exception: `evidence[].quote` stays in the source language, so it remains verbatim-checkable.
 
-Do not translate the response into another language.
-
-Keep proper nouns, product names, and technical terms in their original form (for example `Codex`, `local-first`, `Skill`) — do not translate them and do not add glosses in another language.
+JSON field names stay English. Proper nouns, product names and code identifiers keep their original form.

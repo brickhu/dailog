@@ -88,8 +88,8 @@
   "description": "提案检测：system=对话原文，user=提案提示词 → exploration_threads + creative_proposal（R1→R2 的唯一接口）",
   "config": {
    "temperature": 0.3,
-   "maxTokens": 16384,
-   "thinking": "disabled",
+   "maxTokens": 32768,
+   "thinking": "enabled",
    "seed": 41,
    "responseFormat": {
     "type": "json_object"
@@ -106,7 +106,7 @@
    },
    {
     "role": "user",
-    "file": "proposal.user.md"
+    "file": "proposal.user.3.md"
    }
   ],
   "name": "R1:提案（creative_proposal）"
@@ -126,7 +126,7 @@
   "params": {
    "dialogue": "素材：对话原文（messages 是 [tN 说话人] 编号块；sourceUrl 是原文地址）",
    "suggestion": "投稿人建议（可空）",
-   "creative_proposal": "Proposal Detector 选定的 creative_proposal JSON（R1→R2 的唯一接口）",
+   "creative_proposal": "Editorial Discovery Director 选定的 creative_proposal JSON（R1→R2 的唯一接口）",
    "HOST_NAME": "主持人名（投稿快照 host.callName）",
    "GUEST_NAME": "嘉宾名（投稿快照 guest.name）"
   },
@@ -137,7 +137,7 @@
    },
    {
     "role": "user",
-    "file": "script-by-proposal.user.md"
+    "file": "script.user.3.md"
    }
   ],
   "name": "R2:脚本创作（照 creative_proposal 渲染）"

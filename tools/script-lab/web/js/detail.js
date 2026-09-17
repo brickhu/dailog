@@ -161,40 +161,29 @@ function proposalDetailRows(r, opts) {
     const e = function (s) { return String(s == null ? "" : s); };
     const rows = [];
     if (!r) return '';
-    // ⓪ 新契约（creative_proposal / exploration thread）：core_question → 张力 → 转折 → 发现 → 终点 → 遗留问题
+    // ⓪ 新契约（creative_proposal / exploration thread）：编辑看四样——标题、总分、评分明细、编辑理由
+    //    其余字段（主问题/起点/张力/中段素材/转折/发现/终点/遗留问题/建议时长/原文出处）不再占版面。
     if (r.core_question && (r.central_tension || r.possible_discovery)) {
       const r0 = [];
-      if (r.thread_id || r.title) r0.push(row('这条线', e(r.thread_id) + (r.title ? ' · ' + e(r.title) : '')));
-      r0.push(row('主问题', e(r.core_question)));
-      if (r.initial_state) r0.push(row('起点', e(r.initial_state)));
-      if (r.central_tension) r0.push(row('张力', e(r.central_tension)));
-      if (r.exploration) r0.push(row('中段素材', e(r.exploration)));
-      if (r.turning_point) r0.push(row('转折', e(r.turning_point)));
-      if (r.possible_discovery) r0.push(row('可能的发现', e(r.possible_discovery)));
-      if (r.ending_state) r0.push(row('终点', e(r.ending_state)));
-      if (r.open_question) r0.push(row('留下的问题', e(r.open_question)));
-      if (r.recommended_duration) r0.push(row('建议时长', e((r.recommended_duration.category || '') + ' 约 ' + (r.recommended_duration.minutes || ''))));
-      // 总分 = 服务端按提示词 §10 权重实算的（可比）；模型自报的 overall 只在对不上时标一下
+      if (r.title) r0.push(row('标题', e(r.title)));
       const sc0 = r.score || {};
-      const wOf = (sc0.weights && typeof sc0.weights === 'object') ? sc0.weights : {};
-      const total = (typeof sc0.overall_computed === 'number') ? sc0.overall_computed : ((typeof sc0.overall === 'number') ? sc0.overall : null);
+      const total = (typeof sc0.overall === 'number' && Number.isFinite(sc0.overall)) ? sc0.overall : null;
       if (total !== null) {
-        const claimed = Number(sc0.overall);
-        const note = (typeof sc0.overall_computed === 'number' && Number.isFinite(claimed) && Math.abs(claimed - sc0.overall_computed) > 2)
-          ? " <span style='color:#d29922;font-size:11px'>（模型自报 " + claimed + "）</span>" : '';
-        r0.push(row('总分', "<span style='font-size:18px;font-weight:700;color:#3fb950'>" + total + "</span><span style='color:#8a91a0;font-size:11px'> / 100</span>" + note));
+        r0.push(row('总分', "<span style='font-size:" + (big ? 18 : 15) + "px;font-weight:700;color:#3fb950'>" + total + "</span><span style='color:#8a91a0;font-size:11px'> / 100</span>"));
       }
-      const dimKeys = Object.keys(wOf);
-      if (dimKeys.length) {
-        r0.push(row('评分明细', dimKeys.map(function (k) {
+      // 评分明细：紧跟在总分后面一行（维度分 × 权重，编辑一眼能核对总分怎么来的）
+      const DIM_SHORT = { cognitive_delta: '认知', thinking_depth: '思考', exploration_depth: '探索', tension_stakes: '张力', perspective_potential: '视角', audience_resonance: '共鸣', surprise: '意外', source_integrity: '素材' };
+      const wOf = (sc0.weights && typeof sc0.weights === 'object') ? sc0.weights : {};
+      const wKeys = Object.keys(wOf);
+      if (wKeys.length) {
+        r0.push(row('评分明细', wKeys.map(function (k) {
           const v = Number(sc0[k]);
-          return Number.isFinite(v) ? (k + ' ' + v + '×' + wOf[k] + ' = ' + (v * wOf[k])) : (k + ' —');
+          return (DIM_SHORT[k] || k) + ' ' + (Number.isFinite(v) ? v : '—') + '×' + wOf[k];
         }).join(' · ')));
       } else {
-        const chips0 = Object.keys(sc0).map(function (k) { return k + ' ' + sc0[k]; }).join(' · ');
-        if (chips0) r0.push(row('评分', chips0));
+        const chips0 = Object.keys(sc0).filter(function (k) { return k !== 'overall'; }).map(function (k) { return (DIM_SHORT[k] || k) + ' ' + sc0[k]; }).join(' · ');
+        if (chips0) r0.push(row('评分明细', chips0));
       }
-      if (Array.isArray(r.evidence) && r.evidence.length) r0.push(row('原文出处', r.evidence.map(function (x) { return e(x && x.speaker) + '：' + e(x && x.quote); }).join('\n')));
       if (r.editorial_reason) r0.push(row('编辑理由', e(r.editorial_reason)));
       return r0.join('');
     }
@@ -508,7 +497,7 @@ function renderProposalCards(id, proposals, totalTurns){
     // 拒稿动作放投稿卡头部（发布前可用）；data-act 委托分发
     // 首尾默认展开：首=投稿卡 → 直接置 open；尾=最后一张非空卡片
     const rejectBtnHtml = (!isPublished && !isRejected)
-      ? "<button class='pg' style='position:absolute;right:12px;bottom:12px;font-size:12px;padding:4px 14px;color:#f85149;border-color:#f85149' data-act='reject' data-id='" + id + "'>拒稿</button>"
+      ? "<button class='pg' style='position:absolute;right:12px;bottom:12px;font-size:12px;padding:4px 14px;color:#f85149;border-color:#f85149' data-act='reject' data-id='" + id + "' data-zone='" + esc(dt.language || 'zh') + "'>拒稿</button>"
       : '';
     let subCard = card('投稿', statusHtml, "<div style='position:relative'>" + subBody.join('') + rejectBtnHtml + "</div>", 'result');
     subCard = subCard.replace("class='ac-card'", "class='ac-card open'");
@@ -565,7 +554,7 @@ document.addEventListener('click', function (e) {
   if (act === 'review') runReview(sid);                     // 审题：直接调 LLM，结果进审题卡片
   else if (act === 'confirm-proposal') confirmProposal(sid);   // 确认提案：只锁定选题，不创作
   else if (act === 'create') openCreateFlow(sid);            // 创作卡「重新创作」
-  else if (act === 'reject') rejectSubmission(sid);
+  else if (act === 'reject') openRejectModal(sid, b.getAttribute('data-zone'));
   else if (act === 'polish') openPolishConsole(sid, si);
   else if (act === 'tts') batchGenSegAudio(sid, si);
   else if (act === 'merge') openMergeDialog(sid, si);
@@ -692,36 +681,120 @@ async function confirmProposal(id){
   } catch (err) { notice('确认提案失败：' + ((err && err.message) || err), 'error'); return; }
   try { await openDetail(id); } catch (e) {}   // 重拉详情：审题卡 → 审题锁定，创作卡 → 待创作
 }
-async function rejectSubmission(id){
-  let draft = '';
-  {
-    const s = srvOf(id);
-    try {
-      // 空提案场景：审题结果里的 rejection 文案（服务端 production.reviewProposals）
-      const pr = (s && s.proposals) || null;
-      if (pr && Array.isArray(pr.rejection) && pr.rejection.length) draft = String(pr.rejection[0]).trim();
-    } catch {}
-    if (!draft) {
-      try {
-        const rv = (s && s.review) || null;
-        if (rv && typeof rv.rejection_draft === 'string' && rv.rejection_draft.trim()) draft = rv.rejection_draft.trim();
-        else if (rv && rv.score != null) {
-          const s = Number(rv.score);
-          draft = Number.isFinite(s)
-            ? '这篇对话暂未达到创作标准（综合评分 ' + s.toFixed(1) + '）。如果你愿意，可以带着一个更想聊清楚的问题再来，很期待下一条对话。'
-            : '';
-        }
-      } catch {}
-    }
-  }
-  const reason = draft ? prompt('填写拒稿原因（投稿人可见）:', draft) : prompt('填写拒稿原因（投稿人可见）:');
-  if (reason === null) return;   // 取消
-  if (!reason.trim()) { notice('请填写拒稿原因', 'error'); return; }
+// ===================== 拒稿：选拒绝类型 + 选语言 → 模板预填 =====================
+// 原因会经站内通知发给投稿人，所以文案是「投稿人视角」的：判定 + 依据 + 邀请再来。
+// 模板表在 web/assets/reject-templates.json（改文案不用碰代码，也不用重启）。
+const REJECT_LIMIT = 500;        // 平台限制：services/api 的 reject 路由 reason ≤ 500 字
+let rejectTpl = null;            // 模板表缓存（一次加载）
+const rejectCtx = { id: null, zone: 'zh', applied: '' };   // applied = 上次自动填进去的文本（判断编辑有没有手改）
+
+async function loadRejectTemplates(){
+  if (rejectTpl) return rejectTpl;
+  const r = await fetch('/assets/reject-templates.json', { cache: 'no-store' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  rejectTpl = await r.json();
+  return rejectTpl;
+}
+
+async function openRejectModal(id, zone){
+  rejectCtx.id = id;
+  rejectCtx.zone = (zone === 'en') ? 'en' : 'zh';
+  rejectCtx.applied = '';
+  const catSel = document.getElementById('rejectCategory');
+  const langSel = document.getElementById('rejectLang');
+  const ta = document.getElementById('rejectReason');
+  const st = document.getElementById('rejectStatus');
+  const hint = document.getElementById('rejectHint');
+  const zoneHint = document.getElementById('rejectZoneHint');
+  if (st) st.textContent = '';
+  if (ta) ta.value = '';
+  if (catSel) catSel.innerHTML = "<option value=''>加载中…</option>";
+  if (langSel) langSel.innerHTML = "<option value='zh'>简体中文</option>";
+  if (zoneHint) zoneHint.textContent = (rejectCtx.zone === 'en') ? 'English' : '简体中文';
+  if (hint) hint.textContent = '—';
+  const modal = document.getElementById('rejectModal');
+  if (modal) modal.style.display = 'flex';
   try {
-    await j('/api/run/reject', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, reason: reason.trim() }) });
-    notice('✓ 已拒稿', 'success');
+    const t = await loadRejectTemplates();
+    const langs = (Array.isArray(t.languages) && t.languages.length) ? t.languages : [{ code:'zh', label:'简体中文' }, { code:'en', label:'English' }];
+    if (langSel) {
+      langSel.innerHTML = langs.map(function (l) { return "<option value='" + esc(l.code) + "'>" + esc(l.label) + "</option>"; }).join('');
+      langSel.value = rejectCtx.zone;
+    }
+    if (catSel) {
+      catSel.innerHTML = "<option value=''>请选择拒绝类型…</option>" + (t.categories || []).map(function (c) {
+        return "<option value='" + esc(c.id) + "'>" + esc(c.label) + "</option>";
+      }).join('');
+      catSel.value = '';
+    }
+  } catch (e) {
+    if (st) st.textContent = '❌ 模板加载失败：' + e.message;
+  }
+  updateRejectCounter();
+}
+
+function closeRejectModal(){
+  const modal = document.getElementById('rejectModal');
+  if (modal) modal.style.display = 'none';
+}
+
+// 切类型或切语言：没手改过就换模板；手改过就保留，只在提示行说明
+function applyRejectTemplate(){
+  if (!rejectTpl) return;
+  const catSel = document.getElementById('rejectCategory');
+  const langSel = document.getElementById('rejectLang');
+  const ta = document.getElementById('rejectReason');
+  const hint = document.getElementById('rejectHint');
+  if (!catSel || !langSel || !ta) return;
+  const cat = (rejectTpl.categories || []).filter(function (c) { return c.id === catSel.value; })[0];
+  if (hint) hint.textContent = (cat && cat.hint) ? cat.hint : '—';
+  const lang = (langSel.value === 'en') ? 'en' : 'zh';
+  const edited = ta.value.trim() && ta.value !== rejectCtx.applied;
+  if (edited) { if (hint) hint.textContent = (cat && cat.hint ? cat.hint + '　' : '') + '（已保留你手动修改的内容，未覆盖）'; updateRejectCounter(); return; }
+  const txt = (cat && cat.templates && cat.templates[lang]) ? cat.templates[lang] : '';
+  ta.value = txt;
+  rejectCtx.applied = txt;
+  updateRejectCounter();
+}
+function onRejectCategoryChange(){ applyRejectTemplate(); }
+function onRejectLangChange(){ applyRejectTemplate(); }
+
+function updateRejectCounter(){
+  const ta = document.getElementById('rejectReason');
+  const catSel = document.getElementById('rejectCategory');
+  const el = document.getElementById('rejectCount');
+  const btn = document.getElementById('rejectConfirmBtn');
+  if (!ta) return;
+  const n = ta.value.trim().length;
+  if (el) { el.textContent = n + ' / ' + REJECT_LIMIT + ' 字'; el.style.color = (n > REJECT_LIMIT) ? '#f85149' : '#8a91a0'; }
+  const ok = !!(catSel && catSel.value) && n > 0 && n <= REJECT_LIMIT;
+  if (btn) { btn.disabled = !ok; btn.style.opacity = ok ? '1' : '.5'; }
+}
+
+async function submitReject(){
+  const st = document.getElementById('rejectStatus');
+  const catSel = document.getElementById('rejectCategory');
+  const langSel = document.getElementById('rejectLang');
+  const ta = document.getElementById('rejectReason');
+  const btn = document.getElementById('rejectConfirmBtn');
+  const reason = (ta && ta.value || '').trim();
+  const category = (catSel && catSel.value) || '';
+  const language = (langSel && langSel.value === 'en') ? 'en' : 'zh';
+  if (!category) { if (st) st.textContent = '❌ 请先选一类拒绝类型'; return; }
+  if (!reason) { if (st) st.textContent = '❌ 请填写拒稿原因'; return; }
+  if (reason.length > REJECT_LIMIT) { if (st) st.textContent = '❌ 最多 ' + REJECT_LIMIT + ' 字（当前 ' + reason.length + '）'; return; }
+  const id = rejectCtx.id;
+  if (st) st.textContent = '提交中…';
+  if (btn) btn.disabled = true;
+  try {
+    await j('/api/run/reject', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id: id, reason: reason, category: category, language: language }) });
+    closeRejectModal();
+    notice('✓ 已拒稿（' + category + ' · ' + language + '）', 'success');
     if (typeof openDetail === 'function') openDetail(id);
-  } catch (err) { notice('✗ 拒稿失败: ' + err.message, 'error'); }
+  } catch (err) {
+    if (st) st.textContent = '❌ ' + err.message;
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+  }
 }
 
 async function loadR2Title(id){

@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "note": "拒稿原因模板：编辑点「拒稿」→ 选一类拒绝类型 + 选一种语言 → 模板预填进文本框（可自由改写）。每条都远低于平台 500 字上限。分类 id 对应提案稿 §8/§5 的判据，便于日后统计。",
+  "languages": [
+    {
+      "code": "zh",
+      "label": "简体中文"
+    },
+    {
+      "code": "en",
+      "label": "English"
+    }
+  ],
+  "categories": [
+    {
+      "id": "task",
+      "label": "任务执行（翻译 / 润色 / 改写 / 查资料 / 写代码）",
+      "hint": "提案稿 §8：translation、rewriting、proofreading、formatting、information retrieval、straightforward coding assistance",
+      "templates": {
+        "zh": "这段对话主要是在完成一个具体的活儿——翻译、润色、改写或查资料。dailog 想记录的是你自己的判断过程：你遇到了什么、犹豫什么、最后怎么想通的。下次可以试着把那个「卡住的点」聊透一点，哪怕最后没有结论。",
+        "en": "This conversation is mostly about getting a specific job done — translating, polishing, rewriting, or looking something up. What dailog records is your own thinking: what you ran into, what you were unsure about, and how your view changed along the way. Next time, try pushing on the part that actually stuck — even if you don't land on an answer."
+      }
+    },
+    {
+      "id": "qa",
+      "label": "知识问答（问—答—结束）",
+      "hint": "提案稿 §8：shallow Q&A、simple recommendation lists、topic collection without a meaningful situation",
+      "templates": {
+        "zh": "这篇更像一次信息获取：问、答、结束。我们在找的是还没想清楚、正在权衡的时刻——那种「两个选择都说得通，我不知道该选哪个」的处境。如果你手上有件正在纠结的事，带着它来就行。",
+        "en": "This reads more like information gathering: a question, an answer, done. What we look for is a moment you hadn't figured out yet — where two options both made sense and you didn't know which way to go. If you have something you're genuinely stuck on, bring that."
+      }
+    },
+    {
+      "id": "monologue",
+      "label": "AI 独角戏（本人参与度低）",
+      "hint": "提案稿 §8：AI monologue without meaningful Human engagement",
+      "templates": {
+        "zh": "这段里主要是 AI 在讲，你自己的位置和判断还看不太出来。这里的现场需要你多推几步——追问、反驳，或者直接说出你不同意的地方。你在哪句话上停了一下、觉得不对劲，那才是我们想听的。",
+        "en": "Most of this is the AI talking, and your own position is hard to see. A good episode needs you to push back — follow up, disagree, or say where it stopped making sense to you. The moment you paused and thought \"that's not quite right\" is the part we want."
+      }
+    },
+    {
+      "id": "private",
+      "label": "过于私人（公开会越界）",
+      "hint": "提案稿 §5：Private Thinking——真实，但不适合公开成一期节目",
+      "templates": {
+        "zh": "这是一件很私人的事，我们判断它更适合留在你和 AI 之间，而不是公开做成一期节目。这不是内容的对错，是边界问题。如果同一件事里有一个你也愿意公开聊的部分，欢迎换个角度再来。",
+        "en": "This is a very personal matter, and we judged it better kept between you and the AI rather than made into a public episode. That's not a judgment on the content — it's about boundaries. If there's a part of this you'd be comfortable discussing publicly, we'd welcome it from that angle."
+      }
+    },
+    {
+      "id": "notyet",
+      "label": "思考未成形（有现场但还没逼到墙角）",
+      "hint": "过了提案稿 §4 的门槛，但太浅：有真实处境，思考没走到能撑起一期节目的程度",
+      "templates": {
+        "zh": "能看出你确实在想一件事，但这轮思考还没走到能撑起一期节目的程度——问题还没有被真正逼到墙角。等它再清晰一点、或者你有了新的判断，随时再来。",
+        "en": "You're clearly thinking about something real, but this round hasn't gone far enough to carry an episode — the question hasn't been pushed to the point where it bites yet. When it gets sharper, or your view moves, come back anytime."
+      }
+    },
+    {
+      "id": "pasted",
+      "label": "外部素材为主体（贴进来的成品 / 文档）",
+      "hint": "提案稿 §2 SOURCE BOUNDARY 不通过：主体是粘贴/引用的现成材料，不是本人的思考",
+      "templates": {
+        "zh": "这段对话的主体是你贴进来的现成材料（文档、成品或别处的内容）。我们更想听你自己怎么想——你对这份材料哪里不认同、哪里改了主意，那部分才值得展开。",
+        "en": "Most of this conversation is material you pasted in — a document, a finished piece, or something from elsewhere. We're more interested in your own thinking: where you disagreed with it, where it changed your mind. That part is worth unpacking."
+      }
+    },
+    {
+      "id": "other",
+      "label": "其他（自己写）",
+      "hint": "没有合适的现成分类时用；建议仍保持「判定 + 依据 + 邀请」三段式",
+      "templates": {
+        "zh": "",
+        "en": ""
+      }
+    }
+  ]
+}

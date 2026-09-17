@@ -85,6 +85,36 @@
     </div>
   </div>
 </div>
+<!-- 拒稿弹窗：选一类拒绝类型 + 选一种语言 → 模板预填（可编辑） -->
+<div class='modal-overlay' id='rejectModal' style='display:none' onclick='if(event.target===this)closeRejectModal()'>
+  <div class='modal' style='width:540px'>
+    <div class='modal-head'><b>拒稿</b><button class='modal-close' onclick='closeRejectModal()'>✕</button></div>
+    <div class='modal-body'>
+      <div class='muted' style='font-size:12px;margin-bottom:10px'>拒稿原因会通过站内通知发给投稿人（<span id='rejectZoneHint'>—</span>）。选好类型和语言会自动填好模板，可以自由改写。</div>
+      <div style='display:flex;gap:10px'>
+        <div style='flex:1'>
+          <label style='display:block;font-size:12px;color:#8a91a0;margin-bottom:4px'>拒绝类型</label>
+          <select id='rejectCategory' onchange='onRejectCategoryChange()' style='width:100%;box-sizing:border-box;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;padding:6px 8px;font-size:12px'></select>
+        </div>
+        <div style='width:150px'>
+          <label style='display:block;font-size:12px;color:#8a91a0;margin-bottom:4px'>语言</label>
+          <select id='rejectLang' onchange='onRejectLangChange()' style='width:100%;box-sizing:border-box;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;padding:6px 8px;font-size:12px'></select>
+        </div>
+      </div>
+      <div class='muted' id='rejectHint' style='font-size:11px;margin-top:6px'>—</div>
+      <label style='display:block;font-size:12px;color:#8a91a0;margin:10px 0 4px'>拒稿原因（投稿人可见，可编辑）</label>
+      <textarea id='rejectReason' oninput='updateRejectCounter()' spellcheck='false' style='width:100%;box-sizing:border-box;height:130px;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;padding:8px 10px;font-size:12px;resize:vertical;line-height:1.6' placeholder='选一类拒绝类型，模板会自动填进来…'></textarea>
+      <div style='display:flex;justify-content:space-between;margin-top:4px'>
+        <span class='muted' id='rejectCount' style='font-size:11px'>0 / 500 字</span>
+        <span class='muted' style='font-size:11px'>平台上限 500 字</span>
+      </div>
+    </div>
+    <div class='modal-foot'>
+      <span id='rejectStatus' class='muted' style='font-size:12px'></span>
+      <button class='pg' id='rejectConfirmBtn' style='background:#f85149;color:#fff;border:0;opacity:.5' disabled onclick='submitReject()'>确认拒稿</button>
+    </div>
+  </div>
+</div>
 <!-- 采集进度弹层（单条/批量采集在弹层内显示进度，离开列表页不丢） -->
 <div class='modal-overlay' id='collectModal' style='display:none'>
   <div class='modal' style='width:480px'>

@@ -798,10 +798,19 @@ async function handleApi(path, res, req) {
     const body = await readBody(req);
     const id = (body && body.id) || null;
     const reason = (body && body.reason) ? String(body.reason).trim() : "";
+    // 拒稿分类与语言：平台侧没有这两个字段（只存 reason），lab 侧留痕给统计用（"这类拒稿占多少"）
+    const category = (body && body.category) ? String(body.category).trim() : "";
+    const language = (body && body.language === "en") ? "en" : ((body && body.language === "zh") ? "zh" : "");
     if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
     if (!reason) { sendJson(res, { ok: false, error: "请填写拒稿原因" }, 400); return; }
+    // 平台限制：reason ≤ 500 字（超了返回 reason_too_long）——这里先挡，给出人话
+    if (reason.length > 500) { sendJson(res, { ok: false, error: "拒稿原因最多 500 字（当前 " + reason.length + " 字）" }, 400); return; }
     try {
       const r = await apiWithToken(e, token, "/v1/editor/submissions/" + id + "/reject", { method: "POST", body: { reason } });
+      if (category || language) {
+        await saveProduction(e, token, id, { reject: { category, language, chars: reason.length, at: new Date().toISOString() } }).catch(() => null);
+      }
+      console.log("[reject] " + id + " 分类=" + (category || "（未选）") + " 语言=" + (language || "（未指定）") + " 字数=" + reason.length);
       sendJson(res, { ok: true, status: "rejected" });
     } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
     return;
@@ -1180,14 +1189,17 @@ function contentLanguageOf(dialogue) {
 /** 维度标签 → 字段名（提示词 §9/§10 用的是人话标签） */
 const DIM_KEY_BY_LABEL = {
   "cognitive delta": "cognitive_delta",
-  "exploration depth": "exploration_depth",
+  "thinking depth": "thinking_depth",          // 新稿 §14 B
+  "exploration depth": "exploration_depth",    // 旧稿 §10 B（两稿各不相同，不要互相别名，否则明细对不上 key）
   "tension / stakes": "tension_stakes",
+  "perspective potential": "perspective_potential",  // 新稿 §14 D
+  "audience resonance": "audience_resonance",        // 旧稿 §10 E
   "surprise": "surprise",
-  "audience resonance": "audience_resonance",
   "source integrity": "source_integrity",
 };
-/** 兜底权重（提示词里那张表解析不出来时用；正常永远走解析结果） */
-const SCORE_WEIGHTS_FALLBACK = { cognitive_delta: 7, exploration_depth: 5, tension_stakes: 3, surprise: 2, audience_resonance: 1, source_integrity: 2 };
+/** 兜底权重（提示词那张表解析不出来时用；正常走解析结果）。
+ *  只用于**评分明细的展示**（各维度分 × 权重），总分不在这里算。 */
+const SCORE_WEIGHTS_FALLBACK = { cognitive_delta: 6, thinking_depth: 4, tension_stakes: 3, perspective_potential: 3, surprise: 2, source_integrity: 2 };
 
 /** 从提案提示词 §10 那张表里解析六维权重——"Cognitive Delta      × 7 = /35" → { cognitive_delta: 7, … }。
  *  这样权重**只维护在提示词一处**：改 §9/§10 的系数，服务端自动跟着变，不用两头同步。 */
@@ -1203,17 +1215,6 @@ function scoreWeightsFromPrompt(p) {
   return keys.every((k) => Number.isFinite(out[k])) ? out : null;
 }
 
-/** 六维加权总分（0–100）；六个维度分不齐就返回 null（不猜） */
-function computeOverall(sc, weights) {
-  if (!sc || typeof sc !== "object") return null;
-  let sum = 0;
-  for (const k of Object.keys(weights)) {
-    const v = Number(sc[k]);
-    if (!Number.isFinite(v)) return null;
-    sum += v * weights[k];
-  }
-  return Math.round(sum * 10) / 10;
-}
 
 /** 投稿区（submissions.language）→ 提示词里的语言标签；未知区回退 null（退回"跟随原文语言"的旧行为） */
 const ZONE_LABELS = { zh: "Simplified Chinese (简体中文)", en: "English" };
@@ -1257,7 +1258,7 @@ function polishInputView(target) {
 
 
 
-// 评分唯一来源 = 模型输出里的 score.overall（提示词 §9/§10 定义权重与算法）。
+// 评分唯一来源 = 模型输出里的 score.overall（提示词 §14 SCORING MODEL / §15 TOTAL SCORE 定义分档与加权）。
 // 服务端**不再**重算总分：权重表只存在于提示词一处，改权重不必两头同步。
 // 下面只做「形态检查」——分在不在、是不是 0–100 的数——不判断它对不对。
 
@@ -1520,10 +1521,10 @@ function segmentsFromDraftShape(p) {
       // 出稿校验（不阻断，仅报告）——按「提案 v2」契约（eligibility + 加权分 + recommended_thread_id）：
       //   ① eligible=false ⇒ 必须 threads=[] 且 creative_proposal=null（旧结果没这字段时按 eligible 处理）
       //   ② eligible=true  ⇒ creative_proposal 九字段齐、每条线八字段齐、有 evidence、recommended_thread_id 能对上号
-      //   ③ score 只查形态（overall 是不是 0–100 的数字）——总分以模型输出为准，服务端不重算（权重只在提示词一处）
+      //   ③ score 只查形态（overall 是不是 0–100 的数字）——总分以模型输出为准，服务端不重算（算术只在提示词一处）
       const warnings = [];
       const WEIGHTS = scoreWeightsFromPrompt(p) || SCORE_WEIGHTS_FALLBACK;
-      if (!scoreWeightsFromPrompt(p)) console.warn("[proposal-validate] 提示词 §10 的权重表没解析出来，用了兜底权重 " + JSON.stringify(SCORE_WEIGHTS_FALLBACK));
+      if (!scoreWeightsFromPrompt(p)) console.warn("[proposal-validate] 提示词 §15 的权重表没解析出来，评分明细改用兜底权重 " + JSON.stringify(SCORE_WEIGHTS_FALLBACK));
       const CP_FIELDS = ["core_question", "initial_state", "central_tension", "exploration", "turning_point", "possible_discovery", "ending_state", "open_question", "recommended_duration"];
       const filled = (v) => (typeof v === "string" ? !!v.trim() : !!v);
       const elig = (result && result.eligibility && typeof result.eligibility === "object") ? result.eligibility : null;
@@ -1547,18 +1548,16 @@ function segmentsFromDraftShape(p) {
         const miss = ["title", "core_question", "initial_state", "central_tension", "turning_point", "possible_discovery", "ending_state", "open_question"].filter((k) => !filled(t[k]));
         if (miss.length) warnings.push(`T${ti + 1} 缺字段：${miss.join("、")}`);
         if (!Array.isArray(t.evidence) || !t.evidence.length) warnings.push(`T${ti + 1} 缺 evidence（这条线没有原文出处）`);
-        // 总分由服务端按提示词 §10 的权重实算（权重每次都从提示词那张表里解析，不另存一份）：
-        //   编辑要的是一个**可比的总分 + 明细**，而模型算六次乘法经常错（实测 24 篇里 11 篇偏高 4–13 分）。
-        //   模型自报的 score.overall 原样留着，只用来核对；对不上就报一条 warning。
+        // 总分**以模型输出为准**：提示词 §14/§15 要求它自己按 6/4/3/3/2/2 加权求和写进 score.overall，
+        //   服务端不再重算、也不再拿重算值去纠正它——两套算术打架只会让编辑不知道该信哪个。
+        //   服务端只做形态校验：overall 必须是 0–100 的数字。
+        //   weights 仍然下发，但只用于前端展示「各维度分 × 权重」的明细。
         const sc = (t && t.score && typeof t.score === "object") ? t.score : null;
         if (!sc) { warnings.push(`T${ti + 1} 缺 score（编辑没法比较各条线）`); return; }
-        const computed = computeOverall(sc, WEIGHTS);
-        if (computed === null) { warnings.push(`T${ti + 1} 六维分不齐，算不出总分（拿到 ${JSON.stringify(sc)}）`); return; }
-        sc.overall_computed = computed;
         sc.weights = Object.assign({}, WEIGHTS);
-        const claimed = Number(sc.overall);
-        if (!Number.isFinite(claimed)) warnings.push(`T${ti + 1} 模型没给 score.overall（服务端实算 ${computed}）`);
-        else if (Math.abs(claimed - computed) > 2) warnings.push(`T${ti + 1} 模型自报 overall=${claimed} 与实算 ${computed} 差 ${Math.round((claimed - computed) * 10) / 10} 分（以实算为准）`);
+        const overall = Number(sc.overall);
+        if (!Number.isFinite(overall)) warnings.push(`T${ti + 1} 没给 score.overall（总分缺失）`);
+        else if (overall < 0 || overall > 100) warnings.push(`T${ti + 1} score.overall=${sc.overall} 不在 0–100 之间`);
       });
       if (eligible && threads.length) {
         const recId = result && result.recommended_thread_id;
@@ -2038,7 +2037,7 @@ function segmentsFromDraftShape(p) {
       ].join("\n");
       const cmpMsgs = [{ role: "system", content: system }, { role: "user", content: userMsg + batchTask }];
       if (body && body.preview) { sendJson(res, { ok: true, preview: { messages: cmpMsgs, ids: ids, meta: meta } }); return; }
-      const r = await llmComplete(null, null, {}, cmpMsgs, Object.assign({}, p.config, { maxTokens: 8192 }), null);
+      const r = await llmComplete(null, null, {}, cmpMsgs, Object.assign({}, p.config, { maxTokens: 32768 }), null);
       const parsed = extractJson(r.content);
       console.log("[compare] n=" + ids.length + " | input " + ((r.usage && r.usage.prompt_tokens) || "?") + " tok | ranking=" + JSON.stringify(parsed && parsed.ranking));
       sendJson(res, { ok: true, result: parsed, meta: meta, usage: fmtUsage(r.usage) });
