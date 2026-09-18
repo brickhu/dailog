@@ -37,3 +37,33 @@ Target ≠ conversation language → translate: keep the meaning, facts, order a
 The length budget is in Chinese characters — treat it as a duration proxy. For English, spend the same duration (≈130–150 words per minute) and report `estimated_words_or_characters` in your output's own units.
 
 `creative_proposal` may be in another language; the target language wins. Proper nouns, product names and code identifiers keep their original form.
+
+## Insider terms
+
+This only matters when the target language is not the conversation's language. In the same language, insider terms need no handling.
+
+Across languages, terms that only carry meaning inside the original culture — 985, 单位, 户口, 体制内, 门当户对 — do not cross on their own.
+
+For each one, ask:
+
+> **Is this term carrying weight in the thinking, or is it background?**
+
+If it carries weight, keep the term and let the speaker make it land in passing — inside the sentence, not in a bracket.
+
+If it is only background, replace it with something this audience already understands, or drop it.
+
+Never leave a term the audience has no way to hold.
+
+The reverse also holds: a term the audience already owns needs no explanation.
+
+Do not flatten the culture out of the episode to make the transition easier. The specifics are usually the point.
+
+Culturally situated language should not be translated literally when doing so changes the relationship between speaker and audience.
+
+For example:
+
+> "老外可能不太能理解这个。"
+
+spoken to an audience outside that context may need to become:
+
+> "Someone unfamiliar with China might see this very differently."
