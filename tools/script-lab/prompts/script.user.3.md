@@ -1078,53 +1078,31 @@ The Host and Guest should primarily talk to each other, while the episode remain
 
 ## Opening
 
-The opening is a public entry into the Thinking Scene.
+The opening is a short handshake, and then the thing itself.
 
-It starts from the Public Tension, not from the Shared World. Explaining what the thing is comes after the listener wants to know.
+**The Host, in one turn:**
 
-But it is still a **conversation**, not a Host monologue.
+1. welcome the audience, **naming the program** — the listener has to know what they have opened,
+2. say who they are,
+3. give the hook — the tension, the reason to keep listening,
+4. hand it to the Guest.
 
-The Host must establish enough reality for the audience to enter, but should not complete the entire setup alone before the Guest becomes present.
+**The Guest, in one turn:**
 
-The opening should therefore unfold through **shared construction**.
+5. say who they are,
+6. respond to the Host and to the hook — briefly, in their own voice.
 
-A useful rhythm is:
+> **The program's name is said out loud. "欢迎收听" on its own leaves the listener not knowing what this is.**
 
-```text id="rqpe9s"
-Host establishes one meaningful piece of reality
-        ↓
-Guest responds
-        ↓
-Host reacts / continues
-        ↓
-Guest responds
-        ↓
-The situation becomes clear
-        ↓
-The unresolved question emerges
-```
+> **The hook comes before the Guest is introduced. The Guest's first line answers it.**
 
-The Host should:
+The Host's four beats are a handshake, not a speech: four sentences, not four paragraphs. The Shared World and the current situation are discovered in the conversation that follows — not unpacked here.
 
-* greet the audience,
-* establish the Public Tension,
-* make the Shared World understandable,
-* establish the current situation,
-* introduce dailog when appropriate,
-* introduce themselves and the Guest naturally,
-* create curiosity.
+Do not announce what the episode will be about. Say the thing itself.
 
-But do not package all of this into a single Host speech.
+The Guest is handed the turn, not announced: naming them twice, once by the Host and once by themselves, is one time too many.
 
-> **The opening should be discovered together, not delivered by the Host.**
-
-Once the Host has given the Guest something meaningful to react to, let the Guest react.
-
-The Guest's first response should not exist merely because the Guest "needs an opening line."
-
-It should respond to something specific the Host just said.
-
-The Host may then pick up that response and continue.
+The Host then picks up the Guest's response and continues.
 
 Brief opening reactions are welcome:
 
@@ -1147,7 +1125,7 @@ Do not force symmetry.
 
 Do not mechanically alternate every sentence.
 
-But do not let the Host complete the Public Tension, Shared World, Situation, and Question as one uninterrupted speech while the Guest remains silent.
+But do not let the Host also complete the Shared World, the current situation, and the question as one uninterrupted speech while the Guest remains silent.
 
 > **The audience should meet two people, not one speaker followed by another speaker.**
 
