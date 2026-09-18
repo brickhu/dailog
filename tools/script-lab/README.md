@@ -110,7 +110,17 @@ cp tools/script-lab/.env.example tools/script-lab/.env
 唯一的写入口 `saveProduction` 只在 `script/save`、`publish-submit`、`reject` 这几条「编辑按了按钮」的路径上被调。
 
 ```bash
-# 0) 找 id：列出投稿（id 可以只写前 8 位，界面显示的也是 8 位）
+# 一条命令走完全程（向导）：选提案 → 脚本 → 打磨 → 发布文案
+node tools/script-lab/dryrun.mjs <投稿id>
+```
+
+① 出提案列表，上下键选一条 → ② 出脚本全文 → 菜单【打磨脚本 / 生成发布文案 / 退出】
+→ ③ 打磨后脚本 → 菜单 → ④ 发布文案 → 结束。
+
+下面是单步用法（做对照实验、批量时用）：
+
+```bash
+# 0) 找 id：列出投稿
 node tools/script-lab/dryrun.mjs list
 node tools/script-lab/dryrun.mjs list 关键词
 

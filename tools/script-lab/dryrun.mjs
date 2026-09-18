@@ -10,6 +10,7 @@
  * 全程不写 production.json、不改投稿状态、不落 prompt 文件。
  *
  * 用法：
+ *   node tools/script-lab/dryrun.mjs <投稿id>                          完整流程（向导）：选提案 → 脚本 → 打磨 → 发布文案
  *   node tools/script-lab/dryrun.mjs list [关键词]                     列出投稿（id 列就是投稿 id，直接复制来用）
  *   node tools/script-lab/dryrun.mjs material <id>                    取素材包（JSON）
  *   node tools/script-lab/dryrun.mjs r2 <id> [--file prompts/x.md]    干跑一个环节
@@ -56,8 +57,8 @@ const AS_JSON = flag("json");
 const STAGE = {
   r1: { endpoint: "/api/run/review/round1", base: () => ({}), preview: true },
   r2: { endpoint: "/api/run/review/round2", base: (m, o) => ({ review: need((o && o.review) || (m.proposal && m.proposal.value), "提案") }), preview: true },
-  r3: { endpoint: "/api/run/polish", base: (m) => ({ scripts: need(m.scripts && m.scripts.length ? m.scripts : null, "脚本") }), preview: true },
-  r4: { endpoint: "/api/run/publish", base: (m) => ({ script: need((m.scripts || [])[0] || null, "脚本"), fillOnly: true }), preview: true },
+  r3: { endpoint: "/api/run/polish", base: (m, o) => ({ scripts: need((o && o.scripts) || (m.scripts && m.scripts.length ? m.scripts : null), "脚本") }), preview: true },
+  r4: { endpoint: "/api/run/publish", base: (m, o) => ({ script: need((o && o.script) || (m.scripts || [])[0] || null, "脚本"), fillOnly: true }), preview: true },
 };
 
 /** 从 r1 的产物里挑一条线，做成 r2 要的提案（thread 省略 → 用模型推荐的那条） */
@@ -241,9 +242,152 @@ function writeOut(path, obj) {
   writeFileSync(resolve(path), JSON.stringify(obj, null, 1));
 }
 
+
+/* ─────────────────────────  完整流程（向导）  ───────────────────────── */
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** 上下键选择；不是终端时退化成输入序号 */
+async function choose(title, items, allowBack) {
+  const labels = items.map((x) => (typeof x === "string" ? x : x.label));
+  const hints = items.map((x) => (typeof x === "string" ? "" : x.hint || ""));
+  if (!process.stdin.isTTY) {
+    // 非终端（管道/重定向）：整条流只读一次，逐行发号，避免每次新建 readline 把缓冲吃掉
+    for (let i = 0; i < labels.length; i++) console.log("  " + (i + 1) + ") " + labels[i] + (hints[i] ? "   " + hints[i] : ""));
+    if (!choose._lines) {
+      choose._lines = [];
+      const readline = await import("node:readline");
+      const rl = readline.createInterface({ input: process.stdin });
+      await new Promise((done) => {
+        rl.on("line", (l) => choose._lines.push(l));
+        rl.on("close", done);
+        if (process.stdin.readableEnded) done();
+      });
+    }
+    const ans = String(choose._lines.shift() || "").trim();
+    if (allowBack && /^b$/i.test(ans)) return -1;
+    const n = Number(ans);
+    return Number.isFinite(n) && n >= 1 && n <= labels.length ? n - 1 : 0;
+  }
+  const readline = await import("node:readline");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  readline.emitKeypressEvents(process.stdin, rl);
+  process.stdin.setRawMode(true);
+  let cur = 0, drawn = 0;
+  const paint = () => {
+    if (drawn) process.stdout.write("\x1b[" + drawn + "A\x1b[J");
+    const out = [title];
+    labels.forEach((l, i) => out.push((i === cur ? "  \x1b[7m▸ " + l + "\x1b[0m" : "    " + l) + (hints[i] ? "   \x1b[2m" + hints[i] + "\x1b[0m" : "")));
+    out.push("  \x1b[2m↑↓ 选择 · Enter 确认" + (allowBack ? " · b 返回" : "") + "\x1b[0m");
+    process.stdout.write(out.join("\n") + "\n");
+    drawn = out.length;
+  };
+  paint();
+  return await new Promise((resolve) => {
+    const done = (v) => { process.stdin.setRawMode(false); process.stdin.removeListener("keypress", onKey); rl.close(); resolve(v); };
+    const onKey = (str, key) => {
+      if (!key) return;
+      if (key.ctrl && key.name === "c") { done(-2); process.exit(130); }
+      if (key.name === "up" || key.name === "k") { cur = (cur - 1 + labels.length) % labels.length; paint(); }
+      else if (key.name === "down" || key.name === "j") { cur = (cur + 1) % labels.length; paint(); }
+      else if (key.name === "return" || key.name === "enter") { done(cur); }
+      else if (allowBack && (key.name === "b" || key.name === "escape")) { done(-1); }
+    };
+    process.stdin.on("keypress", onKey);
+  });
+}
+
+/** 把一版脚本全文打出来 */
+function printScript(script, heading) {
+  const segs = (script && (script.segments || script.script)) || [];
+  const ep = (script && script.episode) || {};
+  console.log("\n" + "═".repeat(64));
+  if (heading) console.log(heading);
+  if (ep.title) console.log("标题　" + ep.title);
+  if (ep.hook) console.log("钩子　" + ep.hook);
+  console.log("─".repeat(64));
+  segs.forEach((g, i) => {
+    const who = String(g.speaker).toLowerCase() === "host" ? "主持" : "嘉宾";
+    console.log(String(i + 1).padStart(2, "0") + " " + who + "｜" + g.text);
+  });
+  console.log("─".repeat(64) + "\n共 " + segs.length + " 段\n");
+}
+
+/** 一个投稿走完全程：R1 选提案 → R2 脚本 → (R3 打磨) → (R4 发布文案) */
+async function flow(rawId) {
+  const id = await resolveId(rawId);
+  const m = await material(id);
+  console.log("\n投稿　" + id + "\n标题　" + (m.title || "") + "\n");
+
+  // —— R1 ——
+  console.log("① 提案生成中…");
+  const t1 = Date.now();
+  let r1;
+  try { r1 = await runStage("r1", id, m, null, {}); }
+  catch (e) { console.log("提案没出来：" + e.message); return; }
+  const th = (r1.result && r1.result.exploration_threads) || [];
+  if (!th.length) { console.log("这条投稿没给出提案（" + ((r1.result && r1.result.eligibility && r1.result.eligibility.reason) || "无说明") + "）"); return; }
+  console.log("　✓ " + ((Date.now() - t1) / 1000).toFixed(0) + "s，给出 " + th.length + " 条\n");
+  const pick = await choose("挑一条提案（Enter 确认）", th.map((t) => ({ label: String(t.title || "").slice(0, 70), hint: t.id === r1.result.recommended_thread_id ? "★模型推荐" : "" })));
+  if (pick < 0) return;
+  const review = buildReview(r1.result, String(pick + 1));
+  console.log("\n已选：" + review.title);
+
+  // —— R2 ——
+  console.log("\n② 脚本创作中…");
+  let r2;
+  try { r2 = await runStage("r2", id, m, null, { review }); }
+  catch (e) { console.log("脚本没出来：" + e.message + "（可重跑）"); return; }
+  let cur = (r2.result.scripts || [])[0] || null;
+  if (!cur) { console.log("脚本没出来（模型这次没给 script 数组）—— 重跑一次通常就有。"); return; }
+  printScript(cur, "脚本");
+
+  // —— 菜单循环 ——
+  for (;;) {
+    const menu = [{ label: "打磨脚本" }, { label: "生成发布文案" }, { label: "退出" }];
+    const k = await choose("下一步", menu);
+    if (k === -1 || k === 2) { console.log("\n结束。"); return; }
+
+    if (k === 0) {
+      console.log("\n③ 脚本打磨中…");
+      let r3;
+      try { r3 = await runStage("r3", id, m, null, { scripts: [{ segments: cur.segments }] }); }
+      catch (e) { console.log("打磨失败：" + e.message); continue; }
+      const segs = (r3.result && (r3.result.segments || (r3.result.script && r3.result.script.segments))) || null;
+      if (!segs) { console.log("打磨没返回 segments。"); continue; }
+      cur = Object.assign({}, cur, { segments: segs });
+      printScript(cur, "打磨后脚本");
+      continue;
+    }
+
+    if (k === 1) {
+      console.log("\n④ 发布文案生成中…");
+      let r4;
+      try { r4 = await runStage("r4", id, m, null, { script: cur }); }
+      catch (e) { console.log("发布文案失败：" + e.message); continue; }
+      const meta = r4.result && r4.result.result ? r4.result.result : r4.result;
+      console.log("\n" + "═".repeat(64));
+      console.log("发布文案");
+      console.log("─".repeat(64));
+      if (meta && typeof meta === "object") {
+        for (const [kk, vv] of Object.entries(meta)) console.log(kk + "：\n  " + String(vv).replace(/\n/g, "\n  ") + "\n");
+      } else console.log(String(meta));
+      const again = await choose("还要做什么", [{ label: "回去继续打磨" }, { label: "退出" }]);
+      if (again === 0) continue;
+      console.log("\n结束。");
+      return;
+    }
+  }
+}
+
 (async () => {
   const cmd = PARSED.pos[0];
   const ids = PARSED.pos.slice(1);
+  const KNOWN = ["list", "material", "all", "batch", "r1", "r2", "r3", "r4"];
+
+  // 不带已知命令 → 直接当投稿 id，走完整流程（向导）
+  if (cmd && !KNOWN.includes(cmd)) { await flow(cmd); return; }
+  if (cmd === "run") { await flow(need(ids[0], "投稿 id")); return; }
   const file = opt("file", null);
 
   if (cmd === "list") {
