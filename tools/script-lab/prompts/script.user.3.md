@@ -6,7 +6,7 @@ Each episode contains:
 
 * **Host** — a real human with a real name and real voice.
 * **Guest** — an AI with its own name and identity.
-* **Audience** — listeners experiencing the conversation as a media program.
+* **Audience** — the people experiencing the conversation as a media program.
 
 You are given:
 
@@ -21,7 +21,7 @@ The episode should transform a private Thinking Scene into a **public conversati
 
 > **First make the situation legible. Then make the thinking alive.**
 
-The listener should first understand what is happening and why it matters, then enter the specific situation, witness the thinking unfold, and naturally arrive at a Perspective.
+The audience should first understand what is happening and why it matters, then enter the specific situation, witness the thinking unfold, and naturally arrive at a Perspective.
 
 ---
 
@@ -61,7 +61,7 @@ The situation gives the thinking its meaning.
 
 The interaction reveals the thinking.
 
-The Perspective is what the listener may carry away.
+The Perspective is what the audience may carry away.
 
 > **Reconstruct the Thinking Scene, not just the ideas inside it.**
 
@@ -147,7 +147,7 @@ Perspective
 
 ### Public Tension
 
-Give the listener a real reason to care.
+Give the audience a real reason to care.
 
 The Public Tension must come from the source.
 
@@ -155,21 +155,21 @@ Do not invent a universal problem merely to make the episode sound important.
 
 ### Shared World
 
-Create the minimum common ground required for the listener to understand the conversation.
+Create the minimum common ground required for the audience to understand the conversation.
 
-By the time the main discussion begins, the listener should be able to answer:
+By the time the main discussion begins, the audience should be able to answer:
 
 * What is this thing?
 * What does it refer to?
 * What is the Human doing with it?
 
-The listener should not need the source conversation to understand the subject.
+The audience should not need the source conversation to understand the subject.
 
 ### Specific Situation
 
 Establish the Human's current situation.
 
-The listener should understand:
+The audience should understand:
 
 * what has already been built, tried, decided, or encountered,
 * where the Human currently stands,
@@ -183,7 +183,7 @@ Only after the situation is clear should the unresolved question become central.
 
 The question should feel like a **current bind with consequences**, not merely a topic.
 
-> **Do not ask the deepest question before the listener understands the situation that produced it.**
+> **Do not ask the deepest question before the audience understands the situation that produced it.**
 
 > **Context is the ground the thinking stands on.**
 
@@ -281,7 +281,7 @@ Do not merely discuss the topic.
 
 > **Do not describe the Thinking Scene. Perform the Thinking Scene.**
 
-The listener should understand:
+The audience should understand:
 
 * what is happening,
 * why it matters,
@@ -389,7 +389,7 @@ If not, do not invent it.
 
 ### POSITION DELTA TEST
 
-> **Would a reasonable listener believe that either participant holds a materially different position from the one supported by the source?**
+> **Would a reasonable member of the audience believe that either participant holds a materially different position from the one supported by the source?**
 
 If yes, rewrite.
 
@@ -438,7 +438,7 @@ Identify what is already known
         ↓
 Identify what remains unresolved
         ↓
-Establish the listener's starting point
+Establish the audience's starting point
         ↓
 Reconstruct the present interaction
         ↓
@@ -549,7 +549,7 @@ Do not alternate speakers simply to create symmetry.
 
 Instead:
 
-> **Let the speaker stop where a real listener would naturally react.**
+> **Let the speaker stop where the other person would naturally react.**
 
 A longer uninterrupted turn is valid when the speaker is naturally explaining, recalling a necessary fact, or completing a thought.
 
@@ -710,7 +710,7 @@ The next thought should usually be caused by the previous thought.
 
 > **The conversation should feel impossible to shuffle.**
 
-The listener should be able to sense:
+The audience should be able to sense:
 
 > "He said that because she just said this."
 
@@ -800,13 +800,19 @@ Every premise needed to follow the current thought must emerge naturally.
 
 But once the situation is clear, do not keep explaining.
 
-Let the listener witness the interaction.
+Let the audience witness the interaction.
 
 The Host and Guest should feel like two people occupying the same conversational space.
 
 Listening is part of the conversation.
 
-Brief responses such as agreement, surprise, confusion, amusement, or acknowledgement may be created when they make the shared attention audible.
+When one participant needs several segments to say something — explaining, recalling, laying out what happened — the other does not disappear.
+
+A long narration is not a monologue. The other participant is reacting inside it, and those reactions belong in the episode.
+
+What they say there carries nothing: a recognition, a small surprise, a word handed back to the speaker.
+
+If one person is carrying several segments in a row, the other has stopped being audible.
 
 They do not need to advance the argument.
 
@@ -814,7 +820,7 @@ They exist because the other person is there.
 
 > **A conversation is shared attention, not alternating monologues.**
 
-The listener should occasionally feel:
+The audience should occasionally feel:
 
 > "I can hear that she is listening."
 
@@ -901,7 +907,7 @@ That is the core of conversational realism.
 
 # 15. INFORMATION VS PERSPECTIVE
 
-Information exists to help the listener understand and follow the situation.
+Information exists to help the audience understand and follow the situation.
 
 Do not turn the episode into a knowledge dump.
 
@@ -975,7 +981,7 @@ The Host should:
 * introduce the Guest,
 * create curiosity.
 
-Do not begin with private-context language that assumes the listener already knows the Human's project.
+Do not begin with private-context language that assumes the audience already knows the Human's project.
 
 Do not begin with the deepest question simply because it is intellectually interesting.
 
@@ -1012,14 +1018,14 @@ Do not:
 
 * mechanically recap the episode,
 * turn the ending into a lesson,
-* ask the listener a closing question,
-* assign the listener a task,
-* give the listener a takeaway as an instruction,
+* ask the audience a closing question,
+* assign the audience a task,
+* give the audience a takeaway as an instruction,
 * switch into presenter mode.
 
 > **End the scene, don't summarize the scene.**
 
-> **The listener overhears the ending. The ending is not delivered to the listener.**
+> **The audience overhears the ending. The ending is not delivered to the audience.**
 
 ---
 
@@ -1082,7 +1088,7 @@ Prefer:
 
 Avoid long code, variable names, file paths, stack traces, syntax, and repetitive implementation details unless essential to the Thinking Scene.
 
-Translate technical material into conceptual meaning the listener can understand without seeing the screen.
+Translate technical material into conceptual meaning the audience can understand without seeing the screen.
 
 ---
 
@@ -1094,7 +1100,7 @@ The episode does **not necessarily begin where the source Thinking Scene begins*
 
 The source may begin too late because the Human and AI already share context.
 
-The podcast should therefore establish the listener's starting point first:
+The podcast should therefore establish the audience's starting point first:
 
 ```text
 Audience Entry
@@ -1194,11 +1200,11 @@ Before returning the script, silently verify:
 
 ## LISTENER ENTRY
 
-1. Does the listener know what the thing under discussion is?
-2. Does the listener understand the Human's current situation?
-3. Does the listener understand why it matters now?
-4. Does the listener understand what remains unresolved before deep exploration begins?
-5. Could the listener follow the episode without seeing the source conversation?
+1. Does the audience know what the thing under discussion is?
+2. Does the audience understand the Human's current situation?
+3. Does the audience understand why it matters now?
+4. Does the audience understand what remains unresolved before deep exploration begins?
+5. Could the audience follow the episode without seeing the source conversation?
 
 ## LIVE THINKING
 
