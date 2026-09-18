@@ -102,6 +102,40 @@ cp tools/script-lab/.env.example tools/script-lab/.env
 可选：`LLM_BASE_URL` / `LLM_MODEL`（默认 `https://api.deepseek.com` / `deepseek-chat`）/ `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` / `LLM_SEED`。
   输出一致性建议：先把输入 key 和提示词指针对齐（`--as dialogue` 或信封），再 `--temperature 0.2` 左右 + `--seed 42`（固定 seed）；温度 0.4 仍会明显抖动，结构性评分/创作类字段（title、comment）波动属正常。
 
+## 干跑（dryrun）：不碰业务状态地跑测试
+
+任意投稿 × 任意环节，跑完只把结果给你，**不写 production.json、不改投稿状态、不落提示词文件**。
+
+为什么是安全的：四个环节本来就只读——R3 打磨明确注明「服务端绝不写 R2」，R4 元信息走 `fillOnly` 分支；
+唯一的写入口 `saveProduction` 只在 `script/save`、`publish-submit`、`reject` 这几条「编辑按了按钮」的路径上被调。
+
+```bash
+# 0) 看素材：这篇投稿四个环节各自跑不跑得了、缺什么
+node tools/script-lab/dryrun.mjs material <id>
+
+# 1) 干跑单个环节
+node tools/script-lab/dryrun.mjs r1 <id>            # 出提案（慢，~1–2 分钟）
+node tools/script-lab/dryrun.mjs r2 <id>            # 出脚本
+node tools/script-lab/dryrun.mjs r3 <id>            # 语感打磨
+node tools/script-lab/dryrun.mjs r4 <id>            # 发布元信息
+
+# 2) 一口气跑完四个环节
+node tools/script-lab/dryrun.mjs all <id>
+
+# 3) 对照实验：换一份提示词正文，不改 prompts.json，也不落盘
+node tools/script-lab/dryrun.mjs r2 <id> --file /tmp/script.before.md --out /tmp/a.json
+node tools/script-lab/dryrun.mjs r2 <id> --out /tmp/b.json
+
+# 4) 多篇投稿同一环节
+node tools/script-lab/dryrun.mjs batch <id1> <id2> <id3> --stage r2 --outdir /tmp/dry
+```
+
+选项：`--file <提示词.md>` 覆盖正文 · `--out <file>` 结果落盘 · `--outdir <dir>` batch 输出目录 ·
+`--json` 原样打印 · `--server`（默认 `http://127.0.0.1:4173`）· `--env`（默认 `local`）· `--stage`（batch 必填）
+
+服务端配套：`GET /api/dryrun/material/<id>` 返回素材包（对话原文 / 提案及其来源 / 现有脚本 / 主客名 / 提示词接线 / 各环节就绪状态），
+dryrun.mjs 的每一步都建立在它上面——所以「跑不了」时它会直接告诉你缺哪一样。
+
 ## 提示词（.md 正文 + .mjs 包装）
 
 - **提示词正文写在 `prompts/*.md`**（Markdown，改完即生效，无需构建）；

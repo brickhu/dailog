@@ -2331,6 +2331,72 @@ function segmentsFromDraftShape(p) {
     return;
   }
 
+  // GET /api/dryrun/material/<id> → 干跑素材包（**只读**：不写 production、不改投稿状态、不落 prompt 文件）
+  //   一次把四个环节各自需要的输入给全，省得每次测试都去猜怎么拼。
+  const dryMat = path.match(/^\/api\/dryrun\/material\/([0-9a-f-]+)$/);
+  if (dryMat) {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const id = dryMat[1];
+    try {
+      const detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null);
+      const dialogue = await loadDialogue(e, token, id).catch(() => null);
+      const production = await loadProduction(e, token, id).catch(() => null);
+      const det = detail || {};
+      const msgs = (dialogue && dialogue.messages) || [];
+      // 提案：锁定稿优先；否则取 reviewProposals 的推荐线程（与前端同一套回退）
+      let proposal = null, proposalSource = null;
+      if (det.review && det.review.core_question) { proposal = det.review; proposalSource = "review"; }
+      else {
+        const rp = (production && production.reviewProposals) || null;
+        if (rp && Array.isArray(rp.proposals) && rp.proposals.length) {
+          const rec = rp.creative_proposal || {};
+          const rid = rp.recommended_thread_id || rec.thread_id || "";
+          const src = rp.proposals.filter((p) => p.thread_id === rid)[0] || rp.proposals[0];
+          proposal = Object.assign({}, src, { recommended_duration: rec.recommended_duration || src.recommended_duration || null });
+          proposalSource = "reviewProposals";
+        }
+      }
+      const scripts = Array.isArray(det.reviewScripts) ? det.reviewScripts : [];
+      // 提示词接线（prompts.json 是唯一源）：只读出来给测试用，方便按环节换文件做对照
+      let prompts = {};
+      try {
+        const idx = JSON.parse(readFileSync(join(here, "prompts", "prompts.json"), "utf8"));
+        for (const k of Object.keys(idx)) {
+          const v = idx[k] || {};
+          const u = (v.messages || []).filter((x) => x && x.role === "user")[0] || null;
+          prompts[k] = { name: v.name || null, file: (u && u.file) || null, config: v.config || null };
+        }
+      } catch { prompts = {}; }
+      const missing = (arr) => arr.filter(Boolean);
+      const stages = {
+        r1: { endpoint: "POST /api/run/review/round1", ready: msgs.length > 0, needs: missing([!msgs.length && "对话原文"]) },
+        r2: { endpoint: "POST /api/run/review/round2", ready: msgs.length > 0 && !!proposal, needs: missing([!msgs.length && "对话原文", !proposal && "提案（锁定稿或 reviewProposals）"]) },
+        r3: { endpoint: "POST /api/run/polish", ready: scripts.length > 0, needs: missing([!scripts.length && "脚本（R2 产出的 reviewScripts）"]) },
+        r4: { endpoint: "POST /api/run/publish（fillOnly）", ready: scripts.length > 0, needs: missing([!scripts.length && "脚本（R2 产出的 reviewScripts）"]) },
+      };
+      sendJson(res, {
+        ok: true, mode: "dryrun", writes: "none", id,
+        title: det.title || (dialogue && dialogue.title) || null,
+        stage: det.status || null, language: det.language || null,
+        host: { callName: det.callName || null },
+        guest: (det.guest && { id: det.guest.id, name: det.guest.name }) || null,
+        dialogue: {
+          sourceUrl: (dialogue && dialogue.sourceUrl) || null,
+          source: (dialogue && dialogue.source) || null,
+          title: (dialogue && dialogue.title) || null,
+          count: msgs.length, messages: msgs,
+        },
+        proposal: { source: proposalSource, value: proposal },
+        scripts,
+        prompts,
+        stages,
+      });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
   // GET /api/r2title/<id> → 投稿卡片标题：从 R2 对话 JSON 取 title（缓存化，不依赖本地）
   const rt = path.match(/^\/api\/r2title\/([0-9a-f-]+)$/);
   if (rt) {
