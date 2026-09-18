@@ -1245,23 +1245,7 @@ Remove:
 * AI verbosity,
 * secondary exploration threads.
 
-Prioritize material that moves the audience through:
-
-```text id="x2z17o"
-Public Tension
-↓
-Shared World
-↓
-Specific Situation
-↓
-Unresolved Question
-↓
-Thinking
-↓
-Turning Point
-↓
-Perspective
-```
+Prioritize material that moves the episode through the structure in §3.
 
 Do not preserve content simply because it was interesting in the raw source.
 
