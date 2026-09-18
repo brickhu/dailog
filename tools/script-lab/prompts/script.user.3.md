@@ -1046,18 +1046,18 @@ The Host and Guest should **build the opening together**.
 
 ### HOST
 
-The Host's opening should combine four functions into one natural movement:
+The Host opens in **one turn**, in this order:
 
-* connect with the audience,
-* create the Hook,
-* welcome the audience to dailog and establish their own identity,
-* bring the Guest into the Hook.
+1. welcome the audience, and say the program's name,
+2. say who they are,
+3. give the Hook,
+4. hand it to the Guest.
 
-These functions should not feel like separate announcements.
+> **Welcome → who I am → the Hook → the Guest. One turn, four moves — not four announcements.**
 
-The Host should not complete the entire setup before the Guest appears.
+The turn is a handshake, not the setup: the Shared World and the current situation are discovered in the conversation that follows.
 
-> **The Host's job is to create the opening situation and give the Guest something worth responding to.**
+> **The Host's job is to open the door and give the Guest something worth responding to.**
 
 The Hook should create an open loop through:
 
@@ -1075,8 +1075,6 @@ Do not manufacture drama.
 
 Do not reveal the Perspective.
 
-The Host may introduce dailog and themselves naturally within the Hook rather than pausing the conversation to deliver formal program information.
-
 ### GUEST
 
 The Guest should enter as a **participant in the opening**, not as a second presenter.
@@ -1089,7 +1087,7 @@ Its object is not the subject. It is the Host — the person who just walked in 
 
 A simple response stays on one thing: what the Host is actually carrying. It does not open the analysis.
 
-Then the Guest greets the audience, briefly, and stops.
+In the same turn, the Guest greets the audience briefly — and stops there.
 
 > **Greeting alone is what leaves the opening flat. The response comes first.**
 
@@ -1102,15 +1100,9 @@ Do not force formal self-introduction unless it naturally belongs to the scene.
 A useful internal pattern is:
 
 ```text id="e7r2q1"
-Host creates the Hook
+Host's turn — welcome, identity, Hook, handed to the Guest
         ↓
-Host naturally establishes dailog + identity
-        ↓
-Host brings Guest into the situation
-        ↓
-Guest gives a simple response
-        ↓
-Guest greets the audience
+Guest's turn — a simple response, then a brief greeting
         ↓
 Host reacts
         ↓
