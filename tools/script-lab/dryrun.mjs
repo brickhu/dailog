@@ -10,7 +10,7 @@
  * 全程不写 production.json、不改投稿状态、不落 prompt 文件。
  *
  * 用法：
- *   node tools/script-lab/dryrun.mjs list [关键词]                     列出投稿（id 可只写前 8 位）
+ *   node tools/script-lab/dryrun.mjs list [关键词]                     列出投稿（id 列就是投稿 id，直接复制来用）
  *   node tools/script-lab/dryrun.mjs material <id>                    取素材包（JSON）
  *   node tools/script-lab/dryrun.mjs r2 <id> [--file prompts/x.md]    干跑一个环节
  *   node tools/script-lab/dryrun.mjs all <id>                         四个环节依次干跑
@@ -95,7 +95,61 @@ async function resolveId(id) {
   throw new Error(id + " 匹配到 " + hit.length + " 篇，请多写几位：" + hit.slice(0, 4).map((r) => r.id.slice(0, 12)).join(" / "));
 }
 
-const material = async (id) => api("/api/dryrun/material/" + await resolveId(id));
+/** 老服务端没有 /api/dryrun/material 时，客户端自己从 /api/detail 拼一份（行为完全一致，不写任何状态） */
+async function materialFallback(full) {
+  const d = await api("/api/detail/" + full);
+  const det = d.detail || {};
+  const prod = d.production || {};
+  const msgs = (d.dialogue && d.dialogue.messages) || [];
+  let proposal = null, source = null;
+  if (det.review && det.review.core_question) { proposal = det.review; source = "review"; }
+  else {
+    const rp = prod.reviewProposals || null;
+    if (rp && Array.isArray(rp.proposals) && rp.proposals.length) {
+      const rec = rp.creative_proposal || {};
+      const rid = rp.recommended_thread_id || rec.thread_id || "";
+      const src = rp.proposals.filter((p) => p.thread_id === rid)[0] || rp.proposals[0];
+      proposal = Object.assign({}, src, { recommended_duration: rec.recommended_duration || src.recommended_duration || null });
+      source = "reviewProposals";
+    }
+  }
+  const scripts = (d.prodSummary && Array.isArray(d.prodSummary.scriptList) && d.prodSummary.scriptList.length)
+    ? d.prodSummary.scriptList
+    : (Array.isArray(det.reviewScripts) ? det.reviewScripts : []);
+  const miss = (a) => a.filter(Boolean);
+  return {
+    ok: true, mode: "dryrun（客户端拼装：服务端版本较旧）", writes: "none", id: full,
+    title: det.title || (d.dialogue && d.dialogue.title) || null,
+    stage: det.status || null, language: det.language || null,
+    host: { callName: det.callName || null },
+    guest: (det.guest && { id: det.guest.id, name: det.guest.name }) || null,
+    dialogue: {
+      sourceUrl: (d.dialogue && d.dialogue.sourceUrl) || null,
+      source: (d.dialogue && d.dialogue.source) || null,
+      title: (d.dialogue && d.dialogue.title) || null,
+      count: msgs.length, messages: msgs,
+    },
+    proposal: { source, value: proposal },
+    scripts, prompts: {},
+    stages: {
+      r1: { endpoint: "POST /api/run/review/round1", ready: msgs.length > 0, needs: miss([!msgs.length && "对话原文"]) },
+      r2: { endpoint: "POST /api/run/review/round2", ready: msgs.length > 0 && !!proposal, needs: miss([!msgs.length && "对话原文", !proposal && "提案（锁定稿或 reviewProposals）"]) },
+      r3: { endpoint: "POST /api/run/polish", ready: scripts.length > 0, needs: miss([!scripts.length && "脚本"]) },
+      r4: { endpoint: "POST /api/run/publish（fillOnly）", ready: scripts.length > 0, needs: miss([!scripts.length && "脚本"]) },
+    },
+  };
+}
+
+const material = async (id) => {
+  const full = await resolveId(id);
+  try {
+    return await api("/api/dryrun/material/" + full);
+  } catch (e) {
+    const msg = String((e && e.message) || e);
+    if (!/未知端点|404|not found/i.test(msg)) throw e;   // 只有"这条路由不存在"才降级
+    return await materialFallback(full);
+  }
+};
 
 /** 干跑一个环节：先 preview 拿渲染好的 messages，必要时换掉提示词正文，再真跑一次 */
 async function runStage(stage, id, mat, fileOverride) {
@@ -152,8 +206,8 @@ function writeOut(path, obj) {
 
   if (cmd === "list") {
     const rows = await listSubmissions(ids[0] || null);
-    console.log("共 " + rows.length + " 篇    （id 列可以只写前 8 位）");
-    for (const r of rows) console.log("  " + r.id.slice(0, 8) + "  " + String(r.stage || "?").padEnd(10) + "  " + String(r.title || "(无标题)").slice(0, 46) + "   " + r.id);
+    console.log("共 " + rows.length + " 篇    （下面这一列就是投稿 id，直接复制给命令用）");
+    for (const r of rows) console.log("  " + r.id + "  " + String(r.stage || "?").padEnd(10) + "  " + String(r.title || "(无标题)").slice(0, 40));
     return;
   }
 
@@ -178,19 +232,20 @@ function writeOut(path, obj) {
   const targets = need(ids.length ? ids : null, "投稿 id");
   const outdir = opt("outdir", null);
 
-  for (const id of targets) {
+  for (const rawId of targets) {
+    const id = await resolveId(rawId);          // 只写前 8 位也行；补全后再传给各环节端点
     const m = await material(id);
     for (const st of stages) {
       try {
         const r = await runStage(st, id, m, file);
-        const label = st + "  " + id.slice(0, 8) + "  " + (r.ms / 1000).toFixed(1) + "s" + (r.usedFile ? "  提示词=" + r.usedFile : "");
+        const label = st + "  " + id + "  " + (r.ms / 1000).toFixed(1) + "s" + (r.usedFile ? "  提示词=" + r.usedFile : "");
         if (AS_JSON) console.log(JSON.stringify(r, null, 1));
         else { console.log("─".repeat(60)); console.log(label); const s = summarize(st, r.result); if (s) console.log(s); }
         const out = opt("out", null) || (outdir ? outdir.replace(/\/+$/, "") + "/dryrun-" + st + "-" + id.slice(0, 8) + ".json" : null);
         if (out) writeOut(out, r);
       } catch (e) {
         console.log("─".repeat(60));
-        console.log(st + "  " + id.slice(0, 8) + "  失败：" + String(e.message || e));
+        console.log(st + "  " + id + "  失败：" + String(e.message || e));
       }
     }
   }
