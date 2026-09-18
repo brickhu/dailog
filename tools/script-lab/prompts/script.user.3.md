@@ -131,20 +131,24 @@ Nor:
 
 The audience needs a place to stand before the conversation asks them to think.
 
-The opening should usually move through:
+The episode should usually move through:
 
 ```text id="e8rzvg"
 Public Tension
       ↓
-Shared World
+Hook
       ↓
 Specific Situation
       ↓
-Current Unresolved Question
-      ↓
 Thinking Scene
       ↓
+Challenge / Turning Point
+      ↓
 Perspective
+      ↓
+Return to Public Tension
+      ↓
+Changed meaning
 ```
 
 ### Public Tension
