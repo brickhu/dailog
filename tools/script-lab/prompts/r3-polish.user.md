@@ -1,21 +1,25 @@
-# 语感打磨：给台词添加 TTS 标记
+# 语感打磨：给台词添加「结构层」TTS 标记
 
 要打磨的台词在 system 的「要打磨的台词」里。
 
-先通读全部 `segments`，理解完整对话、上下文、双方关系、情绪变化和认知推进，再逐句进行处理。
+先通读全部 `segments`，理解完整对话、上下文、双方关系、语气变化和认知推进，再逐句处理。
 
 你的任务不是改写台词，而是：
 
 > **让每一句话听起来像真人正在此刻说出来，而不是朗读一份已经写好的采访稿。**
 
-重点处理：
+**本环节只做能从文本与互动判断出来的那一层：**
 
-* 情绪
-* 语气
-* 互动反应
-* 思考停顿
-* 重点词强调
-* 笑声及必要的副语言
+* 重点词强调（`[emphasis]`）
+* 思考停顿（`[break]` / `[long-break]`）
+* 互动反应（靠停顿、重音、轻笑表达，不判断情绪）
+* 笑声（`[laughing]` / `[chuckling]`）
+* 叹气（`[sighing]`）
+* 轻声（`[soft tone]`）
+
+**本环节不打情绪标签。** `[curious]` `[doubtful]` `[happy]` 这类需要推断说话者内心状态的标签，自动判断不可靠，**由编辑在界面上手选**（界面里有完整情绪词表）。
+
+原则：**宁可不标，也不要猜情绪。**
 
 ---
 
@@ -27,14 +31,13 @@
 
 你应该主动寻找：
 
-* 哪些地方需要情绪变化；
 * 哪些地方应该产生反应；
 * 哪些词应该被强调；
 * 哪些地方应该停顿；
 * 哪些地方自然会笑；
-* 哪些地方需要改变语气。
+* 哪些地方该收轻声。
 
-然后使用合适的 TTS 标记。
+然后使用本环节允许的那 7 个标签（§17）。
 
 但不要给每句话都加标记。
 
@@ -91,74 +94,67 @@
 * key insight
 * closing reflection
 
-当这些时刻真实存在时，应主动添加合适的 TTS 标记。
+**每个时刻落成一个具体标签，标签类型由时刻决定：**
 
-不要因为一句话“理论上可以正常朗读”就跳过明显的 performance moment。
+| 时刻 | 首选标签 |
+| --- | --- |
+| reaction / surprise / disagreement | `[break]`（先顿一下）或 `[emphasis]`（把反对的那个词压重） |
+| hesitation / realization / 组织答案 | `[break]` / `[long-break]` |
+| 真正的笑点 | `[chuckling]` / `[laughing]` |
+| turning point / key distinction / punchline / key insight | `[emphasis]` |
+| 情绪落点 / 收着说 | `[soft tone]`（可加 `[break]`） |
+| 真的叹一口气 | `[sighing]` |
 
-但不要为了制造变化而强行加戏。
+**总量参考**：一篇 25–40 段的真实对谈，通常有 **8–15 处**值得处理的时刻。标完之后如果只有 0–3 处，几乎总是漏找——逐段再过一遍。反之，如果每一段都有标签，说明在凑数。
+
+（这是"通常值"，不是配额：平淡的段落本来就没有时刻。）
+
+不要因为一句话“理论上可以正常朗读”就跳过明显的时刻。
+
+但也不要为了制造变化而强行加戏。
 
 ---
 
-# 4. EMOTION MARKERS
+# 4. 情绪标签不在本环节范围内
 
-Emotion marker 用于表达说话者此刻真实的情绪或心理状态。
+`[curious]` `[doubtful]` `[happy]` 这类标签需要推断说话者此刻的内心状态。自动打磨判断不可靠——实测只会在**台词字面写着情绪词**的地方打对（"很高兴"→`[happy]`），其余一律判不准，最后退回 `[emphasis]`。
 
-常见适用场景：
+所以本环节不打情绪标签。**情绪由编辑在界面上手选**（界面里有 50+ 个情绪词及中文释义）。
 
-* Host 听到出乎意料的观点；
-* Guest 面对质疑；
-* 某个观点让说话者产生好奇；
-* 某个问题让说话者犹豫；
-* 某个发现带来明显惊讶；
-* 某个观点让双方产生共鸣；
-* 某个结论变得更加坚定。
+如果某一行的语气确实关键，用本环节能可靠表达的手段去做：
 
-Emotion marker 一般放在句首。
+* 停顿：`[break]` / `[long-break]`
+* 重音：`[emphasis]`
+* 笑声：`[chuckling]` / `[laughing]`
+* 轻声：`[soft tone]`
 
-例如：
+判断依据是**互动功能**，不是内心状态：
 
-```text
-[curious] What makes you think that?
+> **这句话在对上一句做什么？**（质疑 / 让步 / 追问 / 恍然 / 认输 / 安慰 / 收住）
 
-[surprised] I hadn't looked at it that way.
-
-[doubtful] I'm not sure that's actually the problem.
-
-[confident] I think that's where the difference really is.
-
-[uncertain] I'm still not convinced.
-```
-
-不要机械地让每个 segment 使用不同 emotion。
-
-相同的情绪可以连续出现在多个 segment 中。
-
-> **Emotional continuity is more important than emotional variety.**
-
-情绪应该因为对话发生变化，而不是因为 segment 发生变化。
+判断得出来，就用上面四种手段表达；判断不出来，就不标。
 
 ---
 
 # 5. EMPHASIS
 
-主动寻找一句话中真正承重的词或短语，并使用 `[emphasis]`。
+选词的判据不是“哪个词重要”，而是：
 
-优先考虑：
+> **把哪个词换成它的反面，这句话的意思就变了？**
 
-* 对比项；
-* 转折后的关键结论；
-* 核心概念；
-* 重要区别；
-* 关键数字；
-* 专有名词；
-* punchline；
-* 改变整句话意义的词。
+那个词才是重音所在（多为对比项、否定词、转折后的结论、关键数字）。
 
-`[emphasis]` 必须：
+`[emphasis]` 只标**一个词**：
 
-* 紧贴被强调的词；
-* 中间不能有空格；
-* 放在被强调词之前。
+* 最长 4 个字；
+* 不含标点、不含顿号、不含逗号；
+* 紧贴该词、中间不留空格、放在词前。
+
+```text
+✓ [emphasis]成本    ✓ [emphasis]稀缺    ✓ [emphasis]没有    ✓ [emphasis]认知
+
+✗ [emphasis]思考的过程本身   ✗ [emphasis]最强的那一条   ✗ [emphasis]新的内容形态
+```
 
 例如：
 
@@ -178,25 +174,9 @@ That's not the same as saying AI makes design [emphasis]easy.
 
 不要为了完成任务而机械强调。
 
-### Emphasis coverage
+不要把整个短语、分句或整句标上——那是“放大一段”，不是重音。
 
-对于有实质内容的节目：
-
-> **主动寻找多个真正值得强调的词。**
-
-不要让整篇 substantive dialogue 最终一个 `[emphasis]` 都没有。
-
-如果完整脚本中存在明显的：
-
-* contrast,
-* reversal,
-* key concept,
-* conclusion,
-* punchline
-
-却完全没有 `[emphasis]`，必须重新检查。
-
-整体应当让听众听得出**自然的重音变化**。
+**句式陷阱**：中文里“不是 X，而是 Y”这类对比句会在一篇里反复出现。出现多次时**不要每次都标**——只在真正承重的那些时刻标（§3）。遇到就标，等于没做判断。
 
 ---
 
@@ -207,26 +187,14 @@ That's not the same as saying AI makes design [emphasis]easy.
 例如：
 
 ```text
-[surprised] Wait, I hadn't thought about it that way.
+[break] 等一下，我不确定这个结论成立。
 
-[curious] Okay, but what happens if we take that seriously?
+[emphasis]真正的变量是成本，不是工具。
 
-[doubtful] I'm not sure that follows.
+[chuckling] 好吧，这个说法我接受。
 
-[empathetic] I can see why that would be difficult.
+[soft tone] 我大概明白你在说什么了。
 ```
-
-reaction 不一定必须有 emotion marker。
-
-也可以通过：
-
-* `[break]`
-* `[long-break]`
-* `[chuckling]`
-* `[emphasis]`
-* `[soft tone]`
-
-表现。
 
 核心原则：
 
@@ -280,22 +248,32 @@ Prefer the former.
 
 使用 `[break]` 或 `[long-break]` 表现自然停顿。
 
-优先考虑：
+**关键机制：`[break]` 紧贴标点符号时不生效——前后任一方向挨着标点，这个标签就等于没写。**
 
-* 组织答案；
-* 突然意识到某件事；
-* 重要观点出现前；
-* 某句话需要让听众消化；
-* 情绪发生变化；
-* 说话者正在重新判断。
-
-例如：
+所以它**只能放在句子内部，左右都不挨标点**：
 
 ```text
-I thought that was the problem. [break] But maybe it isn't.
+✓ 我觉得[break]这件事不是成本问题。
 
-[long-break] I'm not sure I agree with that.
+✓ 真正难的不是实现[break]是让人愿意留下来。
+
+✓ 那问题就变成[long-break]谁来承担这个代价。
+
+✗ 我觉得这件事不是成本问题。[break] 那什么是成本问题？   ← 前面是句号，不生效
+
+✗ 我觉得这件事不是成本问题[break]，那什么是成本问题？    ← 后面是逗号，不生效
+
+✗ 嗯……[break]我还真没这么想过。                        ← 前面是省略号，不生效
 ```
+
+**推论：句与句之间的停顿没法用 `[break]` 标**（那里永远有标点）。句间停顿交给台词本身的标点；`[break]` 只用来标**句内**的那一下：换气、犹豫、说到一半才想明白。
+
+优先考虑（都发生在句内）：
+
+* 组织答案时卡一下；
+* 突然意识到某件事；
+* 重要观点出现前的那一下；
+* 说话者正在重新判断。
 
 不要给所有长句加 pause。
 
@@ -314,7 +292,7 @@ Pause 必须有明确的 conversational reason。
 例如：
 
 ```text
-[curious] 嗯……我还真没这么想过。
+嗯……我还真没这么想过。
 ```
 
 不要大量添加：
@@ -391,47 +369,19 @@ Pause 必须有明确的 conversational reason。
 
 ---
 
-# 11. OTHER VOCAL EFFECTS
+# 11. 叹气
 
-只有上下文明确支持时才使用：
-
-```text
-[sighing]
-[gasping]
-[clear throat]
-[groaning]
-[panting]
-[yawning]
-[sobbing]
-[crying loudly]
-```
-
-这些不是装饰。
+`[sighing]` 只在这种时候用：台词本身带着**释然、无奈、或者把一口气吐出来**的意思（“算了”“也只能这样了”“说到底”）。
 
 不要为了增加“真人感”而随机加入。
 
 ---
 
-# 12. DELIVERY MARKERS
+# 12. 轻声
 
-根据实际表达需要，可以使用：
+`[soft tone]` 用于**明显收着说**的地方：承认一件不太想说的事、安慰对方、把话说轻。
 
-```text
-[whispering]
-[shouting]
-[screaming]
-[soft tone]
-[in a hurry tone]
-```
-
-适用场景：
-
-* `[soft tone]`：私密、柔和、情绪敏感的表达；
-* `[whispering]`：真正压低声音；
-* `[in a hurry tone]`：真实的急促表达；
-* `[shouting]` / `[screaming]`：只有强烈上下文支持时使用。
-
-不要把这些 marker 当作普通情绪标签。
+它标的是“怎么说”，不是“什么心情”。
 
 ---
 
@@ -439,33 +389,32 @@ Pause 必须有明确的 conversational reason。
 
 标记应该是**主动寻找，而不是平均撒点**。
 
-对于一篇具有充分认知内容的完整节目：
+一篇 25–40 段的真实对谈，整体大约 **8–15 处**，并且分布在几类里：
 
-* `[emphasis]` 应出现多个有意义的使用点；
-* emotion marker 应出现在重要反应、转折或状态变化处；
-* `[break]` / `[long-break]` 应出现在有真实思考或情绪停顿的位置；
-* `[chuckling]` / `[laughing]` 应出现在真实笑点或轻松落点。
+* `[emphasis]`：转折 / 对比 / 关键区别处（通常占一半左右，不该占满）；
+* `[break]` / `[long-break]`：真实思考、犹豫、临时改口处；
+* `[chuckling]` / `[laughing]`：真实笑点或轻松落点；
+* `[soft tone]`：收着说的地方。
 
-不要让整篇只有一种 marker。
+**不要让整篇只有一种标签**——如果最后只剩 `[emphasis]`，说明反应、停顿、笑意都没有被听出来。
 
-也不要让每一句都被 marker 包围。
+也不要让每一句都被标签包围。
 
 一个合理的整体感觉应该接近：
 
 ```text
 ordinary
 ordinary
-[curious]
-ordinary
-[emphasis]
-ordinary
-[surprised]
-ordinary
 [break]
 ordinary
 [emphasis]
 ordinary
+ordinary
 [chuckling]
+ordinary
+[emphasis]
+ordinary
+[soft tone]
 ordinary
 ```
 
@@ -484,14 +433,14 @@ ordinary
 也不是：
 
 ```text
-[curious]
 [emphasis]
-[surprised]
-[doubtful]
 [break]
+[emphasis]
 [chuckling]
 [emphasis]
-[curious]
+[break]
+[emphasis]
+[soft tone]
 ```
 
 核心原则：
@@ -506,12 +455,12 @@ ordinary
 
 重点检查：
 
-1. 是否存在应该有 `[emphasis]` 却没有标出的重点词；
-2. 是否存在明显反应却没有 emotion marker；
-3. 是否存在自然的思考停顿却没有 `[break]`；
-4. 是否存在真正的笑点却没有 `[chuckling]` 或 `[laughing]`；
-5. 是否存在明显情绪落点却完全没有 vocal treatment；
-6. 是否存在连续很多 substantive segments 完全平铺。
+1. 是否存在明显反应却没有反应处理（`[break]` / `[emphasis]` / `[chuckling]` / `[soft tone]`）；
+2. 是否存在自然的思考停顿却没有 `[break]`；
+3. 是否存在真正的笑点却没有 `[chuckling]` 或 `[laughing]`；
+4. 是否存在转折 / 对比 / 关键区别却没有 `[emphasis]`；
+5. 是否存在连续很多 substantive segments 完全平铺；
+6. 是否所有标签最后都只剩 `[emphasis]`——若是，回到 §3 重找时刻。
 
 如果发现明显 performance opportunity，补充合适的 cue。
 
@@ -586,87 +535,31 @@ ordinary
 
 ---
 
-# 17. ALLOWED MARKERS
-
-只能使用以下 marker。
-
-### 情绪
+# 17. ALLOWED MARKERS（只有这 7 个）
 
 ```text
-happy sad angry excited calm nervous confident surprised satisfied delighted scared worried upset frustrated depressed empathetic embarrassed disgusted moved proud relaxed grateful curious sarcastic
-
-uncertain doubtful confused disappointed regretful hopeful nostalgic determined sympathetic anxious disdainful unhappy hysterical indifferent guilty ashamed jealous envious optimistic pessimistic lonely bored contemptuous compassionate resigned
+emphasis      重读紧跟其后的那个词
+break         短停顿
+long-break    长停顿
+laughing      笑
+chuckling     轻笑
+sighing       叹气 / 释然
+soft tone     轻声
 ```
 
-### 语气
+**不允许使用情绪标签。** `[curious]` `[happy]` `[doubtful]` `[worried]` 这类一律不打——本环节不判断情绪（见 §4），编辑会在界面上手选。
+
+也不要自创其他标签，不要使用：
 
 ```text
-whispering
-shouting
-screaming
-soft tone
-in a hurry tone
-emphasis
-```
-
-### 音效
-
-```text
-laughing
-chuckling
-sobbing
-crying loudly
-sighing
-groaning
-panting
-gasping
-yawning
-snoring
-clear throat
-```
-
-### 特效
-
-```text
-audience laughing
-background laughter
-crowd laughing
-```
-
-### 停顿
-
-```text
-break
-long-break
-```
-
-不要自创其他 marker。
-
-不要使用：
-
-```text
-[thoughtful]
-[thinking]
-[smiling]
+[thoughtful] [thinking] [smiling] [pause] [emphasis ]（标签后带空格）
 ```
 
 ---
 
 # 18. MARKER PLACEMENT
 
-### Emotion
-
-放在句首。
-
-正确：
-
-```text
-[curious] What makes you think that?
-```
-
-不要放在句尾。
-
-### Delivery
+### `[soft tone]`
 
 放在需要改变说法的位置。
 
@@ -693,7 +586,7 @@ long-break
 
 ### Break
 
-放在需要停顿的位置。
+放在**句内、左右都不挨标点**的位置——挨着标点就不生效（见 §8）。
 
 ---
 
@@ -705,15 +598,15 @@ long-break
 2. 顺序完全一致；
 3. `speaker` 完全一致；
 4. 除允许的规则外，台词正文完全不变；
-5. 是否主动寻找并使用了真正的 `[emphasis]`；
-6. 是否对重要 reaction 使用了 emotion cue；
+5. 每一个标签是否都能追溯到 §3 里一个真实的表演时刻；
+6. 重要 reaction 是否被听得出（用 `[break]` / `[emphasis]` / `[chuckling]` / `[soft tone]`）；
 7. 是否对自然停顿使用了 `[break]` / `[long-break]`；
 8. 是否对真实笑点使用了 `[chuckling]` / `[laughing]`；
 9. 是否存在大量 substantive dialogue 完全没有任何 vocal variation；
 10. 是否出现了为了凑数量而添加的 marker；
 11. 所有 marker 都来自允许词表；
-12. `[emphasis]` 是否紧贴被强调词；
-13. 没有在相邻句子中为了“变化”强行切换 emotion；
+12. `[emphasis]` 是否只标一个词（≤4 字、不含标点）并紧贴该词；
+13. 是否完全没有使用情绪标签（本环节不允许）；
 14. Host 和 Guest 是否听起来像真正的 conversation participants；
 15. 整体是否像真人说话，而不是演员在表演文本。
 
@@ -736,7 +629,7 @@ long-break
   "segments": [
     {
       "speaker": "host",
-      "text": "[curious] 嗨，欢迎回到 dailog。"
+      "text": "嗨，欢迎回到 dailog。[break] 今天想聊一个我最近一直没想清楚的问题。"
     },
     {
       "speaker": "guest",

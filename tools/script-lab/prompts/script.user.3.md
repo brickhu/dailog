@@ -19,7 +19,9 @@ Your task is to turn the source conversation and the approved editorial proposal
 
 The episode should transform a private Thinking Scene into a **public conversation worth entering**.
 
-The audience should first understand **what is happening and why it matters**, then enter the specific situation, witness the thinking unfold, and naturally arrive at a Perspective.
+> **First make the situation legible. Then make the thinking alive.**
+
+The listener should first understand what is happening and why it matters, then enter the specific situation, witness the thinking unfold, and naturally arrive at a Perspective.
 
 ---
 
@@ -33,53 +35,27 @@ Do not replace the selected Thinking Scene.
 
 Do not introduce a different primary theme.
 
-The proposal defines one coherent Thinking Scene:
+The proposal defines:
 
 ```text
-Situation / initial state
-
+Situation / initial_state
         ↓
-
 core_question
-
         ↓
-
 central_tension
-
         ↓
-
 exploration
-
         ↓
-
 turning_point
-
         ↓
-
 possible_discovery / Perspective
-
         ↓
-
 ending_state
-
         ↓
-
 open_question
 ```
 
 The **Thinking Scene is the primary editorial unit**.
-
-The cognitive arc is the internal movement through that scene.
-
-The episode should allow the listener to understand:
-
-* what the Human is dealing with,
-* why it matters now,
-* what the Human is trying to figure out,
-* what makes the situation difficult,
-* how the Human and Guest think through it together,
-* what changes during the interaction,
-* and what Perspective emerges or remains unresolved.
 
 The situation gives the thinking its meaning.
 
@@ -93,24 +69,15 @@ Do not begin from the Perspective.
 
 Do not turn the proposal into an explanatory outline.
 
-Do not make the characters simply explain a conclusion that has already been decided.
+Do not make the characters explain a conclusion that has already been decided.
 
 ---
 
-# 2. THE LISTENER'S STARTING POINT
+# 2. THE CORE EDITORIAL PHILOSOPHY
 
-The source conversation and the podcast have **different starting points**.
+The source conversation and the podcast have different starting points.
 
-The source conversation may begin in the middle of a thought.
-
-The Human and AI may already share:
-
-* context,
-* terminology,
-* history,
-* assumptions,
-* references,
-* and an immediate situation.
+The source conversation may begin in the middle of a thought because the Human and AI already share context, terminology, assumptions, and history.
 
 The audience does not.
 
@@ -118,21 +85,51 @@ The audience does not.
 
 Therefore:
 
-> **The characters may start in the middle of thinking. The episode cannot.**
+> **The characters may already be in the middle of thinking. The episode cannot.**
 
-Before the Host and Guest begin seriously thinking through the unresolved question, the listener needs a place to stand.
+But the opposite is also important:
 
-The listener should naturally come to understand:
+> **Do not replace live thinking with a retrospective report of how the Human thought about it before.**
 
-* what is happening,
-* what this thing is,
-* why it matters,
-* why the Human is dealing with it,
-* and what is at stake now.
+The creative task is therefore:
 
-Only then should the conversation enter the deeper Thinking Scene.
+```text
+Make the situation legible
+        ↓
+Make the unresolved tension present
+        ↓
+Let Human and AI think through it now
+        ↓
+Let understanding change
+```
 
-The episode should usually move through:
+The episode should feel like:
+
+> "I understand what is happening."
+
+then:
+
+> "I understand why this matters."
+
+then:
+
+> "Now I want to see where this goes."
+
+The desired experience is not:
+
+> "The Human already figured this out and is asking the AI to confirm it."
+
+Nor:
+
+> "The Human and AI are debating a question that I don't yet understand."
+
+---
+
+# 3. THE LISTENER'S STARTING POINT
+
+The audience needs a place to stand before the conversation asks them to think.
+
+The opening should usually move through:
 
 ```text
 Public Tension
@@ -141,7 +138,7 @@ Shared World
       ↓
 Specific Situation
       ↓
-Human's Question
+Current Unresolved Question
       ↓
 Thinking Scene
       ↓
@@ -150,164 +147,197 @@ Perspective
 
 ### Public Tension
 
-The listener needs an initial reason to care.
+Give the listener a real reason to care.
 
-The Public Tension should come from the actual source situation.
+The Public Tension must come from the source.
 
 Do not invent a universal problem merely to make the episode sound important.
 
-Do not make broad claims that the source does not support.
-
 ### Shared World
 
-The listener needs enough understanding to know what reality the Host and Guest are talking about.
+Create the minimum common ground required for the listener to understand the conversation.
 
-Shared World does **not** mean a background lecture.
+By the time the main discussion begins, the listener should be able to answer:
 
-It means creating the minimum common ground required for the listener to follow the conversation.
+* What is this thing?
+* What does it refer to?
+* What is the Human doing with it?
 
-**By the end of this step:** the thing under discussion has a name, a purpose, and a concrete referent — the listener could describe it to someone else in one sentence.
+The listener should not need the source conversation to understand the subject.
 
 ### Specific Situation
 
-Once the listener understands the world, reveal the concrete situation the Human is actually facing.
+Establish the Human's current situation.
 
-**By the end of this step:** the listener knows what the Human has already done, decided, or built, and what stage this is at.
+The listener should understand:
 
-### Human's Question
+* what has already been built, tried, decided, or encountered,
+* where the Human currently stands,
+* and what is happening now.
 
-Only then should the specific unresolved question become the center of attention.
+This is context, not a retrospective biography.
 
-**By the end of this step:** the question is stated as a bind with a cost, not as a topic.
+### Current Unresolved Question
 
-The goal of the opening is not to ask the deepest question as quickly as possible.
+Only after the situation is clear should the unresolved question become central.
 
-The goal is to make the listener understand enough of the situation that the question becomes interesting **to them too**.
+The question should feel like a **current bind with consequences**, not merely a topic.
 
-Do not confuse:
+> **Do not ask the deepest question before the listener understands the situation that produced it.**
 
-> "This is the question the Human is thinking about."
+> **Context is the ground the thinking stands on.**
 
-with:
-
-> "This is the question the listener is ready to hear."
-
-The first belongs to the source conversation.
-
-The second belongs to the episode.
-
-## Judge the opening by what the listener can point at, not by what they feel
-
-Do not judge the opening by whether it "creates understanding".
-
-Judge it by whether the listener could repeat back, in their own words:
-
-* **what this thing is** — the project, product, method, or problem under discussion;
-* **where it stands** — what has already been done or decided, and what stage this is at;
-* **why it is stuck now** — the specific thing the Human cannot resolve, and what it costs them.
-
-If any of the three can only be answered with a vague phrase ("我在做一件事", "有个项目", "卡在一个问题上"), the opening has not established it — however strongly the listener is made to feel that they understand.
-
-> **If the listener cannot say what this thing is, nothing else in the episode can land.**
-
-> **Let the listener catch up before the characters get ahead.**
-
-The listener should first feel:
-
-> "I understand what is happening."
-
-Then:
-
-> "I understand why this matters."
-
-Then:
-
-> "Okay, now I want to know where this goes."
-
-Do not rush through this threshold simply because the Thinking Scene itself is intellectually interesting.
-
-> **The audience needs a place to stand before the conversation asks them to think.**
-
-The Audience Entry is not a separate topic.
-
-It is the threshold into the Thinking Scene.
+Do not rush through this stage merely because the Thinking Scene itself is intellectually interesting.
 
 ---
 
-# 3. THE THINKING SCENE
+# 4. MAKE THE THINKING ALIVE
+
+Once the situation is clear, stop explaining and let the thinking happen.
+
+The source conversation may contain completed thoughts, previous attempts, conclusions, and discoveries.
+
+These are source material, not necessarily live moments in the episode.
+
+> **The source contains the history of the thinking. The episode contains the experience of thinking.**
+
+A common failure mode is:
+
+```text
+"I previously thought X."
+
+"I tried Y."
+
+"Then I realized Z."
+
+"So I want to ask you..."
+```
+
+This turns the Human into a reporter of their own thinking.
+
+Avoid using past reasoning to tell the audience the intellectual journey that the episode should let them experience.
+
+Instead:
+
+```text
+Current situation
+        ↓
+Current tension
+        ↓
+Human's intuition / hypothesis / uncertainty
+        ↓
+Guest response
+        ↓
+Human reaction
+        ↓
+New uncertainty
+        ↓
+Further exploration
+        ↓
+Changed understanding
+```
+
+Past actions may be mentioned when they establish the current situation:
+
+> "I tried this approach, and it created a different problem."
+
+That is useful.
+
+But avoid:
+
+> "I originally thought X, then I considered Y, then I realized Z..."
+
+when that simply reports completed cognition.
+
+> **Past actions can establish the problem. Past reasoning should not prematurely resolve it.**
+
+The Human may know things.
+
+The Human may have strong opinions.
+
+The Human may already have a hypothesis.
+
+But something important must still be genuinely unresolved.
+
+Do not fake discovery.
+
+If the source shows that a decision is already settled, do not pretend it is being decided for the first time.
+
+Instead, explore what remains uncertain around that decision.
+
+The question should be:
+
+> **What is still alive here?**
+
+---
+
+# 5. THE THINKING SCENE
 
 A Thinking Scene is:
 
 > **a real situation in which the Human is trying to understand, decide, create, solve, or rethink something that matters to them.**
 
-The episode should not merely discuss the topic of the scene.
-
-It should let the audience enter the situation and experience the thinking.
+Do not merely discuss the topic.
 
 > **Do not describe the Thinking Scene. Perform the Thinking Scene.**
 
-The audience should understand:
+The listener should understand:
 
 * what is happening,
-* why the Human cares,
-* what they are uncertain about,
+* why it matters,
+* what the Human is uncertain about,
 * what they are trying to figure out,
 * what makes the problem difficult,
 * and why the conversation is happening now.
 
-The Thinking Scene begins when the listener can meaningfully understand the situation.
+A typical cognitive movement is:
 
-Do not force the episode to reproduce the exact point where the source conversation began thinking.
+```text
+Situation
+↓
+Initial understanding
+↓
+Question / tension
+↓
+Exploration
+↓
+Challenge
+↓
+Turning point
+↓
+Deeper exploration
+↓
+Perspective
+↓
+Ending state / open question
+```
 
----
+The Perspective is a destination, not an opening thesis.
 
-# 4. CONTEXT IS THE GROUND, NOT THE BACKGROUND
+Do not jump directly from situation to Perspective.
 
-The selected Thinking Scene may originate from the middle of a longer Human–AI conversation.
-
-The episode does NOT need to reproduce the source conversation from the beginning.
-
-But the listener must have enough context to inhabit the situation.
-
-Before entering the main thinking, four things must be **materially present in what is said** — not merely inferable:
-
-* what the Human is doing, building, deciding, facing, or thinking about,
-* what the key subject, project, person, or concept actually refers to,
-* why this question matters now,
-* what makes the situation difficult or uncertain.
-
-"Materially present" means the listener could answer all four from the episode alone, without guessing.
-
-Brevity is not the goal. **Being answerable is the goal.** Context can be short; it cannot be vague.
-
-Do not dump background, summarize the source conversation, or define everything before anything happens — what matters is whether the four answers are reachable, not how much was explained.
-
-> **Context is not background. Context is the ground the thinking stands on.**
-
-Context should feel like part of the conversation.
-
-Once the listener can inhabit the situation, stop explaining and let the scene take over.
+Let the Perspective be earned through interaction.
 
 ---
 
-# 5. THE SOURCE CONVERSATION
+# 6. THE SOURCE CONVERSATION
 
-The original conversation is the **semantic source material** for the episode.
+The original conversation is the **semantic source material** and **ground truth**.
 
-It can provide:
+It may provide:
 
 * facts,
 * ideas,
 * arguments,
 * questions,
 * examples,
-* actual Human concerns,
-* actual AI reasoning,
+* Human concerns,
+* AI reasoning,
 * disagreements,
 * contradictions,
 * discoveries,
 * uncertainty,
-* changes in understanding.
+* cognitive changes.
 
 But:
 
@@ -315,17 +345,11 @@ But:
 
 The final episode is not a replay of the raw transcript.
 
-It is an editorial reconstruction of the same underlying interaction and Thinking Scene.
+It is an editorial reconstruction of the same underlying Thinking Scene.
 
 ---
 
-# 6. RECONSTRUCT THE CONVERSATION, NOT THE MINDS
-
-The source conversation is the **semantic ground truth**.
-
-Your task is to reconstruct a more natural, engaging, present-tense interview while preserving the intellectual identity of the original Human and AI participants.
-
-> **Reconstruct the conversation, not the minds.**
+# 7. RECONSTRUCT THE CONVERSATION, NOT THE MINDS
 
 The conversational layer may be reconstructed.
 
@@ -347,19 +371,13 @@ Preserve:
 * conclusions,
 * uncertainty.
 
-Do not invent a substantive belief, experience, motivation, value, or position that is not supported by the source conversation.
+Do not invent substantive beliefs, experiences, motivations, values, or positions.
 
 > **Ideas may move. Ownership must not be fabricated.**
 
-An idea originally expressed by one participant may be naturally rephrased, developed, clarified, or incorporated by the other when the source conversation shows meaningful engagement with that idea.
+An idea may be rephrased, developed, clarified, or incorporated by the other participant when the source shows meaningful engagement.
 
-The goal is not to preserve literal authorship of every sentence.
-
-The goal is to preserve meaningful intellectual provenance where attribution matters.
-
-When a substantive idea is materially tied to a participant's personal belief, experience, judgment, preference, or consequential position, preserve its attribution.
-
-Do not silently transfer a meaningful position from one participant to the other simply because it makes the dialogue smoother.
+But materially personal, professional, moral, or consequential positions must retain their source-supported attribution.
 
 ### SOURCE SUPPORT TEST
 
@@ -371,9 +389,7 @@ If not, do not invent it.
 
 ### POSITION DELTA TEST
 
-After reading the reconstructed script:
-
-> **Would a reasonable listener believe that either participant holds a materially different position from the one supported by the source conversation?**
+> **Would a reasonable listener believe that either participant holds a materially different position from the one supported by the source?**
 
 If yes, rewrite.
 
@@ -381,547 +397,452 @@ If yes, rewrite.
 
 ---
 
-# 7. SOURCE-GROUNDED CONVERSATIONAL FRICTION
+# 8. SOURCE MATERIAL VS LIVE EXPERIENCE
 
-The final episode should not sound like two people taking turns delivering polished arguments.
+Before writing each major exchange, distinguish:
 
-It should feel like ideas are **meeting each other in real time**.
+### What is already known
 
-Use conversational friction when supported by the source.
+Facts, completed actions, established decisions, prior attempts, existing positions.
 
-Useful forms include:
+These may establish the current situation.
 
-* immediate reaction,
+### What is still unresolved
+
+An uncertainty, tension, implication, contradiction, trade-off, interpretation, or consequence.
+
+This is what should drive the live conversation.
+
+Do not use completed reasoning merely because it makes the dialogue cleaner.
+
+Prefer the unresolved part that naturally follows from what is already known.
+
+> **Do not make the Human ask the Guest to validate a conclusion. Make them test an uncertainty together.**
+
+---
+
+# 9. FORGET THE ORIGINAL TIMELINE
+
+The source provides meaning, not chronology.
+
+Internally:
+
+```text
+Original Conversation
+        ↓
+Extract semantic material
+        ↓
+Separate substance from conversational form
+        ↓
+Identify what is already known
+        ↓
+Identify what remains unresolved
+        ↓
+Establish the listener's starting point
+        ↓
+Reconstruct the present interaction
+        ↓
+Write the episode
+```
+
+> **Preserve WHAT was said. Forget WHEN it was said.**
+
+But do preserve the **epistemic state** of the scene:
+
+* what was known,
+* what was assumed,
+* what was uncertain,
+* what was discovered,
+* what was already decided,
+* and what remained unresolved.
+
+Do not flatten all of these into one finished position.
+
+---
+
+# 10. TEMPORAL ISOLATION
+
+The final episode is happening **now**.
+
+It is not:
+
+* a sequel,
+* a follow-up,
+* a retrospective,
+* an interview about a previous conversation.
+
+Never imply fictional conversational history.
+
+Avoid:
+
+* "we talked about this before"
+* "we discussed this earlier"
+* "last time you said..."
+* "you mentioned earlier..."
+* "as we discussed..."
+* "I remember you saying..."
+* "when we talked about..."
+* "we already discussed..."
+
+The concept survives.
+
+The fictional history does not.
+
+---
+
+# 11. CONVERSATION IS RECIPROCAL ACTION
+
+The episode is not two people taking turns completing their own thoughts.
+
+It is two people continuously affecting each other's next thought.
+
+> **A conversation is reciprocal action.**
+
+A line is not merely information.
+
+A line should do something to the other person:
+
+* make them reconsider,
+* clarify,
+* resist,
+* notice a contradiction,
+* become curious,
+* remember something relevant,
+* change direction,
+* narrow a claim,
+* challenge an assumption,
+* or simply stay with the thought.
+
+Then the next line should be shaped by that reaction.
+
+> **Every line should change what becomes possible for the next line.**
+
+The desired rhythm is therefore:
+
+```text id="4n8s3w"
+Host says something
+        ↓
+Guest reacts to THAT specific thing
+        ↓
+Host reacts to the reaction
+        ↓
+Guest responds
+        ↓
+Something changes
+        ↓
+The conversation moves
+```
+
+Not:
+
+```text id="h8rtv1"
+Host delivers a complete thought
+        ↓
+Guest delivers a complete thought
+        ↓
+Host delivers another complete thought
+        ↓
+Guest delivers another complete thought
+```
+
+### DO NOT COMPLETE EVERY THOUGHT
+
+A speaker does not need to finish an idea simply because the idea can be explained completely.
+
+In real conversation, a thought may stop because the other person reacts.
+
+Allow:
+
+* unfinished thoughts,
+* partial answers,
+* immediate reactions,
+* brief acknowledgements,
+* hesitation,
+* interruption-like pivots,
+* clarification,
+* self-correction,
+* short disagreement,
+* unexpected follow-up questions.
+
+A short response can be valuable even when it adds little information if it shows that the other person is actually present.
+
+Do not artificially make every turn informative.
+
+> **Conversation has rhythm because people respond before the previous thought is fully exhausted.**
+
+### THINK IN SPEECH, DO NOT DESCRIBE THINKING
+
+The audience should hear a thought forming, not a speaker explaining that they are thinking.
+
+Avoid mechanical meta-thinking such as:
+
+* "Let me think about this."
+* "I think the key issue is..."
+* "I want to organize my thoughts."
+* "What I'm thinking here is..."
+* "The way I see this is..."
+
+These expressions are not forbidden, but do not use them merely to signal that thinking is happening.
+
+Prefer the thinking itself:
+
+* hesitation,
+* correction,
+* contrast,
+* surprise,
+* resistance,
+* realization,
+* unfinished formulation,
+* immediate consequence.
+
+For example:
+
+> "Wait — if that's true, then..."
+
+is usually more alive than:
+
+> "Hmm, let me think. I think the key issue is..."
+
+> **Do not narrate the formation of thought. Let the formation of thought shape the sentence itself.**
+
+### THE HUMAN AND AI HAVE DIFFERENT SELVES
+
+The Human and Guest should not feel like interchangeable voices delivering information.
+
+They should retain their own:
+
+* positions,
+* preferences,
+* assumptions,
+* uncertainties,
+* stakes,
+* conversational habits,
+* and relationship to the subject.
+
+Identity should be audible through how each participant reacts.
+
+The Human may resist an idea because it conflicts with their situation.
+
+The Guest may qualify an idea because the Host's reaction exposes a weakness.
+
+The Host may become more convinced.
+
+The Guest may narrow an earlier claim.
+
+One may notice something the other did not.
+
+The important point is:
+
+> **They are not merely expressing their own positions. They are responding to each other as distinct participants.**
+
+Do not manufacture personality traits or emotions unsupported by the source.
+
+Instead, let identity emerge from the participants' actual positions, concerns, preferences, and reactions.
+
+### THE OTHER PERSON MUST EXIST IN THE NEXT LINE
+
+Before writing each major line, implicitly ask:
+
+> **Why is this person saying this now, after what the other person just said?**
+
+If the line would sound equally natural regardless of the previous line, it is probably too independent.
+
+The next thought should usually be caused by the previous thought.
+
+> **The conversation should feel impossible to shuffle.**
+
+The listener should be able to sense:
+
+> "He said that because she just said this."
+
+not:
+
+> "He had this paragraph prepared anyway."
+
+### SOURCE-GROUNDED FRICTION
+
+Use friction supported by the source:
+
 * resistance,
 * clarification,
 * correction,
 * contradiction,
 * counterexample,
 * reconsideration,
-* thought formation.
+* unexpected implication.
 
-These create:
+Do not manufacture disagreement simply for drama.
 
-> **"They are thinking through this together."**
+> **Friction should reveal thinking, not manufacture conflict.**
 
-not:
-
-> **"They are reading a finished article to each other."**
-
----
-
-# 8. WHAT MAY BE NEW AND WHAT MAY NOT
-
-## New questions ARE allowed
-
-You may create Host questions that were not explicitly asked in the source.
-
-A new question is valid when it naturally follows from:
-
-* an existing position,
-* an existing argument,
-* an existing contradiction,
-* an existing implication,
-* an existing uncertainty,
-* the central tension,
-* or the current Thinking Scene.
-
-The wording may be new.
-
-The underlying intellectual problem must not be new.
-
-## New substantive answers are NOT allowed
-
-Do not invent:
-
-* theories,
-* arguments,
-* facts,
-* experiences,
-* beliefs,
-* conclusions.
-
-If the source does not contain enough material to answer a question:
-
-1. use an existing source-backed idea,
-2. qualify the answer,
-3. acknowledge uncertainty,
-4. allow the question to remain unresolved,
-5. or let the Host recognize that the answer is incomplete.
-
-> **New questions may be constructed. New beliefs may not.**
-
----
-
-# 9. FORGET THE ORIGINAL TIMELINE
-
-The source conversation provides meaning, not chronology.
-
-Internally perform:
-
-```text
-Original Conversation
-
-        ↓
-
-Extract relevant semantic material
-
-        ↓
-
-Separate semantic substance from conversational form
-
-        ↓
-
-Preserve beliefs, positions, facts, experiences, and cognitive states
-
-        ↓
-
-FORGET THE ORIGINAL TIMELINE
-
-        ↓
-
-Use the Creative Proposal as the Thinking Scene
-
-        ↓
-
-Find the listener's starting point
-
-        ↓
-
-Establish the Shared World
-
-        ↓
-
-Enter the Specific Situation
-
-        ↓
-
-Reconstruct the interaction
-
-        ↓
-
-Create source-grounded conversational friction
-
-        ↓
-
-Rebuild the conversation in the present
-
-        ↓
-
-Write the podcast episode
-```
-
-Critical rule:
-
-> **Preserve WHAT was said. Forget WHEN it was said.**
-
----
-
-# 10. TEMPORAL ISOLATION
-
-The final episode is NOT:
-
-* a sequel,
-* a follow-up,
-* a retrospective,
-* an interview about a previous conversation,
-* a conversation happening after the source conversation.
-
-The Host and Guest are having the conversation **now**.
-
-Never imply that they previously discussed the subject.
-
-Avoid fictional-memory language such as:
-
-* "we talked about this before"
-* "we discussed this earlier"
-* "last time you said..."
-* "you mentioned earlier..."
-* "you told me before..."
-* "as we discussed..."
-* "going back to what you said..."
-* "I remember you saying..."
-* "when we talked about..."
-* "we already discussed..."
-* "after our conversation..."
-
-The concept survives.
-
-The fictional conversational history does not.
-
----
-
-# 11. USE SOURCE KNOWLEDGE WITHOUT SOURCE MEMORY
-
-Suppose the source contains:
-
-> Human: "Does CVD divergence count as a moat?"
-
-The final episode may say:
-
-> "Let's take CVD divergence as an example. If I build that into the product, does it actually create a moat?"
-
-It must NOT say:
-
-> "Earlier we talked about CVD divergence. Does that count as a moat?"
-
-The concept survives.
-
-The fictional conversational history does not.
-
----
-
-# 12. PRESENT-TENSE CONVERSATION
-
-Every line should feel like it is happening for the first time in this episode.
-
-The Host can know things.
-
-The Guest can know things.
-
-Both may bring up material from the source.
-
-But nobody should narrate the source conversation as something that happened previously.
-
-The listener should feel:
-
-> **"I am inside this Thinking Scene right now."**
-
----
-
-# 13. DO NOT START FROM THE PERSPECTIVE
-
-Do NOT:
-
-1. decide the final Perspective,
-2. make the Guest explain it immediately,
-3. make the Host ask questions that simply expose it,
-4. summarize the same conclusion at the end.
-
-That produces an AI-generated article disguised as an interview.
-
-Instead:
-
-> **Let the Thinking Scene discover its way there.**
-
-The Perspective is a destination, not the opening thesis.
-
----
-
-# 14. COGNITIVE MOVEMENT
-
-The Thinking Scene should contain meaningful movement in:
-
-* understanding,
-* judgment,
-* framing,
-* interpretation,
-* direction,
-* or perspective.
-
-A typical structure is:
-
-```text
-Situation
-
-↓
-
-Initial understanding
-
-↓
-
-Question / tension
-
-↓
-
-Exploration
-
-↓
-
-Challenge
-
-↓
-
-Turning point
-
-↓
-
-Deeper exploration
-
-↓
-
-Perspective
-
-↓
-
-Ending state / open question
-```
-
-Do not jump directly from the situation to the Perspective.
-
-The Perspective should be earned through interaction.
-
----
-
-# 15. THE HOST
-
-The Host is an active participant in the Thinking Scene, not a question-delivery mechanism.
-
-The Host should:
-
-* react to what the Guest actually says,
-* challenge,
-* doubt,
-* test assumptions,
-* introduce source-grounded counterexamples,
-* notice contradictions,
-* ask for distinctions,
-* misunderstand occasionally when supported by the logic,
-* reconsider,
-* sharpen an unfinished thought,
-* occasionally change their mind.
-
-The Host should have a recognizable human voice.
-
-Conversational reactions may include:
-
-* "Wait."
-* "I'm not sure I buy that."
-* "But doesn't that contradict what you just said?"
-* "Hold on."
-* "What do you mean by that?"
-* "I think we're mixing two things."
-* "That doesn't quite explain my situation."
-* "Let me think about that for a second."
-* "I'm not sure that's the right way to put it."
-
-These are examples of conversational functions, not phrases to insert mechanically.
-
-Do not manufacture emotional drama.
-
----
-
-# 16. THE GUEST
-
-The AI Guest is a participant in the Thinking Scene, not an oracle.
+### GUEST IS A PARTICIPANT, NOT AN ORACLE
 
 The Guest should:
 
-* respond to the Host's actual reaction,
+* respond to the Host's actual words,
 * answer directly,
 * develop ideas progressively,
 * qualify claims,
 * acknowledge uncertainty,
-* challenge the Host where source-supported,
+* challenge where source-supported,
 * revise or narrow an earlier claim,
-* make distinctions,
-* recognize contradictions.
+* ask questions when they naturally move the shared thought forward.
 
-Do not make every answer complete.
+Do not make every Guest answer complete.
 
 Do not make every answer quotable.
 
 Do not make the Guest sound like an essay writer.
 
-Avoid excessive AI language:
+Avoid excessive AI language such as:
 
 * "That's a great question."
 * "Absolutely."
 * "Exactly."
 * "As an AI..."
 * "I completely understand."
-* "That's a very insightful point."
 
-Natural conversation is more important than polished aphorisms.
+### HOST IS NOT AN INTERVIEW MACHINE
+
+The Host should:
+
+* react,
+* challenge,
+* doubt,
+* test assumptions,
+* notice contradictions,
+* introduce source-grounded counterexamples,
+* ask for distinctions,
+* reconsider,
+* sharpen unfinished thoughts,
+* sometimes change their mind.
+
+Questions are not the primary sign that the Host is active.
+
+**Reaction is.**
+
+A Host can be highly active without asking a question.
+
+For example:
+
+> "No, wait. That changes what I was assuming."
+
+may be more useful than immediately asking another question.
 
 ---
 
-# 17. CONVERSATIONAL PRESENCE
-
-The finished episode is the listener's first and only experience of the Thinking Scene.
+# 12. CONVERSATIONAL PRESENCE
 
 The audience was not present for the source conversation.
 
-Never assume the listener knows what the Human and Guest already know.
-
 > **The source conversation is available to the editor, not to the audience.**
 
-Every important reference, situation, or premise needed to understand the current thought must emerge naturally within the episode.
+Every premise needed to follow the current thought must emerge naturally.
 
-At the same time, the Host and Guest are not performing isolated speeches.
+But once the situation is clear, do not keep explaining.
 
-They are physically and psychologically present with each other.
+Let the listener witness the interaction.
+
+The Host and Guest should feel like two people occupying the same conversational space.
 
 Listening is part of the conversation.
 
-A listener should occasionally hear that the other person is:
+Brief responses such as agreement, surprise, confusion, amusement, or acknowledgement may be created when they make the shared attention audible.
 
-* following,
-* reacting,
-* surprised,
-* agreeing,
-* confused,
-* amused,
-* or simply staying with the thought.
+They do not need to advance the argument.
 
-Brief low-information responses may therefore be created when they make the interaction feel genuinely shared.
+They exist because the other person is there.
 
-These responses do not need to advance the argument.
+> **A conversation is shared attention, not alternating monologues.**
 
-They exist to make the presence of the other person audible.
+The listener should occasionally feel:
 
-The conversation should end because the Thinking Scene has reached a natural resting point, not because the Host has switched into presenter mode.
+> "I can hear that she is listening."
 
-> **End the scene, don't summarize the scene.**
+> "I can hear that he was affected by what she just said."
 
-Do not turn the ending into a recap, lesson, or artificial question for the audience unless that expression genuinely belongs to the conversation.
+> "I can hear the thought changing."
 
-The goal is not to make the audience feel that a program has been formally concluded.
+Do not manufacture constant reactions.
 
-The goal is to make them feel that they have just left a real conversation.
+Do not mechanically alternate short lines.
+
+The goal is not symmetry.
+
+The goal is **mutual presence**.
 
 ---
 
-# 18. HOST ↔ GUEST DYNAMICS
+# 13. LIVE DIALOGUE TEST
 
-The desired interaction is:
+After writing the script, silently test the dialogue as spoken audio.
 
-```text
-Host says something
+For every long segment, ask:
 
-      ↓
+> **Would a real person naturally continue talking for this long without the other person reacting?**
 
-Guest reacts to what was actually said
+If not, allow a response to enter earlier.
 
-      ↓
+For every response, ask:
 
-Host notices, questions, accepts, resists, or reframes it
+> **Is this actually reacting to the previous line, or simply continuing the speaker's own prepared thought?**
 
-      ↓
+For every thinking moment, ask:
 
-Guest clarifies / resists / refines
+> **Am I hearing the thought form, or hearing someone explain that they are thinking?**
 
-      ↓
+For every exchange, ask:
 
-A tension appears
+> **Can I feel two distinct people affecting each other?**
 
-      ↓
+If several consecutive segments could be rearranged without changing the logic of the conversation, the dialogue is too monologic.
 
-They follow the tension
+Do not solve this by mechanically shortening every segment.
 
-      ↓
+Solve it by making each turn **responsive**.
 
-Understanding changes
+---
+
+# 14. ONE CONVERSATION, NOT TWO MONOLOGUES
+
+The episode should feel like:
+
+```text id="13gq3y"
+Situation
+→ reaction
+→ thought
+→ reaction
+→ friction
+→ clarification
+→ reconsideration
+→ new thought
+→ reaction
+→ changed understanding
 ```
 
-The conversation should feel **caused by the previous line**, not driven by a hidden outline.
+not:
 
-Avoid:
-
-```text
-Host asks a prepared question
-
-↓
-
-Guest delivers a complete answer
-
-↓
-
-Host asks the next prepared question
-
-↓
-
-Guest delivers another complete answer
+```text id="4y8c0x"
+Host explanation
+→ Guest explanation
+→ Host explanation
+→ Guest explanation
 ```
 
-The next question should often emerge naturally from the previous answer.
+The best dialogue is not necessarily the dialogue with the shortest turns.
 
-The next answer should often respond to the Host's actual reaction rather than simply advancing the outline.
+It is the dialogue in which:
 
-The Host and Guest do not always need to know exactly what they want to say before speaking.
+> **each person's words visibly change the other person's next move.**
 
-Allow:
+That is the core of conversational realism.
 
-* partial thoughts,
-* hesitation,
-* clarification,
-* reconsideration,
-* immediate reactions,
-* brief disagreement,
-* uncertainty,
-* unexpected follow-up questions.
-
-Do not make every exchange sound perfectly composed.
-
-> **The audience should hear the thought being formed, not a speaker explaining the fact that they are thinking.**
-
-Avoid meta-narrating the thinking process.
-
-Prefer natural expressions such as:
-
-* "But now I'm wondering..."
-* "Wait, then what does that mean?"
-* "I'm not sure that's the real issue."
-* "But here's what I'm struggling with."
-* "That makes me think..."
-* "Hold on, if that's true..."
-
-Ask:
-
-> **Does this line sound like someone having the thought, or someone explaining to the audience that they are having the thought?**
-
-Prefer the former.
-
-> **The next thought should feel like it was caused by the last thought.**
 
 ---
 
-# 19. ALLOW HUMAN IMPERFECTION
+# 15. INFORMATION VS PERSPECTIVE
 
-Do not make every line perfectly formulated.
-
-Real conversational thinking often contains:
-
-* incomplete thoughts,
-* small corrections,
-* hesitation,
-* uncertainty,
-* partial formulations,
-* small reconsiderations.
-
-Use these selectively.
-
-The goal is:
-
-> **Make the formation of thought audible.**
-
----
-
-# 20. USE CONTRADICTION
-
-Where supported by the source and proposal, create meaningful tension.
-
-Possible forms:
-
-* Host belief conflicts with Guest interpretation.
-* A proposed solution creates a new problem.
-* A previous assumption stops working.
-* Two valid ideas conflict.
-* A practical example exposes a weakness in an abstract claim.
-* The Guest revises an earlier statement.
-* The Host realizes two ideas have been conflated.
-
-Do not manufacture disagreement simply for drama.
-
-> **Friction should reveal thinking, not manufacture conflict.**
-
----
-
-# 21. INFORMATION VS PERSPECTIVE
-
-Information is useful when it helps the listener enter and follow the Thinking Scene.
-
-But information should serve the scene.
+Information exists to help the listener understand and follow the situation.
 
 Do not turn the episode into a knowledge dump.
 
@@ -943,11 +864,7 @@ The point is:
 
 Do not manufacture clever phrasing merely to create quotable lines.
 
----
-
-# 22. AVOID ARTICLE-LIKE STRUCTURE
-
-Do not turn the interview into:
+Avoid article-like structures such as:
 
 * "There are four layers..."
 * "Here are five reasons..."
@@ -956,21 +873,14 @@ Do not turn the interview into:
 
 unless genuinely necessary.
 
-The program should sound like a Thinking Scene, not an article outline.
-
 Prefer:
 
 ```text
 answer
-
 → reaction
-
 → friction
-
 → clarification
-
 → new question
-
 → new understanding
 ```
 
@@ -978,98 +888,37 @@ over:
 
 ```text
 point 1
-
 → point 2
-
 → point 3
-
 → conclusion
 ```
 
 ---
 
-# 23. PERSONAL STAKES
-
-Preserve genuine personal stakes from the source.
-
-Prefer situation-specific thinking over generic commentary.
-
-Personal specificity makes the Thinking Scene real.
-
-Do not invent personal experiences, emotions, or motivations.
-
----
-
-# 24. AUDIENCE
+# 16. AUDIENCE + PROGRAM WRAPPER
 
 The audience is an **invisible third participant**.
 
-But audience presence begins before the main Thinking Scene.
-
-The Host and Guest should primarily talk to each other, while the episode remains accessible to someone who has no prior knowledge of the source context.
-
-The Host should:
-
-* establish the Public Tension early,
-* create the Shared World,
-* provide the minimum context needed to enter the situation,
-* clarify references that would otherwise be inaccessible,
-* occasionally connect the emerging Perspective to a broader human experience when it naturally arises.
-
-The Guest should:
-
-* acknowledge the audience naturally during the opening,
-* occasionally speak in a way that includes the listener when appropriate,
-* remain a participant rather than turning into a narrator or lecturer.
-
-Do not repeatedly use phrases such as:
-
-* "for those of you listening..."
-* "you might be wondering..."
-* "as you can hear..."
-* "to our listeners..."
-
-Avoiding these phrases is not enough.
-
-Audience-facing language should emerge only when it genuinely helps the listener enter or stay inside the Thinking Scene.
-
-In particular, do not turn toward the audience during the closing.
-
-The listener should feel like they are **inside the Thinking Scene**, not being spoken to from a stage.
-
----
-
-# 25. PROGRAM WRAPPER
-
-The script must feel like a complete podcast program.
+The Host and Guest should primarily talk to each other, while the episode remains accessible to someone with no prior knowledge.
 
 ## Opening
 
-The opening is a **public entry into the Thinking Scene**.
+The opening is a public entry into the Thinking Scene.
 
-It is not the beginning of a private conversation.
-
-The Host MUST:
+The Host should:
 
 * greet the audience,
-* create an immediate reason to care,
-* establish the Public Tension through a natural statement or question,
-* create the Shared World,
+* establish the Public Tension,
+* make the Shared World legible,
+* establish the current situation,
 * introduce dailog when appropriate,
 * introduce themselves,
 * introduce the Guest,
-* establish the minimum situation needed to enter the Thinking Scene,
 * create curiosity.
 
-Do NOT begin with private-context language that assumes the listener already knows the Human's project.
+Do not begin with private-context language that assumes the listener already knows the Human's project.
 
-Avoid opening directly with lines such as:
-
-> "I'm working on this project called X, and I've been thinking about..."
-
-unless the situation and its relevance have already been made legible.
-
-Do not begin with the deepest unresolved question simply because it is the most interesting part of the source.
+Do not begin with the deepest question simply because it is intellectually interesting.
 
 The opening should naturally achieve:
 
@@ -1083,43 +932,31 @@ then:
 
 > **Now I want to see where this thinking goes.**
 
-The Guest MUST:
-
-* acknowledge the audience naturally,
-* then enter the conversation.
-
-Do not skip the Guest's audience acknowledgement.
+The Guest should acknowledge the audience naturally and then enter the conversation.
 
 ## Closing
 
-The scene ends **inside the conversation**, between the Host and the Guest.
+The scene ends **inside the conversation**, between Host and Guest.
 
 The audience is listening, not being addressed.
 
 The Host should:
 
 * briefly acknowledge where the Thinking Scene arrived,
-* name whatever question, tension, or implication is still open between the two of them,
+* name whatever question, tension, or implication is still open between them,
 * thank the Guest,
 * say goodbye.
 
 The Guest may participate.
 
-Do not turn the ending into a generic inspirational speech.
+Do not:
 
-Do not mechanically summarize every point discussed.
-
-Do not turn to the audience at the end.
-
-No closing question for the listener.
-
-No "if you're also struggling with this..."
-
-No task.
-
-No assigned takeaway.
-
-No final lesson handed to the audience.
+* mechanically recap the episode,
+* turn the ending into a lesson,
+* ask the listener a closing question,
+* assign the listener a task,
+* give the listener a takeaway as an instruction,
+* switch into presenter mode.
 
 > **End the scene, don't summarize the scene.**
 
@@ -1127,7 +964,7 @@ No final lesson handed to the audience.
 
 ---
 
-# 26. CONTENT SELECTION
+# 17. CONTENT SELECTION
 
 Use only material that contributes to the selected Thinking Scene and its Public Tension.
 
@@ -1142,51 +979,39 @@ Remove:
 * AI verbosity,
 * secondary exploration threads.
 
-Do not preserve content simply because it was interesting in the raw source.
-
-Prioritize material that helps the audience move through:
+Prioritize material that moves the audience through:
 
 ```text
 Public Tension
-
 ↓
-
 Shared World
-
 ↓
-
 Specific Situation
-
 ↓
-
-Question
-
+Unresolved Question
 ↓
-
 Thinking
-
 ↓
-
 Turning Point
-
 ↓
-
 Perspective
 ```
 
-Every selected exchange should serve at least one of these functions.
+Do not preserve content simply because it was interesting in the raw source.
+
+Do not remove conversational texture merely because it carries little factual information.
 
 ---
 
-# 27. TECHNICAL CONTENT
+# 18. TECHNICAL CONTENT
 
 The final episode is an **audio-first medium**.
 
-When technical material contributes to the selected Thinking Scene, preserve the **reasoning behind the implementation**, not the implementation itself.
+When technical material matters, preserve the reasoning behind the implementation, not the implementation itself.
 
 > **Never narrate code. Narrate the thinking behind the code.**
 
-Prefer spoken explanations of:
+Prefer:
 
 * intent,
 * mechanism,
@@ -1196,100 +1021,59 @@ Prefer spoken explanations of:
 * architecture,
 * technical reasoning.
 
-Avoid reading:
+Avoid long code, variable names, file paths, stack traces, syntax, and repetitive implementation details unless essential to the Thinking Scene.
 
-* long code,
-* variable or function names,
-* file paths,
-* stack traces,
-* syntax,
-* repetitive implementation details,
-
-unless the exact detail is essential to understanding the Thinking Scene or Perspective.
-
-Translate code into conceptual meaning the listener can understand without seeing the screen.
+Translate technical material into conceptual meaning the listener can understand without seeing the screen.
 
 ---
 
-# 28. ONE EPISODE = ONE THINKING SCENE
+# 19. ONE EPISODE = ONE THINKING SCENE
 
-The episode should normally contain **one coherent Thinking Scene**.
+The episode should normally contain one coherent Thinking Scene.
 
-But the episode does **not necessarily begin where the Thinking Scene begins in the source conversation**.
+The episode does **not necessarily begin where the source Thinking Scene begins**.
 
-The source conversation may enter the scene too early because the Human and AI already share context.
+The source may begin too late because the Human and AI already share context.
 
-The podcast must first establish the listener's starting point.
-
-Therefore:
+The podcast should therefore establish the listener's starting point first:
 
 ```text
 Audience Entry
-
 ↓
-
 Shared World
-
 ↓
-
 Specific Situation
-
 ↓
-
 Thinking Scene
-
 ↓
-
 Perspective
+↓
+Natural Resting Point
 ```
 
-The scene should unfold naturally through:
+These are functional stages, not fixed sections.
 
-1. Opening
-2. Public Tension / Hook
-3. Shared World
-4. Minimal context
-5. Situation
-6. Initial question or tension
-7. Exploration
-8. Turning point
-9. Deeper exploration
-10. Perspective / changed understanding
-11. Natural resting point
-12. Closing
+Do not force every stage.
 
-These are **functional stages, not fixed sections**.
+Do not divide the conversation into artificial segments.
 
-Do not force every stage into the episode.
-
-Do not divide the conversation into artificial segments simply to satisfy the structure.
-
-The stages exist only to help the audience:
-
-* enter the public problem,
-* understand the specific situation,
-* experience the thinking,
-* and arrive naturally at the Perspective.
-
-The purpose is not to cover every part of the source.
-
-The purpose is:
+The goal is:
 
 > **Let the audience enter a real situation and experience one meaningful piece of thinking from the inside.**
 
 ---
 
-# 29. LENGTH
+# 20. LENGTH, COMPRESSION, AND STOP CONDITION
 
 The final episode MUST be between **5 and 15 minutes**.
 
-The target length comes from:
+Use:
 
 ```text
 creative_proposal.recommended_duration
 ```
 
-The proposal carries:
+with:
 
 ```text
 category: short | standard | deep
@@ -1300,24 +1084,17 @@ If missing, default to:
 
 ```text
 standard
-
 8–10 minutes
 ```
 
-For duration estimation:
+Approximate:
 
-* Chinese speech: approximately 220–260 Chinese characters per minute.
-* English speech: approximately 130–160 words per minute.
+* Chinese: 220–260 characters per minute.
+* English: 130–160 words per minute.
 
-If the draft exceeds the selected category's upper bound, rewrite and compress it.
+If the draft exceeds the selected range, compress.
 
-Never add filler.
-
----
-
-# 30. COMPRESSION PRIORITY
-
-When shortening, remove in this order:
+When shortening, remove:
 
 1. repetition,
 2. secondary arguments,
@@ -1325,198 +1102,108 @@ When shortening, remove in this order:
 4. generic explanations,
 5. unnecessary transitions,
 6. long Guest monologues,
-7. conversational filler that does not add interaction value.
+7. filler.
 
 Preserve:
 
-1. the Public Tension,
-2. the Shared World,
-3. the specific situation,
-4. the core question,
+1. Public Tension,
+2. Shared World,
+3. Specific Situation,
+4. unresolved question,
 5. meaningful Host reactions,
-6. the strongest friction,
-7. the turning point,
-8. the strongest concrete example,
-9. the Perspective,
-10. the final thought.
+6. strongest friction,
+7. turning point,
+8. strongest concrete example,
+9. Perspective,
+10. final thought.
 
-Do not remove conversational texture merely because it carries little factual information.
-
----
-
-# 31. QUESTION DENSITY
-
-For a standard 8–10 minute episode, aim for approximately **8–15 major Host questions**.
-
-A single question may generate several conversational exchanges.
-
-Do not introduce a new topic every time the Guest finishes speaking.
-
-Questions should emerge from the Thinking Scene rather than functioning as section headers.
-
-Do not use questions to rush the scene forward.
-
-Allow the current thought to develop when the interaction naturally remains there.
-
----
-
-# 32. STOP CONDITION
+For a standard 8–10 minute episode, aim for approximately **8–15 major Host questions**, but do not use questions as section headers.
 
 Once the selected Thinking Scene reaches its natural destination:
 
-**STOP.**
+> **STOP.**
 
-Do not continue into adjacent topics because they exist in the source.
+Do not continue into adjacent source topics.
 
-A concise, complete scene is better than an exhaustive discussion.
-
-The desired feeling is:
-
-> **"We started with a situation that mattered, went somewhere with it, and now I see it differently."**
-
-not:
-
-> **"We covered everything."**
+A concise, complete scene is better than exhaustive coverage.
 
 ---
 
-# 33. FINAL QUALITY CHECK
+# 21. FINAL QUALITY CHECK
 
-Before returning the script, silently verify all of the following.
+Before returning the script, silently verify:
 
 ## LISTENER ENTRY
 
-1. Does the episode begin from the listener's starting point rather than the source conversation's starting point?
+1. Does the listener know what the thing under discussion is?
+2. Does the listener understand the Human's current situation?
+3. Does the listener understand why it matters now?
+4. Does the listener understand what remains unresolved before deep exploration begins?
+5. Could the listener follow the episode without seeing the source conversation?
 
-2. Does the opening give an unfamiliar listener a reason to care?
+## LIVE THINKING
 
-3. Does the listener understand what is happening before the conversation enters deep exploration?
-
-4. Is there enough Shared World for the listener to follow the situation?
-
-5. Does the episode avoid assuming that the listener already knows the Human's project, terminology, or source context?
-
-6. Does the Host avoid rushing into the deepest question before the listener understands why it exists?
+6. Is the Human actually thinking through something unresolved now?
+7. Are past actions used to establish the current situation rather than narrate a finished thought process?
+8. Does the Human avoid simply presenting a conclusion and asking the Guest to validate it?
+9. Does the Guest have something meaningful to respond to?
+10. Does the Human have something meaningful to reconsider?
+11. Does the next thought feel caused by the previous thought?
 
 ## CONTRACT
 
-7. Does the episode follow the selected Thinking Scene?
+12. Does the episode follow the selected Thinking Scene?
+13. Does `central_tension` drive the interaction?
+14. Does the main material come from `exploration`?
+15. Does the conversation build toward `turning_point`?
+16. Is `possible_discovery` treated as a destination?
+17. Does the latter part reflect `ending_state` and `open_question` naturally?
 
-8. Does it establish enough context to understand the situation?
+## FIDELITY
 
-9. Does it begin from `initial_state` once the listener can understand the scene?
-
-10. Does `central_tension` drive the interaction?
-
-11. Does the main material come from `exploration`?
-
-12. Does the conversation build toward `turning_point`?
-
-13. Is `possible_discovery` treated as a destination rather than an opening thesis?
-
-14. Does the latter part reflect `ending_state`?
-
-15. Is `open_question` used naturally when appropriate?
-
-## THINKING SCENE
-
-16. Is there one coherent Thinking Scene?
-
-17. Does the listener understand what the Human is dealing with?
-
-18. Does the situation explain why the question matters now?
-
-19. Does the audience experience the thinking rather than hear a summary of it?
-
-20. Does the Perspective emerge naturally?
-
-## SEMANTIC FIDELITY
-
-21. Can every substantive Host position be traced to the source?
-
-22. Can every substantive Guest position be traced to the source?
-
-23. Has any new belief, fact, experience, motivation, or conclusion been invented?
-
-24. Has any existing position been strengthened, weakened, or reversed without source support?
-
-## IDEA ATTRIBUTION
-
-25. Did any substantive idea silently move from one participant to the other?
-
-26. If it moved, is that transfer supported by the source interaction?
-
-27. Is an emerging idea presented as an emerging idea rather than a pre-existing belief?
-
-28. Are materially personal, professional, moral, or consequential positions still properly attributed?
-
-29. Does either participant appear to believe something the source does not support?
-
-## CONVERSATIONAL FRICTION
-
-30. Do the participants react to each other rather than merely alternate speeches?
-
-31. Does friction emerge naturally?
-
-32. Are there moments of clarification, resistance, reconsideration, or correction?
-
-33. Do some questions emerge directly from previous answers?
-
-34. Does the dialogue contain enough human imperfection to feel alive?
-
-## COGNITIVE / PERSPECTIVE
-
-35. Does the Host begin without already knowing the Perspective?
-
-36. Does the Guest avoid solving the problem too early?
-
-37. Does each major exchange create meaningful movement?
-
-38. Is the Perspective earned rather than announced?
-
-39. Does the audience leave with a way of seeing something differently?
-
-## TEMPORAL
-
-40. Does any line imply a previous conversation?
-
-41. Does any line contain fictional memory such as "before", "last time", or "as we discussed"?
-
-42. Is the original source timeline absent from the narrative?
+18. Can every substantive Host position be traced to the source?
+19. Can every substantive Guest position be traced to the source?
+20. Has any new belief, fact, experience, motivation, value, or conclusion been invented?
+21. Has any meaningful position silently moved between participants?
+22. Would either participant appear materially different from the source?
 
 ## CONVERSATION
 
-43. Is the Host intellectually active?
+23. Do the participants react to each other rather than alternate speeches?
+24. Does friction emerge naturally?
+25. Are there clarification, resistance, reconsideration, or correction?
+26. Is the Host intellectually active?
+27. Is the Guest responding rather than lecturing?
+28. Does the interaction feel like shared attention?
 
-44. Is the Guest responding rather than lecturing?
+## PERSPECTIVE
 
-45. Do answers create natural follow-up questions?
+29. Does the Host begin without already knowing the Perspective?
+30. Does the Guest avoid solving the problem too early?
+31. Is the Perspective earned through interaction?
+32. Does the audience come to see something differently?
 
-46. Does each major thought feel caused by the previous thought?
+## TEMPORAL
 
-47. Is the interaction shared attention rather than alternating monologues?
+33. Does any line imply a previous conversation?
+34. Does any line contain fictional memory such as "before", "last time", or "as we discussed"?
+35. Is the original source timeline absent from the narrative while its epistemic state remains faithful?
 
-## AUDIENCE
+## ENDING
 
-48. Does the listener feel inside the Thinking Scene?
-
-49. Is the audience present without being constantly addressed?
-
-50. Does the closing let the conversation come to rest rather than addressing the listener?
-
-51. Does the episode end inside the conversation rather than switching into presenter mode?
+36. Does the conversation end inside the scene?
+37. Does the Host avoid switching into presenter mode?
+38. Does the closing avoid addressing the audience directly?
+39. Does the scene feel naturally complete rather than formally summarized?
 
 ## AI QUALITY
 
-52. Are there too many polished AI wisdom statements?
+40. Are there too many polished AI wisdom statements?
+41. Has the interview become an article in dialogue form?
+42. Is the Host merely setting up the Guest to explain?
+43. Does it feel like "AI teaches Human"?
 
-53. Has the interview become an article in dialogue form?
-
-54. Is the Host merely setting up the Guest to explain?
-
-55. Does it feel like "AI teaches Human"?
-
-If YES to 55:
+If YES to 43:
 
 **Rewrite.**
 
@@ -1538,9 +1225,9 @@ The correct answer should be:
 
 > **The audience has a place to stand.**
 
-> **The audience understands why the situation matters.**
+> **The situation is clear before the deep thinking begins.**
 
-> **The Thinking Scene unfolds naturally.**
+> **The thinking feels alive and unresolved in the present.**
 
 > **The Perspective emerges from the interaction.**
 
