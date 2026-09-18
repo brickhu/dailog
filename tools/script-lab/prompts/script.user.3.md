@@ -1078,68 +1078,125 @@ The Host and Guest should primarily talk to each other, while the episode remain
 
 ## Opening
 
-The opening is a short handshake, and then the thing itself.
+The first ~30 seconds are a **designed conversational micro-scene**.
 
-**The Host, in one turn:**
+They must accomplish two things at once:
 
-1. welcome the audience, **naming the program** — the listener has to know what they have opened,
-2. say who they are,
-3. give the hook — the tension, the reason to keep listening,
-4. hand it to the Guest.
+1. make the audience want to stay,
+2. establish who is speaking and why this conversation is worth entering.
 
-**The Guest, in one turn:**
+Do not treat the opening as a checklist of program information.
 
-5. say who they are,
-6. respond to the Host and to the hook — briefly, in their own voice.
+The Host and Guest should **build the opening together**.
 
-> **The program's name is said out loud. "欢迎收听" on its own leaves the listener not knowing what this is.**
+### HOST
 
-> **The hook comes before the Guest is introduced. The Guest's first line answers it.**
+The Host's opening should combine four functions into one natural movement:
 
-The Host's four beats are a handshake, not a speech: four sentences, not four paragraphs. The Shared World and the current situation are discovered in the conversation that follows — not unpacked here.
+* connect with the audience,
+* create the Hook,
+* welcome the audience to dailog and establish their own identity,
+* bring the Guest into the Hook.
 
-Do not announce what the episode will be about. Say the thing itself.
+These functions should not feel like separate announcements.
 
-The Guest is handed the turn, not announced: naming them twice, once by the Host and once by themselves, is one time too many.
+The Host should not complete the entire setup before the Guest appears.
 
-The Host then picks up the Guest's response and continues.
+> **The Host's job is to create the opening situation and give the Guest something worth responding to.**
 
-Brief opening reactions are welcome:
+The Hook should create an open loop through:
 
+* contradiction,
+* surprise,
+* uncertainty,
+* tension,
+* an unexpected observation,
+* a concrete consequence,
+* or a question that feels genuinely unresolved.
+
+The Hook must come from the source.
+
+Do not manufacture drama.
+
+Do not reveal the Perspective.
+
+The Host may introduce dailog and themselves naturally within the Hook rather than pausing the conversation to deliver formal program information.
+
+### GUEST
+
+The Guest should enter as a **participant in the opening**, not as a second presenter.
+
+The Guest's first contribution should accomplish two things:
+
+* acknowledge the audience and the new conversational space,
+* respond to the Host's actual words and the Hook.
+
+The Guest should not merely say hello and wait for the real conversation to begin.
+
+The Guest should already **have a relationship to what was just said**.
+
+The response may be:
+
+* agreement,
 * surprise,
 * amusement,
+* challenge,
+* clarification,
 * recognition,
 * playful resistance,
-* clarification,
-* "嗯",
-* "对",
-* "哈哈",
-* "等等",
-* or a natural acknowledgement.
+* or a reframing of the Hook.
 
-These are not filler.
+A brief audience acknowledgement is enough.
 
-They establish that the Guest is already **in the room**.
+Do not force formal self-introduction unless it naturally belongs to the scene.
+
+### OPENING RHYTHM
+
+A useful internal pattern is:
+
+```text id="e7r2q1"
+Host creates the Hook
+        ↓
+Host naturally establishes dailog + identity
+        ↓
+Host brings Guest into the situation
+        ↓
+Guest acknowledges the audience
+        ↓
+Guest responds to Host + Hook
+        ↓
+Host reacts
+        ↓
+The Thinking Scene begins
+```
+
+This is a conversational rhythm, not a fixed sequence.
+
+Some information may arrive earlier or later when the source makes that more natural.
+
+The important principle is:
+
+> **The audience should meet the Host and Guest through an actual exchange, not through two separate introductions.**
+
+By the end of the opening, the audience should already know:
+
+* why they should keep listening,
+* who the Host is,
+* what dailog is in relation to this episode,
+* who the Guest is,
+* and what unresolved tension they are about to witness.
+
+The audience should feel:
+
+> **"Something is happening here, and these two people are already inside it."**
+
+Not:
+
+> **"The host has finished the introduction. Now the show begins."**
 
 Do not force symmetry.
 
 Do not mechanically alternate every sentence.
-
-But do not let the Host also complete the Shared World, the current situation, and the question as one uninterrupted speech while the Guest remains silent.
-
-> **The audience should meet two people, not one speaker followed by another speaker.**
-
-The opening should naturally achieve:
-
-> **Why should I care?**
-
-then:
-
-> **Oh, this is the situation they're actually in.**
-
-then:
-
-> **Now I want to see where this thinking goes.**
 
 ## Closing
 
