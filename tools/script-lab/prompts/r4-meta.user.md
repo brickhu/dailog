@@ -31,7 +31,7 @@ The metadata should:
 
 You receive:
 
-```text id="kmcjq5"
+```text
 episode
 production
 script
@@ -90,7 +90,7 @@ But the Thinking Scene itself is not automatically the reason to listen.
 
 A public episode needs:
 
-```text id="op6jxy"
+```text
 Thinking Scene
         ↓
 Public Tension
@@ -323,7 +323,7 @@ The summary should:
 
 Think of the relationship as:
 
-```text id="l0c6h4"
+```text
 Title
 = creates the public entry
 
@@ -347,7 +347,7 @@ Generate an editorial introduction of approximately **100–200 words**.
 
 The description should make the complete editorial logic understandable:
 
-```text id="k5a3d1"
+```text
 Public Tension
 ↓
 Specific Situation
@@ -407,13 +407,13 @@ Prefer specific concepts over broad categories.
 
 Example:
 
-```text id="2u7mcm"
+```text
 ["AI products", "product strategy", "startup moat"]
 ```
 
 Avoid generic tags such as:
 
-```text id="j6gbv8"
+```text
 ["AI", "technology", "podcast"]
 ```
 
@@ -429,7 +429,7 @@ Preserve standard technical terms in their commonly used form.
 
 Choose exactly ONE:
 
-```text id="jt7n72"
+```text
 insight
 advice
 experience
@@ -479,13 +479,13 @@ Prefer visual representations of the **scene and tension**, not merely the subje
 
 Prefer:
 
-```text id="7wq24g"
+```text
 ["person questioning AI reflection", "entrepreneur facing blank screen"]
 ```
 
 over:
 
-```text id="38j4g8"
+```text
 ["AI", "business", "podcast"]
 ```
 
@@ -501,7 +501,7 @@ Include a reference when additional context would materially help the listener u
 
 Each reference must contain:
 
-```json id="lznfqh"
+```json
 {
   "term": "Original term",
   "type": "Type",
@@ -660,7 +660,7 @@ The title, summary, and description do not need identical structures.
 
 Consistency should come from the underlying editorial logic:
 
-```text id="xw9b4f"
+```text
 Public Tension
 →
 Thinking Scene

@@ -519,7 +519,7 @@ Then the next line should be shaped by that reaction.
 
 The desired rhythm is therefore:
 
-```text id="4n8s3w"
+```text
 Host says something
         ↓
 Guest reacts to THAT specific thing
@@ -535,7 +535,7 @@ The conversation moves
 
 Not:
 
-```text id="h8rtv1"
+```text
 Host delivers a complete thought
         ↓
 Guest delivers a complete thought
@@ -807,7 +807,7 @@ Solve it by making each turn **responsive**.
 
 The episode should feel like:
 
-```text id="13gq3y"
+```text
 Situation
 → reaction
 → thought
@@ -822,7 +822,7 @@ Situation
 
 not:
 
-```text id="4y8c0x"
+```text
 Host explanation
 → Guest explanation
 → Host explanation
