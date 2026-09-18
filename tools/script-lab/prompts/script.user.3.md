@@ -155,6 +155,17 @@ The Public Tension must come from the source.
 
 Do not invent a universal problem merely to make the episode sound important.
 
+The tension is already in the proposal, as `central_tension`. The opening must not restate it as a proposition.
+
+Put it in the audience's mouth instead. A hook is made of two things colliding:
+
+* a question the listener also has,
+* a concrete fact that argues against the easy answer.
+
+Both come from the source. A fact that is not in the source is not a fact.
+
+The Host may say "I keep wondering" — as long as what he wonders about is the listener's question, not his own.
+
 ### Shared World
 
 Create the minimum common ground required for the audience to understand the conversation.
@@ -1069,6 +1080,8 @@ The Host and Guest should primarily talk to each other, while the episode remain
 
 The opening is a public entry into the Thinking Scene.
 
+It starts from the Public Tension, not from the Shared World. Explaining what the thing is comes after the listener wants to know.
+
 But it is still a **conversation**, not a Host monologue.
 
 The Host must establish enough reality for the audience to enter, but should not complete the entire setup alone before the Guest becomes present.
@@ -1155,6 +1168,12 @@ then:
 The scene ends **inside the conversation**, between Host and Guest.
 
 The audience is listening, not being addressed.
+
+The closing returns to the tension the opening raised.
+
+Do not answer it, and do not replace it with a different open question.
+
+> **Same tension. Sharper shape.**
 
 The Host should:
 
