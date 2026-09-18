@@ -10,6 +10,7 @@
  * 全程不写 production.json、不改投稿状态、不落 prompt 文件。
  *
  * 用法：
+ *   node tools/script-lab/dryrun.mjs list [关键词]                     列出投稿（id 可只写前 8 位）
  *   node tools/script-lab/dryrun.mjs material <id>                    取素材包（JSON）
  *   node tools/script-lab/dryrun.mjs r2 <id> [--file prompts/x.md]    干跑一个环节
  *   node tools/script-lab/dryrun.mjs all <id>                         四个环节依次干跑
@@ -70,7 +71,31 @@ async function api(path, body) {
   } finally { clearTimeout(t); }
 }
 
-const material = (id) => api("/api/dryrun/material/" + id);
+/** 列出投稿：dryrun 的前提是先找到 id */
+async function listSubmissions(keyword) {
+  const out = [];
+  for (const page of [1, 2]) {
+    const d = await api("/api/submissions?page=" + page + "&pageSize=100");
+    const rows = d.rows || [];
+    out.push(...rows);
+    if (rows.length < 100) break;
+  }
+  const kw = keyword ? String(keyword).toLowerCase() : null;
+  return out.filter((r) => !kw || String(r.title || "").toLowerCase().includes(kw) || String(r.id).startsWith(kw));
+}
+
+/** 允许只写前 8 位（界面上显示的就是 8 位）；不足 36 位时去投稿列表里补全 */
+async function resolveId(id) {
+  if (!id) throw new Error("缺投稿 id");
+  if (id.length >= 36) return id;
+  const rows = await listSubmissions(null);
+  const hit = rows.filter((r) => String(r.id).startsWith(id));
+  if (hit.length === 1) return hit[0].id;
+  if (!hit.length) throw new Error("找不到投稿 " + id);
+  throw new Error(id + " 匹配到 " + hit.length + " 篇，请多写几位：" + hit.slice(0, 4).map((r) => r.id.slice(0, 12)).join(" / "));
+}
+
+const material = async (id) => api("/api/dryrun/material/" + await resolveId(id));
 
 /** 干跑一个环节：先 preview 拿渲染好的 messages，必要时换掉提示词正文，再真跑一次 */
 async function runStage(stage, id, mat, fileOverride) {
@@ -124,6 +149,13 @@ function writeOut(path, obj) {
   const cmd = argv[0];
   const ids = argv.slice(1).filter((a) => !a.startsWith("--") && argv[argv.indexOf(a) - 1] !== "--stage" && argv[argv.indexOf(a) - 1] !== "--file" && argv[argv.indexOf(a) - 1] !== "--out" && argv[argv.indexOf(a) - 1] !== "--outdir" && argv[argv.indexOf(a) - 1] !== "--server" && argv[argv.indexOf(a) - 1] !== "--env" && argv[argv.indexOf(a) - 1] !== "--timeout");
   const file = opt("file", null);
+
+  if (cmd === "list") {
+    const rows = await listSubmissions(ids[0] || null);
+    console.log("共 " + rows.length + " 篇    （id 列可以只写前 8 位）");
+    for (const r of rows) console.log("  " + r.id.slice(0, 8) + "  " + String(r.stage || "?").padEnd(10) + "  " + String(r.title || "(无标题)").slice(0, 46) + "   " + r.id);
+    return;
+  }
 
   if (cmd === "material") {
     const m = await material(need(ids[0], "投稿 id"));
