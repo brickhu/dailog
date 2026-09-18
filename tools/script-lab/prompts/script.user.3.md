@@ -1033,33 +1033,27 @@ The Host and Guest should primarily talk to each other, while the episode remain
 
 ## Opening
 
-The first ~30 seconds are a **designed conversational micro-scene**.
+Someone is walking into a room where two people are already talking.
 
-They must accomplish two things at once:
+They do not know who these people are, or what this room is. They can leave at any moment, and nothing is holding them there. The first thirty seconds are all the time it takes them to decide.
 
-1. make the audience want to stay,
-2. establish who is speaking and why this conversation is worth entering.
+The opening is the Host turning toward them and letting them in — far enough that they know whose room this is, and want to stay.
 
-Do not treat the opening as a checklist of program information.
+> **The listener arrives as a stranger. The opening is the moment they stop being one.**
 
-The Host and Guest should **build the opening together**.
+Everything the opening has to do comes out of that. The listener has to learn who is speaking, what this is, and why staying is worth it — not as program information delivered to them, but as what a stranger needs in order to sit down.
 
-### HOST
+> **Do not announce what the episode will be about. Start the thing itself.**
 
-The Host opens in **one turn**, in this order:
+### THE HOOK
 
-1. welcome the audience, and say the program's name,
-2. say who they are,
-3. give the Hook,
-4. hand it to the Guest.
+The Hook is not a separate thing from the Public Tension. It is the same tension, said the way the listener would say it.
 
-> **Welcome → who I am → the Hook → the Guest. One turn, four moves — not four announcements.**
+The Public Tension is a tension in the material. A stranger does not care about material. So the Hook is not what is at stake in the source — it is what is at stake for them.
 
-The turn is a handshake, not the setup: the Shared World and the current situation are discovered in the conversation that follows.
+> **Same tension. The listener's words.**
 
-> **The Host's job is to open the door and give the Guest something worth responding to.**
-
-The Hook should create an open loop through:
+A Hook creates an open loop through:
 
 * contradiction,
 * surprise,
@@ -1075,49 +1069,25 @@ Do not manufacture drama.
 
 Do not reveal the Perspective.
 
-### GUEST
+> **The Host's job is to give the Guest something worth responding to.**
 
-The Guest should enter as a **participant in the opening**, not as a second presenter.
+### THE GUEST
 
-The Guest's first move is a **simple response**.
+The Guest is already in the room. They are a participant, not a second presenter.
 
-Its object is not the subject. It is the Host — the person who just walked in carrying a problem.
+Their first move is a **simple response**, and its object is the Host — the person who just walked in carrying a problem — not the subject.
 
 > **The Guest answers the person, not the topic.**
 
-A simple response stays on one thing: what the Host is actually carrying. It does not open the analysis.
+A simple response stays on one thing: what the Host is actually carrying. It does not open the analysis. Then, in the same turn, the Guest greets the audience briefly — and stops.
 
-In the same turn, the Guest greets the audience briefly — and stops there.
-
-> **Greeting alone is what leaves the opening flat. The response comes first.**
-
-The real conversation begins when the Host reacts to that response.
+The conversation itself begins when the Host reacts.
 
 Do not force formal self-introduction unless it naturally belongs to the scene.
 
-### OPENING RHYTHM
+### BY THE END
 
-A useful internal pattern is:
-
-```text id="e7r2q1"
-Host's turn — welcome, identity, Hook, handed to the Guest
-        ↓
-Guest's turn — a simple response, then a brief greeting
-        ↓
-Host reacts
-        ↓
-The Thinking Scene begins
-```
-
-This is a conversational rhythm, not a fixed sequence.
-
-Some information may arrive earlier or later when the source makes that more natural.
-
-The important principle is:
-
-> **The audience should meet the Host and Guest through an actual exchange, not through two separate introductions.**
-
-By the end of the opening, the audience should already know:
+The listener should have:
 
 * why they should keep listening,
 * who the Host is,
