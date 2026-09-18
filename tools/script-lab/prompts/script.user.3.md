@@ -35,7 +35,7 @@ Do not replace the selected Thinking Scene.
 
 Do not introduce a different primary theme.
 
-The proposal defines:
+The proposal defines these fields — the proposal's shape, not the episode's:
 
 ```text id="6ay5wq"
 Situation / initial_state
@@ -91,19 +91,7 @@ But the opposite is also important:
 
 > **Do not replace live thinking with a retrospective report of how the Human thought about it before.**
 
-The creative task is:
-
-```text id="njmayt"
-Make the situation legible
-        ↓
-Make the unresolved tension present
-        ↓
-Let Human and AI think through it now
-        ↓
-Let them affect each other's next move
-        ↓
-Let understanding change
-```
+The creative task is to move the audience through the structure in §3 — live, not as a report.
 
 The episode should feel like:
 
@@ -254,25 +242,7 @@ This turns the Human into a reporter of their own thinking.
 
 Avoid using past reasoning to tell the audience the intellectual journey that the episode should let them experience.
 
-Instead:
-
-```text id="jjunkh"
-Current situation
-        ↓
-Current tension
-        ↓
-Human's intuition / hypothesis / uncertainty
-        ↓
-Guest response
-        ↓
-Human reaction
-        ↓
-New uncertainty
-        ↓
-Further exploration
-        ↓
-Changed understanding
-```
+Instead, let the audience watch the exchange happen now: what the Human is unsure about, how the Guest answers, how that changes what the Human says next. The movement itself is in §5.
 
 Past actions may be mentioned when they establish the current situation:
 
@@ -327,7 +297,7 @@ The audience should understand:
 * what makes the problem difficult,
 * and why the conversation is happening now.
 
-A typical cognitive movement is:
+Inside one Thinking Scene, a typical movement is:
 
 ```text id="u0m5zs"
 Situation
@@ -336,17 +306,17 @@ Initial understanding
 ↓
 Question / tension
 ↓
-Exploration
+Human's intuition / hypothesis / uncertainty
 ↓
-Challenge
+Guest response
 ↓
-Turning point
+Human reaction
 ↓
-Deeper exploration
+New uncertainty
+↓
+Exploration → challenge → turning point
 ↓
 Perspective
-↓
-Ending state / open question
 ```
 
 The Perspective is a destination, not an opening thesis.
@@ -462,7 +432,7 @@ Prefer the unresolved part that naturally follows from what is already known.
 
 The source provides meaning, not chronology.
 
-Internally:
+Internally — this is the writing process, not the episode:
 
 ```text id="ea9fm4"
 Original Conversation
@@ -981,7 +951,7 @@ Solve it by making each turn **responsive**.
 
 # 14. ONE CONVERSATION, NOT TWO MONOLOGUES
 
-The episode should feel like:
+The exchange should feel like:
 
 ```text id="13gq3y"
 Situation
@@ -1051,26 +1021,7 @@ Avoid article-like structures such as:
 
 unless genuinely necessary.
 
-Prefer:
-
-```text id="d0q4m7"
-answer
-→ reaction
-→ social beat
-→ friction
-→ clarification
-→ new question
-→ new understanding
-```
-
-over:
-
-```text id="ae0jf8"
-point 1
-→ point 2
-→ point 3
-→ conclusion
-```
+Do not deliver the material as a sequence of points. Let it arrive through the exchange in §14.
 
 ---
 
@@ -1293,13 +1244,9 @@ Audience Entry
 Shared World
 ↓
 Specific Situation
-↓
-Thinking Scene
-↓
-Perspective
-↓
-Natural Resting Point
 ```
+
+The rest of the episode follows the structure in §3.
 
 These are functional stages, not fixed sections.
 
