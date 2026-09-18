@@ -16,7 +16,8 @@
     "draft": "node tools/script-lab/run.mjs draft",
     "meta": "node tools/script-lab/run.mjs meta",
     "lab": "node tools/script-lab/server.mjs",
-    "lab:dev": "node tools/script-lab/server.mjs --env dev"
+    "lab:dev": "node tools/script-lab/server.mjs --env dev",
+    "dryrun": "node tools/script-lab/dryrun.mjs"
   },
   "devDependencies": {
     "@msgpack/msgpack": "^3.1.3",
