@@ -1126,6 +1126,8 @@ The Host may introduce dailog and themselves naturally within the Hook rather th
 
 The Guest should enter as a **participant in the opening**, not as a second presenter.
 
+The Guest's first move is a response, not the episode's first argument.
+
 The Guest's first contribution should accomplish two things:
 
 * acknowledge the audience and the new conversational space,
