@@ -1126,29 +1126,19 @@ The Host may introduce dailog and themselves naturally within the Hook rather th
 
 The Guest should enter as a **participant in the opening**, not as a second presenter.
 
-The Guest's first move is a response, not the episode's first argument.
+The Guest's first move is a **simple response**.
 
-The Guest's first contribution should accomplish two things:
+Its object is not the subject. It is the Host — the person who just walked in carrying a problem.
 
-* acknowledge the audience and the new conversational space,
-* respond to the Host's actual words and the Hook.
+> **The Guest answers the person, not the topic.**
 
-The Guest should not merely say hello and wait for the real conversation to begin.
+A simple response stays on one thing: what the Host is actually carrying. It does not open the analysis.
 
-The Guest should already **have a relationship to what was just said**.
+Then the Guest greets the audience, briefly, and stops.
 
-The response may be:
+> **Greeting alone is what leaves the opening flat. The response comes first.**
 
-* agreement,
-* surprise,
-* amusement,
-* challenge,
-* clarification,
-* recognition,
-* playful resistance,
-* or a reframing of the Hook.
-
-A brief audience acknowledgement is enough.
+The real conversation begins when the Host reacts to that response.
 
 Do not force formal self-introduction unless it naturally belongs to the scene.
 
@@ -1163,9 +1153,9 @@ Host naturally establishes dailog + identity
         ↓
 Host brings Guest into the situation
         ↓
-Guest acknowledges the audience
+Guest gives a simple response
         ↓
-Guest responds to Host + Hook
+Guest greets the audience
         ↓
 Host reacts
         ↓
