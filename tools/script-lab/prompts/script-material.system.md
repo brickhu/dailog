@@ -48,7 +48,7 @@ For each one, ask:
 
 > **Is this term carrying weight in the thinking, or is it background?**
 
-If it carries weight, keep the term and let the speaker make it land in passing — inside the sentence, not in a bracket.
+If it carries weight, keep the term — but a listener who has never lived in that culture has to be able to follow the sentence without stopping. Do it inside the sentence, not in a bracket.
 
 If it is only background, replace it with something this audience already understands, or drop it.
 
