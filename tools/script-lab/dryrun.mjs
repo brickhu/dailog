@@ -16,6 +16,10 @@
  *   node tools/script-lab/dryrun.mjs all <id>                         四个环节依次干跑
  *   node tools/script-lab/dryrun.mjs batch <id...> --stage r2 [--outdir /tmp]
  *
+ *  r1 会给出几条候选提案，挑一条喂给 r2：
+ *   node tools/script-lab/dryrun.mjs r1 <id> --out /tmp/r1.json
+ *   node tools/script-lab/dryrun.mjs r2 <id> --from /tmp/r1.json --thread 2
+ *
  * 选项：
  *   --stage <r1|r2|r3|r4>   batch 模式必填
  *   --file <path>           用另一份提示词正文做对照（**不改** prompts.json，也不落盘）
@@ -30,11 +34,20 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 const argv = process.argv.slice(2);
-const opt = (name, dflt) => {
-  const i = argv.indexOf("--" + name);
-  return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : dflt;
-};
-const flag = (name) => argv.includes("--" + name);
+// 带值的选项必须在这里登记，否则它的值会被当成位置参数（投稿 id）
+const OPTS_WITH_VALUE = new Set(["stage", "file", "out", "outdir", "server", "env", "timeout", "from", "thread"]);
+const PARSED = (() => {
+  const pos = [], flags = new Set(), vals = {};
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (!a.startsWith("--")) { pos.push(a); continue; }
+    const name = a.slice(2);
+    if (OPTS_WITH_VALUE.has(name)) { vals[name] = argv[++i]; } else flags.add(name);
+  }
+  return { pos, flags, vals };
+})();
+const opt = (name, dflt) => (PARSED.vals[name] !== undefined ? PARSED.vals[name] : dflt);
+const flag = (name) => PARSED.flags.has(name);
 const SERVER = opt("server", process.env.LAB_URL || "http://127.0.0.1:4173").replace(/\/+$/, "");
 const ENV = opt("env", "local");
 const TIMEOUT = Number(opt("timeout", "600000"));
@@ -42,10 +55,37 @@ const AS_JSON = flag("json");
 
 const STAGE = {
   r1: { endpoint: "/api/run/review/round1", base: () => ({}), preview: true },
-  r2: { endpoint: "/api/run/review/round2", base: (m) => ({ review: need(m.proposal && m.proposal.value, "提案") }), preview: true },
+  r2: { endpoint: "/api/run/review/round2", base: (m, o) => ({ review: need((o && o.review) || (m.proposal && m.proposal.value), "提案") }), preview: true },
   r3: { endpoint: "/api/run/polish", base: (m) => ({ scripts: need(m.scripts && m.scripts.length ? m.scripts : null, "脚本") }), preview: true },
   r4: { endpoint: "/api/run/publish", base: (m) => ({ script: need((m.scripts || [])[0] || null, "脚本"), fillOnly: true }), preview: true },
 };
+
+/** 从 r1 的产物里挑一条线，做成 r2 要的提案（thread 省略 → 用模型推荐的那条） */
+function buildReview(r1raw, threadN) {
+  const r1 = (r1raw && r1raw.result) || r1raw || {};     // 兼容 dryrun 自己的输出包裹与裸的 r1 结果
+  const th = (r1 && r1.exploration_threads) || [];
+  if (!th.length) throw new Error("这份 r1 结果里没有 exploration_threads");
+  let src, recommended;
+  if (threadN) {
+    const i = Number(threadN) - 1;
+    if (!(i >= 0 && i < th.length)) throw new Error("--thread 只有 1–" + th.length);
+    src = th[i]; recommended = false;
+  } else {
+    src = th.filter((t) => t.id === (r1 && r1.recommended_thread_id))[0] || th[0];
+    recommended = true;
+  }
+  const F8 = ["core_question", "initial_state", "central_tension", "exploration", "turning_point", "possible_discovery", "ending_state", "open_question"];
+  const cp = {};
+  for (const k of F8) cp[k] = src[k] || "";
+  cp.title = src.title || "";
+  cp.thread_id = src.id || src.thread_id || "";
+  cp.score = src.score || null;
+  cp.evidence = src.evidence || null;
+  cp.editorial_reason = src.editorial_reason || "";
+  cp.recommended_duration = ((r1 && r1.creative_proposal) || {}).recommended_duration || src.recommended_duration || { category: "standard", minutes: "8–10" };
+  cp.__recommended = recommended;
+  return cp;
+}
 
 function need(v, what) {
   if (!v) throw new Error("素材包缺少" + what + "——这个环节跑不了（先跑上游环节，或换一篇投稿）");
@@ -152,10 +192,10 @@ const material = async (id) => {
 };
 
 /** 干跑一个环节：先 preview 拿渲染好的 messages，必要时换掉提示词正文，再真跑一次 */
-async function runStage(stage, id, mat, fileOverride) {
+async function runStage(stage, id, mat, fileOverride, opts) {
   const s = STAGE[stage];
   if (!s) throw new Error("未知环节：" + stage + "（可选 r1/r2/r3/r4）");
-  const base = s.base(mat);
+  const base = s.base(mat, opts || {});
   const t0 = Date.now();
   const pv = await api(s.endpoint, Object.assign({ id }, base, { preview: true }));
   if (!pv.preview || !Array.isArray(pv.preview.messages)) throw new Error("该环节没有返回 preview.messages");
@@ -187,8 +227,10 @@ function summarize(stage, result) {
   }
   if (stage === "r1") {
     const th = (result && result.exploration_threads) || [];
-    lines.push("线程  " + th.length + " ｜ 推荐 " + ((result && result.recommended_thread_id) || "—"));
-    for (const x of th) lines.push("  · " + String(x.title || "").slice(0, 70));
+    const rec = (result && result.recommended_thread_id) || "";
+    lines.push("这条投稿给出 " + th.length + " 个提案，挑一条喂给 r2：");
+    th.forEach((x, i) => lines.push("  " + (i + 1) + ") " + String(x.title || "").slice(0, 60) + (x.id === rec ? "   ★模型推荐" : "")));
+    lines.push("用法：--from <这份r1结果.json> --thread <上面那个序号>");
   }
   if (stage === "r4" && result && !list) lines.push(JSON.stringify(result).slice(0, 300));
   return lines.join("\n");
@@ -200,8 +242,8 @@ function writeOut(path, obj) {
 }
 
 (async () => {
-  const cmd = argv[0];
-  const ids = argv.slice(1).filter((a) => !a.startsWith("--") && argv[argv.indexOf(a) - 1] !== "--stage" && argv[argv.indexOf(a) - 1] !== "--file" && argv[argv.indexOf(a) - 1] !== "--out" && argv[argv.indexOf(a) - 1] !== "--outdir" && argv[argv.indexOf(a) - 1] !== "--server" && argv[argv.indexOf(a) - 1] !== "--env" && argv[argv.indexOf(a) - 1] !== "--timeout");
+  const cmd = PARSED.pos[0];
+  const ids = PARSED.pos.slice(1);
   const file = opt("file", null);
 
   if (cmd === "list") {
@@ -231,13 +273,16 @@ function writeOut(path, obj) {
   const stages = cmd === "all" ? ["r1", "r2", "r3", "r4"] : cmd === "batch" ? [need(opt("stage", null), "batch 模式要 --stage")] : [cmd];
   const targets = need(ids.length ? ids : null, "投稿 id");
   const outdir = opt("outdir", null);
+  const fromFile = opt("from", null);
+  const opts = {};
+  if (fromFile) opts.review = buildReview(JSON.parse(readFileSync(resolve(fromFile), "utf8")), opt("thread", null));
 
   for (const rawId of targets) {
     const id = await resolveId(rawId);          // 只写前 8 位也行；补全后再传给各环节端点
     const m = await material(id);
     for (const st of stages) {
       try {
-        const r = await runStage(st, id, m, file);
+        const r = await runStage(st, id, m, file, opts);
         const label = st + "  " + id + "  " + (r.ms / 1000).toFixed(1) + "s" + (r.usedFile ? "  提示词=" + r.usedFile : "");
         if (AS_JSON) console.log(JSON.stringify(r, null, 1));
         else { console.log("─".repeat(60)); console.log(label); const s = summarize(st, r.result); if (s) console.log(s); }

@@ -123,14 +123,18 @@ node tools/script-lab/dryrun.mjs r2 <id>            # 出脚本
 node tools/script-lab/dryrun.mjs r3 <id>            # 语感打磨
 node tools/script-lab/dryrun.mjs r4 <id>            # 发布元信息
 
-# 2) 一口气跑完四个环节
+# 2) r1 会给出几条候选提案 —— 挑一条喂给 r2
+node tools/script-lab/dryrun.mjs r1 <id> --out /tmp/r1.json
+node tools/script-lab/dryrun.mjs r2 <id> --from /tmp/r1.json --thread 2   # 省略 --thread 用模型推荐那条
+
+# 3) 一口气跑完四个环节
 node tools/script-lab/dryrun.mjs all <id>
 
-# 3) 对照实验：换一份提示词正文，不改 prompts.json，也不落盘
+# 4) 对照实验：换一份提示词正文，不改 prompts.json，也不落盘
 node tools/script-lab/dryrun.mjs r2 <id> --file /tmp/script.before.md --out /tmp/a.json
 node tools/script-lab/dryrun.mjs r2 <id> --out /tmp/b.json
 
-# 4) 多篇投稿同一环节
+# 5) 多篇投稿同一环节
 node tools/script-lab/dryrun.mjs batch <id1> <id2> <id3> --stage r2 --outdir /tmp/dry
 ```
 
