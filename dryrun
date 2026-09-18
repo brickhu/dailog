@@ -1,0 +1,6 @@
+#!/bin/sh
+# 裸命令包装：不依赖 pnpm/npm，直接在仓库根目录跑
+#   ./dryrun <投稿id>        完整流程
+#   ./dryrun list            列投稿
+#   ./dryrun r2 <id> --file x.md
+exec node "$(dirname "$0")/tools/script-lab/dryrun.mjs" "$@"
