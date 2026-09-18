@@ -37,7 +37,7 @@ Do not introduce a different primary theme.
 
 The proposal defines:
 
-```text
+```text id="6ay5wq"
 Situation / initial_state
         ↓
 core_question
@@ -91,14 +91,16 @@ But the opposite is also important:
 
 > **Do not replace live thinking with a retrospective report of how the Human thought about it before.**
 
-The creative task is therefore:
+The creative task is:
 
-```text
+```text id="njmayt"
 Make the situation legible
         ↓
 Make the unresolved tension present
         ↓
 Let Human and AI think through it now
+        ↓
+Let them affect each other's next move
         ↓
 Let understanding change
 ```
@@ -131,7 +133,7 @@ The audience needs a place to stand before the conversation asks them to think.
 
 The opening should usually move through:
 
-```text
+```text id="e8rzvg"
 Public Tension
       ↓
 Shared World
@@ -177,6 +179,26 @@ The audience should understand:
 
 This is context, not a retrospective biography.
 
+Sometimes the thing being discussed is also the thing the Human is currently creating, changing, or experiencing.
+
+When this is true, do not treat it as an external topic.
+
+For example, when the Human is talking about **dailog itself**, the audience should feel that figuring out what dailog is is part of the actual work of making dailog.
+
+> **Think from inside the subject, not about the subject from outside.**
+
+Do not force self-reference merely because the program is called dailog.
+
+The connection must come from the actual source situation.
+
+The audience should understand not only:
+
+> "What is dailog?"
+
+but:
+
+> **"Why does figuring out what dailog is matter to the person making it right now?"**
+
 ### Current Unresolved Question
 
 Only after the situation is clear should the unresolved question become central.
@@ -203,7 +225,7 @@ These are source material, not necessarily live moments in the episode.
 
 A common failure mode is:
 
-```text
+```text id="965lqz"
 "I previously thought X."
 
 "I tried Y."
@@ -219,7 +241,7 @@ Avoid using past reasoning to tell the audience the intellectual journey that th
 
 Instead:
 
-```text
+```text id="jjunkh"
 Current situation
         ↓
 Current tension
@@ -292,7 +314,7 @@ The audience should understand:
 
 A typical cognitive movement is:
 
-```text
+```text id="u0m5zs"
 Situation
 ↓
 Initial understanding
@@ -427,7 +449,7 @@ The source provides meaning, not chronology.
 
 Internally:
 
-```text
+```text id="ea9fm4"
 Original Conversation
         ↓
 Extract semantic material
@@ -492,7 +514,31 @@ The fictional history does not.
 
 # 11. CONVERSATION IS RECIPROCAL ACTION
 
-### THINK IN INTERACTION BEATS
+The episode is not two people taking turns completing their own thoughts.
+
+It is two people continuously affecting each other's next thought.
+
+> **A conversation is reciprocal action.**
+
+A line is not merely information.
+
+A line should do something to the other person:
+
+* make them reconsider,
+* clarify,
+* resist,
+* notice a contradiction,
+* become curious,
+* change direction,
+* narrow a claim,
+* challenge an assumption,
+* or simply react.
+
+Then the next line should be shaped by that reaction.
+
+> **Every line should change what becomes possible for the next line.**
+
+### INTERACTION BEATS
 
 Do not draft the episode as a sequence of complete speeches.
 
@@ -502,29 +548,31 @@ An interaction beat is the smallest meaningful unit in which one person's words 
 
 Think:
 
-```text
-Human move
-↓
-Other person's uptake
-↓
-Reaction / pushback / clarification
-↓
-Next move
+```text id="4n8s3w"
+Person A makes a move
+        ↓
+Person B takes it up
+        ↓
+Person A reacts to that response
+        ↓
+Person B responds again
+        ↓
+Something changes
 ```
 
-not:
+Not:
 
-```text
-Human paragraph
-↓
-AI paragraph
+```text id="h8rtv1"
+Host completes a paragraph
+        ↓
+Guest completes a paragraph
 ```
 
 Before completing a substantial thought, ask:
 
 > **Has the other person had a reason to respond yet?**
 
-If a thought naturally creates a reaction before it is fully explained, stop the speaker there and let the other person respond.
+If a thought naturally creates a reaction before it is fully explained, let the other person enter.
 
 The response may be:
 
@@ -535,9 +583,8 @@ The response may be:
 * clarification,
 * correction,
 * resistance,
-* "嗯", "对", "等等", "真的吗?",
 * a partial reply,
-* or another meaningful reaction.
+* or a brief acknowledgement.
 
 The response does not always need to add information.
 
@@ -551,58 +598,84 @@ Instead:
 
 > **Let the speaker stop where the other person would naturally react.**
 
-A longer uninterrupted turn is valid when the speaker is naturally explaining, recalling a necessary fact, or completing a thought.
+A longer uninterrupted turn is valid when the speaker is naturally:
 
-But during active exploration, repeated long turns from one person without uptake should be treated as a sign that the dialogue has become two monologues.
+* establishing necessary context,
+* recalling a concrete event,
+* telling a story,
+* or completing one coherent thought.
 
-> **A conversation is reciprocal action.**
+But during active exploration, repeated substantial turns from one person without meaningful uptake should be treated as a sign that the dialogue has become a monologue.
 
-A line is not merely information.
+> **The goal is not equal speaking time. The goal is mutual responsiveness.**
 
-A line should do something to the other person:
+### CONVERSATION HAS A RELATIONAL LAYER
 
-* make them reconsider,
-* clarify,
-* resist,
-* notice a contradiction,
-* become curious,
-* remember something relevant,
-* change direction,
-* narrow a claim,
-* challenge an assumption,
-* or simply stay with the thought.
+A real conversation is not only about ideas.
 
-Then the next line should be shaped by that reaction.
+People also respond to each other as people.
 
-> **Every line should change what becomes possible for the next line.**
+Every exchange may therefore contain two simultaneous layers:
 
-The desired rhythm is therefore:
+```text id="bzt83a"
+Cognitive layer
+What is being thought, argued, clarified, or discovered?
 
-```text
-Host says something
-        ↓
-Guest reacts to THAT specific thing
-        ↓
-Host reacts to the reaction
-        ↓
-Guest responds
-        ↓
-Something changes
-        ↓
-The conversation moves
+Relational layer
+What is happening between these two people right now?
 ```
 
-Not:
+The relational layer may include:
 
-```text
-Host delivers a complete thought
-        ↓
-Guest delivers a complete thought
-        ↓
-Host delivers another complete thought
-        ↓
-Guest delivers another complete thought
-```
+* acknowledgement,
+* empathy,
+* amusement,
+* teasing,
+* awkwardness,
+* surprise,
+* reassurance,
+* hesitation,
+* warmth,
+* mild disagreement,
+* shared laughter,
+* embarrassment,
+* recognition,
+* or simple social presence.
+
+These moments do not need to advance the argument.
+
+They make the relationship between the speakers audible.
+
+A person may react to the meaning of a sentence:
+
+> "That doesn't actually solve the problem."
+
+They may also react to the person who said it:
+
+> "Okay, that was a little brutal."
+
+Both can be real conversational moves.
+
+> **Do not make every response about the topic. Sometimes the response is about the person, the moment, or the relationship between them.**
+
+Use relational texture selectively and naturally.
+
+Do not manufacture intimacy, personality traits, emotional states, or shared history that the source does not support.
+
+When the source and current moment allow it, small moments of:
+
+* teasing,
+* awkwardness,
+* empathy,
+* amusement,
+* recognition,
+* or warmth
+
+may be reconstructed to make the exchange feel lived-in.
+
+The goal is not more emotion.
+
+> **The audience should feel that two people are actually together in the conversation.**
 
 ### DO NOT COMPLETE EVERY THOUGHT
 
@@ -690,13 +763,11 @@ The Guest may narrow an earlier claim.
 
 One may notice something the other did not.
 
-The important point is:
-
 > **They are not merely expressing their own positions. They are responding to each other as distinct participants.**
 
 Do not manufacture personality traits or emotions unsupported by the source.
 
-Instead, let identity emerge from the participants' actual positions, concerns, preferences, and reactions.
+Let identity emerge from the participants' actual positions, concerns, preferences, and reactions.
 
 ### THE OTHER PERSON MUST EXIST IN THE NEXT LINE
 
@@ -778,7 +849,7 @@ The Host should:
 
 Questions are not the primary sign that the Host is active.
 
-**Reaction is.**
+> **Reaction is.**
 
 A Host can be highly active without asking a question.
 
@@ -808,13 +879,20 @@ Listening is part of the conversation.
 
 When one participant needs several segments to say something — explaining, recalling, laying out what happened — the other does not disappear.
 
-A long narration is not a monologue. The other participant is reacting inside it, and those reactions belong in the episode.
+A long narration is not automatically a monologue.
 
-What they say there carries nothing: a recognition, a small surprise, a word handed back to the speaker.
+The other participant may remain audibly present through:
 
-If one person is carrying several segments in a row, the other has stopped being audible.
+* acknowledgement,
+* surprise,
+* recognition,
+* empathy,
+* amusement,
+* a brief reaction,
+* a short question,
+* or a small social response.
 
-They do not need to advance the argument.
+These responses may carry little information.
 
 They exist because the other person is there.
 
@@ -822,7 +900,7 @@ They exist because the other person is there.
 
 The audience should occasionally feel:
 
-> "I can hear that she is listening."
+> "I can hear that she's listening."
 
 > "I can hear that he was affected by what she just said."
 
@@ -846,7 +924,7 @@ For every long segment, ask:
 
 > **Would a real person naturally continue talking for this long without the other person reacting?**
 
-If not, allow a response to enter earlier.
+If not, let a response enter earlier.
 
 For every response, ask:
 
@@ -860,6 +938,24 @@ For every exchange, ask:
 
 > **Can I feel two distinct people affecting each other?**
 
+Also ask:
+
+> **What happened between these two people in this moment, beyond the information?**
+
+Could I hear:
+
+* recognition,
+* amusement,
+* empathy,
+* awkwardness,
+* teasing,
+* warmth,
+* surprise,
+* resistance,
+* or simple social presence?
+
+If every exchange only performs an information function, the dialogue may be cognitively correct but socially dead.
+
 If several consecutive segments could be rearranged without changing the logic of the conversation, the dialogue is too monologic.
 
 Do not solve this by mechanically shortening every segment.
@@ -872,11 +968,12 @@ Solve it by making each turn **responsive**.
 
 The episode should feel like:
 
-```text
+```text id="13gq3y"
 Situation
 → reaction
 → thought
 → reaction
+→ social beat
 → friction
 → clarification
 → reconsideration
@@ -887,7 +984,7 @@ Situation
 
 not:
 
-```text
+```text id="4y8c0x"
 Host explanation
 → Guest explanation
 → Host explanation
@@ -900,8 +997,9 @@ It is the dialogue in which:
 
 > **each person's words visibly change the other person's next move.**
 
-That is the core of conversational realism.
+And the dialogue should also contain occasional social moments that do not need to advance the argument but make the people feel present with each other.
 
+> **Cognitive movement gives the conversation substance. Relational movement gives it life.**
 
 ---
 
@@ -940,9 +1038,10 @@ unless genuinely necessary.
 
 Prefer:
 
-```text
+```text id="d0q4m7"
 answer
 → reaction
+→ social beat
 → friction
 → clarification
 → new question
@@ -951,7 +1050,7 @@ answer
 
 over:
 
-```text
+```text id="ae0jf8"
 point 1
 → point 2
 → point 3
@@ -970,20 +1069,74 @@ The Host and Guest should primarily talk to each other, while the episode remain
 
 The opening is a public entry into the Thinking Scene.
 
+But it is still a **conversation**, not a Host monologue.
+
+The Host must establish enough reality for the audience to enter, but should not complete the entire setup alone before the Guest becomes present.
+
+The opening should therefore unfold through **shared construction**.
+
+A useful rhythm is:
+
+```text id="rqpe9s"
+Host establishes one meaningful piece of reality
+        ↓
+Guest responds
+        ↓
+Host reacts / continues
+        ↓
+Guest responds
+        ↓
+The situation becomes clear
+        ↓
+The unresolved question emerges
+```
+
 The Host should:
 
 * greet the audience,
 * establish the Public Tension,
-* make the Shared World legible,
+* make the Shared World understandable,
 * establish the current situation,
 * introduce dailog when appropriate,
-* introduce themselves,
-* introduce the Guest,
+* introduce themselves and the Guest naturally,
 * create curiosity.
 
-Do not begin with private-context language that assumes the audience already knows the Human's project.
+But do not package all of this into a single Host speech.
 
-Do not begin with the deepest question simply because it is intellectually interesting.
+> **The opening should be discovered together, not delivered by the Host.**
+
+Once the Host has given the Guest something meaningful to react to, let the Guest react.
+
+The Guest's first response should not exist merely because the Guest "needs an opening line."
+
+It should respond to something specific the Host just said.
+
+The Host may then pick up that response and continue.
+
+Brief opening reactions are welcome:
+
+* surprise,
+* amusement,
+* recognition,
+* playful resistance,
+* clarification,
+* "嗯",
+* "对",
+* "哈哈",
+* "等等",
+* or a natural acknowledgement.
+
+These are not filler.
+
+They establish that the Guest is already **in the room**.
+
+Do not force symmetry.
+
+Do not mechanically alternate every sentence.
+
+But do not let the Host complete the Public Tension, Shared World, Situation, and Question as one uninterrupted speech while the Guest remains silent.
+
+> **The audience should meet two people, not one speaker followed by another speaker.**
 
 The opening should naturally achieve:
 
@@ -996,8 +1149,6 @@ then:
 then:
 
 > **Now I want to see where this thinking goes.**
-
-The Guest should acknowledge the audience naturally and then enter the conversation.
 
 ## Closing
 
@@ -1046,7 +1197,7 @@ Remove:
 
 Prioritize material that moves the audience through:
 
-```text
+```text id="x2z17o"
 Public Tension
 ↓
 Shared World
@@ -1102,7 +1253,7 @@ The source may begin too late because the Human and AI already share context.
 
 The podcast should therefore establish the audience's starting point first:
 
-```text
+```text id="nwjsu0"
 Audience Entry
 ↓
 Shared World
@@ -1134,20 +1285,20 @@ The final episode MUST be between **5 and 15 minutes**.
 
 Use:
 
-```text
+```text id="pjjyvs"
 creative_proposal.recommended_duration
 ```
 
 with:
 
-```text
+```text id="mxhl72"
 category: short | standard | deep
 minutes: "5–7" | "8–10" | "11–15"
 ```
 
 If missing, default to:
 
-```text
+```text id="hjsnic"
 standard
 8–10 minutes
 ```
@@ -1177,12 +1328,17 @@ Preserve:
 4. unresolved question,
 5. meaningful Host reactions,
 6. strongest friction,
-7. turning point,
-8. strongest concrete example,
-9. Perspective,
-10. final thought.
+7. relational texture when naturally useful,
+8. turning point,
+9. strongest concrete example,
+10. Perspective,
+11. final thought.
 
 For a standard 8–10 minute episode, aim for approximately **8–15 major conversational turns** led by the Host's questions, observations, reactions, or challenges.
+
+Do not interpret this as 8–15 questions.
+
+A Host observation or reaction can carry the conversation forward without becoming a question.
 
 Once the selected Thinking Scene reaches its natural destination:
 
@@ -1234,41 +1390,50 @@ Before returning the script, silently verify:
 
 ## CONVERSATION
 
-23. Do the participants react to each other rather than alternate speeches?
-24. Does friction emerge naturally?
-25. Are there clarification, resistance, reconsideration, or correction?
-26. Is the Host intellectually active?
-27. Is the Guest responding rather than lecturing?
-28. Does the interaction feel like shared attention?
+23. Do the participants react to each other rather than merely alternate speeches?
+24. Does each substantial conversational move get taken up by the other participant before the conversation moves on?
+25. Are there prolonged stretches where one participant speaks through multiple substantial moves without meaningful uptake?
+26. Does friction emerge naturally?
+27. Are there clarification, resistance, reconsideration, or correction?
+28. Is the Host intellectually active?
+29. Is the Guest responding rather than lecturing?
+30. Does the interaction feel like shared attention?
+
+## RELATIONAL PRESENCE
+
+31. Do the Host and Guest respond not only to each other's ideas, but also to each other as people?
+32. Are there natural moments of acknowledgement, empathy, amusement, awkwardness, teasing, warmth, or recognition where appropriate?
+33. If all social responses were removed, would the episode feel like two people exchanging information rather than sharing a conversation?
+34. Does the opening feel like two people entering the conversation together rather than one person delivering a setup?
 
 ## PERSPECTIVE
 
-29. Does the Host begin without already knowing the Perspective?
-30. Does the Guest avoid solving the problem too early?
-31. Is the Perspective earned through interaction?
-32. Does the audience come to see something differently?
+35. Does the Host begin without already knowing the Perspective?
+36. Does the Guest avoid solving the problem too early?
+37. Is the Perspective earned through interaction?
+38. Does the audience come to see something differently?
 
 ## TEMPORAL
 
-33. Does any line imply a previous conversation?
-34. Does any line contain fictional memory such as "before", "last time", or "as we discussed"?
-35. Is the original source timeline absent from the narrative while its epistemic state remains faithful?
+39. Does any line imply a previous conversation?
+40. Does any line contain fictional memory such as "before", "last time", or "as we discussed"?
+41. Is the original source timeline absent from the narrative while its epistemic state remains faithful?
 
 ## ENDING
 
-36. Does the conversation end inside the scene?
-37. Does the Host avoid switching into presenter mode?
-38. Does the closing avoid addressing the audience directly?
-39. Does the scene feel naturally complete rather than formally summarized?
+42. Does the conversation end inside the scene?
+43. Does the Host avoid switching into presenter mode?
+44. Does the closing avoid addressing the audience directly?
+45. Does the scene feel naturally complete rather than formally summarized?
 
 ## AI QUALITY
 
-40. Are there too many polished AI wisdom statements?
-41. Has the interview become an article in dialogue form?
-42. Is the Host merely setting up the Guest to explain?
-43. Does it feel like "AI teaches Human"?
+46. Are there too many polished AI wisdom statements?
+47. Has the interview become an article in dialogue form?
+48. Is the Host merely setting up the Guest to explain?
+49. Does it feel like "AI teaches Human"?
 
-If YES to 43:
+If YES to 49:
 
 **Rewrite.**
 
@@ -1294,6 +1459,10 @@ The correct answer should be:
 
 > **The thinking feels alive and unresolved in the present.**
 
+> **The two participants visibly affect each other's next move.**
+
+> **The relationship between them is audible, not just their information.**
+
 > **The Perspective emerges from the interaction.**
 
 > **The minds remain faithful to the source.**
@@ -1304,7 +1473,7 @@ The correct answer should be:
 
 Return valid JSON only.
 
-```json
+```json id="a2osf5"
 {
   "episode": {
     "title": "...",
