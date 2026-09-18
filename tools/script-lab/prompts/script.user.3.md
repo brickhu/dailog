@@ -492,9 +492,68 @@ The fictional history does not.
 
 # 11. CONVERSATION IS RECIPROCAL ACTION
 
-The episode is not two people taking turns completing their own thoughts.
+### THINK IN INTERACTION BEATS
 
-It is two people continuously affecting each other's next thought.
+Do not draft the episode as a sequence of complete speeches.
+
+Internally construct it as a sequence of **interaction beats**.
+
+An interaction beat is the smallest meaningful unit in which one person's words create a response from the other person.
+
+Think:
+
+```text
+Human move
+↓
+Other person's uptake
+↓
+Reaction / pushback / clarification
+↓
+Next move
+```
+
+not:
+
+```text
+Human paragraph
+↓
+AI paragraph
+```
+
+Before completing a substantial thought, ask:
+
+> **Has the other person had a reason to respond yet?**
+
+If a thought naturally creates a reaction before it is fully explained, stop the speaker there and let the other person respond.
+
+The response may be:
+
+* a short question,
+* agreement,
+* disbelief,
+* surprise,
+* clarification,
+* correction,
+* resistance,
+* "嗯", "对", "等等", "真的吗?",
+* a partial reply,
+* or another meaningful reaction.
+
+The response does not always need to add information.
+
+It needs to show that the other person **received the previous thought**.
+
+Do not split every sentence mechanically.
+
+Do not alternate speakers simply to create symmetry.
+
+Instead:
+
+> **Let the speaker stop where a real listener would naturally react.**
+
+A longer uninterrupted turn is valid when the speaker is naturally explaining, recalling a necessary fact, or completing a thought.
+
+But during active exploration, repeated long turns from one person without uptake should be treated as a sign that the dialogue has become two monologues.
 
 > **A conversation is reciprocal action.**
 
