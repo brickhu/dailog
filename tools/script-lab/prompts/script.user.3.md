@@ -1101,7 +1101,7 @@ When shortening, remove:
 3. duplicate examples,
 4. generic explanations,
 5. unnecessary transitions,
-6. long Guest monologues,
+6. long monologic turns that do not create a response,
 7. filler.
 
 Preserve:
@@ -1117,7 +1117,7 @@ Preserve:
 9. Perspective,
 10. final thought.
 
-For a standard 8–10 minute episode, aim for approximately **8–15 major Host questions**, but do not use questions as section headers.
+For a standard 8–10 minute episode, aim for approximately **8–15 major conversational turns** led by the Host's questions, observations, reactions, or challenges.
 
 Once the selected Thinking Scene reaches its natural destination:
 
