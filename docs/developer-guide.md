@@ -2,7 +2,7 @@
 
 > 记录开发过程中踩过的坑与解决方案。**新会话 / 新 Agent 接手前先读本文件**，
 > 避免重复排查。每个坑都标注了根因、修复与"勿回退"注意事项。
-> 最后更新：2026-08-14
+> 最后更新：2026-09-19
 
 ## 1. StyleX dev 模式 FOUC —— 首帧无样式闪烁（已修复，勿回退）
 
@@ -42,6 +42,23 @@ curl -s http://dailog.orb.local/virtual:stylex.css | wc -c
 # 生产构建产物：client-*.css 应含 stylex 规则（约 48KB；runtimeInjection:true 时仅 1.2KB）
 pnpm --filter @dailogues/site build && wc -c apps/site/dist/_build/assets/client-*.css
 ```
+
+### 补充（2026-09-19）：路由 chunk 样式迟到 →「先显示内容、后渲染样式」
+runtimeInjection 是**逐模块**注入：路由 chunk（`src/routes/**`，懒加载动态 import）的样式
+到达时间晚于壳模块。entry-client 原先只按「style 规则数稳定 180ms」放行 —— 路由 chunk 还在
+路上（刚改完代码 vite 重新 transform、冷缓存时尤其明显）就放行 → 页面先用壳样式显示，
+路由样式到达后再重绘一次，即「内容先出现、样式后到」。
+
+**修复**：`app.tsx` 的 RouterOutlet 内 `createEffect(markRouteStylesReady)`
+（`lib/route-styles.ts`）—— Solid hydration 会把 user effect 推迟到路由内容渲染之后，
+所以这个 effect 正好是「路由样式已就绪」的时刻；`entry-client` 必须等该信号 + 原有稳定
+窗口才移除 `html.stylex-pre`（5s 兜底保留，防 hydration 异常时永久白屏）。
+实测（headless Chromium，人为把路由 chunk 延迟 1.8s）：修复前 2295ms 以 844 规则放行
+（缺路由页样式）→ 修复后 5917ms 以 919 规则放行；正常冷/热加载放行点基本不变（~410ms）。
+
+**生产不受影响**：CSS 构建期提取为单文件，`<link rel=stylesheet>` 在 head 内
+（candelbot.app 实测字节 3291，早于 `<body>` 5678）→ render-blocking，且路由 chunk 带
+`modulepreload`。所以该现象只在 dev 出现，不是线上问题。
 
 ### 勿回退
 - `runtimeInjection` 改回 `true` → dev 中间件返回 0 字节、**生产 CSS 只剩 1.2KB**，FOUC 复发。
@@ -301,4 +318,60 @@ The resource .../play-button-xxx.js was preloaded using link preload but not use
 - 登录/登出恢复 window.location.href 整页刷新 → 重新暴露旧壳+旧哈希组合。
 - sw.js 的 isCacheableAsset 校验删除 → SPA fallback HTML 重新被当 JS 缓存，永久卡死。
 - AuthProvider 改回 onMount 自管理 + 事件 → 回到事件耦合且 SPA 导航后不刷新的旧问题。
+
+## 12. 页面级 Suspense + 客户端专属 createResource —— Hydration Mismatch（2026-09-19）
+
+### 现象
+页面级 Suspense 移入 `layouts/page.tsx`（fallback 由字符串 `"loading..."` 改为元素
+`<div>loading...</div>`）后，直开 `/episode/<id>` 报：
+`Hydration Mismatch. Unable to find DOM nodes for hydration key: ...<div>loading...</div>`，
+内容区被 ErrorBoundary 顶成错误文案（页面只剩头部/底部）。
+
+### 根因
+登录态资源（`interactions` / `fav`）的 source 在 SSR 端短路为 `null`
+（`typeof window === "undefined" ? null : ...`）→ **服务端没有序列化该资源**
+（solid server `createResource` 的 `load()`：`lookup == null` 直接 return，不写 `_$HY.r`）
+→ 客户端 hydration 时该资源才发起 fetch、处于 pending。
+
+此时若在**渲染期**读它（`resource.latest` / `resource()`），client `read()` 会把当前
+Suspense 计入 pending（`c.increment()`）→ 边界切回 fallback；而 fallback 在 SSR 端是
+**noHydrate** 渲染的（`Suspense` 流式分支 `setHydrateContext({ id: ctx.id + "0F", noHydrate: true })`
+→ 无 `data-hk`、不进 hydration registry，流式内容到达后还会被 `$df()` 替换）→
+客户端 `getNextElement()` 找不到对应 DOM → 抛错。
+
+两个前提叠加才炸：① fallback 是**元素**（字符串 fallback 命中
+`insertExpression` 的 `if (hydrating()) return current`，hydration 期是空操作 —— 这也是
+旧代码 `fallback="loading..."` "看起来没事"的原因）；② 资源在渲染期被读。
+
+注：**服务端已序列化的资源是安全的** —— `resolved === true` 时 `.latest` 直接返回
+`value()`、不调用 `read()`，因此不 increment（`stats` 公开端点即此类，SSR 计数照常进 HTML）。
+
+### 修复
+客户端专属资源的取值统一走 `apps/site/src/lib/client-value.ts` 的
+`createClientValue(read, initial)`：
+
+```tsx
+// ❌ 渲染期直接读：hydration 期 pending → 页面级 Suspense 切 fallback → mismatch
+const liked = () => !!interactions.latest?.liked;
+// ✅ 经 effect 读（不挂起边界），值经 signal 暴露给 JSX
+const liked = createClientValue(() => interactions.latest?.liked, false);
+```
+
+为什么有效：`createEffect` 是 **user computation**（`createEffect` 内
+`if (!options || !options.render) c.user = true`），而 client `read()` 的注册条件是
+`if (Listener && !Listener.user && c)` → 不 increment Suspense；且 hydration 期
+user effect 会排队到 hydration 结束后才执行（`sharedConfig.effects`）→ 首帧渲染
+`initial`（与服务端一致），取到值后 signal 更新。`components/interact-buttons.tsx`
+早就是同一写法（effect 读 + signal），可对照。
+
+### 勿回退 / 约定
+- 页面级 `<Suspense>` 下的**客户端专属**异步数据（登录态、收藏态…）**禁止在渲染期读**，
+  一律走 `createClientValue`；需要刷新时照旧调 `refetch()`（`resolved` 后 `.latest`
+  不走挂起路径）。
+- 服务端能取的公开数据仍用 `createAsync + cache()` / `createResource`（SSR 序列化，
+  hydration 期是 resolved —— 安全且首屏可见）；不要为了省事把公开数据也改成客户端专属。
+- 排查此类 mismatch：headless Chromium + `page.on('pageerror')`，并代理 `_$HY.r`
+  （`has`/`get` 陷阱）打印客户端查找的 hydration key 与 `s` 状态，
+  可直接看出"哪个 key 没命中 / 哪个资源在 hydration 期被读"。
+
 

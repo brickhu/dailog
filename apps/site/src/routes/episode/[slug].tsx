@@ -1,7 +1,7 @@
-import { For, Show, Suspense, createEffect, createResource, createSignal, onCleanup } from "solid-js";
+import { For, Show, createEffect, createResource, createSignal, onCleanup } from "solid-js";
 import { NoHydration } from "solid-js/web";
 import { A, createAsync, useNavigate, useParams } from "@solidjs/router";
-import { Meta, Title } from "@solidjs/meta";
+import { Link, Meta, Title } from "@solidjs/meta";
 import { Cover } from "../../components/cover";
 import { PlayButton } from "../../components/play-button";
 import { ShareDialog } from "../../components/share-buttons";
@@ -9,17 +9,19 @@ import { fetchFavoriteStatus, setFavorite } from "../../lib/favorites";
 import { DetailSkeleton } from "../../components/page-skeletons";
 import { usePlayback, type QueueEpisode } from "../../lib/playback";
 import { getEpisodeCached } from "../../lib/episode-cache";
+import { createClientValue } from "../../lib/client-value";
 import type { EpisodeSummary } from "../../lib/db";
 import { apiBaseForFetch, env, episodeCoverUrl } from "../../lib/env";
 import { fmtDate, fmtDuration } from "../../lib/format";
 import * as stylex from "@stylexjs/stylex";
 import { layouts, typography, shadows, dimensions, colors, global } from "@dailogues/ui/theme.stylex";
-import { Button, Icon } from "@dailogues/ui";
+import { Button, Icon, Badge } from "@dailogues/ui";
 import { ClickableCard } from "../../components/clickable-card";
 import { useI18n } from "@dailogues/i18n";
 import { auth } from "../../lib/auth-guard";
 import { Page } from "../../layouts/page";
 import { Block, Container } from "../../layouts/container";
+import { PageSpinner } from "../../components/page-loading";
 
 
 // 详情页（传统博客式）：dailog.fm/<episode_id> —— SSR 渲染（可索引/分享）。
@@ -93,7 +95,11 @@ const css = stylex.create({
     gap : dimensions.spacing2,
     width: "100%"
   },
-  playerActions:{},
+  playerActions:{
+    display : "flex",
+    alignItems : "center",
+    gap : dimensions.spacing2
+  },
   otherActions: {
     display : "flex",
     alignItems : "center",
@@ -176,185 +182,10 @@ const css = stylex.create({
     gap: dimensions.spacing2,
   },
 
-  tag: {
-    padding: `${dimensions.spacing1} ${dimensions.spacing3}`,
-    borderRadius: dimensions.radiusFull,
-    backgroundColor: colors.surfaceStrong,
-    color: colors.neutral,
-    fontSize: dimensions.fontSizeSm,
-    textDecoration: "none",
-    ":hover": {
-      opacity: 0.75,
-    },
-  },
+
 })
 
-// const styles = stylex.create({
-//   page: {
-//     minHeight: "100vh",
-//     paddingBlock: dimensions.spacing4,
-//     gap: dimensions.spacing8,
-//     [TABLETANDDESKTOP]: {
-//       paddingBlock: dimensions.spacing12,
-//     }
-//   },
-//   grid: {
-//     display: "grid",
-//     gridTemplateColumns : "repeat(4, 1fr)",
-//     gap: dimensions.spacing4, 
-//     maxWidth: dimensions.tablet, 
-//     minWidth: dimensions.mobile,
-//     padding: dimensions.spacing4,
-//     width: "100%",
-//     [TABLETANDDESKTOP]: {
-//       gridTemplateColumns : "repeat(6, 1fr)",
-//     },
-//   },
-//   head: {
 
-//   },
-//   main: {
-
-//   },
-//   foot : {},
-//   titleOutter : {
-//     gridColumn : "1 / -1",
-//     order: 2,
-//     [TABLETANDDESKTOP]: {
-//       gridColumn : "span 4",
-//       order: 1,
-//     },
-//     display: "flex",
-//     flexDirection: "column",
-//     gap: dimensions.spacing2
-//   },
-//   coverOutter : {
-//     gridColumn : "1 / -1",
-//     gridRow: "span 2",
-//     display : "flex",
-//     alignItems : "center",
-//     justifyContent : "center",
-//     order: 1,
-//     aspectRatio: 4/3,
-//     [TABLETANDDESKTOP]: {
-//       gridColumn : "span 2",
-//       justifyContent : "flex-end",
-//       order: 2,
-//     },
-//   },
-//   actionOutter : {
-//     gridColumn : "1 / -1",
-//     display: "flex",
-//     alignItems: "center",
-//     flexWrap: "wrap",
-//     gap: dimensions.spacing4,
-//      order: 3,
-//     [TABLETANDDESKTOP]: {
-//       gridColumn : "span 4",
-//     },
-//   },
-//   title : {
-     
-//   },
-
-//   desc: {
-//     gridColumn : "1 / -1",
-//   },
-  // tags: {
-  //   gridColumn: "1 / -1",
-  //   display: "flex",
-  //   flexWrap: "wrap",
-  //   gap: dimensions.spacing2,
-  // },
-  // tag: {
-  //   padding: `${dimensions.spacing1} ${dimensions.spacing3}`,
-  //   borderRadius: dimensions.radiusFull,
-  //   backgroundColor: colors.surfaceStrong,
-  //   color: colors.neutral,
-  //   fontSize: dimensions.fontSizeSm,
-  //   textDecoration: "none",
-  //   ":hover": {
-  //     opacity: 0.75,
-  //   },
-  // },
-//   cast: {
-//     gridColumn : "1 / -1",
-//   },
-//   likeActive: {
-//     color: colors.danger,
-//   },
-//   castSection: {
-//     gridColumn: "1 / -1",
-//     display: "flex",
-//     flexDirection: "column",
-//     gap: dimensions.spacing3,
-//   },
-//   castLabel: {
-//     color: colors.neutral,
-//   },
-//   castGrid: {
-//     display: "flex",
-//     flexWrap: "wrap",
-//     gap: dimensions.spacing4,
-//   },
-//   // 布局交给 xstyle，视觉（surface 底 + 圆角 + hover 反馈）由 ClickableCard 提供
-//   personCard: {
-//     display: "flex",
-//     alignItems: "center",
-//     gap: dimensions.spacing4,
-//     textDecoration: "none",
-//     color: "inherit",
-//     minWidth: 0,
-//   },
-//   personAvatar: {
-//     width: "56px",
-//     height: "56px",
-//     borderRadius: "50%",
-//     objectFit: "cover",
-//     flexShrink: 0,
-//   },
-//   personAvatarFallback: {
-//     width: "56px",
-//     height: "56px",
-//     borderRadius: "50%",
-//     backgroundColor: colors.ink,
-//     color: colors.background,
-//     display: "flex",
-//     alignItems: "center",
-//     justifyContent: "center",
-//     fontSize: dimensions.fontSize2xl,
-//     flexShrink: 0,
-//   },
-//   personBody: {
-//     display: "flex",
-//     flexDirection: "column",
-//     gap: dimensions.spacing1,
-//     minWidth: 0,
-//   },
-//   personRole: {
-//     color: colors.neutral,
-//   },
-//   personName: {
-//     fontWeight: dimensions.fontWeightBold,
-//     fontSize: dimensions.fontSizeLg,
-//     lineHeight: 1.3,
-//     overflowWrap: "anywhere",
-//   },
-//   personMeta: {
-//     color: colors.neutral,
-//     fontSize: dimensions.fontSizeSm,
-//   },
-
-//   cover:{
-//     maxWidth : `calc(${dimensions.size2xl} * 3)`,
-//     minWidth : dimensions.size2xl,
-//     width : "90%",
-//     boxShadow: shadows.shadowMed,
-//     borderRadius : dimensions.radiusMd
-//   },
-
-
-// });
 
 // cache() 在 lib/episode-cache.ts（列表页 hover 预取共用同一缓存）：
 // route.preload 仅客户端 hover/导航预取（SSR 端 SolidStart 不调用）——SSR 数据
@@ -398,9 +229,12 @@ export default function EpisodeDetailPage() {
       return r.ok ? ((await r.json()) as { liked: boolean; likes: number }) : null;
     },
   );
-  // liked 用 interactions.latest（不挂起）：like 切换后 refetchInteractions 期间保持旧值，
-  // 否则 read() 在 Suspense 边界内会使整页挂起闪骨架屏（与下方 stats 同因，见播放闪屏注释）
-  const liked = () => !!interactions.latest?.liked;
+  // liked 经 createClientValue 读（effect 内读 → 不挂起页面级 Suspense）：interactions
+  // 是登录态端点、SSR 端 source 短路为 null（服务端没有序列化）→ 客户端 hydration 期
+  // 该资源处于 pending，若在渲染期直接读 .latest 会把 pages/layouts 的 Suspense 打进
+  // fallback → Hydration Mismatch（根因见 lib/client-value.ts）。
+  // 副作用同前：like 切换后 refetchInteractions 期间保持旧值，不使整页挂起闪骨架屏。
+  const liked = createClientValue(() => interactions.latest?.liked, false);
 
   // 本集开始播放 → 延迟 ~600ms 重拉统计（play 上报落库后再取，数字即时刷新；
   // reportStat 是 fire-and-forget，立即 refetch 可能抢在上报前读到旧值）
@@ -451,8 +285,10 @@ export default function EpisodeDetailPage() {
     () => (typeof window === "undefined" ? null : ep()?.id ?? null),
     async (id) => fetchFavoriteStatus(id),
   );
-  // favorited 用 fav.latest（不挂起）：toggle 后 refetchFav 期间保持旧值（与 liked 同因）
-  const favorited = () => !!fav.latest?.contains;
+  // favorited 经 createClientValue 读（同 liked：客户端专属资源不能在渲染期读，
+  // 否则 hydration 期页面级 Suspense fallback → mismatch）；toggle 后 refetchFav
+  // 期间保持旧值
+  const favorited = createClientValue(() => fav.latest?.contains, false);
 
   const [busyFav, setBusyFav] = createSignal(false);
   const toggleFavorite = async () => {
@@ -506,19 +342,46 @@ export default function EpisodeDetailPage() {
   // createEffect 在 hydration 后执行一次即触发跳转。
   createEffect(() => {
     const e = ep();
+    console.log("节目信息",e)
     if (typeof window !== "undefined" && e && e.slug !== params.slug) {
       window.location.replace(`/episode/${e.slug}`);
     }
   });
 
+  // ── 分享卡片 / SEO 元信息 ──────────────────────────────────────────────
+  // 社交爬虫不执行 JS，只读 SSR 首帧的 head（entry-server 的 deferStream 保证数据解析
+  // 后才 flush，见上方注释）。字段缺失会直接毁掉卡片：X 没有 twitter:card 会退化成
+  // 纯链接；微信/微博/Slack 没有 description 只剩一行标题；没有图就没有缩略图。
+  // 封面走 API 的 ?w=960 出图（R2 原图 1400² 约 690KB，对爬虫过重；外链封面
+  // episodeCoverUrl 会忽略 w 直用原 URL）。无封面兜底站点图标——宁可小图也不要无图。
+  const shareUrl = () => `${env.siteBaseUrl}/episode/${ep()!.slug ?? ""}`;
+  const shareTitle = () => ep()!.title || "dailog";
+  const shareDesc = () =>
+    (ep()?.summary || ep()?.description || "").replace(/\s+/g, " ").trim().slice(0, 200);
+  const shareImage = () =>
+    episodeCoverUrl(ep()!.id, ep()!.coverUrl, 960) ?? `${env.siteBaseUrl}/icons/icon-512.png`;
+
   return (
-    <Suspense fallback="loading...">
+
     <Show when={ep()} fallback={<div>{t("episode.notFound")}</div>}>
-      <Title>{ep()!.title || "dailog"}</Title>
-      <Meta property="og:title" content={ep()!.title || "dailog"} />
+      <Title>{shareTitle()}</Title>
+      <Meta name="description" content={shareDesc()} />
+      <Link rel="canonical" href={shareUrl()} />
+
+      <Meta property="og:site_name" content="dailog" />
       <Meta property="og:type" content="article" />
-      <Meta property="og:url" content={`${env.siteBaseUrl}/episode/${ep()!.slug ?? ""}`} />
-      <Meta property="og:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
+      <Meta property="og:title" content={shareTitle()} />
+      <Meta property="og:description" content={shareDesc()} />
+      <Meta property="og:url" content={shareUrl()} />
+      <Meta property="og:image" content={shareImage()} />
+      <Meta property="og:image:alt" content={shareTitle()} />
+      <Meta property="og:locale" content={ep()!.language === "en" ? "en_US" : "zh_CN"} />
+
+      {/* 封面是 1:1 方图 → summary（方缩略图，不裁切）；换横幅图再改 summary_large_image */}
+      <Meta name="twitter:card" content="summary" />
+      <Meta name="twitter:title" content={shareTitle()} />
+      <Meta name="twitter:description" content={shareDesc()} />
+      <Meta name="twitter:image" content={shareImage()} />
     
     
     <Page xstyle={css.page}>
@@ -536,6 +399,15 @@ export default function EpisodeDetailPage() {
                   <span> · </span>
                   <span>{fmtDuration(ep()!.durationSeconds, true)}</span>
                 </Show>
+                {/* 播放/完播统计：stats 由 SSR 序列化（公开端点，见上方 createResource），
+                    渲染期读 .latest 是安全的；stats 未就绪（接口失败）时整段不显示，
+                    不渲染 "0 次播放" 这种误导性数字。播放开始时下方 effect 会 refetch 刷新。 */}
+                {/* <Show when={stats.latest}>
+                  <span> · </span>
+                  <span>{t("episode.plays", { count: stats.latest!.plays })}</span>
+                  <span> · </span>
+                  <span>{t("episode.completions", { count: stats.latest!.completions })}</span>
+                </Show> */}
                 {/* <span> · </span>
                 <A {...stylex.props(global.linkText,css.creatorLink)} href={"/@" + (ep()!.username ?? "")}>{t("episode.createBy", { user: ep()!.username! })}</A>
     */}
@@ -546,6 +418,9 @@ export default function EpisodeDetailPage() {
             <div {...stylex.props(css.actions)}>
               <div {...stylex.props(css.playerActions)}>
                   <PlayButton episode={asQueue(ep()!)} appear="fill" isIconOnly={true} />
+                  <Show when={stats.latest}>
+                    <span {...stylex.props(typography.caption)}>{stats.latest!.plays} plays</span>
+                  </Show>
               </div>
               
               <div {...stylex.props(css.otherActions)}>
@@ -620,8 +495,10 @@ export default function EpisodeDetailPage() {
               <div {...stylex.props(css.tags)}>
                 <For each={ep()!.tags!}>
                   {(tag) => (
-                    <A href={`/tag/${encodeURIComponent(tag)}`} {...stylex.props(css.tag)}>
-                      #{tag}
+                    <A href={`/tag/${encodeURIComponent(tag)}`}>
+                     
+                      <Badge label={tag} />
+                      
                     </A>
                   )}
                 </For>
@@ -649,7 +526,7 @@ export default function EpisodeDetailPage() {
     </Page>
     <ShareDialog episode={asQueue(ep()!)} isOpen={shareOpen()} onOpenChange={setShareOpen} />      
     </Show>
-    </Suspense>
+
     // <div {...stylex.props(layouts.page,styles.page)}>
     //   <Title>Dailog</Title>
 

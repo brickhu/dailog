@@ -1,8 +1,9 @@
-import { type JSX } from "solid-js";
+import { type JSX, Suspense, ErrorBoundary } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { type StyleXStyles } from "@stylexjs/stylex";
+import { Banner } from "@dailogues/ui";
 
-export type Direction = "horizontal" | "vertical"
+
 
 
 const styles = stylex.create({
@@ -19,10 +20,13 @@ export function Page(props: {
     children? : JSX.Element,
     xstyle? : StyleXStyles
 }){
-
-    const attrs = stylex.props(
-        styles.page,
-        props.xstyle
-    );
-    return <div {...attrs}> {props?.children}</div>
+  return (
+    <div {...stylex.props(styles.page, props.xstyle)} >
+      <ErrorBoundary fallback={(err) => <Banner status="error" title="Something went wrong">{err?.message || "Please try again later"}</Banner>}> 
+      <Suspense fallback={<div>loading...</div>}>
+        {props?.children}
+      </Suspense>
+     </ErrorBoundary>
+    </div>
+  )
 }

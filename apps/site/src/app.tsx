@@ -16,6 +16,7 @@ import { SearchDialog } from "./components/search-dialog";
 import { Header } from "./components/header";
 import { Footer } from "./components/footer";
 import { initInstallStore } from "./lib/install-store";
+import { markRouteStylesReady } from "./lib/route-styles";
 import "./app.css";
 
 // 路由出口：不再做全局路由过渡骨架屏。@solidjs/router 导航是 transition（延迟提交），
@@ -23,6 +24,12 @@ import "./app.css";
 // 目标页壳随即渲染；异步数据由各页面内部的 <Suspense fallback={spinner/骨架}> 处理。
 // 这里仅兜底懒加载 chunk（预载缺失时），用轻量 spinner 而非整页骨架屏。
 function RouterOutlet(props: { children: JSX.Element }) {
+  // dev 首帧放行信号：路由内容（懒加载的 route chunk）已挂载 → 它的 stylex 样式
+  // 一定已注入。Solid hydration 期间会把 user effect 推迟到路由内容渲染之后执行，
+  // 所以这个 effect 正好是「路由样式就绪」的时刻；entry-client 用它决定何时移除
+  // html.stylex-pre（仅看「壳样式稳定 180ms」会误判 —— 路由 chunk 还在路上就放行，
+  // 表现为「内容先出现、样式后到」）。生产构建 CSS 是 render-blocking，此信号无副作用。
+  createEffect(markRouteStylesReady);
   return <Suspense fallback={<PageSpinner />}>{props.children}</Suspense>;
 }
 

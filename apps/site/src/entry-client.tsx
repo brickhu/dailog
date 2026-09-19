@@ -1,4 +1,5 @@
 import { mount, StartClient } from "@solidjs/start/client";
+import { whenRouteStylesReady } from "./lib/route-styles";
 
 const root = document.getElementById("app");
 if (!root) throw new Error("root #app not found");
@@ -25,6 +26,14 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
 
 if (import.meta.env.DEV) {
   const reveal = () => document.documentElement.classList.remove("stylex-pre");
+  // 路由 chunk（懒加载）样式就绪信号：app.tsx RouterOutlet 在路由内容挂载时标记
+  // （见 lib/route-styles.ts）。等它到位再放行，否则「壳样式稳定 180ms」会误判 ——
+  // 路由 chunk 还在路上就放行 → 页面内容先出现（只有壳样式），路由样式随后到达再
+  // 重绘一次，即「先显示内容、后渲染样式」。
+  let routeReady = false;
+  whenRouteStylesReady(() => {
+    routeReady = true;
+  });
   // 首帧放行必须等「全部首屏样式」就绪，而非「有样式就行」：
   // runtimeInjection 逐模块注入，首屏路由 chunk（轮播/卡片等组件样式）晚于壳样式
   // 到达（路由 chunk 由 router 异步加载）。过早放行会把中间态暴露成首屏晃动——
@@ -59,6 +68,10 @@ if (import.meta.env.DEV) {
   let lastCount = -1;
   let lastChange = 0;
   const check = () => {
+    if (!routeReady) {
+      requestAnimationFrame(check);
+      return;
+    }
     if (!stylesReady()) {
       requestAnimationFrame(check);
       return;
@@ -77,5 +90,6 @@ if (import.meta.env.DEV) {
     requestAnimationFrame(check);
   };
   requestAnimationFrame(check);
+  // 兜底：信号异常（hydration 失败/路由 chunk 永远不来）也必须放行，避免永久白屏
   setTimeout(reveal, 5000);
 }

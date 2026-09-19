@@ -26,4 +26,6 @@
 - [2026-08-21] 协作坑：编辑器开着旧缓冲保存会整体覆盖磁盘上 agent 已改的新文件（曾致 [slug].tsx 改动全丢）——agent 改完文件要提醒用户重新加载/关闭旧缓冲
 - [2026-08-21] StyleX 编译红线（site dev 容器整体 503 的根因）：①stylex.create 禁跨文件导入常量（DESKTOP/TABLET 须本地写同值字面量，theme.stylex.ts 注释有约定）；②stylex.props 条件禁引用 local/splitProps 与组件内 const；③条件必须写成直接引用 props 的裸调用表达式 `isSize("sm") && style`，禁 `fn() === x` 二元式/`!!x`——会被编译期静态求值炸 Unsupported expression。新组件照 button.tsx 的 isSize/isVariant 约定写
 - [2026-08-31] 语感打磨保持单轮批量 + 防回显自动重试（不做多轮对话）；下一环节议题：①语音片段可否浏览器 Wasm 直接合成 ②audio1→audio2 段间间隔控制
+- [2026-09-19] dev「先显示内容、后渲染样式」= runtimeInjection 逐模块注入 + 路由 chunk（懒加载）样式晚到，而 entry-client 只按「规则数稳定 180ms」放行。修复：RouterOutlet 里 createEffect 标记路由内容已挂载（lib/route-styles.ts，hydration 会推迟 user effect 到路由渲染后），entry-client 等该信号再移除 stylex-pre。生产不受影响（CSS 单文件 render-blocking + 路由 chunk modulepreload）——详见 developer-guide §1 补充
+- [2026-09-19] 页面级 Suspense（layouts/page.tsx）+ **客户端专属** createResource（SSR 短路 null → 服务端不序列化 → hydration 期才 fetch）= Hydration Mismatch（渲染期读它会把该 Suspense 计入 pending → 切回 noHydrate 的 fallback 元素 → getNextElement 抛错）。约定：这类数据一律用 `lib/client-value.ts` 的 createClientValue 取值（createEffect 是 user computation，不 increment Suspense 且排在 hydration 之后）；服务端已序列化的资源（resolved）读 .latest 安全。详见 developer-guide §12
 

@@ -1,0 +1,16 @@
+# dailog 站点爬虫策略（candelbot.app / dailog.fm 共用同一份构建产物）
+#
+# ⚠️ 分享卡片依赖社交平台的抓取器读取节目详情页 head 里的 OG 标签
+#    （og:title / og:image / twitter:card …）。**不要**在这里对
+#    Twitterbot / facebookexternalhit / TelegramBot / Slackbot 等做 Disallow，
+#    否则链接预览会直接失效。下方 Disallow 只覆盖登录态页面与 API 代理端点。
+
+User-agent: *
+Allow: /
+Disallow: /me
+Disallow: /login
+Disallow: /forgot-password
+Disallow: /account
+Disallow: /settings
+Disallow: /submission/
+Disallow: /v1/
