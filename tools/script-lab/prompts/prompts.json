@@ -37,15 +37,18 @@
   "name": "Agent:脚本创作（对话式改稿）"
  },
  "r3-polish": {
-  "version": 3,
-  "description": "语感打磨：逐段给台词加情绪/语气/音效/停顿标签，一个字不改",
+  "version": 4,
+  "description": "语感打磨（逐句）：点某一句左侧的图标，把这一句打磨得像真人说的——改说法不改内容，标记当工具用",
   "config": {
    "temperature": 0.4,
-   "maxTokens": 8192,
+   "maxTokens": 2048,
    "thinking": "disabled"
   },
   "params": {
-   "scripts": "脚本 JSON（分层：壳 + 主体 segments，含 source 标注 R/Q/M）"
+   "toolbox": "工具库正文（由 assets/fish-tags.json 生成；注在 system）",
+   "scripts": "这一版的完整台词 JSON（上下文）",
+   "target": "要打磨的段号（1-based）",
+   "note": "编辑的打磨意见（可空）"
   },
   "messages": [
    {
@@ -57,7 +60,7 @@
     "file": "r3-polish.user.md"
    }
   ],
-  "name": "R3:语感打磨（polish）"
+  "name": "R3:语感打磨（逐句）"
  },
  "r4-meta": {
   "version": 4,

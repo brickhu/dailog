@@ -1245,10 +1245,15 @@ function withLanguageFact(msgs, dialogue, zone) {
 
 function polishInputView(target) {
   const segs = (target && Array.isArray(target.segments)) ? target.segments : [];
-  // 只喂 speaker + text。老脚本里可能残留历史字段（src / origRatio / fromTurn / chain / type / name），
+  // 只喂 n + speaker + text。老脚本里可能残留历史字段（src / origRatio / fromTurn / chain / type / name），
   // 对模型没用：白占 token，还会被原样回显、跟着写进新脚本。顺序与条数保持不变（提示词要求一一对应）。
+  //
+  // 为什么带 n：**模型数不清"第几段"**。实测（2026-09-19）喂纯数组 + 提示里写"第 6 段"，
+  // 它按 0-based 数，返回的是第 7 段的内容——而且把 index 原样回声，位置校验形同虚设。
+  // 带上 n 之后它变成查表：找 n=6 那条，不用数。
   return {
-    segments: segs.map((s) => ({
+    segments: segs.map((s, i) => ({
+      n: i + 1,
       speaker: String((s && s.speaker) || "").toLowerCase() === "guest" ? "guest" : "host",
       text: String((s && s.text) || ""),
     })),
@@ -1965,6 +1970,73 @@ function segmentsFromDraftShape(p) {
       // 编辑之后就过期了，带出来只会让人看到"20 个回合"这种对不上的旧话。
       const polished = { segments: segs };
       sendJson(res, { ok: true, local: true, result: polished, usage: fmtUsage(r.usage) });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // GET /api/fish-tags → Fish 标签工具库（单一源 assets/fish-tags.json，web 补全菜单用）
+  if (path === "/api/fish-tags") {
+    try {
+      const { fishTags, fishTagFlat } = await import("./lib/fish-tags.mjs");
+      sendJson(res, { ok: true, groups: fishTags().groups || [], flat: fishTagFlat() });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/run/polish-one → 语感打磨（逐句）：body {id, scriptIndex, segIndex, note?, scripts?, messages?, config?, preview?}
+  //   与 /api/run/polish 的区别：那个磨一整版（返回全部 segments），这个只磨**第 segIndex 段**（1-based 由服务端算）。
+  //   输入只能来自前端（脚本编辑区里最新那一份）——不回退服务端副本。
+  if (path === "/api/run/polish-one" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const body = await readBody(req);
+    const id = (body && body.id) || null;
+    const scriptIndex = (body && body.scriptIndex !== undefined) ? Number(body.scriptIndex) : 0;
+    const segIndex = (body && body.segIndex !== undefined) ? Number(body.segIndex) : -1;
+    const note = (body && typeof body.note === "string") ? body.note.trim() : "";
+    if (!id) { sendJson(res, { ok: false, error: "需指定投稿 id" }, 400); return; }
+    try {
+      if (!Array.isArray(body.scripts) || !body.scripts.length) {
+        sendJson(res, { ok: false, error: "打磨输入缺失：必须由前端把脚本编辑区里最新的 scripts 一起传过来（不回退服务端副本）" }, 400);
+        return;
+      }
+      const target = body.scripts[scriptIndex];
+      if (!target || !Array.isArray(target.segments)) { sendJson(res, { ok: false, error: "脚本不存在（index " + scriptIndex + "）" }, 404); return; }
+      const seg = target.segments[segIndex];
+      if (!seg) { sendJson(res, { ok: false, error: "段不存在（第 " + (segIndex + 1) + " 段）" }, 404); return; }
+      const index = segIndex + 1;   // 1-based，与 user 提示词里的"第 N 段"一致
+      const p = getPrompt("r3-polish");
+      const { toolboxText } = await import("./lib/fish-tags.mjs");
+      const defaultMsgs = renderPrompt(p, {
+        toolbox: toolboxText(),
+        scripts: JSON.stringify(polishInputView(target), null, 1),
+        target: String(index),
+        note: note || "（无）",
+      });
+      const cfgOverride = {};
+      if (body && Array.isArray(body.messages) && body.messages.length) {
+        const cfg = (body && body.config) || {};
+        if (cfg.temperature !== undefined && cfg.temperature !== "") cfgOverride.temperature = Number(cfg.temperature);
+        if (cfg.seed !== undefined && cfg.seed !== "") cfgOverride.seed = Number(cfg.seed);
+        if (cfg.maxTokens !== undefined && cfg.maxTokens !== "") cfgOverride.maxTokens = Number(cfg.maxTokens);
+        if (cfg.thinking !== undefined) cfgOverride.thinking = cfg.thinking;
+      }
+      if (body && body.preview) {
+        sendJson(res, { ok: true, apiBody: previewApiBody("r3-polish", defaultMsgs), preview: { messages: defaultMsgs, config: p.config || {}, name: p.name || "r3-polish-one", description: p.description || "", index, speaker: seg.speaker, original: seg.text } });
+        return;
+      }
+      const msgs = (body && Array.isArray(body.messages) && body.messages.length) ? body.messages : defaultMsgs;
+      const r = await llmComplete(null, null, cfgOverride, msgs, p.config);
+      const parsed = extractJson(r.content);
+      const got = parsed && parsed.index !== undefined ? Number(parsed.index) : NaN;
+      const text = parsed && typeof parsed.text === "string" ? parsed.text : "";
+      // 位置校验：对不上就是模型理解偏了。宁可不改，也不能改错段。
+      if (got !== index) {
+        sendJson(res, { ok: false, error: "位置对不上：要求第 " + index + " 段，模型返回 " + (Number.isFinite(got) ? got : "非法 index") + "——本次结果作废" });
+        return;
+      }
+      if (!text.trim()) { sendJson(res, { ok: false, error: "返回的 text 是空的——本次结果作废" }); return; }
+      sendJson(res, { ok: true, local: true, index, speaker: seg.speaker, original: seg.text, text, usage: fmtUsage(r.usage) });
     } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
     return;
   }

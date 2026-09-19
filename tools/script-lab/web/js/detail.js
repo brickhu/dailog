@@ -1125,27 +1125,22 @@ function fmtSeg(t){
   return esc(String(t)).replace(/\[([^\[\]]*)\]/g, "<span style='color:#bc8cff'>[$1]</span>");
 }
 
-// Fish Audio 标签补全目录：编辑段文本时输入 [ 弹出（情绪 / 语气 / 强调 / 停顿 / 音效）
-const FISH_TAG_GROUPS = [
-  { name: '情绪', tags: [
-    ['calm','平静'],['curious','好奇'],['doubtful','怀疑'],['confused','困惑'],['surprised','惊讶'],
-    ['moved','感动'],['empathetic','共情'],['worried','担忧'],['happy','开心'],['sad','难过'],
-    ['nervous','紧张'],['excited','兴奋'],['satisfied','满意'],['relaxed','放松'],['grateful','感激'],
-    ['proud','自豪'],['sarcastic','讽刺'],['hopeful','希望'],['determined','坚定'],['anxious','焦虑'],
-    ['relieved','释然'],['frustrated','沮丧'],['delighted','欣喜'],['scared','害怕'],['upset','不安'],
-    ['depressed','低落'],['embarrassed','尴尬'],['disgusted','反感'],['ashamed','羞愧'],['lonely','孤独'],
-    ['nostalgic','怀念'],['sympathetic','同情'],['compassionate','关切'],['resigned','认命'],['bored','无聊'],
-    ['guilty','内疚'],['jealous','嫉妒'],['envious','羡慕'],['disappointed','失望'],['regretful','遗憾'],
-    ['optimistic','乐观'],['pessimistic','悲观'],['uncertain','不确定'],['indifferent','冷淡'],
-    ['hysterical','歇斯底里'],['disdainful','轻蔑'],['contemptuous','鄙视'],['unhappy','不悦'],['confident','自信']
-  ]},
-  { name: '语气', tags: [
-    ['soft tone','轻柔'],['whispering','耳语'],['in a hurry tone','急促'],['shouting','大声'],['screaming','尖叫']
-  ]},
-  { name: '强调', tags: [['emphasis','重读紧跟其后的词']] },
-  { name: '停顿', tags: [['break','短停顿'],['long-break','长停顿']] },
-  { name: '音效', tags: [['laughing','笑声——台词里的“哈哈”换成它（标签后不跟“哈哈”）'],['chuckling','轻笑'],['sighing','叹气/释然']] }
-];
+// Fish Audio 标签补全目录：**单一源 assets/fish-tags.json**
+//（server 端 GET /api/fish-tags 提供；R3 的 system 工具库也用同一份）。
+// 这里不再写死——写死就是两处维护同一个词表，早晚对不上。
+let FISH_TAG_GROUPS = [];
+(function loadFishTags(){
+  try {
+    fetch('/api/fish-tags').then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.ok && Array.isArray(d.groups) && d.groups.length) {
+        FISH_TAG_GROUPS = d.groups.map(function (g) {
+          return { name: g.name, when: g.when, tags: (g.tags || []).map(function (t) { return [t[0], t[1]]; }) };
+        });
+      }
+    }).catch(function () {});
+  } catch (e) {}
+})();
+
 // 展开成扁平项（补全过滤/导航用）
 function fishTagFlat(){
   const out = [];
@@ -1196,6 +1191,7 @@ function renderSegsHtml(script, id, si){
     const spk = seg.speaker === 'guest' ? 'guest' : 'host';
     parts.push(`<div class='seg-row' data-si='${si}' data-segi='${segi}' data-segkey='${segKey(id, seg)}'>`
       + `<input type='checkbox' class='seg-check' data-si='${si}' data-segi='${segi}' onchange='updateBatchTtsBtn(${si})' style='align-self:center;flex-shrink:0'>`
+      + `<button type='button' class='seg-polish-btn' title='打磨这一句（带入全文上下文）' onclick='polishOne("${id}",${si},${segi})' style='align-self:center;flex-shrink:0;background:none;border:none;color:#8b949e;cursor:pointer;font-size:13px;padding:2px 4px'>✎</button>`
       + `<div class='script-seg seg-${spk}'>`
         + `<div class='script-seg-head'><span class='who who-${spk}'>${esc(seg.speaker)}</span><button type='button' class='seg-del-btn' title='删除该段' onclick='deleteSeg(\"${id}\",${si},${segi})'>🗑</button></div>`
         + `<div class='script-seg-view' id='sgsv-${id}-${si}-${segi}' ondblclick='openSegEdit(\"${id}\",${si},${segi})' title='双击编辑（失焦自动保存）' style='cursor:text'>${fmtSeg(seg.text)}</div>`
@@ -1730,6 +1726,38 @@ async function openPolishConsole(id, si){
       try { await openDetail(id); } catch (e) {}
     }
   });
+}
+
+// —— 逐句打磨：点段左侧的 ✎ ——
+// 与 openPolishConsole（整版打磨）并存：这个只磨第 segi 段，把全文一起送去做上下文，结果**就地替换**。
+// 服务端 /api/run/polish-one 不回退服务端副本，所以这里必须把编辑区里最新那一份 scripts 带上。
+async function polishOne(id, si, segi){
+  const scripts = (typeof labWorkScriptsOf === 'function') ? labWorkScriptsOf(id) : null;
+  const target = Array.isArray(scripts) ? scripts[si] : null;
+  const seg = (target && Array.isArray(target.segments)) ? target.segments[segi] : null;
+  if (!seg || !String(seg.text || '').trim()) { notice('这一段没有台词', 'error'); return; }
+  // 打磨意见（可选）：取消 → 放弃本次；留空 → 按默认打磨
+  let note = '';
+  try { const a = window.prompt('打磨意见（可留空，直接回车）', ''); if (a === null) return; note = String(a); } catch (e) {}
+  const row = document.querySelector(".seg-row[data-si='" + si + "'][data-segi='" + segi + "']");
+  const btn = row && row.querySelector('.seg-polish-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    const d = await j('/api/run/polish-one', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: id, scriptIndex: si, segIndex: segi, note: note, scripts: scripts }) });
+    if (!d || !d.ok) throw new Error((d && d.error) || '打磨失败');
+    const next = scripts.map(function (s, i) {
+      if (i !== si) return s;
+      const segs2 = s.segments.map(function (x, k) { return k === segi ? Object.assign({}, x, { text: d.text }) : x; });
+      return Object.assign({}, s, { segments: segs2 });
+    });
+    saveScripts(id, next);
+    if (typeof rerenderSegsArea === 'function') rerenderSegsArea(id, si);
+    notice('✓ 第 ' + d.index + ' 段已打磨（本地生效；语音合成确认时入库）', 'success');
+  } catch (e) {
+    notice('✗ ' + ((e && e.message) || e), 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '✎'; }
+  }
 }
 
 /** 脚本改动统一只写本地（编辑/删段/插段/打磨都走这里）。
