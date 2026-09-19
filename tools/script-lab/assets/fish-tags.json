@@ -1,0 +1,95 @@
+{
+ "note": "Fish Audio TTS 标签工具库。单一源：web 补全菜单、server 注入 R3 system 都用这一份。",
+ "groups": [
+  {
+   "name": "情绪",
+   "when": "说话者此刻的心理状态。只在能从台词或互动判断出来时用；判不准就不要加。",
+   "tags": [
+    ["calm", "平静"],
+    ["curious", "好奇"],
+    ["doubtful", "怀疑"],
+    ["confused", "困惑"],
+    ["surprised", "惊讶"],
+    ["moved", "感动"],
+    ["empathetic", "共情"],
+    ["worried", "担忧"],
+    ["happy", "开心"],
+    ["sad", "难过"],
+    ["nervous", "紧张"],
+    ["excited", "兴奋"],
+    ["satisfied", "满意"],
+    ["relaxed", "放松"],
+    ["grateful", "感激"],
+    ["proud", "自豪"],
+    ["sarcastic", "讽刺"],
+    ["hopeful", "希望"],
+    ["determined", "坚定"],
+    ["anxious", "焦虑"],
+    ["relieved", "释然"],
+    ["frustrated", "沮丧"],
+    ["delighted", "欣喜"],
+    ["scared", "害怕"],
+    ["upset", "不安"],
+    ["depressed", "低落"],
+    ["embarrassed", "尴尬"],
+    ["disgusted", "反感"],
+    ["ashamed", "羞愧"],
+    ["lonely", "孤独"],
+    ["nostalgic", "怀念"],
+    ["sympathetic", "同情"],
+    ["compassionate", "关切"],
+    ["resigned", "认命"],
+    ["bored", "无聊"],
+    ["guilty", "内疚"],
+    ["jealous", "嫉妒"],
+    ["envious", "羡慕"],
+    ["disappointed", "失望"],
+    ["regretful", "遗憾"],
+    ["optimistic", "乐观"],
+    ["pessimistic", "悲观"],
+    ["uncertain", "不确定"],
+    ["indifferent", "冷淡"],
+    ["hysterical", "歇斯底里"],
+    ["disdainful", "轻蔑"],
+    ["contemptuous", "鄙视"],
+    ["unhappy", "不悦"],
+    ["confident", "自信"]
+   ]
+  },
+  {
+   "name": "语气",
+   "when": "怎么说这句话——音量、气息、节奏。它描述发声方式，不是情绪。",
+   "tags": [
+    ["soft tone", "轻柔"],
+    ["whispering", "耳语"],
+    ["in a hurry tone", "急促"],
+    ["shouting", "大声"],
+    ["screaming", "尖叫"]
+   ]
+  },
+  {
+   "name": "强调",
+   "when": "紧跟其后的那个词要被重读。只影响一个词，不要连着用。",
+   "tags": [
+    ["emphasis", "重读紧跟其后的词"]
+   ]
+  },
+  {
+   "name": "停顿",
+   "when": "真实思考、犹豫、临时改口的地方。紧贴标点符号前后不生效，要落在词与词之间。",
+   "tags": [
+    ["break", "短停顿"],
+    ["long-break", "长停顿"]
+   ]
+  },
+  {
+   "name": "音效",
+   "when": "非语言的声音。台词里的“哈哈”“唉”要换成标签本身，标签后不要再跟那些字。",
+   "tags": [
+    ["laughing", "笑声——台词里的“哈哈”换成它（标签后不跟“哈哈”）"],
+    ["chuckling", "轻笑"],
+    ["sighing", "叹气/释然"]
+   ]
+  }
+ ]
+}
