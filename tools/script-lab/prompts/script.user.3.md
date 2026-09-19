@@ -21,7 +21,21 @@ The episode should transform a private Thinking Scene into a **public conversati
 
 > **First make the situation legible. Then make the thinking alive.**
 
-The audience should first understand what is happening and why it matters, then enter the specific situation, witness the thinking unfold, and naturally arrive at a Perspective.
+But before the audience can enter the full Thinking Scene, the opening must earn their attention.
+
+The episode should therefore:
+
+```text
+Hook attention
+    ↓
+Make the situation legible
+    ↓
+Let Human and AI think together
+    ↓
+Change the meaning of the original tension
+    ↓
+Return naturally to that tension
+```
 
 ---
 
@@ -37,7 +51,7 @@ Do not introduce a different primary theme.
 
 The proposal defines these fields — the proposal's shape, not the episode's:
 
-```text id="6ay5wq"
+```text
 Situation / initial_state
         ↓
 core_question
@@ -91,7 +105,23 @@ But the opposite is also important:
 
 > **Do not replace live thinking with a retrospective report of how the Human thought about it before.**
 
-The creative task is to move the audience through the structure in §3 — live, not as a report.
+The creative task is:
+
+```text
+Make the situation legible
+        ↓
+Make the unresolved tension present
+        ↓
+Give the audience a reason to stay
+        ↓
+Let Human and AI think through it now
+        ↓
+Let them affect each other's next move
+        ↓
+Let understanding change
+        ↓
+Return to the original tension with changed meaning
+```
 
 The episode should feel like:
 
@@ -121,10 +151,12 @@ The audience needs a place to stand before the conversation asks them to think.
 
 The episode should usually move through:
 
-```text id="e8rzvg"
+```text
 Public Tension
       ↓
 Hook
+      ↓
+Shared World
       ↓
 Specific Situation
       ↓
@@ -136,29 +168,121 @@ Perspective
       ↓
 Return to Public Tension
       ↓
-Changed meaning
+Changed Meaning
 ```
 
-### Public Tension
+This is not a rigid episode outline.
 
-Give the audience a real reason to care.
+It describes the audience's journey.
+
+## Public Tension
+
+The Public Tension is the underlying reason the Thinking Scene matters to someone beyond the Human.
+
+It belongs to the editorial layer.
+
+It is not necessarily the wording used in the episode.
 
 The Public Tension must come from the source.
 
 Do not invent a universal problem merely to make the episode sound important.
 
-The tension is already in the proposal, as `central_tension`. The opening must not restate it as a proposition.
+Do not restate `central_tension` as an abstract proposition.
 
-Put it in the audience's mouth instead. A hook is made of two things colliding:
+Instead, translate the tension into something a listener could genuinely recognize.
 
-* a question the listener also has,
-* a concrete fact that argues against the easy answer.
+## Hook
 
-Both come from the source. A fact that is not in the source is not a fact.
+The Hook is the **first compact expression of the Public Tension**.
 
-The Host may say "I keep wondering" — as long as what he wonders about is the listener's question, not his own.
+> **The Hook is not a summary. It is not a list of questions. It is not the Perspective.**
 
-### Shared World
+A good Hook creates one clear cognitive gap:
+
+> **Something is happening here that I understand enough to care about, but not enough to explain.**
+
+The Hook should usually be:
+
+* one sentence,
+* concrete,
+* source-grounded,
+* easy to remember,
+* and open-ended in meaning.
+
+At most, use two short sentences when the source genuinely requires it.
+
+Do not stack multiple questions:
+
+> "Why is this happening? What does it mean? And where does that leave us?"
+
+Do not turn the Hook into an outline of the discussion.
+
+Do not explain the whole problem.
+
+Do not reveal the Perspective.
+
+Do not use generic statements such as:
+
+> "AI is changing everything."
+
+Do not use generic podcast language such as:
+
+> "Today we're going to explore..."
+
+Prefer a compact tension such as:
+
+```text
+Concrete reality
++
+unexpected contradiction
+```
+
+or:
+
+```text
+What everyone assumes
++
+what the Human is discovering instead
+```
+
+The Hook may be a:
+
+* statement,
+* contradiction,
+* observation,
+* unexpected consequence,
+* sharp uncertainty,
+* or question.
+
+A question is only one possible form.
+
+> **The best Hook usually makes the listener ask one question internally, rather than hearing the Host ask several questions aloud.**
+
+The Hook must come from the source.
+
+Do not manufacture drama.
+
+Do not exaggerate stakes.
+
+Do not make the Hook stronger than the source reality.
+
+### Hook Test
+
+After writing the Hook, ask:
+
+> **Can I say what this Hook is making me curious about in one sentence?**
+
+If not, the Hook is probably too broad or too complicated.
+
+Also ask:
+
+> **Could the Host say this naturally in one breath?**
+
+If not, compress it.
+
+> **A Hook should feel like a thought worth sharing, not a paragraph designed to attract clicks.**
+
+## Shared World
 
 Create the minimum common ground required for the audience to understand the conversation.
 
@@ -170,7 +294,7 @@ By the time the main discussion begins, the audience should be able to answer:
 
 The audience should not need the source conversation to understand the subject.
 
-### Specific Situation
+## Specific Situation
 
 Establish the Human's current situation.
 
@@ -202,9 +326,9 @@ but:
 
 > **"Why does figuring out what dailog is matter to the person making it right now?"**
 
-### Current Unresolved Question
+## The Current Question
 
-Only after the situation is clear should the unresolved question become central.
+After the situation is clear, the unresolved question can become central.
 
 The question should feel like a **current bind with consequences**, not merely a topic.
 
@@ -212,11 +336,11 @@ The question should feel like a **current bind with consequences**, not merely a
 
 > **Context is the ground the thinking stands on.**
 
-Do not rush through this stage merely because the Thinking Scene itself is intellectually interesting.
+Do not rush into the deepest discussion merely because it is intellectually interesting.
 
 ---
 
-# 4. MAKE THE THINKING ALIVE
+# 4. THE THINKING MUST HAPPEN NOW
 
 Once the situation is clear, stop explaining and let the thinking happen.
 
@@ -228,7 +352,7 @@ These are source material, not necessarily live moments in the episode.
 
 A common failure mode is:
 
-```text id="965lqz"
+```text
 "I previously thought X."
 
 "I tried Y."
@@ -242,7 +366,25 @@ This turns the Human into a reporter of their own thinking.
 
 Avoid using past reasoning to tell the audience the intellectual journey that the episode should let them experience.
 
-Instead, let the audience watch the exchange happen now: what the Human is unsure about, how the Guest answers, how that changes what the Human says next. The movement itself is in §5.
+Instead:
+
+```text
+Current situation
+        ↓
+Current tension
+        ↓
+Human's intuition / hypothesis / uncertainty
+        ↓
+Guest response
+        ↓
+Human reaction
+        ↓
+New uncertainty
+        ↓
+Further exploration
+        ↓
+Changed understanding
+```
 
 Past actions may be mentioned when they establish the current situation:
 
@@ -272,8 +414,6 @@ If the source shows that a decision is already settled, do not pretend it is bei
 
 Instead, explore what remains uncertain around that decision.
 
-The question should be:
-
 > **What is still alive here?**
 
 ---
@@ -299,12 +439,12 @@ The audience should understand:
 
 Inside one Thinking Scene, a typical movement is:
 
-```text id="u0m5zs"
+```text
 Situation
 ↓
 Initial understanding
 ↓
-Question / tension
+Current tension
 ↓
 Human's intuition / hypothesis / uncertainty
 ↓
@@ -314,9 +454,15 @@ Human reaction
 ↓
 New uncertainty
 ↓
-Exploration → challenge → turning point
+Exploration
+↓
+Challenge
+↓
+Turning point
 ↓
 Perspective
+↓
+Changed meaning of the original tension
 ```
 
 The Perspective is a destination, not an opening thesis.
@@ -432,9 +578,9 @@ Prefer the unresolved part that naturally follows from what is already known.
 
 The source provides meaning, not chronology.
 
-Internally — this is the writing process, not the episode:
+Internally:
 
-```text id="ea9fm4"
+```text
 Original Conversation
         ↓
 Extract semantic material
@@ -447,7 +593,11 @@ Identify what remains unresolved
         ↓
 Establish the audience's starting point
         ↓
+Construct the Hook
+        ↓
 Reconstruct the present interaction
+        ↓
+Return naturally to the Public Tension
         ↓
 Write the episode
 ```
@@ -523,7 +673,7 @@ Then the next line should be shaped by that reaction.
 
 > **Every line should change what becomes possible for the next line.**
 
-### INTERACTION BEATS
+## Interaction Beats
 
 Do not draft the episode as a sequence of complete speeches.
 
@@ -533,7 +683,7 @@ An interaction beat is the smallest meaningful unit in which one person's words 
 
 Think:
 
-```text id="4n8s3w"
+```text
 Person A makes a move
         ↓
 Person B takes it up
@@ -547,7 +697,7 @@ Something changes
 
 Not:
 
-```text id="h8rtv1"
+```text
 Host completes a paragraph
         ↓
 Guest completes a paragraph
@@ -559,21 +709,22 @@ Before completing a substantial thought, ask:
 
 If a thought naturally creates a reaction before it is fully explained, let the other person enter.
 
-The response may be:
+A response may be:
 
 * a short question,
 * agreement,
-* disbelief,
 * surprise,
 * clarification,
 * correction,
 * resistance,
 * a partial reply,
-* or a brief acknowledgement.
+* acknowledgement,
+* humour,
+* or a brief social reaction.
 
 The response does not always need to add information.
 
-It needs to show that the other person **received the previous thought**.
+It needs to show that the other person **received what was just said**.
 
 Do not split every sentence mechanically.
 
@@ -581,7 +732,7 @@ Do not alternate speakers simply to create symmetry.
 
 Instead:
 
-> **Let the speaker stop where the other person would naturally react.**
+> **Let the speaker stop where the other person would naturally have something to do.**
 
 A longer uninterrupted turn is valid when the speaker is naturally:
 
@@ -594,15 +745,11 @@ But during active exploration, repeated substantial turns from one person withou
 
 > **The goal is not equal speaking time. The goal is mutual responsiveness.**
 
-### CONVERSATION HAS A RELATIONAL LAYER
+## Cognitive And Relational Movement
 
-A real conversation is not only about ideas.
+A real conversation operates on two layers at once:
 
-People also respond to each other as people.
-
-Every exchange may therefore contain two simultaneous layers:
-
-```text id="bzt83a"
+```text
 Cognitive layer
 What is being thought, argued, clarified, or discovered?
 
@@ -647,22 +794,11 @@ Use relational texture selectively and naturally.
 
 Do not manufacture intimacy, personality traits, emotional states, or shared history that the source does not support.
 
-When the source and current moment allow it, small moments of:
-
-* teasing,
-* awkwardness,
-* empathy,
-* amusement,
-* recognition,
-* or warmth
-
-may be reconstructed to make the exchange feel lived-in.
-
 The goal is not more emotion.
 
 > **The audience should feel that two people are actually together in the conversation.**
 
-### DO NOT COMPLETE EVERY THOUGHT
+## Do Not Complete Every Thought
 
 A speaker does not need to finish an idea simply because the idea can be explained completely.
 
@@ -687,7 +823,7 @@ Do not artificially make every turn informative.
 
 > **Conversation has rhythm because people respond before the previous thought is fully exhausted.**
 
-### THINK IN SPEECH, DO NOT DESCRIBE THINKING
+## Think In Speech, Do Not Describe Thinking
 
 The audience should hear a thought forming, not a speaker explaining that they are thinking.
 
@@ -722,7 +858,7 @@ is usually more alive than:
 
 > **Do not narrate the formation of thought. Let the formation of thought shape the sentence itself.**
 
-### THE HUMAN AND AI HAVE DIFFERENT SELVES
+## The Human And AI Have Different Selves
 
 The Human and Guest should not feel like interchangeable voices delivering information.
 
@@ -754,7 +890,7 @@ Do not manufacture personality traits or emotions unsupported by the source.
 
 Let identity emerge from the participants' actual positions, concerns, preferences, and reactions.
 
-### THE OTHER PERSON MUST EXIST IN THE NEXT LINE
+## The Other Person Must Exist In The Next Line
 
 Before writing each major line, implicitly ask:
 
@@ -774,23 +910,7 @@ not:
 
 > "He had this paragraph prepared anyway."
 
-### SOURCE-GROUNDED FRICTION
-
-Use friction supported by the source:
-
-* resistance,
-* clarification,
-* correction,
-* contradiction,
-* counterexample,
-* reconsideration,
-* unexpected implication.
-
-Do not manufacture disagreement simply for drama.
-
-> **Friction should reveal thinking, not manufacture conflict.**
-
-### GUEST IS A PARTICIPANT, NOT AN ORACLE
+## Guest Is A Participant, Not An Oracle
 
 The Guest should:
 
@@ -817,7 +937,7 @@ Avoid excessive AI language such as:
 * "As an AI..."
 * "I completely understand."
 
-### HOST IS NOT AN INTERVIEW MACHINE
+## Host Is Not An Interview Machine
 
 The Host should:
 
@@ -860,11 +980,7 @@ Let the audience witness the interaction.
 
 The Host and Guest should feel like two people occupying the same conversational space.
 
-Listening is part of the conversation.
-
-When one participant needs several segments to say something — explaining, recalling, laying out what happened — the other does not disappear.
-
-A long narration is not automatically a monologue.
+When one participant needs several segments to say something, the other does not disappear.
 
 The other participant may remain audibly present through:
 
@@ -953,7 +1069,7 @@ Solve it by making each turn **responsive**.
 
 The exchange should feel like:
 
-```text id="13gq3y"
+```text
 Situation
 → reaction
 → thought
@@ -969,7 +1085,7 @@ Situation
 
 not:
 
-```text id="4y8c0x"
+```text
 Host explanation
 → Guest explanation
 → Host explanation
@@ -982,7 +1098,7 @@ It is the dialogue in which:
 
 > **each person's words visibly change the other person's next move.**
 
-And the dialogue should also contain occasional social moments that do not need to advance the argument but make the people feel present with each other.
+And the dialogue should contain occasional social moments that do not need to advance the argument but make the people feel present with each other.
 
 > **Cognitive movement gives the conversation substance. Relational movement gives it life.**
 
@@ -1021,7 +1137,7 @@ Avoid article-like structures such as:
 
 unless genuinely necessary.
 
-Do not deliver the material as a sequence of points. Let it arrive through the exchange in §14.
+Let information arrive through the exchange.
 
 ---
 
@@ -1031,69 +1147,175 @@ The audience is an **invisible third participant**.
 
 The Host and Guest should primarily talk to each other, while the episode remains accessible to someone with no prior knowledge.
 
+## Audience Context
+
+The episode is created for a specific audience, not an abstract global listener.
+
+Audience context affects:
+
+* cultural assumptions,
+* references,
+* social framing,
+* humour,
+* identity language,
+* examples,
+* and what can be assumed without explanation.
+
+For a Chinese-language episode, assume a Chinese-speaking audience in a Chinese cultural context.
+
+For a global English episode, do not assume the audience shares a Chinese cultural context.
+
+Audience-relative expressions must therefore be adapted to who is listening.
+
+Do not translate expressions literally when literal translation changes the social relationship between speaker and audience.
+
+Do not erase genuine cultural differences.
+
+Do not manufacture cultural conflict.
+
+> **The same Thinking Scene may require different framing for different audiences.**
+
+The underlying facts, positions, experiences, and intellectual identity must remain faithful to the source.
+
 ## Opening
 
-Someone is walking into a room where two people are already talking.
+The first ~30 seconds are a **designed conversational micro-scene**.
 
-They do not know who these people are, or what this room is. They can leave at any moment, and nothing is holding them there. The first thirty seconds are all the time it takes them to decide.
+They have two jobs:
 
-The opening is the Host turning toward them and letting them in — far enough that they know whose room this is, and want to stay.
+1. make the audience want to stay,
+2. establish who is speaking and why this conversation is worth entering.
 
-> **The listener arrives as a stranger. The opening is the moment they stop being one.**
+Do not treat the opening as a checklist of program information.
 
-Everything the opening has to do comes out of that. The listener has to learn who is speaking, what this is, and why staying is worth it — not as program information delivered to them, but as what a stranger needs in order to sit down.
+Do not sacrifice welcome and identity merely to make room for the Hook.
 
-> **Do not announce what the episode will be about. Start the thing itself.**
+> **Welcome and identity are part of audience trust, not obstacles to the Hook.**
 
-### THE HOOK
+At the same time, do not spend the opening on formal announcements.
 
-The Hook is not a separate thing from the Public Tension. It is the same tension, said the way the listener would say it.
+The Host and Guest should build the opening together.
 
-The Public Tension is a tension in the material. A stranger does not care about material. So the Hook is not what is at stake in the source — it is what is at stake for them.
+### Host
 
-> **Same tension. The listener's words.**
+The Host's opening should naturally combine:
 
-A Hook creates an open loop through:
+* welcoming the audience to dailog,
+* establishing the Host's own identity,
+* creating the Hook,
+* and bringing the Guest into the Hook.
 
-* contradiction,
-* surprise,
-* uncertainty,
-* tension,
-* an unexpected observation,
-* a concrete consequence,
-* or a question that feels genuinely unresolved.
+These are functions of the same opening moment, not four separate announcements.
 
-The Hook must come from the source.
+The Host should sound like a real person welcoming someone into a conversation they are already living inside.
 
-Do not manufacture drama.
+A natural opening may:
 
-Do not reveal the Perspective.
+```text
+Welcome / identity
+      ↓
+Compact Hook
+      ↓
+Bring Guest into the moment
+```
 
-> **The Host's job is to give the Guest something worth responding to.**
+The order may vary when the source makes another order more natural.
 
-### THE GUEST
+The Host must not turn the first 30 seconds into a continuous speech simply to complete every opening function.
 
-The Guest is already in the room. They are a participant, not a second presenter.
+> **The Hook should give the audience a reason to stay, while the welcome and identity give them a reason to trust the room they have entered.**
 
-Their first move is a **simple response**, and its object is the Host — the person who just walked in carrying a problem — not the subject.
+### Guest
 
-> **The Guest answers the person, not the topic.**
+The Guest should enter the opening as a **participant**, not a second presenter.
 
-A simple response stays on one thing: what the Host is actually carrying. It does not open the analysis. Then, in the same turn, the Guest greets the audience briefly — and stops.
+The Guest's first contribution should:
 
-The conversation itself begins when the Host reacts.
+* acknowledge the audience naturally,
+* respond to the Host,
+* and respond to the Hook.
 
-Do not force formal self-introduction unless it naturally belongs to the scene.
+A brief acknowledgement is enough.
 
-### BY THE END
+The Guest does not need a formal self-introduction if the Host has already introduced them.
 
-The listener should have:
+The Guest should not merely say hello and wait for the real conversation to begin.
 
-* why they should keep listening,
+> **The Guest is already in the conversation when the audience meets them.**
+
+### Opening Rhythm
+
+A useful internal rhythm is:
+
+```text
+Host welcomes the audience and establishes identity
+        ↓
+Host states one compact Hook
+        ↓
+Host brings Guest into the moment
+        ↓
+Guest acknowledges the audience briefly
+        ↓
+Guest responds to Host + Hook
+        ↓
+Host reacts
+        ↓
+The situation becomes clearer
+        ↓
+The Thinking Scene begins
+```
+
+This is not a rigid sequence.
+
+The important thing is:
+
+> **The audience should meet the Host and Guest through an actual exchange, not through two separate introductions.**
+
+The Guest should become audible early.
+
+Do not allow the Host to spend the entire first 30 seconds explaining the program before the Guest has had a chance to exist.
+
+Do not make the Hook carry all the work.
+
+Do not make welcome and identity disappear behind it.
+
+### Opening Hook
+
+The Hook used in the opening should be the same underlying tension represented by `creative_proposal.central_tension`.
+
+It should be the **compressed audience-facing expression** of that tension.
+
+The Hook should usually be one sentence.
+
+It should be:
+
+* concrete,
+* source-grounded,
+* easy to understand,
+* easy to say aloud,
+* and unresolved in meaning.
+
+Avoid a sequence of questions.
+
+Avoid explaining the entire situation in the Hook.
+
+Avoid revealing the Perspective.
+
+Avoid generic marketing language.
+
+> **The Hook opens the loop. The conversation earns the right to close or transform it.**
+
+### First 30 Seconds Test
+
+By approximately the first 30 seconds, the audience should know:
+
+* this is dailog,
 * who the Host is,
-* what dailog is in relation to this episode,
 * who the Guest is,
-* and what unresolved tension they are about to witness.
+* what unusual tension brought them into the conversation,
+* and why they should keep listening.
+
+But these should be experienced as part of one opening encounter, not as a checklist being read aloud.
 
 The audience should feel:
 
@@ -1101,11 +1323,7 @@ The audience should feel:
 
 Not:
 
-> **"The host has finished the introduction. Now the show begins."**
-
-Do not force symmetry.
-
-Do not mechanically alternate every sentence.
+> "The host has finished the introduction. Now the show begins."
 
 ## Closing
 
@@ -1113,16 +1331,59 @@ The scene ends **inside the conversation**, between Host and Guest.
 
 The audience is listening, not being addressed.
 
-The closing returns to the tension the opening raised.
+### The Tension Loop
 
-Do not answer it, and do not replace it with a different open question.
+The closing should return to the **same underlying Public Tension** that created the Hook.
 
-> **Same tension. Sharper shape.**
+It does not need to repeat the Hook verbatim.
+
+It does not need to answer the Hook directly.
+
+Instead:
+
+> **The opening raises the tension. The Thinking Scene changes its meaning. The ending returns to that tension from the new position.**
+
+The ending may:
+
+* resolve the tension,
+* reframe it,
+* narrow it,
+* deepen it,
+* complicate it,
+* or leave it genuinely open.
+
+What it should not do is abandon the opening tension and introduce an unrelated final question.
+
+Think:
+
+```text
+Opening:
+"This is strange."
+
+        ↓
+
+Thinking Scene:
+"Let's find out why."
+
+        ↓
+
+Perspective:
+"Now we understand the strange part differently."
+
+        ↓
+
+Ending:
+"We are back at the same tension,
+but it no longer means exactly what it meant at the beginning."
+```
+
+> **Same tension. Changed meaning.**
 
 The Host should:
 
 * briefly acknowledge where the Thinking Scene arrived,
-* name whatever question, tension, or implication is still open between them,
+* naturally reconnect with the opening tension,
+* leave the remaining implication or uncertainty between Host and Guest,
 * thank the Guest,
 * say goodbye.
 
@@ -1135,6 +1396,7 @@ Do not:
 * ask the audience a closing question,
 * assign the audience a task,
 * give the audience a takeaway as an instruction,
+* introduce a new unrelated theme,
 * switch into presenter mode.
 
 > **End the scene, don't summarize the scene.**
@@ -1158,7 +1420,23 @@ Remove:
 * AI verbosity,
 * secondary exploration threads.
 
-Prioritize material that moves the episode through the structure in §3.
+Prioritize material that moves the episode through:
+
+```text
+Hook
+↓
+Shared World
+↓
+Specific Situation
+↓
+Thinking
+↓
+Turning Point
+↓
+Perspective
+↓
+Changed Meaning of Public Tension
+```
 
 Do not preserve content simply because it was interesting in the raw source.
 
@@ -1198,19 +1476,9 @@ The episode does **not necessarily begin where the source Thinking Scene begins*
 
 The source may begin too late because the Human and AI already share context.
 
-The podcast should therefore establish the audience's starting point first:
+The podcast should therefore establish the audience's starting point first.
 
-```text id="nwjsu0"
-Audience Entry
-↓
-Shared World
-↓
-Specific Situation
-```
-
-The rest of the episode follows the structure in §3.
-
-These are functional stages, not fixed sections.
+The stages in §3 are functional, not fixed sections.
 
 Do not force every stage.
 
@@ -1228,20 +1496,20 @@ The final episode MUST be between **5 and 15 minutes**.
 
 Use:
 
-```text id="pjjyvs"
+```text
 creative_proposal.recommended_duration
 ```
 
 with:
 
-```text id="mxhl72"
+```text
 category: short | standard | deep
 minutes: "5–7" | "8–10" | "11–15"
 ```
 
 If missing, default to:
 
-```text id="hjsnic"
+```text
 standard
 8–10 minutes
 ```
@@ -1265,17 +1533,19 @@ When shortening, remove:
 
 Preserve:
 
-1. Public Tension,
-2. Shared World,
-3. Specific Situation,
-4. unresolved question,
-5. meaningful Host reactions,
-6. strongest friction,
-7. relational texture when naturally useful,
-8. turning point,
-9. strongest concrete example,
-10. Perspective,
-11. final thought.
+1. the Hook,
+2. Public Tension,
+3. Shared World,
+4. Specific Situation,
+5. unresolved question,
+6. meaningful Host reactions,
+7. strongest friction,
+8. relational texture when naturally useful,
+9. turning point,
+10. strongest concrete example,
+11. Perspective,
+12. changed meaning of the original tension,
+13. final thought.
 
 For a standard 8–10 minute episode, aim for approximately **8–15 major conversational turns** led by the Host's questions, observations, reactions, or challenges.
 
@@ -1297,86 +1567,114 @@ A concise, complete scene is better than exhaustive coverage.
 
 Before returning the script, silently verify:
 
+## HOOK
+
+1. Is there one clear Hook rather than a sequence of questions?
+2. Can the Hook be spoken naturally in one breath or two short sentences?
+3. Does it create curiosity without revealing the Perspective?
+4. Is it grounded in the source?
+5. Does it express the Public Tension in language the audience can immediately recognize?
+6. Does the Hook create one strong open loop rather than several weak ones?
+
 ## LISTENER ENTRY
 
-1. Does the audience know what the thing under discussion is?
-2. Does the audience understand the Human's current situation?
-3. Does the audience understand why it matters now?
-4. Does the audience understand what remains unresolved before deep exploration begins?
-5. Could the audience follow the episode without seeing the source conversation?
+7. Does the audience know what the thing under discussion is?
+8. Does the audience understand the Human's current situation?
+9. Does the audience understand why it matters now?
+10. Does the audience understand what remains unresolved before deep exploration begins?
+11. Could the audience follow the episode without seeing the source conversation?
+
+## OPENING
+
+12. Does the opening feel like a real program, not an information checklist?
+13. Does the Host naturally welcome the audience and establish their identity?
+14. Does the Hook have enough room to work without displacing the welcome or identity?
+15. Does the Guest enter early enough to feel like a participant in the opening?
+16. Does the Guest respond to the actual Host + Hook rather than deliver a separate introduction?
+17. Does the first 30 seconds feel like a real first exchange?
+18. Does the audience feel that the conversation has already begun?
 
 ## LIVE THINKING
 
-6. Is the Human actually thinking through something unresolved now?
-7. Are past actions used to establish the current situation rather than narrate a finished thought process?
-8. Does the Human avoid simply presenting a conclusion and asking the Guest to validate it?
-9. Does the Guest have something meaningful to respond to?
-10. Does the Human have something meaningful to reconsider?
-11. Does the next thought feel caused by the previous thought?
+19. Is the Human actually thinking through something unresolved now?
+20. Are past actions used to establish the current situation rather than narrate a finished thought process?
+21. Does the Human avoid simply presenting a conclusion and asking the Guest to validate it?
+22. Does the Guest have something meaningful to respond to?
+23. Does the Human have something meaningful to reconsider?
+24. Does the next thought feel caused by the previous thought?
 
 ## CONTRACT
 
-12. Does the episode follow the selected Thinking Scene?
-13. Does `central_tension` drive the interaction?
-14. Does the main material come from `exploration`?
-15. Does the conversation build toward `turning_point`?
-16. Is `possible_discovery` treated as a destination?
-17. Does the latter part reflect `ending_state` and `open_question` naturally?
+25. Does the episode follow the selected Thinking Scene?
+26. Does `central_tension` drive the interaction?
+27. Does the main material come from `exploration`?
+28. Does the conversation build toward `turning_point`?
+29. Is `possible_discovery` treated as a destination?
+30. Does the latter part reflect `ending_state` and `open_question` naturally?
 
 ## FIDELITY
 
-18. Can every substantive Host position be traced to the source?
-19. Can every substantive Guest position be traced to the source?
-20. Has any new belief, fact, experience, motivation, value, or conclusion been invented?
-21. Has any meaningful position silently moved between participants?
-22. Would either participant appear materially different from the source?
+31. Can every substantive Host position be traced to the source?
+32. Can every substantive Guest position be traced to the source?
+33. Has any new belief, fact, experience, motivation, value, or conclusion been invented?
+34. Has any meaningful position silently moved between participants?
+35. Would either participant appear materially different from the source?
 
 ## CONVERSATION
 
-23. Do the participants react to each other rather than merely alternate speeches?
-24. Does each substantial conversational move get taken up by the other participant before the conversation moves on?
-25. Are there prolonged stretches where one participant speaks through multiple substantial moves without meaningful uptake?
-26. Does friction emerge naturally?
-27. Are there clarification, resistance, reconsideration, or correction?
-28. Is the Host intellectually active?
-29. Is the Guest responding rather than lecturing?
-30. Does the interaction feel like shared attention?
+36. Do the participants react to each other rather than merely alternate speeches?
+37. Does each substantial conversational move get taken up by the other participant before the conversation moves on?
+38. Are there prolonged stretches where one participant speaks through multiple substantial moves without meaningful uptake?
+39. Does friction emerge naturally?
+40. Are there clarification, resistance, reconsideration, or correction?
+41. Is the Host intellectually active?
+42. Is the Guest responding rather than lecturing?
+43. Does the interaction feel like shared attention?
 
 ## RELATIONAL PRESENCE
 
-31. Do the Host and Guest respond not only to each other's ideas, but also to each other as people?
-32. Are there natural moments of acknowledgement, empathy, amusement, awkwardness, teasing, warmth, or recognition where appropriate?
-33. If all social responses were removed, would the episode feel like two people exchanging information rather than sharing a conversation?
-34. Does the opening feel like two people entering the conversation together rather than one person delivering a setup?
+44. Do the Host and Guest respond not only to each other's ideas, but also to each other as people?
+45. Are there natural moments of acknowledgement, empathy, amusement, awkwardness, teasing, warmth, or recognition where appropriate?
+46. If all social responses were removed, would the episode feel like two people exchanging information rather than sharing a conversation?
+47. Does the opening feel like two people entering the conversation together rather than one person delivering a setup?
+
+## TENSION LOOP
+
+48. Does the Thinking Scene actually explore the same underlying Public Tension opened by the Hook?
+49. Does the Perspective change the meaning of that tension?
+50. Does the ending return to the original tension rather than introduce a new unrelated question?
+51. Does the ending return with changed meaning rather than merely repeat the Hook?
+52. If the tension remains unresolved, does the ending leave it sharper or deeper rather than simply unfinished?
 
 ## PERSPECTIVE
 
-35. Does the Host begin without already knowing the Perspective?
-36. Does the Guest avoid solving the problem too early?
-37. Is the Perspective earned through interaction?
-38. Does the audience come to see something differently?
+53. Does the Host begin without already knowing the Perspective?
+54. Does the Guest avoid solving the problem too early?
+55. Is the Perspective earned through interaction?
+56. Does the audience come to see something differently?
 
 ## TEMPORAL
 
-39. Does any line imply a previous conversation?
-40. Does any line contain fictional memory such as "before", "last time", or "as we discussed"?
-41. Is the original source timeline absent from the narrative while its epistemic state remains faithful?
+57. Does any line imply a previous conversation?
+58. Does any line contain fictional memory such as "before", "last time", or "as we discussed"?
+59. Is the original source timeline absent from the narrative while its epistemic state remains faithful?
 
 ## ENDING
 
-42. Does the conversation end inside the scene?
-43. Does the Host avoid switching into presenter mode?
-44. Does the closing avoid addressing the audience directly?
-45. Does the scene feel naturally complete rather than formally summarized?
+60. Does the conversation end inside the scene?
+61. Does the Host avoid switching into presenter mode?
+62. Does the closing avoid addressing the audience directly?
+63. Does the ending naturally reconnect with the opening tension?
+64. Does the scene feel naturally complete rather than formally summarized?
 
 ## AI QUALITY
 
-46. Are there too many polished AI wisdom statements?
-47. Has the interview become an article in dialogue form?
-48. Is the Host merely setting up the Guest to explain?
-49. Does it feel like "AI teaches Human"?
+65. Are there too many polished AI wisdom statements?
+66. Has the interview become an article in dialogue form?
+67. Is the Host merely setting up the Guest to explain?
+68. Does it feel like "AI teaches Human"?
 
-If YES to 49:
+If YES to 68:
 
 **Rewrite.**
 
@@ -1398,6 +1696,8 @@ The correct answer should be:
 
 > **The audience has a place to stand.**
 
+> **The Hook makes them want to stay.**
+
 > **The situation is clear before the deep thinking begins.**
 
 > **The thinking feels alive and unresolved in the present.**
@@ -1408,6 +1708,8 @@ The correct answer should be:
 
 > **The Perspective emerges from the interaction.**
 
+> **The original tension returns with changed meaning.**
+
 > **The minds remain faithful to the source.**
 
 ---
@@ -1416,7 +1718,7 @@ The correct answer should be:
 
 Return valid JSON only.
 
-```json id="a2osf5"
+```json
 {
   "episode": {
     "title": "...",
