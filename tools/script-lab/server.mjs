@@ -1873,7 +1873,16 @@ function segmentsFromDraftShape(p) {
       const r = await apiWithToken(e, token, "/v1/editor/submissions/" + id + "/review", { method: "PUT", body: { review } });
       // 同一提交点：本轮审题结果一并入库（换浏览器/清缓存后能拉回来）
       if (proposals) await saveProduction(e, token, id, { reviewProposals: proposals }).catch(() => null);
-      sendJson(res, { ok: true, saved: !!(r && r.ok) });
+      // 同一提交点：**投稿标题 ← 锁定的提案标题**。
+      //   投稿的原始标题常常是平台名（"Gemini - direct access to Google AI"）或无标题，没有编辑意义；
+      //   编辑一旦选定了这条线，标题就该是那条线的标题。用的接口与采集回写同一个（PATCH .../title）。
+      //   标题回写失败不影响锁定本身——锁定才是这条路径的目的。
+      const newTitle = (review && typeof review.title === "string") ? review.title.trim() : "";
+      if (newTitle) {
+        await apiWithToken(e, token, "/v1/editor/submissions/" + id + "/title", { method: "PATCH", body: { title: newTitle } })
+          .catch((err) => { console.warn("[review/confirm] 投稿标题回写失败（不影响锁定）:", String((err && err.message) || err)); });
+      }
+      sendJson(res, { ok: true, saved: !!(r && r.ok), title: newTitle || null });
     } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
     return;
   }
