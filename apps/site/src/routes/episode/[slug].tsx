@@ -142,10 +142,12 @@ const css = stylex.create({
     display: "inline-flex",
     alignItems: "center",
     gap: dimensions.spacing1,
-    backgroundColor: colors.surfaceWeak,
-    padding: `${dimensions.spacing1} ${dimensions.spacing1}`,
+    backgroundColor: colors.surface,
+    padding: `${dimensions.spacing1} ${dimensions.spacing3} ${dimensions.spacing1} ${dimensions.spacing1}`,
     borderRadius: dimensions.radiusFull,
     fontSize: dimensions.fontSizeSm,
+    color: colors.foreground,
+    textDecoration: "none",
   },
   castVerb: {
     color: colors.neutral,
@@ -409,7 +411,7 @@ const languageLabel = () => {
             <div {...stylex.props(css.titleOutter)}>
               <div {...stylex.props(typography.caption, css.caption)}>
                 <Show when={ep()!.number}>
-                  <span>{t("episode.number", { n: ep()!.number! })}</span>
+                  <span>{categoryLabel()}</span>
                 </Show>
                 <Show when={ep()!.durationSeconds}>
                   <span> · </span>
@@ -470,15 +472,17 @@ const languageLabel = () => {
           {/* 演职员：[头像][主播] 采访 [头像][AI 嘉宾] —— 两个名字都是可点击 badge
               （主播 → /@username 频道页；嘉宾 → /guest/:id）。无嘉宾的节目只显示主播。 */}
           <div {...stylex.props(css.cast)}>
-            <span {...stylex.props(css.castPerson)}>
+            <span> {t("episode.number", { n: ep()!.number! })} : </span>
+            
+            <A {...stylex.props(css.castPerson)} href={`/@${ep()!.username}`}>
               <Avatar image={ep()!.hostAvatar} name={hostName()} size={20} /> {hostName()}
-            </span>
+            </A>
             <span {...stylex.props(css.castVerb)}>×</span>
 
-            <span {...stylex.props(css.castPerson)}>
+            <A {...stylex.props(css.castPerson)} href={` /guest/${ep()!.guest!.id}`}>
               <Avatar  image={ep()!.guest!.avatar} name={ep()!.guest!.name} size={20} /> {ep()!.guest!.name}
-            </span>
-
+            </A>
+            
           </div>
           {/* Highlights */}
           <Show when={ep()?.highlights?.length}>
