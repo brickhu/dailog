@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, Show } from "solid-js";
+import { createSignal, createEffect, onMount, For, Show } from "solid-js";
 import { useNavigate } from "@solidjs/router";
 import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
@@ -7,12 +7,19 @@ import { colors, dimensions } from "@dailogues/ui/theme.stylex";
 import { Button, TextInput, Spinner } from "@dailogues/ui";
 import VoiceSamplePreview from "../components/voice-sample-preview";
 import VoiceSampleRecorderDialog from "../components/voice-sample-recorder-dialog";
+import type { RecordedSample } from "../components/voice-sample-recorder-dialog";
+import { ENABLED_SAMPLE_LANGUAGES } from "../lib/languages";
+import { getReadingScript } from "../lib/reading-scripts";
+import { saveVoiceSampleCallName, uploadVoiceSample } from "../lib/voice-sample";
 import { useI18n } from "@dailogues/i18n";
 
-// 账号中心（dailog.fm/account）：
-//   区块一「账号管理」——邮箱/GitHub 绑定/昵称/修改密码（better-auth 官方端点，站内代理）
-//   区块二「主持人资料」——displayName/bio/gender/profession/age/nationality/socialLinks（PATCH /api/me/profile）
-// 划分：账号 = user 表（登录凭据 + @slug=name），主持人档案 = profiles 表（公开身份）
+// 账号中心（dailog.fm/settings）：
+//   区块一「账号管理」——邮箱 / 昵称（@slug）/ 修改密码（better-auth 官方端点，站内代理）
+//   区块二「主持人资料」——displayName/bio/gender/profession/age/nationality/socialLinks（**账号级，不区分语言**）
+//   区块三「声音采样」——**按语言区**各一张卡：该区节目中的称呼（callName）+ 该区声音采样（录音/试听/重录）。
+//         一投稿 = 一语言区 = 一期节目，两个区各自独立配置。
+// 划分：账号 = user 表；主持人资料 = profiles（账号级）；**称呼 + 采样 = voice_samples 行**（owner × 语种，
+//       后端 PATCH /v1/me/voice-sample { language, callName }）。
 
 interface ProfileData {
   email: string | null;
@@ -21,6 +28,7 @@ interface ProfileData {
   image: string | null;
   displayName: string | null;
   bio: string | null;
+  /** 脚本画像（账号级；投稿快照 personaInfo） */
   gender: string | null;
   profession: string | null;
   age: string | null;
@@ -58,6 +66,10 @@ const styles = stylex.create({
     fontWeight: dimensions.fontWeightBold,
     marginBottom: dimensions.spacing3,
   },
+  sectionDesc: {
+    color: colors.neutral,
+    marginBottom: dimensions.spacing4,
+  },
   card: {
     padding: dimensions.spacing6,
     borderRadius: dimensions.radiusMd,
@@ -90,6 +102,12 @@ const styles = stylex.create({
     display: "flex",
     gap: dimensions.spacing3,
     alignItems: "center",
+  },
+  divider: {
+    borderTopStyle: "solid",
+    borderTopWidth: dimensions.borderWidthThin,
+    borderTopColor: colors.ink,
+    margin: `${dimensions.spacing4} 0`,
   },
   error: {
     fontSize: dimensions.fontSizeSm,
@@ -165,15 +183,31 @@ export default function AccountPage() {
 function AccountSection(props: { profile: ProfileData; loadError: string | null }) {
   const { t } = useI18n();
   return (
-    <section {...stylex.props(styles.section)}>
-      <div {...stylex.props(styles.sectionTitle)}>{t("account.section")}</div>
-      <AccountBlock profile={props.profile} loadError={props.loadError} />
-      <HostProfileBlock profile={props.profile} />
-    </section>
+    <>
+      <section {...stylex.props(styles.section)}>
+        <div {...stylex.props(styles.sectionTitle)}>{t("account.section")}</div>
+        <AccountBlock profile={props.profile} loadError={props.loadError} />
+      </section>
+
+      {/* 主持人资料（账号级）：公开身份 + 脚本画像 */}
+      <section {...stylex.props(styles.section)}>
+        <HostProfileBlock profile={props.profile} />
+      </section>
+
+      {/* 声音采样：按语言区各一张卡（称呼 + 采样） */}
+      <section {...stylex.props(styles.section)}>
+        <div {...stylex.props(styles.sectionTitle)}>{t("account.zonesSection")}</div>
+        <div {...stylex.props(styles.sectionDesc)}>{t("account.zonesDesc")}</div>
+        <For each={ENABLED_SAMPLE_LANGUAGES}>
+          {(lang) => <HostZoneCard profile={props.profile} language={lang} />}
+        </For>
+      </section>
+    </>
   );
 }
 
-/** 主持人资料：昵称/简介/性别/职业/年龄/国籍/社交链接（脚本生成注入主持人画像） */
+/** 主持人资料（**账号级，不区分语言**）：公开身份（展示名/简介/社交链接）+ 脚本画像（性别/职业/年龄/国籍）。
+ *  节目中的称呼不在这里——它随声音采样走（各语言区卡片）。 */
 function HostProfileBlock(props: { profile: ProfileData }) {
   const { t } = useI18n();
   const p = () => props.profile;
@@ -221,7 +255,9 @@ function HostProfileBlock(props: { profile: ProfileData }) {
       <div {...stylex.props(styles.row)}>
         <span {...stylex.props(styles.rowLabel)}>{t("account.hostProfile")}</span>
       </div>
-      <div {...stylex.props(styles.rowValue)}>{t("account.hostProfileDesc")}</div>
+      <div {...stylex.props(styles.field)}>
+        <div {...stylex.props(styles.rowValue)}>{t("account.hostProfileDesc")}</div>
+      </div>
       <div {...stylex.props(styles.field)}>
         <TextInput label={t("account.displayName")} value={displayName()} onChange={(v) => setDisplayName(v)} maxLength={30} />
         <TextInput label={t("account.bio")} value={bio()} onChange={(v) => setBio(v)} maxLength={200} />
@@ -239,7 +275,138 @@ function HostProfileBlock(props: { profile: ProfileData }) {
   );
 }
 
-/** 账号管理：邮箱 / GitHub 绑定 / 昵称 / 修改密码 */
+/** 单个语言区的「采样配置」卡 = 该区节目中的称呼（callName，**存在采样行上**）+ 该区声音采样 */
+function HostZoneCard(props: { profile: ProfileData; language: string }) {
+  const { t } = useI18n();
+  const zone = () => props.language;
+
+  // 称呼（该区）：随该语种采样行走；还没录音时服务端存 draft 行
+  const [callName, setCallName] = createSignal("");
+  const [nameMsg, setNameMsg] = createSignal<{ ok: boolean; text: string } | null>(null);
+  const [nameBusy, setNameBusy] = createSignal(false);
+
+  // 声音采样（该区）
+  const [sample, setSample] = createSignal<{ id: string | null; duration: number; hasAudio: boolean } | null>(null);
+  const [sampleLoaded, setSampleLoaded] = createSignal(false);
+  const [sampleVer, setSampleVer] = createSignal(0);
+  const [sampleBusy, setSampleBusy] = createSignal(false);
+  const [sampleMsg, setSampleMsg] = createSignal<{ ok: boolean; text: string } | null>(null);
+  const [recorderOpen, setRecorderOpen] = createSignal(false);
+
+  /** 拉该语种采样行：含 callName（draft 行 = 只配了称呼还没录音 → hasAudio=false） */
+  const fetchSample = async () => {
+    try {
+      const res = await fetch(`/v1/me/voice-sample?language=${encodeURIComponent(zone())}`);
+      if (res.ok) {
+        const vs = (await res.json()) as { id?: string | null; duration?: number; callName?: string | null; status?: string } | null;
+        setSample(vs ? { id: vs.id ?? null, duration: vs.duration ?? 0, hasAudio: vs.status === "ready" } : null);
+        setCallName(vs?.callName ?? "");
+      } else {
+        setSample(null);
+        setCallName("");
+      }
+    } catch {
+      setSample(null);
+    } finally {
+      setSampleLoaded(true);
+    }
+  };
+  onMount(() => void fetchSample());
+
+  /** 保存该区节目中的称呼（写在采样行上；还没录音时服务端建 draft 行） */
+  const saveCallName = async () => {
+    setNameMsg(null);
+    setNameBusy(true);
+    try {
+      const ok = await saveVoiceSampleCallName(zone(), callName().trim());
+      if (ok) await fetchSample();
+      setNameMsg(ok ? { ok: true, text: t("account.zoneNameSaved") } : { ok: false, text: t("account.saveFailed") });
+    } finally {
+      setNameBusy(false);
+    }
+  };
+
+  /** 朗读文案：固定稿 + 该区称呼（未填回退公开身份的展示名） */
+  const readingScript = () =>
+    getReadingScript(zone(), callName().trim() || props.profile.displayName?.trim() || t("submit.hostFallback")).text;
+
+  /** 录音弹窗「保存」→ 上传该区采样（称呼随上传一并提交） */
+  const onSampleSubmit = async (s: RecordedSample) => {
+    setSampleBusy(true);
+    const uploaded = await uploadVoiceSample({ ...s, callName: callName().trim() || null });
+    setSampleBusy(false);
+    if (!uploaded) {
+      setSampleMsg({ ok: false, text: t("recorder.uploadFailed") });
+      return; // 上传失败：弹窗保持打开，录音还在，可直接重试保存
+    }
+    await fetchSample();
+    setSampleVer((v) => v + 1); // 试听地址换版本 → 重新拉取新录音（含浏览器缓存绕过）
+    setSampleMsg({ ok: true, text: t("account.voiceSampleDone") });
+    setRecorderOpen(false);
+  };
+
+  return (
+    <div {...stylex.props(styles.card)}>
+      <div {...stylex.props(styles.row)}>
+        <span {...stylex.props(styles.rowLabel)}>{t("account.zoneCard", { zone: t(("lang." + zone()) as never) })}</span>
+        <Show when={sampleLoaded()} fallback={<Spinner />}>
+          <Show when={sample()?.hasAudio} fallback={<span {...stylex.props(styles.rowValue)}>{t("account.voiceSampleNone")}</span>}>
+            <span {...stylex.props(styles.badge)}>{t("account.voiceSampleRecorded")}</span>
+          </Show>
+        </Show>
+      </div>
+
+      <div {...stylex.props(styles.field)}>
+        <div {...stylex.props(styles.rowValue)}>{t("account.zoneRoleDesc")}</div>
+      </div>
+      <div {...stylex.props(styles.field)}>
+        <TextInput label={t("account.callName")} value={callName()} onChange={(v) => setCallName(v)} maxLength={20} placeholder={props.profile.displayName ?? undefined} />
+      </div>
+      <Button onClick={saveCallName} isDisabled={nameBusy()}>{t("account.saveZoneName")}</Button>
+      <Show when={nameMsg()}>
+        <div {...stylex.props(nameMsg()!.ok ? styles.success : styles.error)}>{nameMsg()!.text}</div>
+      </Show>
+
+      <div {...stylex.props(styles.divider)} />
+
+      <div {...stylex.props(styles.field)}>
+        <div {...stylex.props(styles.rowValue)}>{t("account.voiceSampleDesc")}</div>
+      </div>
+      <Show when={sampleLoaded()} fallback={<Spinner />}>
+        <Show
+          when={sample()?.hasAudio}
+          fallback={
+            <div {...stylex.props(styles.actions)}>
+              <Button onClick={() => setRecorderOpen(true)}>{t("recorder.recordAction")}</Button>
+            </div>
+          }
+        >
+          <VoiceSamplePreview
+            duration={sample()!.duration}
+            language={zone()}
+            audioUrl={`/v1/me/voice-sample/audio?language=${encodeURIComponent(zone())}&v=${sampleVer()}`}
+            onReRecord={() => setRecorderOpen(true)}
+          />
+        </Show>
+      </Show>
+      <Show when={sampleMsg()}>
+        <div {...stylex.props(sampleMsg()!.ok ? styles.success : styles.error)}>{sampleMsg()!.text}</div>
+      </Show>
+
+      <VoiceSampleRecorderDialog
+        open={recorderOpen()}
+        language={zone()}
+        script={readingScript()}
+        busy={sampleBusy()}
+        onClose={() => setRecorderOpen(false)}
+        onCancel={() => setRecorderOpen(false)}
+        onSubmit={onSampleSubmit}
+      />
+    </div>
+  );
+}
+
+/** 账号管理：邮箱 / 昵称（@slug）/ 修改密码 */
 function AccountBlock(props: { profile: ProfileData; loadError: string | null }) {
   const { t } = useI18n();
   const p = () => props.profile;
@@ -287,43 +454,6 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
     }
   };
 
-  // ---- 声音采样（生成节目中"你"的声音）：预览条 + 录音弹窗（新增/修改均从准备录制打开）----
-  const [sample, setSample] = createSignal<{ id: string | null; language: string; duration: number; transcript: string | null } | null>(null);
-  const [sampleLoaded, setSampleLoaded] = createSignal(false);
-  const [sampleMsg, setSampleMsg] = createSignal<{ ok: boolean; text: string } | null>(null);
-  const [recorderOpen, setRecorderOpen] = createSignal(false);
-  const [recorderMode, setRecorderMode] = createSignal<"add" | "edit">("add");
-
-  const fetchSample = async () => {
-    try {
-      const res = await fetch("/v1/me/voice-sample");
-      if (res.ok) {
-        const vs = (await res.json()) as { id?: string | null; language?: string; duration?: number; transcript?: string | null } | null;
-        setSample(vs ? { id: vs.id ?? null, language: vs.language ?? "zh", duration: vs.duration ?? 0, transcript: vs.transcript ?? null } : null);
-      } else {
-        setSample(null);
-      }
-    } catch {
-      setSample(null);
-    } finally {
-      setSampleLoaded(true);
-    }
-  };
-  onMount(() => void fetchSample());
-
-  const openRecorder = (mode: "add" | "edit") => {
-    setSampleMsg(null);
-    setRecorderMode(mode);
-    setRecorderOpen(true);
-  };
-
-  /** 弹窗确认保存成功：刷新采样数据（时长/语种/音频立即更新） */
-  const onSampleSaved = async () => {
-    await fetchSample();
-    setSampleMsg({ ok: true, text: t("account.voiceSampleDone") });
-    setRecorderOpen(false);
-  };
-
   return (
     <>
       {props.loadError && <div {...stylex.props(styles.error)}>{props.loadError}</div>}
@@ -349,47 +479,6 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
         <Button onClick={saveName}>{t("account.saveNickname")}</Button>
         <Show when={nameMsg()}>
           <div {...stylex.props(nameMsg()!.ok ? styles.success : styles.error)}>{nameMsg()!.text}</div>
-        </Show>
-      </div>
-
-      <div {...stylex.props(styles.card)}>
-        <div {...stylex.props(styles.row)}>
-          <span {...stylex.props(styles.rowLabel)}>{t("account.voiceSample")}</span>
-          <Show when={sampleLoaded()} fallback={<Spinner />}>
-            <Show when={sample()} fallback={<span {...stylex.props(styles.rowValue)}>{t("account.voiceSampleNone")}</span>}>
-              <span {...stylex.props(styles.badge)}>{t("account.voiceSampleRecorded")}</span>
-            </Show>
-          </Show>
-        </div>
-        <div {...stylex.props(styles.field)}>
-          <div {...stylex.props(styles.rowValue)}>{t("account.voiceSampleDesc")}</div>
-        </div>
-        <Show
-          when={sample()}
-          fallback={
-            <div {...stylex.props(styles.actions)}>
-              <Button onClick={() => openRecorder("add")}>{t("recorder.addAction")}</Button>
-            </div>
-          }
-        >
-          <VoiceSamplePreview
-            duration={sample()!.duration}
-            language={sample()!.language}
-            audioUrl="/v1/me/voice-sample/audio"
-            onReRecord={() => openRecorder("edit")}
-          />
-        </Show>
-        <VoiceSampleRecorderDialog
-          open={recorderOpen()}
-          mode={recorderMode()}
-          defaultLanguage={sample()?.language}
-          hostName={p().displayName?.trim() || p().nickname?.trim() || undefined}
-          onClose={() => setRecorderOpen(false)}
-          onCancel={() => setRecorderOpen(false)}
-          onSaved={onSampleSaved}
-        />
-        <Show when={sampleMsg()}>
-          <div {...stylex.props(sampleMsg()!.ok ? styles.success : styles.error)}>{sampleMsg()!.text}</div>
         </Show>
       </div>
 

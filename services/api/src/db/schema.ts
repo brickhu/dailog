@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean, index, integer, jsonb, pgTable, real, smallint, text, timestamp, uniqueIndex, uuid,
 } from "drizzle-orm/pg-core";
@@ -63,15 +64,17 @@ export const authAccounts = pgTable("account", {
 // 业务表（user_id 关联 better-auth user.id，text 类型；M5 迁移）
 // ---------------------------------------------------------------------------
 
-/** 主持人档案（1:1 关联 user；id 即用户 id）。
- *  账号级属性（role/plan/credit）在 user 表；此处只留「主持人」信息。
- *  display_name = 昵称 = 节目称呼配置源；主页标识 = user.name（@name，无独立 username）。
- *  脚本生成时把 bio/gender/profession/age/nationality 注入主持人画像（有是补充，没有也没关系）。 */
+/** 主持人档案（1:1 关联 user；id 即用户 id）——**账号级，不区分语言**。
+ *  · 公开身份（对外展示）：display_name = 展示名、bio = 简介、social_links = 社交链接
+ *    （主页标识 = user.name（@name），无独立 username 列）
+ *  · 脚本画像：gender/profession/age/nationality（只进脚本生成的主持人画像，不对外展示）
+ *  节目中的称呼（callName）不在这里——它随**声音采样**走（voice_samples.call_name，按语言区）。 */
 export const profiles = pgTable("profiles", {
   id: text("id").primaryKey().references(() => authUsers.id, { onDelete: "cascade" }),
-  /** 主持人展示名/昵称（节目中的称呼配置源；投稿时填充 callNameInEpisode） */
+  /** 主持人展示名/昵称（公开身份；节目中的称呼见 voice_samples.call_name） */
   displayName: text("display_name").notNull(),
   bio: text("bio"),
+  /** 脚本画像（投稿快照 submissions.host.personaInfo 的账号级部分） */
   gender: text("gender"),
   profession: text("profession"),
   age: text("age"),
@@ -84,22 +87,51 @@ export const profiles = pgTable("profiles", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** AI 平台嘉宾库：品牌声线宿主（跨期统一的 AI 受访嘉宾）。
+ *  嘉宾的参考音频/转录**不单独建表**——与主持人同用 voice_samples（guest_id 非空即嘉宾行）。 */
+export const guests = pgTable("guests", {
+  id: text("id").primaryKey(), // 用 platform 枚举值作 id（claude/chatgpt/...）
+  platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek", "perplexity", "grok"] }).notNull().unique(),
+  name: text("name").notNull(),
+  avatar: text("avatar"),
+  intro: text("intro"),
+  url: text("url"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** 声音采样（**主持人 + 嘉宾共用一张表**）：一行 = 一个声音身份 × 语种。
+ *  owner 二选一（CHECK 约束保证恰好一个）：
+ *    · user_id  非空 → 主持人（投稿人）的采样，profiles.id = user.id
+ *    · guest_id 非空 → 嘉宾（AI 品牌声线）的采样，guests.id
+ *  call_name = 该语种节目中这个身份的称呼（主持人 = 自己的节目称呼；嘉宾 = 嘉宾名）。
+ *  audio_url 为空 = 只配了称呼还没录音（status='draft'，不参与投稿前置校验与 TTS）。
+ *  R2 key：主持人 voices/{userId}/{language}.webm；嘉宾 guests/{guestId}/{language}.mp3。 */
 export const voiceSamples = pgTable(
   "voice_samples",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    /** 声音归属主持人档案（profiles.id = user.id 恒等） */
-    userId: text("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
-    /** 采样语种（zh/en/…）：一人多语种各一条；编辑按脚本语言匹配（对应语种 → en → 唯一兜底） */
+    /** 主持人 owner（profiles.id = user.id 恒等）；与 guestId 二选一 */
+    userId: text("user_id").references(() => profiles.id, { onDelete: "cascade" }),
+    /** 嘉宾 owner（guests.id）；与 userId 二选一 */
+    guestId: text("guest_id").references(() => guests.id, { onDelete: "cascade" }),
+    /** 采样语种（zh/en/…）：一个身份多语种各一条；编辑按脚本语言匹配（对应语种 → en → 唯一兜底） */
     language: text("language").notNull().default("zh"),
-    audioUrl: text("audio_url").notNull(),
-  /** 参考音频转录文本（用户朗读的固定文案；零样本克隆用） */
-  transcript: text("transcript"),
-  duration: integer("duration").notNull(),
-  status: text("status", { enum: ["ready", "failed"] }).notNull().default("ready"),
+    /** 参考音频 storage key（draft 行可为空：只配了称呼还没录音） */
+    audioUrl: text("audio_url"),
+    /** 参考音频转录文本（主持人朗读的固定文案；零样本克隆用） */
+    transcript: text("transcript"),
+    duration: integer("duration").notNull().default(0),
+    /** 该语种节目中的称呼（投稿 callNameInEpisode 的默认值） */
+    callName: text("call_name"),
+    /** draft = 只有称呼还没录音 / ready = 可用 / failed = 录制失败 */
+    status: text("status", { enum: ["draft", "ready", "failed"] }).notNull().default("ready"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("voice_samples_user_language").on(t.userId, t.language)],
+  (t) => [
+    // owner × 语种唯一：主持人/嘉宾各一条（部分唯一索引，owner 列互斥）
+    uniqueIndex("voice_samples_user_language").on(t.userId, t.language).where(sql`${t.userId} IS NOT NULL`),
+    uniqueIndex("voice_samples_guest_language").on(t.guestId, t.language).where(sql`${t.guestId} IS NOT NULL`),
+  ],
 );
 
 /** 主持人档案快照（投稿时写入 submissions.persona_info；编辑 getDetail 免查库，脚本生成注入画像） */
@@ -171,30 +203,6 @@ export const submissions = pgTable(
   // 归属判定在路由层（routes/submissions.ts），本索引只兜住同区并发的唯一性。
   (t) => [uniqueIndex("submissions_url_language").on(t.url, t.language)],
 );
-
-/** AI 平台嘉宾库：品牌声线宿主（跨期统一的 AI 受访嘉宾）。
- *  编辑本地 TTS 用 guest_voice_samples 的参考音频作嘉宾音色（2D references 内联）。 */
-export const guests = pgTable("guests", {
-  id: text("id").primaryKey(), // 用 platform 枚举值作 id（claude/chatgpt/...）
-  platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek", "perplexity", "grok"] }).notNull().unique(),
-  name: text("name").notNull(),
-  avatar: text("avatar"),
-  intro: text("intro"),
-  url: text("url"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-/** 嘉宾音频采样（按平台 × 语种各一条）：编辑本地 TTS 的嘉宾音色来源；
- *  audio_key = storage key（R2/fs），transcript = 参考音频转录文本（2D references 内联用）；
- *  多语种：同一嘉宾按语种各一条，未定义语种由 TTS 按英文兜底。 */
-export const guestVoiceSamples = pgTable("guest_voice_samples", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  guestId: text("guest_id").notNull().references(() => guests.id, { onDelete: "cascade" }),
-  language: text("language").notNull().default("zh"),
-  audioKey: text("audio_key").notNull(),
-  transcript: text("transcript"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [uniqueIndex("guest_voice_samples_guest_language_unique").on(t.guestId, t.language)]);
 
 /** 成品节目：编辑本地制作完成后一次性上传入库，即已发布（published + isPublic）。
  *  音频在 R2（audioUrl），封面可选（coverUrl）；期号发布时 max+1 分配——"dailog 第 N 期"。 */

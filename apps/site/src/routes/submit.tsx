@@ -14,7 +14,9 @@ import { ZonePicker } from "../components/zone-picker";
 import { env } from "../lib/env";
 import { openImportDialog } from "../components/import-dialog";
 import VoiceSamplePreview from "../components/voice-sample-preview";
-import VoiceSampleRecorderDialog, { type SavedSample } from "../components/voice-sample-recorder-dialog";
+import VoiceSampleRecorderDialog, { type RecordedSample } from "../components/voice-sample-recorder-dialog";
+import { getReadingScript } from "../lib/reading-scripts";
+import { uploadVoiceSample } from "../lib/voice-sample";
 
 // 投稿流程（本质版，2026-08-13）：
 //   input   输入态：分享链接（前端基本 http/https 校验）→ [继续]
@@ -184,14 +186,20 @@ export default function SubmitPage() {
   const [existingEpisode, setExistingEpisode] = createSignal<{ slug?: string; title?: string | null } | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   // 人设（可选）+ 采样（必填；已有采样自动填充可沿用）
-  const [callName, setCallName] = createSignal("");   // callNameInEpisode：本次节目称呼（默认 displayName）
+  const [callName, setCallName] = createSignal("");   // callNameInEpisode：本次节目称呼（默认取该区采样行上的 callName）
+  // 主持人资料（进入确认态时拉取；称呼默认值的兜底展示名）
+  const [hostProfile, setHostProfile] = createSignal<{ displayName?: string | null } | null>(null);
+  // 该投稿区采样行上的「节目称呼」（callName；在设置页按语言区配置）
+  const [zoneCallName, setZoneCallName] = createSignal("");
   const [suggestion, setSuggestion] = createSignal(""); // 节目建议（可选；仅供编辑部选题参考）
   const [hasVoiceSample, setHasVoiceSample] = createSignal(false);
   const [voiceLang, setVoiceLang] = createSignal("zh"); // 已有采样语种（展示用）
   const [sampleDuration, setSampleDuration] = createSignal(0); // 已有采样时长（预览条「XX秒」用）
   const [voiceSampleId, setVoiceSampleId] = createSignal<string | null>(null); // 采样 id（投稿记录用）
   const [recorderOpen, setRecorderOpen] = createSignal(false);
-  const [recorderMode, setRecorderMode] = createSignal<"add" | "edit">("add");
+  const [sampleBusy, setSampleBusy] = createSignal(false); // 采样上传中（录音弹窗 busy）
+  // 采样版本号：重新录制后 +1 → 试听 URL 变化（音频 URL 恒定，<audio> 不会自己重新加载，会一直播旧的）
+  const [sampleVer, setSampleVer] = createSignal(0);
   const [submitting, setSubmitting] = createSignal(false);
   // 提交成功响应里的投稿 id（done 态“投稿详情”按钮跳 /submission/<id> 用）
   const [submissionId, setSubmissionId] = createSignal<string | null>(null);
@@ -201,6 +209,10 @@ export default function SubmitPage() {
   const [zoneInfo, setZoneInfo] = createSignal<Record<string, { submitted: boolean; canSubmit: boolean; status: string | null; hasSample: boolean }> | null>(null);
   // 他人已投稿（check.owner=other）：同一对话的投递权归首个投稿人 → 整条投稿流程不可用
   const [claimed, setClaimed] = createSignal(false);
+
+  /** 录音弹窗的朗读文案：投稿区语种 + 本次节目称呼（本页解析后传入——录音组件不做文案解析） */
+  const readingScript = () =>
+    getReadingScript(zone(), callName().trim() || t("submit.hostFallback")).text;
 
   /** 按"该区是否已有采样"决定是否回读：有 → 取该语种那条的 id/时长（预览条用）；
    *  无 → 直接清空。**缺采样时不发请求**——`/v1/me/voice-sample` 无记录返回 404，
@@ -320,26 +332,65 @@ export default function SubmitPage() {
         const profileRes = await fetch("/v1/me/profile");
         if (profileRes.ok) {
           const profile = (await profileRes.json()) as { displayName?: string | null };
-          // 称呼默认填充主持人昵称 displayName（callNameInEpisode；脚本生成时按脚本语言改写）
-          if (profile.displayName) setCallName(profile.displayName);
+          setHostProfile(profile);
         }
       } catch { /* 静默 */ }
       if (url()) await refreshZoneInfo(url());   // 投稿区占用 + 采样就绪（登录后权威拉取一次）
     })();
   });
 
+  // 该投稿区采样行上的称呼（设置页按语言区配置；换区重新拉取）
+  createEffect(() => {
+    if (step() !== "confirm") return;
+    const z = zone();
+    void (async () => {
+      try {
+        const res = await fetch(`/v1/me/voice-sample?language=${encodeURIComponent(z)}`);
+        const vs = res.ok ? ((await res.json()) as { callName?: string | null } | null) : null;
+        setZoneCallName(vs?.callName ?? "");
+      } catch {
+        setZoneCallName("");
+      }
+    })();
+  });
+
+  // 称呼默认值**按投稿区**取：该区采样行的 callName → 主持人展示名（换区时重新预填；
+  // 用户手改过则不再覆盖；脚本生成时仍会按脚本语言改写）
+  let callNameEdited = false;
+  let prefilledZone = "";
+  createEffect(() => {
+    const z = zone();
+    const zoneName = zoneCallName().trim();
+    const fallback = hostProfile()?.displayName?.trim() || "";
+    if (z !== prefilledZone) {
+      prefilledZone = z;
+      callNameEdited = false;
+    }
+    if (callNameEdited) return;
+    setCallName(zoneName || fallback);
+  });
+
   /** 是否具备声音采样——无采样时禁用提交按钮（接口同样严格校验）。
    *  采样上传时机已前移到录音弹窗「确认保存」：此处只沿用已有/新保存的 sampleId */
   const hasSample = () => hasVoiceSample();
 
-  /** 录音弹窗保存成功：记录采样（语种/时长/id 用于预览条与投稿） */
-  const onSampleSaved = (s: SavedSample) => {
-    setVoiceSampleId(s.sampleId || null);
-    setVoiceLang(s.language);
-    setSampleDuration(s.duration);
+  /** 录音弹窗「保存」→ 上传采样（业务逻辑在本页；录音组件不做任何网络请求） */
+  const onSampleSubmit = async (sample: RecordedSample) => {
+    setSampleBusy(true);
+    const uploaded = await uploadVoiceSample(sample);
+    setSampleBusy(false);
+    if (!uploaded) {
+      setError(t("recorder.uploadFailed"));
+      return; // 上传失败：弹窗保持打开，录音还在，可直接重试保存
+    }
+    setError(null);
+    setVoiceSampleId(uploaded.sampleId || null);
+    setVoiceLang(sample.language);
+    setSampleDuration(sample.duration);
     setHasVoiceSample(true);
+    setSampleVer((v) => v + 1); // 试听地址换版本 → 重新拉取新录音（含浏览器缓存绕过）
     setRecorderOpen(false);
-    // 复核该投稿区语种：弹窗内可能改过语种，录了别的语种不算数（重新走 check，权威）
+    // 采样语种 = 投稿区；复核该区占用/采样状态（服务端 check 为权威）
     if (url()) void refreshZoneInfo(url());
   };
 
@@ -481,18 +532,15 @@ export default function SubmitPage() {
                     {...stylex.props(styles.input)}
                     placeholder={t("submit.callNamePlaceholder")}
                     value={callName()}
-                    onInput={(e) => setCallName(e.currentTarget.value)}
+                    onInput={(e) => { callNameEdited = true; setCallName(e.currentTarget.value); }}
                   />
                   <Show when={hasVoiceSample()}>
                     <p {...stylex.props(styles.ok)}>{t("submit.voiceFilled")}</p>
                     <VoiceSamplePreview
                       duration={sampleDuration()}
                       language={voiceLang()}
-                      audioUrl={`/v1/me/voice-sample/audio?language=${encodeURIComponent(zone())}`}
-                      onReRecord={() => {
-                        setRecorderMode("edit");
-                        setRecorderOpen(true);
-                      }}
+                      audioUrl={`/v1/me/voice-sample/audio?language=${encodeURIComponent(zone())}&v=${sampleVer()}`}
+                      onReRecord={() => setRecorderOpen(true)}
                     />
                   </Show>
                   <Show when={!hasVoiceSample()}>
@@ -501,7 +549,7 @@ export default function SubmitPage() {
                       {t("submit.zoneNoSample", { zone: t(`lang.${zone()}` as never) })}
                     </p>
                     <p {...stylex.props(styles.hint)}>{t("submit.voiceHint")}</p>
-                    <Button onClick={() => { setRecorderMode("add"); setRecorderOpen(true); }}>
+                    <Button onClick={() => setRecorderOpen(true)}>
                       {t("recorder.recordAction")}
                     </Button>
                   </Show>
@@ -574,15 +622,15 @@ export default function SubmitPage() {
           </div>
         </Show>
 
-        {/* 声音采样录制弹窗（新增/修改均从准备录制态打开；确认保存即上传） */}
+        {/* 声音采样录制弹窗（语种 = 投稿区；朗读文案由本页解析后传入；确认保存即上传） */}
         <VoiceSampleRecorderDialog
           open={recorderOpen()}
-          mode={recorderMode()}
-          defaultLanguage={zone()}
-          hostName={callName().trim() || undefined}
+          language={zone()}
+          script={readingScript()}
+          busy={sampleBusy()}
           onClose={() => setRecorderOpen(false)}
           onCancel={() => setRecorderOpen(false)}
-          onSaved={onSampleSaved}
+          onSubmit={onSampleSubmit}
         />
         </div>
       </div>

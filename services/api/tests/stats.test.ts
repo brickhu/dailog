@@ -95,6 +95,7 @@ function makeApp(overrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
       getVoiceSampleByLanguage: async () => null,
       getVoiceSampleKey: async () => null,
       saveVoiceSample: async () => ({ id: "" }),
+      setVoiceSampleCallName: async () => {},
       getProfile: async () => null,
       getPersonaSnapshot: async () => null,
       updateUserNickname: async () => {},

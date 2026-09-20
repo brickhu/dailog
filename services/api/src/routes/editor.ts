@@ -856,7 +856,7 @@ export function editorRoutes(deps: EditorDeps) {
     return c.json({ ok: true });
   }) as unknown as RouteHandler<typeof r9, AuthEnv>);
 
-  /** 上传嘉宾声线（multipart：audio 文件 + language + transcript）→ R2 + guest_voice_samples（服务端配置） */
+  /** 上传嘉宾声线（multipart：audio 文件 + language + transcript）→ R2 + voice_samples（owner = guest_id；与主持人共用一张表） */
   const r10 = createRoute({
     method: "post",
     path: "/v1/editor/guests/:id/voice-sample",
@@ -926,7 +926,7 @@ export function editorRoutes(deps: EditorDeps) {
     const lang = sampleLangQuery(c);
     const sample = (lang ? await deps.repo.episodes.getVoiceSampleByLanguage(userId, lang).catch(() => null) : null)
       ?? await deps.repo.episodes.getVoiceSample(userId);
-    if (!sample) return c.json({ error: "not_found" }, 404);
+    if (!sample?.audioUrl) return c.json({ error: "not_found" }, 404);
     const bytes = await deps.storage.get(sample.audioUrl).then((r) => r.data).catch(() => null);
     if (!bytes) return c.json({ error: "not_found" }, 404);
     return new Response(bytes as unknown as BodyInit, {

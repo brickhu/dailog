@@ -54,12 +54,12 @@ export const colors = stylex.defineVars({
   onSurfaceStrong: {default: "#161b22", [DARK]: "#d9e4dd"},
   
   // 突显区域色
-  popover: {default: "#e6e9e9", [DARK]: "#3e4645"},
-  onPopover: {default: "#383c3b", [DARK]: "#b4c9c6"},
-  popoverWeak: {default: "#f0f2f2", [DARK]: "#232827"},
-  onPopoverWeak: {default: "#3e4645", [DARK]: "#b4c9c6"},
-  popoverStrong: {default: "#a7aaa9", [DARK]: "#606b6a"},
-  onPopoverStrong: {default: "#3e4645", [DARK]: "#b4c9c6"},
+  popover: {default: "#d4d5d5", [DARK]: "#383c3b"},
+  onPopover: {default: "#383c3b", [DARK]: "#d4d5d5"},
+  popoverWeak: {default: "#eff1f1", [DARK]: "#272a29"},
+  onPopoverWeak: {default: "#383c3b", [DARK]: "#d4d5d5"},
+  popoverStrong: {default: "#a7aaa9", [DARK]: "#4e5352"},
+  onPopoverStrong: {default: "#383c3b", [DARK]: "#d4d5d5"},
   // 背景色
   background: {default: "#f9f9f9", [DARK]: "#0e1116"},
   // 前景色

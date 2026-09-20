@@ -370,6 +370,7 @@ export function submissionsRoutes(repo: Repos) {
       ? body.suggestion.trim().slice(0, 500)
       : null;
     // 主持人档案快照（编辑 getDetail 免查库；脚本生成注入画像）
+    // 主持人画像快照（账号级，不区分语言：displayName/bio/性别/职业/年龄/国籍）
     const personaInfo = await repo.episodes.getPersonaSnapshot(userId).catch(() => null);
     // 嘉宾快照：按 URL 猜平台 → guests 表匹配（guest jsonb 定格，preview/脚本直接取）
     let guest = null;

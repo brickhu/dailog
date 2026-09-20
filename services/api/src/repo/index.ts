@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { randomBytes } from "node:crypto";
 import * as schema from "../db/schema";
@@ -117,7 +117,7 @@ export interface SubmissionsRepo {
     /** 投稿时使用的采样（仅记录） */
     voiceSampleId: string | null;
     /** 投稿人全部 ready 采样（按语种；编辑端展示 + 服务端 TTS 按规则匹配） */
-    voiceSamples: Array<{ audioUrl: string; transcript: string | null; language: string; status: string; duration: number | null }>;
+    voiceSamples: Array<{ audioUrl: string | null; transcript: string | null; language: string; status: string; duration: number | null }>;
   } | null>;
   /** 拒审（reason 必填） */
   reject(id: string, reason: string): Promise<void>;
@@ -349,12 +349,14 @@ export interface EpisodesRepo {
   listRemovalRequests(status: "pending" | "approved" | "rejected"): Promise<RemovalRequestRow[]>;
   /** 审批下线申请（编辑端）：置状态 + handledBy/At；返回目标节目 + 申请人（通知用）；不存在/已处理 → null */
   resolveRemovalRequest(id: string, action: "approved" | "rejected", handledBy: string): Promise<{ episodeId: string; userId: string } | null>;
-  // ---- 声音采样（voice 路由沿用） ----
+  // ---- 声音采样（voice 路由沿用；主持人 + 嘉宾共用 voice_samples 表） ----
   getVoiceSample(userId: string): Promise<VoiceSampleRow | null>;
   /** 按语种取采样（编辑本地 TTS 按脚本语言取用）；无该语种 → null（调用方用兜底） */
   getVoiceSampleByLanguage(userId: string, language: string): Promise<VoiceSampleRow | null>;
   getVoiceSampleKey(userId: string): Promise<string | null>;
   saveVoiceSample(row: VoiceSampleRow): Promise<{ id: string }>;
+  /** 只写该语种采样的「节目称呼」（无该行则建 draft 行：只有称呼还没录音） */
+  setVoiceSampleCallName(userId: string, language: string, callName: string | null): Promise<void>;
   // ---- 账号/档案（/api/me/profile） ----
   /** 账号 + 主持人档案——昵称对外叫 nickname（列 user.name，= @slug） */
   getProfile(userId: string): Promise<{
@@ -362,6 +364,7 @@ export interface EpisodesRepo {
     nickname: string | null;
     emailVerified: boolean;
     image: string | null;
+    /** 公开身份：展示名 / 简介 / 社交链接 */
     displayName: string | null;
     bio: string | null;
     gender: string | null;
@@ -372,9 +375,9 @@ export interface EpisodesRepo {
     channelActivatedAt: Date | null;
   } | null>;
   updateUserNickname(userId: string, nickname: string): Promise<void>;
-  /** 主持人档案快照（投稿时写入 submissions.persona_info；编辑 getDetail 免查库） */
+  /** 主持人画像快照（**账号级，不区分语言**）：投稿时写入 submissions.host.personaInfo，编辑侧免查库 */
   getPersonaSnapshot(userId: string): Promise<PersonaSnapshot | null>;
-  /** 主持人档案设置（displayName/bio/gender/profession/age/nationality/socialLinks） */
+  /** 主持人档案设置（账号级）：displayName/bio/gender/profession/age/nationality/socialLinks */
   updateChannel(userId: string, row: { displayName?: string; bio?: string | null; gender?: string | null; profession?: string | null; age?: string | null; nationality?: string | null; socialLinks?: Record<string, string> | null }): Promise<{ ok: true }>;
 }
 
@@ -662,67 +665,87 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return rows[0] ?? null;
       },
       async voiceSampleByLanguage(guestId, language) {
+        // 嘉宾声线与主持人共用 voice_samples（owner = guest_id）
         const rows = await db
           .select({
-            id: schema.guestVoiceSamples.id,
-            guestId: schema.guestVoiceSamples.guestId,
-            language: schema.guestVoiceSamples.language,
-            audioKey: schema.guestVoiceSamples.audioKey,
-            transcript: schema.guestVoiceSamples.transcript,
+            id: schema.voiceSamples.id,
+            guestId: schema.voiceSamples.guestId,
+            language: schema.voiceSamples.language,
+            audioKey: schema.voiceSamples.audioUrl,
+            transcript: schema.voiceSamples.transcript,
           })
-          .from(schema.guestVoiceSamples)
+          .from(schema.voiceSamples)
           .where(and(
-            eq(schema.guestVoiceSamples.guestId, guestId),
-            eq(schema.guestVoiceSamples.language, language),
+            eq(schema.voiceSamples.guestId, guestId),
+            eq(schema.voiceSamples.language, language),
+            eq(schema.voiceSamples.status, "ready"),
+            isNotNull(schema.voiceSamples.audioUrl),
           ))
           .limit(1);
-        return rows[0] ?? null;
+        const row = rows[0];
+        return row && row.audioKey && row.guestId ? { ...row, audioKey: row.audioKey, guestId: row.guestId } : null;
       },
       async voiceSampleAny(guestId) {
         const rows = await db
           .select({
-            id: schema.guestVoiceSamples.id,
-            guestId: schema.guestVoiceSamples.guestId,
-            language: schema.guestVoiceSamples.language,
-            audioKey: schema.guestVoiceSamples.audioKey,
-            transcript: schema.guestVoiceSamples.transcript,
+            id: schema.voiceSamples.id,
+            guestId: schema.voiceSamples.guestId,
+            language: schema.voiceSamples.language,
+            audioKey: schema.voiceSamples.audioUrl,
+            transcript: schema.voiceSamples.transcript,
           })
-          .from(schema.guestVoiceSamples)
-          .where(eq(schema.guestVoiceSamples.guestId, guestId))
-          .orderBy(desc(schema.guestVoiceSamples.createdAt))
+          .from(schema.voiceSamples)
+          .where(and(
+            eq(schema.voiceSamples.guestId, guestId),
+            eq(schema.voiceSamples.status, "ready"),
+            isNotNull(schema.voiceSamples.audioUrl),
+          ))
+          .orderBy(desc(schema.voiceSamples.createdAt))
           .limit(1);
-        return rows[0] ?? null;
+        const row = rows[0];
+        return row && row.audioKey && row.guestId ? { ...row, audioKey: row.audioKey, guestId: row.guestId } : null;
       },
       async anyVoiceSampleByLanguage(language, excludeGuestId) {
         const rows = await db
           .select({
-            id: schema.guestVoiceSamples.id,
-            guestId: schema.guestVoiceSamples.guestId,
-            language: schema.guestVoiceSamples.language,
-            audioKey: schema.guestVoiceSamples.audioKey,
-            transcript: schema.guestVoiceSamples.transcript,
+            id: schema.voiceSamples.id,
+            guestId: schema.voiceSamples.guestId,
+            language: schema.voiceSamples.language,
+            audioKey: schema.voiceSamples.audioUrl,
+            transcript: schema.voiceSamples.transcript,
           })
-          .from(schema.guestVoiceSamples)
+          .from(schema.voiceSamples)
           .where(and(
-            eq(schema.guestVoiceSamples.language, language),
-            excludeGuestId ? ne(schema.guestVoiceSamples.guestId, excludeGuestId) : undefined,
+            eq(schema.voiceSamples.language, language),
+            eq(schema.voiceSamples.status, "ready"),
+            isNotNull(schema.voiceSamples.audioUrl),
+            excludeGuestId ? ne(schema.voiceSamples.guestId, excludeGuestId) : undefined,
           ))
-          .orderBy(desc(schema.guestVoiceSamples.createdAt))
+          .orderBy(desc(schema.voiceSamples.createdAt))
           .limit(1);
-        return rows[0] ?? null;
+        const row = rows[0];
+        return row && row.audioKey && row.guestId ? { ...row, audioKey: row.audioKey, guestId: row.guestId } : null;
       },
       async upsertVoiceSample(row) {
-        await db.insert(schema.guestVoiceSamples).values({
+        // 写入统一采样表（owner = guest_id）；称呼默认取嘉宾名（编辑端可另外改写）
+        const [g] = await db
+          .select({ name: schema.guests.name })
+          .from(schema.guests)
+          .where(eq(schema.guests.id, row.guestId))
+          .limit(1);
+        const updated = await db.update(schema.voiceSamples)
+          .set({ audioUrl: row.audioKey, transcript: row.transcript ?? null, status: "ready" })
+          .where(and(eq(schema.voiceSamples.guestId, row.guestId), eq(schema.voiceSamples.language, row.language)))
+          .returning({ id: schema.voiceSamples.id });
+        if (updated[0]) return;
+        await db.insert(schema.voiceSamples).values({
           guestId: row.guestId,
           language: row.language,
-          audioKey: row.audioKey,
+          audioUrl: row.audioKey,
           transcript: row.transcript ?? null,
-        }).onConflictDoUpdate({
-          target: [schema.guestVoiceSamples.guestId, schema.guestVoiceSamples.language],
-          set: {
-            audioKey: row.audioKey,
-            transcript: row.transcript ?? null,
-          },
+          duration: 0,
+          callName: g?.name ?? null,
+          status: "ready",
         });
       },
       async update(id, row) {
@@ -734,18 +757,21 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .where(eq(schema.guests.id, id));
       },
       async listVoiceSamples() {
-        return db
+        const rows = await db
           .select({
-            id: schema.guestVoiceSamples.id,
-            guestId: schema.guestVoiceSamples.guestId,
+            id: schema.voiceSamples.id,
+            guestId: schema.voiceSamples.guestId,
             guestName: schema.guests.name,
-            language: schema.guestVoiceSamples.language,
-            audioKey: schema.guestVoiceSamples.audioKey,
-            transcript: schema.guestVoiceSamples.transcript,
+            language: schema.voiceSamples.language,
+            audioKey: schema.voiceSamples.audioUrl,
+            transcript: schema.voiceSamples.transcript,
           })
-          .from(schema.guestVoiceSamples)
-          .innerJoin(schema.guests, eq(schema.guests.id, schema.guestVoiceSamples.guestId))
+          .from(schema.voiceSamples)
+          .innerJoin(schema.guests, eq(schema.guests.id, schema.voiceSamples.guestId))
           .orderBy(schema.guests.platform);
+        return rows
+          .filter((r) => r.guestId !== null && r.audioKey !== null)
+          .map((r) => ({ ...r, guestId: r.guestId as string, audioKey: r.audioKey as string }));
       },
     },
 
@@ -813,6 +839,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         const cond = and(
           eq(schema.voiceSamples.userId, userId),
           eq(schema.voiceSamples.status, "ready"),
+          isNotNull(schema.voiceSamples.audioUrl), // draft 行（只有称呼、没录音）不算就绪
           ...(sampleId ? [eq(schema.voiceSamples.id, sampleId)] : []),
           ...(language ? [eq(schema.voiceSamples.language, language)] : []),
         );
@@ -1591,6 +1618,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             transcript: schema.voiceSamples.transcript,
             audioUrl: schema.voiceSamples.audioUrl,
             duration: schema.voiceSamples.duration,
+            callName: schema.voiceSamples.callName,
             createdAt: schema.voiceSamples.createdAt,
           })
           .from(schema.voiceSamples)
@@ -1609,6 +1637,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             transcript: schema.voiceSamples.transcript,
             audioUrl: schema.voiceSamples.audioUrl,
             duration: schema.voiceSamples.duration,
+            callName: schema.voiceSamples.callName,
             createdAt: schema.voiceSamples.createdAt,
           })
           .from(schema.voiceSamples)
@@ -1616,32 +1645,62 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .limit(1);
         return rows[0] ?? null;
       },
+      /** 只写称呼：有该语种行 → 只更新 call_name；无 → 建 draft 行（只有称呼还没录音） */
+      async setVoiceSampleCallName(userId, language, callName) {
+        const updated = await db
+          .update(schema.voiceSamples)
+          .set({ callName })
+          .where(and(eq(schema.voiceSamples.userId, userId), eq(schema.voiceSamples.language, language)))
+          .returning({ id: schema.voiceSamples.id });
+        if (updated.length > 0) return;
+        await db.insert(schema.voiceSamples).values({
+          userId,
+          language,
+          audioUrl: null, // 还没录音
+          duration: 0,
+          callName,
+          status: "draft",
+        });
+      },
       async getVoiceSampleKey(userId) {
         const rows = await db
           .select({ audioUrl: schema.voiceSamples.audioUrl })
           .from(schema.voiceSamples)
-          .where(and(eq(schema.voiceSamples.userId, userId), eq(schema.voiceSamples.status, "ready")))
+          .where(and(
+            eq(schema.voiceSamples.userId, userId),
+            eq(schema.voiceSamples.status, "ready"),
+            isNotNull(schema.voiceSamples.audioUrl), // draft 行（只有称呼）不算
+          ))
           .orderBy(desc(schema.voiceSamples.createdAt))
           .limit(1);
         return rows[0]?.audioUrl ?? null;
       },
       async saveVoiceSample(row: VoiceSampleRow): Promise<{ id: string }> {
-        // 一人多语种各一条（upsert by user+language）；返回 id（投稿时记录 voiceSampleId 用）
+        // owner（user_id 或 guest_id）× 语种一条；owner 列是**部分唯一索引**，
+        // ON CONFLICT 需匹配索引谓词（易写错）→ 改为「先更新，未命中再插入」
+        const owner = row.userId
+          ? and(eq(schema.voiceSamples.userId, row.userId), eq(schema.voiceSamples.language, row.language))
+          : and(eq(schema.voiceSamples.guestId, row.guestId!), eq(schema.voiceSamples.language, row.language));
+        const updated = await db.update(schema.voiceSamples)
+          .set({
+            ...(row.audioUrl !== undefined ? { audioUrl: row.audioUrl } : {}),
+            ...(row.transcript !== undefined ? { transcript: row.transcript } : {}),
+            ...(row.duration !== undefined ? { duration: row.duration } : {}),
+            ...(row.callName !== undefined ? { callName: row.callName } : {}),
+            ...(row.status !== undefined ? { status: row.status } : {}),
+          })
+          .where(owner)
+          .returning({ id: schema.voiceSamples.id });
+        if (updated[0]) return { id: updated[0].id };
         const rows = await db.insert(schema.voiceSamples).values({
-          userId: row.userId,
+          userId: row.userId ?? null,
+          guestId: row.guestId ?? null,
           language: row.language,
-          audioUrl: row.audioUrl,
-          transcript: row.transcript,
-          duration: row.duration,
-          status: row.status,
-        }).onConflictDoUpdate({
-          target: [schema.voiceSamples.userId, schema.voiceSamples.language],
-          set: {
-            audioUrl: row.audioUrl,
-            transcript: row.transcript,
-            duration: row.duration,
-            status: row.status,
-          },
+          audioUrl: row.audioUrl ?? null,
+          transcript: row.transcript ?? null,
+          duration: row.duration ?? 0,
+          callName: row.callName ?? null,
+          status: row.status ?? "ready",
         }).returning({ id: schema.voiceSamples.id });
         return { id: rows[0]?.id ?? "" };
       },
@@ -1685,7 +1744,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           channelActivatedAt: profile.channelActivatedAt,
         };
       },
-      /** 主持人档案快照（投稿时写入 submissions.persona_info；编辑 getDetail 免查库） */
+      /** 主持人画像快照（账号级，不区分语言；投稿时写入 submissions.host.personaInfo） */
       async getPersonaSnapshot(userId) {
         const rows = await db
           .select({

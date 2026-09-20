@@ -50,6 +50,7 @@ function makeApp(repo: Partial<Repos["submissions"]> = {}) {
       getVoiceSampleByLanguage: async () => null,
       getVoiceSampleKey: async () => null,
       saveVoiceSample: async () => ({ id: "" }),
+      setVoiceSampleCallName: async () => {},
       getProfile: async () => null,
       updateUserNickname: async () => {},
       updateChannel: async () => ({ ok: true } as const),

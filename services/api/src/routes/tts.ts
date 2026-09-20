@@ -1,7 +1,7 @@
 // 统一 TTS 端点（multi speaker——官方多说话人接口，一次调用合成整集）：
 //   POST /v1/editor/tts（JSON）
 //   body: { submissionId, language, guestId?, segments: [{speaker: "host"|"guest", text}] }
-//   → host 采样（voice_samples + R2 → wav）+ guest 声线（guest_voice_samples + R2 → wav）
+//   → host 采样 + guest 声线（同一张 voice_samples 表，owner = user_id / guest_id；R2 → wav）
 //   → 有 guest 段：multi speaker（text 内嵌 <|speaker:0|> host / <|speaker:1|> guest，
 //     references 2D 按 speaker 序号；Fish 官方接口，msgpack 内联零样本克隆）
 //   → 纯 host：single（整集单说话人）
@@ -113,6 +113,7 @@ export function ttsRoutes(deps: TtsDeps) {
     if (!hostSample) {
       return c.json({ error: "no_voice_sample", detail: `投稿人没有 ${language} 采样（现有：${samples.map((s) => s.language).join("/") || "无"}）——请先在投稿页录一段 ${language} 采样` }, 422);
     }
+    if (!hostSample.audioUrl) return c.json({ error: "no_voice_sample", detail: language + " 采样没有音频（只配了称呼）——请重新录制" }, 422);
     const hostBytes = await deps.storage.get(hostSample.audioUrl).then((r) => r.data).catch(() => null);
     if (!hostBytes) return c.json({ error: "no_voice_sample", detail: "采样音频读取失败" }, 422);
 

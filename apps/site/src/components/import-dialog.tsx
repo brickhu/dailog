@@ -374,6 +374,7 @@ export function ImportDialog() {
                   {t("common.cancel")}
                 </Button>
                 <Button
+                  variant="primary"
                   onClick={() => void handleConfirm()}
                   disabled={!canSubmit() || state() === "checking"}
                   isLoading={state() === "checking"}

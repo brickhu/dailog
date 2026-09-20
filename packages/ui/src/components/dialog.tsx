@@ -113,6 +113,10 @@ const styles = stylex.create({
     backdropFilter : "blur(40px)",
     color: colors.onPopover,
     boxShadow: shadows.shadowHigh,
+    // 圆角裁切放在弹窗本体（而非内容容器 inner）：inner 若继承圆角 + overflow 裁切，
+    // 会把贴着右下的子元素（底部按钮等）自身的圆角切成父级的大圆角——表现为
+    // 「按钮右下角圆角变大」。这里按弹窗自身的圆角框裁切，padding=0 的弹窗同样正确
+    overflow: "hidden",
     animationName: dialogEnter,
     animationDuration: durations.durationMediumMin,
     animationTimingFunction: easings.easeOut,
@@ -147,7 +151,8 @@ const styles = stylex.create({
     flexDirection: "column",
     width: "100%",
     overflow: "auto",
-    borderRadius: "inherit",
+    // 不设圆角：圆角由 dialog 本体裁切（见 styles.dialog 的 overflow）。
+    // 子元素因此不会被父级圆角弧切到自己的圆角（按钮右下角圆角变大问题）
   },
   inline: {
     boxSizing: "border-box",

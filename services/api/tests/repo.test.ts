@@ -5,7 +5,7 @@ import { createDb } from "../src/db/client";
 import { createRepo } from "../src/repo";
 import type { Env } from "../src/config/env";
 import {
-  authUsers, episodes, guestVoiceSamples, notifications, profiles, submissions, voiceSamples,
+  authUsers, episodes, notifications, profiles, submissions, voiceSamples,
 } from "../src/db/schema";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
@@ -169,18 +169,22 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       const sample = await repo.guests.voiceSampleByLanguage("claude", "zz");
       expect(sample?.transcript).toBe("你好");
       expect((await repo.guests.list()).some((g) => g.id === "claude")).toBe(true);
-      await db.delete(guestVoiceSamples).where(and(eq(guestVoiceSamples.guestId, "claude"), eq(guestVoiceSamples.language, "zz")));
+      // 嘉宾声线与主持人共用 voice_samples（owner = guest_id）
+      await db.delete(voiceSamples).where(and(eq(voiceSamples.guestId, "claude"), eq(voiceSamples.language, "zz")));
     });
   });
 
   describe("profile 档案 + voice sample", () => {
-    it("updateChannel（档案字段）读写 + personaSnapshot 快照", async () => {
-      await repo.episodes.updateChannel(REPO_USER, { displayName: "小北", gender: "男", profession: "产品经理", nationality: "中国", socialLinks: { github: "fei" } });
+    it("updateChannel（账号级档案）读写 + personaSnapshot 快照", async () => {
+      await repo.episodes.updateChannel(REPO_USER, {
+        displayName: "小北", gender: "男", profession: "产品经理", nationality: "中国", socialLinks: { github: "fei" },
+      });
       const profile = await repo.episodes.getProfile(REPO_USER);
       expect(profile?.displayName).toBe("小北");
       expect(profile?.gender).toBe("男");
       expect(profile?.nationality).toBe("中国");
       expect(profile?.socialLinks?.github).toBe("fei");
+      // 画像快照 = 账号级（不区分语言）
       const snap = await repo.episodes.getPersonaSnapshot(REPO_USER);
       expect(snap?.displayName).toBe("小北");
       expect(snap?.profession).toBe("产品经理");

@@ -63,6 +63,7 @@ function fakeRepo(): AppDeps["repo"] {
       getVoiceSampleByLanguage: async () => null,
       getVoiceSampleKey: async () => null,
       saveVoiceSample: async () => ({ id: "" }),
+      setVoiceSampleCallName: async () => {},
       getProfile: async () => null,
       updateUserNickname: async () => {},
       updateChannel: async () => ({ ok: true } as const),
@@ -85,6 +86,7 @@ function fakeRepo(): AppDeps["repo"] {
 function fakeVoice(): AppDeps["voice"] {
   return {
     saveVoiceSample: async () => ({ id: "" }),
+    setCallName: async () => {},
     storage: { put: async () => {}, get: async () => ({ data: new Uint8Array(), total: 0 }), delete: async () => {} },
   };
 }

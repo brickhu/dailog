@@ -1,10 +1,12 @@
-// 账号/主持人档案管理端点：
-//  GET /v1/me/profile  → 账号（email/nickname/GitHub 状态）+ 主持人档案（displayName/bio/gender/profession/age/nationality/socialLinks）
+// 账号/主持人档案管理端点（**账号级，不区分语言**）：
+//  GET /v1/me/profile  → 账号（email/nickname/GitHub 状态）+ 主持人档案
+//                        （displayName/bio/gender/profession/age/nationality/socialLinks）
 //  PATCH /v1/me/profile  { nickname? } → 账号昵称（user.name = @slug；注册时应用层唯一）
 //                      { displayName?, bio?, gender?, profession?, age?, nationality?, socialLinks? } → 主持人档案
 // 账号管理（改密码/GitHub 登录）走 better-auth 官方端点 /api/auth/*（change-password / sign-in/social）。
-// 划分：账号 = user 表（邮箱/密码/昵称=@slug），主持人档案 = profiles 表（displayName/画像/社交链接）。
-// 频道概念已废弃（无 username slug）；@主页 = user.name。
+// 划分：账号 = user 表（邮箱/密码/昵称=@slug）；主持人档案 = profiles（公开身份 + 脚本画像）。
+//       **节目中的称呼（callName）不在这里**——它随声音采样走（voice_samples.call_name，按语言区，
+//       见 /v1/me/voice-sample 的 PATCH）。频道概念已废弃（无 username slug）；@主页 = user.name。
 
 import { createRoute, OpenAPIHono, z, type RouteHandler } from "@hono/zod-openapi";
 import type { Context } from "hono";

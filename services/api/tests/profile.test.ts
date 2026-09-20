@@ -59,6 +59,7 @@ function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
       getVoiceSampleByLanguage: async () => null,
       getVoiceSampleKey: async () => null,
       saveVoiceSample: async () => ({ id: "" }),
+      setVoiceSampleCallName: async () => {},
       getProfile: async () => ({
         email: "tester@test.dev",
         nickname: "测试员",
@@ -114,6 +115,7 @@ function makeApp(episodesOverrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
     repo,
     voice: {
       saveVoiceSample: async () => ({ id: "" }),
+      setCallName: async () => {},
       storage: { put: async () => {}, get: async () => ({ data: new Uint8Array(), total: 0 }), delete: async () => {} },
     },
     favorites: {
@@ -165,6 +167,14 @@ describe("/v1/me/profile", () => {
     const long = await patch("/v1/me/profile", { nickname: "很".repeat(31) })(app);
     expect(long.status).toBe(400);
   });
+
+  it("画像字段（gender/profession/age/nationality）：合法 → 200；空 → 400", async () => {
+    const app = makeApp();
+    const ok = await patch("/v1/me/profile", { gender: "男", profession: "产品经理", age: "28", nationality: "中国" })(app);
+    expect(ok.status).toBe(200);
+    const empty = await patch("/v1/me/profile", { profession: "   " })(app);
+    expect(empty.status).toBe(400);
+  });
 });
 
 describe("/v1/me/profile（主持人档案）", () => {
@@ -188,10 +198,17 @@ describe("/v1/me/profile（主持人档案）", () => {
     expect(bio.status).toBe(400);
   });
 
-  it("画像字段（gender/profession/age/nationality）合法 → 200", async () => {
-    const app = makeApp();
-    const res = await patch("/v1/me/profile", { gender: "男", profession: "产品经理", age: "28", nationality: "中国" })(app);
+  it("空 body → 200（无字段可改，幂等）", async () => {
+    let captured: Record<string, unknown> | null = null;
+    const app = makeApp({
+      updateChannel: async (_userId: string, row: unknown) => {
+        captured = row as Record<string, unknown>;
+        return { ok: true } as const;
+      },
+    });
+    const res = await patch("/v1/me/profile", {})(app);
     expect(res.status).toBe(200);
+    expect(captured).toBeNull();
   });
 
   it("socialLinks 合法对象 → 200；非对象 → 400", async () => {

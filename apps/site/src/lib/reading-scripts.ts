@@ -4,8 +4,9 @@
 // 文案为固定短句（用于用户朗读 + 上传 transcript 供零样本克隆），各语言保持
 // 「问候 + 自我介绍 + 分享对话 + 期望启发」结构一致。
 const TEMPLATES: Record<string, string> = {
-  zh: "大家好，我是{name}，欢迎收听 dailog。今天想和大家分享一段我和 AI 的对话，希望它能给你带来一些新的思考。",
-  en: "Hi everyone, welcome to dailog. I'm {name}, your host today. I hope this conversation between me and AI gives you something new to think about.",
+  // zh/en = 当前开放语种，文案为 2026-09 定稿的固定稿（录音弹窗不再允许改文案）
+  zh: "我是{name}，我很高兴成为dailog的主持人，和大家分享人机对话中的思考现场！",
+  en: "I'm {name}, and I'm glad to be a dailog host — sharing the thinking as it happens in conversations between people and AI.",
   ja: "皆さん、こんにちは。{name}です。dailogへようこそ。今日は、私とAIの会話を皆さんと共有したいと思います。それが皆さんにとって、何か新しい気づきになりますように。",
   ko: "안녕하세요, {name}입니다. dailog에 오신 것을 환영합니다. 오늘은 제가 AI와 나눈 대화를 여러분과 나누고 싶습니다. 여러분께 새로운 생각을 드릴 수 있기를 바랍니다.",
   fr: "Bonjour à tous, bienvenue sur dailog. Je suis {name}, votre hôte aujourd'hui. J'aimerais partager avec vous une conversation entre moi et une IA, en espérant qu'elle vous apporte de nouvelles idées.",
