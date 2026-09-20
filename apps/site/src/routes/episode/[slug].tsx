@@ -1,27 +1,24 @@
 import { For, Show, createEffect, createResource, createSignal, onCleanup } from "solid-js";
-import { NoHydration } from "solid-js/web";
 import { A, createAsync, useNavigate, useParams } from "@solidjs/router";
 import { Link, Meta, Title } from "@solidjs/meta";
 import { Cover } from "../../components/cover";
 import { PlayButton } from "../../components/play-button";
 import { ShareDialog } from "../../components/share-buttons";
 import { fetchFavoriteStatus, setFavorite } from "../../lib/favorites";
-import { DetailSkeleton } from "../../components/page-skeletons";
 import { usePlayback, type QueueEpisode } from "../../lib/playback";
 import { getEpisodeCached } from "../../lib/episode-cache";
 import { createClientValue } from "../../lib/client-value";
 import type { EpisodeSummary } from "../../lib/db";
 import { apiBaseForFetch, env, episodeCoverUrl } from "../../lib/env";
-import { fmtDate, fmtDuration } from "../../lib/format";
+import { fmtDateTime, fmtDuration } from "../../lib/format";
 import * as stylex from "@stylexjs/stylex";
 import { layouts, typography, shadows, dimensions, colors, global } from "@dailogues/ui/theme.stylex";
-import { Button, Icon, Badge } from "@dailogues/ui";
-import { ClickableCard } from "../../components/clickable-card";
+import { Avatar, Badge, Button, Icon, MetadataList, MetadataListItem } from "@dailogues/ui";
 import { useI18n } from "@dailogues/i18n";
-import { auth } from "../../lib/auth-guard";
+import "../../lib/auth-guard"; // 副作用：registerDirective("auth", …) —— use:auth 指令依赖它
 import { Page } from "../../layouts/page";
 import { Block, Container } from "../../layouts/container";
-import { PageSpinner } from "../../components/page-loading";
+
 
 
 // 详情页（传统博客式）：dailog.fm/<episode_id> —— SSR 渲染（可索引/分享）。
@@ -60,8 +57,6 @@ const css = stylex.create({
     gap : dimensions.spacing6
   },
   cover:{
-    // maxWidth : `calc(${dimensions.size2xl} * 3)`,
-    // minWidth : dimensions.size2xl,
     width : "100%",
     boxShadow: shadows.shadowMed,
     borderRadius : dimensions.radiusMd,
@@ -116,10 +111,6 @@ const css = stylex.create({
     
   
   },
-  highlightsTitle: {
-    opacity: 0.8,
-    fontWeight: dimensions.fontWeightSemiBold,
-  },
   highlight: {
     margin: 0,
     borderLeft: `2px solid ${colors.primaryWeak}`,
@@ -129,20 +120,36 @@ const css = stylex.create({
     '::before': {
       content: `"“"`,
       paddingRight: dimensions.spacing2,
-      // float: "left",  
       top: `-10px`,
       display: 'absolute',
       whiteSpace: "nowrap",
       fontSize: dimensions.fontSize2xl,
-      // left : `-${dimensions.spacing4}`,
-      // top: `-${dimensions.spacing2}`,
-      // float: "left",
     },
   },
   credit: {
     marginTop: dimensions.spacing5,
     color: colors.primaryWeak,
     lineHeight: 1.7,
+  },
+  // 演职员行（金句上方）：[头像][主播 badge] 采访 [头像][AI 嘉宾 badge]
+  cast: {
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: dimensions.spacing2,
+  },
+  castPerson: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: dimensions.spacing1,
+    backgroundColor: colors.surfaceWeak,
+    padding: `${dimensions.spacing1} ${dimensions.spacing1}`,
+    borderRadius: dimensions.radiusFull,
+    fontSize: dimensions.fontSizeSm,
+  },
+  castVerb: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeSm,
   },
   refs: {
     display: "flex",
@@ -153,11 +160,6 @@ const css = stylex.create({
     borderTopWidth: dimensions.borderWidthThin,
     borderTopStyle: "solid",
     width: "100%",
-    // backgroundColor: colors.surfaceStrong,
-  },
-  refsLabel: {
-    color: colors.neutral,
-    fontWeight: dimensions.fontWeightBold,
   },
   refItem: {
     fontSize: dimensions.fontSizeSm,
@@ -170,11 +172,6 @@ const css = stylex.create({
   },
   refItemTd: {
     fontWeight: dimensions.fontWeightBold,
-  },
-  refLink: {
-    color: colors.brand,
-    textDecoration: "none",
-    overflowWrap: "anywhere",
   },
    tags: {
     display: "flex",
@@ -197,9 +194,8 @@ export const route = {
 };
 
 export default function EpisodeDetailPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const params = useParams<{ slug: string }>();
-  // const [coverHover, setCoverHover] = createSignal(false);
   // deferStream:true → SSR 端该资源注册为 blocking promise：shell（含 head）等数据解析
   // 后才输出，Suspense 内重渲染的 Title/Meta（og:title / og:image / og:description）已注册进
   // head —— 社交爬虫读 SSR HTML 即拿到节目标题与封面。stream 模式默认不等待（fallback 先
@@ -310,7 +306,27 @@ export default function EpisodeDetailPage() {
   const hostName = () => ep()?.callName ?? ep()?.displayName ?? ep()?.username ?? "";
   // 本期 AI 嘉宾名称（无嘉宾节目回退主播名——文案「用户与{guest}的原始对话」仍通顺）
   const guestName = () => ep()?.guest?.name ?? hostName();
-  const pubDate = () => fmtDate(ep()?.publishedAt);
+  // 发布时间：日期 + 时间（跟随当前语言；时区固定为展示时区，见 lib/format 的 DISPLAY_TIME_ZONE）
+const pubDate = () => fmtDateTime(ep()?.publishedAt, locale() === "zh" ? "zh-CN" : "en-US");
+// 「节目信息」分类：后端枚举（insight/experience/advice/inspiration）→ 本地 i18n 文案；
+// 未知值原样显示（将来枚举扩充时不会显示空白）
+const CATEGORY_KEYS = ["insight", "experience", "advice", "inspiration"] as const;
+const categoryLabel = () => {
+  const c = ep()?.category;
+  if (!c) return "—";
+  return (CATEGORY_KEYS as readonly string[]).includes(c)
+    ? t(`episode.category.${c}` as never)
+    : c;
+};
+// 节目语言：显示名走 i18n lang.<code>（中文 / English…）；未知码原样显示
+const LANGUAGE_KEYS = ["zh", "en"] as const;
+const languageLabel = () => {
+  const l = ep()?.language;
+  if (!l) return "—";
+  return (LANGUAGE_KEYS as readonly string[]).includes(l)
+    ? t(`lang.${l}` as never)
+    : l;
+};
 
   // EpisodeSummary（lib/db）→ QueueEpisode（播放器）
   const asQueue = (e: EpisodeSummary): QueueEpisode => ({
@@ -399,18 +415,7 @@ export default function EpisodeDetailPage() {
                   <span> · </span>
                   <span>{fmtDuration(ep()!.durationSeconds, true)}</span>
                 </Show>
-                {/* 播放/完播统计：stats 由 SSR 序列化（公开端点，见上方 createResource），
-                    渲染期读 .latest 是安全的；stats 未就绪（接口失败）时整段不显示，
-                    不渲染 "0 次播放" 这种误导性数字。播放开始时下方 effect 会 refetch 刷新。 */}
-                {/* <Show when={stats.latest}>
-                  <span> · </span>
-                  <span>{t("episode.plays", { count: stats.latest!.plays })}</span>
-                  <span> · </span>
-                  <span>{t("episode.completions", { count: stats.latest!.completions })}</span>
-                </Show> */}
-                {/* <span> · </span>
-                <A {...stylex.props(global.linkText,css.creatorLink)} href={"/@" + (ep()!.username ?? "")}>{t("episode.createBy", { user: ep()!.username! })}</A>
-    */}
+    
               </div>
               <div {...stylex.props(typography.headingMd)}>{ep()?.title}</div>
             </div>
@@ -460,37 +465,45 @@ export default function EpisodeDetailPage() {
             </div>
           </Show>
         </Block>
+        {/* Main Content */}
         <Block cols={7} start={6} xstyle={css.main}>
+          {/* 演职员：[头像][主播] 采访 [头像][AI 嘉宾] —— 两个名字都是可点击 badge
+              （主播 → /@username 频道页；嘉宾 → /guest/:id）。无嘉宾的节目只显示主播。 */}
+          <div {...stylex.props(css.cast)}>
+            <span {...stylex.props(css.castPerson)}>
+              <Avatar image={ep()!.hostAvatar} name={hostName()} size={20} /> {hostName()}
+            </span>
+            <span {...stylex.props(css.castVerb)}>×</span>
+
+            <span {...stylex.props(css.castPerson)}>
+              <Avatar  image={ep()!.guest!.avatar} name={ep()!.guest!.name} size={20} /> {ep()!.guest!.name}
+            </span>
+
+          </div>
+          {/* Highlights */}
           <Show when={ep()?.highlights?.length}>
             <div {...stylex.props(css.highlights)}>
-              {/* <div {...stylex.props(typography.caption, css.highlightsTitle)}>{t("episode.highlights")}</div> */}
               <For each={ep()?.highlights ?? []}>
                 {(h) => <blockquote {...stylex.props(css.highlight, typography.bodyLg)}>{h.text}</blockquote>}
               </For>
             </div>
           </Show>
-          
-          <div {...stylex.props(css.desc, typography.bodyLg)}>{ep()?.description}</div>
 
+          {/* Description */}
+          <div {...stylex.props(css.desc, typography.bodyLg)}>{ep()?.description}</div>
+          {/* References */}
           <Show when={ep()?.references?.length}>
             <div {...stylex.props(css.refs)}>
-              {/* <div {...stylex.props(typography.caption, css.refsLabel)}>{t("episode.references")}</div> */}
               <For each={ep()?.references ?? []}>
                 {(r) => (
                   <div {...stylex.props(css.refItem)}>
                     <strong {...stylex.props(css.refItemTd)}>{r.term} : </strong> {r.explanation}
-                    {/* <Show when={r.links?.length}>
-                      <span>{" "}
-                        <For each={r.links}>
-                          {(l) => <a href={l} target="_blank" rel="noopener noreferrer" {...stylex.props(css.refLink)}>{l}</a>}
-                        </For>
-                      </span>
-                    </Show> */}
                   </div>
                 )}
               </For>
             </div>
           </Show>
+          {/* Tags */}
           <Show when={ep()!.tags?.length}>
               <div {...stylex.props(css.tags)}>
                 <For each={ep()!.tags!}>
@@ -504,7 +517,24 @@ export default function EpisodeDetailPage() {
                 </For>
               </div>
             </Show>
-
+          {/* Info：节目元信息（值缺失显示 "—"，保持行结构稳定） */}
+          <div {...stylex.props(layouts.containerFull)}>
+            <MetadataList
+              title={<div {...stylex.props(typography.headingXs)}>{t("episode.info.title")}</div>}
+              columns={{ base: 1, [TABLETANDDESKTOP]: 2 }}
+              label={{ position: "start" }}
+            >
+              <MetadataListItem label={t("episode.info.id")}>{ep()?.slug ?? "—"}</MetadataListItem>
+              <MetadataListItem label={t("episode.info.publishedAt")}>{pubDate() || "—"}</MetadataListItem>
+              <MetadataListItem label={t("episode.info.submitter")}>{ep()?.username ?? "—"}</MetadataListItem>
+              <MetadataListItem label={t("episode.info.category")}>{categoryLabel()}</MetadataListItem>
+              <MetadataListItem label={t("episode.info.language")}>{languageLabel()}</MetadataListItem>
+              <MetadataListItem label={t("episode.info.number")}>
+                {ep()?.number ? t("episode.number", { n: ep()!.number! }) : "—"}
+              </MetadataListItem>
+            </MetadataList>
+          </div>
+          {/* Credit */}
           <div {...stylex.props(typography.caption, css.credit)}>
             <span>
               {t("episode.credit.prefix")}
@@ -527,157 +557,5 @@ export default function EpisodeDetailPage() {
     <ShareDialog episode={asQueue(ep()!)} isOpen={shareOpen()} onOpenChange={setShareOpen} />      
     </Show>
 
-    // <div {...stylex.props(layouts.page,styles.page)}>
-    //   <Title>Dailog</Title>
-
-    //   <Suspense fallback={<NoHydration><DetailSkeleton /></NoHydration>}>
-    //     <Show
-    //       when={ep()}
-    //       fallback={<div>{t("episode.notFound")}</div>}
-    //     >
-    //       <Title>{ep()!.title || "dailog"}</Title>
-    //       <Meta property="og:title" content={ep()!.title || "dailog"} />
-    //       <Meta property="og:type" content="article" />
-    //       <Meta property="og:url" content={`${env.siteBaseUrl}/episode/${ep()!.slug ?? ""}`} />
-    //       <Meta property="og:description" content={ep()!.description?.slice(0, 200) || ""} />
-    //       <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
-    //         <Meta property="og:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
-    //       </Show>
-   
-    //       <Meta name="twitter:card" content="summary_large_image" />
-    //       <Meta name="twitter:title" content={ep()!.title || "dailog"} />
-    //       <Meta name="twitter:description" content={ep()!.description?.slice(0, 200) || ""} />
-    //       <Show when={ep()!.coverUrl && episodeCoverUrl(ep()!.id, ep()!.coverUrl)}>
-    //         <Meta name="twitter:image" content={episodeCoverUrl(ep()!.id, ep()!.coverUrl)!} />
-    //       </Show>
-
-     
-    //       <section {...stylex.props(styles.head, styles.grid)}>
-            // <div {...stylex.props(styles.titleOutter)}>
-            //   <div {...stylex.props(typography.caption, styles.caption)}>
-            //     <Show when={ep()!.number}>
-            //       <span>{t("episode.number", { n: ep()!.number! })} · </span>
-            //     </Show>
-            //     <A href={"/@" + (ep()!.username ?? "")}>{"@"+ep()!.username} </A>
-   
-            //   </div>
-            //   <div {...stylex.props(typography.headingMd,styles.title)}>{ep()?.title}</div>
-            // </div>
-    //         <div {...stylex.props(styles.coverOutter)}>
-    //           <Cover episode={asQueue(ep()!)} xstyle={styles.cover}/>
-    //         </div>
-    //         <div {...stylex.props(styles.actionOutter)}>
-    
-    //           <PlayButton episode={asQueue(ep()!)} appear="fill" isIconOnly={false} width={96} label="duration" />
-              // <Button
-              //   icon={liked() ? <Icon icon="material-symbols:thumb-up" width={20} />:<Icon icon="material-symbols:thumb-up-outline" width={20} /> }
-              //   appear={liked()?"fill":"outline"}
-              //   size="lg"
-              //   round="full"
-              //   use:auth={true}
-              //   label={liked() ? t("episode.liked") : t("episode.like")}
-              //   tooltip={liked() ? t("episode.liked") : t("episode.like")}
-              //   isDisabled={busyLike()}
-              //   onClick={toggleLike}
-              // >
-              //   {stats.latest?.likes ?? 0}
-              // </Button>
-              // <Button
-              //   isIconOnly
-              //   icon={favorited() ? <Icon icon="mdi:bookmark" width={20} />:<Icon icon="mdi:bookmark-outline" width={20}/>}
-              //   appear={favorited() ? "fill":"outline"}
-              //   round="full"
-              //   size="lg"
-              //   use:auth={true}
-              //   label={favorited() ? t("favorite.added") : t("favorite.add")}
-              //   tooltip={favorited() ? t("favorite.added") : t("favorite.add")}
-              //   isDisabled={busyFav()}
-              //   onClick={toggleFavorite}
-              // />
-              // <Button
-              //   isIconOnly
-              //   icon={<Icon icon="mdi:share-variant" width={20} />}
-              //   appear="outline"
-              //   size="lg"
-              //   round="full"
-              //   label={t("episode.share")}
-              //   tooltip={t("episode.share")}
-              //   onClick={() => setShareOpen(true)}
-              // />
-    //         </div>
-    //       </section>
-         
-    //       <section {...stylex.props(styles.main,styles.grid)}>
-    //         <div {...stylex.props(styles.desc)}>{ep()?.description}</div>
-            // <Show when={ep()!.tags?.length}>
-            //   <div {...stylex.props(styles.tags)}>
-            //     <For each={ep()!.tags!}>
-            //       {(tag) => (
-            //         <A href={`/tag/${encodeURIComponent(tag)}`} {...stylex.props(styles.tag)}>
-            //           #{tag}
-            //         </A>
-            //       )}
-            //     </For>
-            //   </div>
-            // </Show>
-    //         <div {...stylex.props(styles.cast)}></div>
-    //       </section>
-
-    //       <section {...stylex.props(styles.main, styles.grid)}>
-    //         <div {...stylex.props(styles.castSection)}>{t("episode.cast")}</div>
-    //       </section>
-
-        
-    //       <Show when={ep()!.guest}>
-    //         <section {...stylex.props(styles.main, styles.grid)}>
-    //           <div {...stylex.props(styles.castSection)}>
-    //             <div {...stylex.props(typography.caption, styles.castLabel)}>{t("episode.cast")}</div>
-    //             <div {...stylex.props(styles.castGrid)}>
-          
-    //               <ClickableCard
-    //                 label={`${t("episode.host")} ${hostName() || ep()!.displayName}`}
-    //                 href={"/@" + (ep()!.username ?? "")}
-    //                 padding={3}
-    //                 xstyle={styles.personCard}
-    //               >
-    //                 <Show
-    //                   when={ep()!.hostAvatar}
-    //                   fallback={<div {...stylex.props(styles.personAvatarFallback)}>{(hostName() || "D").slice(0, 1)}</div>}
-    //                 >
-    //                   <img src={ep()!.hostAvatar!} alt="" {...stylex.props(styles.personAvatar)} />
-    //                 </Show>
-    //                 <div {...stylex.props(styles.personBody)}>
-    //                   <div {...stylex.props(typography.caption, styles.personRole)}>{t("episode.host")}</div>
-    //                   <div {...stylex.props(styles.personName)}>{hostName() || ep()!.displayName}</div>
-    //                   <div {...stylex.props(styles.personMeta)}>{"@" + (ep()!.username ?? "")}</div>
-    //                 </div>
-    //               </ClickableCard>
-    //               <ClickableCard
-    //                 label={`${t("episode.guest")} ${ep()!.guest!.name}`}
-    //                 href={"/guest/" + ep()!.guest!.id}
-    //                 padding={3}
-    //                 xstyle={styles.personCard}
-    //               >
-    //                 <Show
-    //                   when={ep()!.guest!.avatar}
-    //                   fallback={<div {...stylex.props(styles.personAvatarFallback)}>{ep()!.guest!.name.slice(0, 1)}</div>}
-    //                 >
-    //                   <img src={ep()!.guest!.avatar!} alt="" {...stylex.props(styles.personAvatar)} />
-    //                 </Show>
-    //                 <div {...stylex.props(styles.personBody)}>
-    //                   <div {...stylex.props(typography.caption, styles.personRole)}>{t("episode.guest")}</div>
-    //                   <div {...stylex.props(styles.personName)}>{ep()!.guest!.name}</div>
-    //                   <div {...stylex.props(styles.personMeta)}>{ep()!.guest!.platform}</div>
-    //                 </div>
-    //               </ClickableCard>
-    //             </div>
-    //           </div>
-    //         </section>
-    //       </Show>
-    //       <ShareDialog episode={asQueue(ep()!)} isOpen={shareOpen()} onOpenChange={setShareOpen} />
-
-    //     </Show>
-    //   </Suspense>
-    // </div>
   );
 }

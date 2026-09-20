@@ -31,6 +31,16 @@ import { MetadataList, MetadataListItem } from "@dailogues/ui";
   {items}
 </MetadataList>
 
+// 响应式列数：键就是媒体查询（断点由你定，组件不写死）
+<MetadataList columns={{ base: 1, "@media (min-width: 900px)": 2 }}>
+  {items}
+</MetadataList>
+
+// 多档：手机 1 列 → ≥600px 两列 → ≥1100px 四列
+<MetadataList columns={{ base: 1, "@media (min-width: 600px)": 2, "@media (min-width: 1100px)": 4 }}>
+  {items}
+</MetadataList>
+
 // 横向流式（flex 换行，忽略 columns/label/maxNumOfItems）
 <MetadataList orientation="horizontal">
   <MetadataListItem label="CPU">M3</MetadataListItem>
@@ -45,14 +55,25 @@ import { MetadataList, MetadataListItem } from "@dailogues/ui";
 | Prop | 类型 | 默认 | 说明 |
 |---|---|---|---|
 | `children` | `JSX.Element` | 必填 | 元数据条目（MetadataListItem 组件） |
-| `columns` | `"single" \| "multi" \| number` | `"single"` | 列布局：single=单列 / multi=auto-fill（`minmax(280px,1fr)`）/ 数字=固定列数 |
-| `label` | `{ position?: "start" \| "top", width?: number \| string }` | 单列 `{position:"start"}` / 多列 `{position:"top"}` | 标签位置与自定义标签列宽（width 仅侧标生效） |
+| `columns` | `"single" \| "multi" \| number \| { base?: number; [mediaQuery: string]: number }` | `"single"` | 列布局：single=单列 / multi=auto-fill（`minmax(280px,1fr)`，列数随容器宽度自适应）/ 数字=固定列数 / 对象=响应式——`base` 为默认列数，其余键写**任意媒体查询**（如 `"@media (min-width: 900px)"`），值为该断点列数；非媒体查询键会被忽略并 warn |
+| `label` | `{ position?: "start" \| "top", width?: number \| string }` | 单列 `{position:"start"}` / 多列 `{position:"top"}` | 标签位置；`width` 自定义标签列宽，**仅 `position:"start"` 生效**，对固定列数与响应式列数都生效（侧标 + N 列 → 每列 `[width] 1fr`，未设 width → `auto 1fr`） |
 | `maxNumOfItems` | `number` | — | 折叠前最多显示条目数；超出出现"显示更多/显示更少"（仅 vertical） |
 | `orientation` | `"vertical" \| "horizontal"` | `"vertical"` | horizontal=flex 行换行（强制顶标，忽略其余布局 props） |
 | `title` | `JSX.Element` | — | 列表上方标题 |
-| `xstyle` | `StyleXStyles` | — | 外部 StyleX 样式，最后合并、冲突时覆盖 |
+| `xstyle` | `StyleXStyles` | — | 外部 StyleX 样式，最后合并、冲突时覆盖（落在根 div；列数控制见下节） |
 | `class` / `className` | `string` | — | 与内部 stylex 类名 + `astryx-metadata-list` 拼接 |
 | 其余 | 原生 `div` 属性 | — | 透传（`ref`、`data-testid`、`aria-*` 等） |
+
+### 响应式列数的实现与控制点
+
+- `columns` 传对象时，组件会为**该实例**注入一段作用域样式（<style>）：
+  `base` 与每个媒体查询各写一次 CSS 变量 `--md-cols`，内部网格类统一读
+  `repeat(var(--md-cols, 1), …)`。因此任意断点都不需要新增 stylex 类。
+- `--md-cols` 也可以**在外部覆盖**（它继承自根 div）：需要绕过 `columns` 做特殊控制时，
+  用 `xstyle` + 自定义媒体查询即可，例如
+  `xstyle={stylex.create({ c: { "@media (min-width: 900px)": { "--md-cols": "2" } } }).c}`。
+- 多列时条目是**顶标堆叠**形态（`columns` 任一档 >1 即自动切换）；若手写 `--md-cols`
+  而不传 `columns`，需要同时传 `label={{ position: "top" }}` 才会堆叠。
 
 ### MetadataListItem
 
@@ -69,7 +90,8 @@ import { MetadataList, MetadataListItem } from "@dailogues/ui";
 
 - **语义**：`<dl>/<dt>/<dd>`；根容器 theming 类 `astryx-metadata-list`（visualProps：columns/orientation 以 `data-*` 暴露），条目类 `astryx-metadata-list-item`
 - **标签位置**：单列默认 `start`（标签左、值右，`auto 1fr` + baseline 对齐）；多列默认 `top`（标签堆叠）；horizontal 强制 `top`
-- **栅格**：单列侧标 `auto 1fr`（8/16px gap）；单列顶标 `1fr`（12px）；多列 `repeat(auto-fill, minmax(280px,1fr))`（16px）；数字列>1 → 顶标 `repeat(n,1fr)` / 侧标 `repeat(n, auto 1fr)`（运行时 inline）；自定义 label width（仅侧标）→ `'<width> 1fr'`
+- **栅格**：单列侧标 `auto 1fr`（8/16px gap）；单列顶标 `1fr`（12px）；多列 `repeat(auto-fill, minmax(280px,1fr))`（16px）；数字列>1 → 顶标 `repeat(n,1fr)` / 侧标 `repeat(n, auto 1fr)`（运行时 inline）；自定义 label width（仅侧标）→ `'<width> 1fr'`；响应式（columns 对象）→ 列数读 `--md-cols`、gap 16px
+- **间距节奏**：标题 ↔ 第一条 = 16px（与多列/响应式路径的 item 间距一致）；顶标模式下一条 item 内部（label ↕ value）为 2px
 - **折叠**：`maxNumOfItems` 仅 vertical 生效；条目数超出时默认折叠，按钮 `aria-expanded` + `aria-controls`（指向 dl id），文案经 `useI18n()` 取 `metadataList.showMore/showLess`（zh：显示更多/显示更少；en：Show more/Show less）
 - **条目计数**：`children()` + `toArray()`（过滤 null/undefined/boolean 并展平，同 React Children.toArray 语义）
 - **图标**：`icon` 渲染在 label 前（inline-flex，muted 色）；lazy JSX prop 用 `children()` 包装防 hydration mismatch（同 Button）

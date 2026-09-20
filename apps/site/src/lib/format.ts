@@ -12,8 +12,28 @@ export function fmtDuration(sec: number | null | undefined, verbose = false): st
   return verbose ? `${m} 分 ${ss} 秒` : `${m}:${ss}`;
 }
 
-/** 日期 → 本地日期字符串（默认 zh-CN，如 "2026/8/24"）；兼容 Date 与 ISO 字符串，空值返回空串 */
+// 展示时区：SSR 容器是 UTC、浏览器是用户本地时区 —— 日期/时间必须**固定时区**渲染，
+// 否则同一页面服务端与客户端算出的文本不同（跨零点会差一天、带时间必差几小时），
+// 直接触发 hydration mismatch。产品主受众在中文区，统一按北京时间展示。
+// 需要换展示时区只改这一处（RSS feed 仍按标准输出 UTC，不受影响）。
+export const DISPLAY_TIME_ZONE = "Asia/Shanghai";
+
+/** 日期 → 展示日期字符串（默认 zh-CN，如 "2026/8/24"）；兼容 Date 与 ISO 字符串，空值返回空串 */
 export function fmtDate(d: Date | string | null | undefined, locale = "zh-CN"): string {
   if (!d) return "";
-  return new Date(d).toLocaleDateString(locale);
+  return new Date(d).toLocaleDateString(locale, { timeZone: DISPLAY_TIME_ZONE });
+}
+
+/** 日期 + 时间 → 展示字符串（详情页「发布时间」等）。
+ *  zh → "2026/9/16 23:32"；en → "9/16/2026, 11:32 PM"（时区固定，见 DISPLAY_TIME_ZONE） */
+export function fmtDateTime(d: Date | string | null | undefined, locale = "zh-CN"): string {
+  if (!d) return "";
+  return new Date(d).toLocaleString(locale, {
+    timeZone: DISPLAY_TIME_ZONE,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

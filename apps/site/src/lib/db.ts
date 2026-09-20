@@ -22,6 +22,8 @@ export interface EpisodeSummary {
   language: string | null;
   audioUrl: string | null;
   tags: string[] | null;
+  /** 分类（枚举：insight / experience / advice / inspiration）——展示走 i18n episode.category.* */
+  category: string | null;
   /** 对话原文地址（投稿时用户提交的分享链接） */
   sourceUrl: string | null;
   // 频道信息
@@ -193,6 +195,7 @@ export async function getEpisode(slug: string): Promise<EpisodeSummary | null> {
              e.language, e.audio_url AS "audioUrl",
              e.number,
              e.tags,
+             e.category,
              -- 对话原文链接：优先节目字段，缺省回退投稿链接（存量节目未写 raw_conversation_url 时仍可显示）
              COALESCE(e.raw_conversation_url, s.url) AS "sourceUrl",
              e.transcript,

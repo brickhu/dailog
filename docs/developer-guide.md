@@ -272,6 +272,27 @@ Solid 1.9 中 JSX 元素作为**普通 props**（icon={...}/endContent={...}）�
 （编译为函数），SSR 与客户端 hydrate 的组件 key 分配不一致 → 嵌套组件（Icon/Button）
 的节点找不到对应。标准 children 不受影响（Solid 对 children 有专门的 hydration 处理）。
 
+### 补充（2026-09-19）：光用 `children()` 包装还不够 —— 条件里再读一次同样炸
+`<Show when={props.title != null}>` 这类**用惰性 prop 做条件**的写法会再 materialize 一次。
+根因在 SSR 与客户端的 key 分配时机不同：
+- **SSR**：`ssrElement(tag, props, children, needsId)` 在**元素创建那一刻**调
+  `ssrHydrationKey()` → `sharedConfig.getNextContextId()`（含动态 props 的元素才有 id）；
+- **客户端**：id 在**插入时**（`getNextElement`）才分配。
+
+所以「创建了但没插入」的多余读会白白消耗一个服务端 id，让之后所有节点的 key 与客户端错位。
+实测（/__md-* 临时路由，逐个隔离）：`Show when={prop != null}` + 子节点读一次 → mismatch；
+去掉 Show 只在子节点位置读一次 → 正常（是否另外建 `children()` memo 都行）。
+
+**正确写法**（`MetadataList` 的 title 容器即此形态）：只读一次、且读在插入位置；
+需要「没传就不占位」时用 CSS `:empty` 收掉空容器，而不是用 Show 判断：
+
+```tsx
+const titleNode = children(() => props.title);   // 只读一次
+// ❌ <Show when={props.title != null}><div …>{titleNode()}</div></Show>
+// ✅ 始终渲染容器；无标题时插入 undefined → 容器 :empty → display:none（不占间距）
+<div {...stylex.props(styles.title)}>{titleNode()}</div>
+```
+
 ### 修复
 - **接收方用 `children()` 包装**（Solid 官方 helper，惰性求值转稳定 memo）：
   Button 的 `icon`/`endContent` 均 `children(() => local.xxx)` 后渲染 —— 已修复
