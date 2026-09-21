@@ -6,9 +6,8 @@ import type { AudioStorage } from "../storage";
 export interface VoiceSampleRow {
   id?: string;          // 仅 GET 回读填充（前端 sampleId）
   language: string;     // 采样语种（一个身份多语种各一条）
-  /** owner：主持人 = profiles.id（user.id）；嘉宾 = guests.id。恰好一个非空 */
-  userId?: string | null;
-  guestId?: string | null;
+  /** 归属身份（profiles.id）：主持人 = user.id；嘉宾 = 嘉宾 profile 的 uuid */
+  profileId?: string;
   /** 参考音频 storage key；draft 行（只有称呼、还没录音）为 null */
   audioUrl?: string | null;
   /** 参考音频转录文本（用户朗读的固定文案；零样本克隆用） */
@@ -130,7 +129,8 @@ export function voiceRoutes(deps: VoiceDeps) {
     const callNameRaw = form?.get("callName");
     const callName = typeof callNameRaw === "string" ? (callNameRaw.trim().slice(0, 20) || null) : undefined;
     const saved = await deps.saveVoiceSample({
-      userId, language, audioUrl: key, transcript, duration, status: "ready",
+      profileId: userId, // 主持人身份 = user.id
+      language, audioUrl: key, transcript, duration, status: "ready",
       ...(callName !== undefined ? { callName } : {}),
     });
     return c.json({ ok: true, sampleId: saved.id }); // sampleId：投稿时记录 voiceSampleId 用

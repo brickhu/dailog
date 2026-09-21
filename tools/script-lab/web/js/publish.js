@@ -19,7 +19,7 @@ function renderPublishCard(id, dt, rawStatus, labEnvVal, scripts){
       + '<div id="pubEditBox" style="display:none;margin-top:8px"></div>';
   }
   // 未发布（crafted）：左右两列——左：节目表字段表单（统一 textarea 黑底）；右：方形封面占位 + 生成封面
-  const hostName = (dt && dt.host && (dt.host.callName || (dt.host.personaInfo && dt.host.personaInfo.displayName))) || '主持人';
+  const hostName = (dt && dt.host && (dt.host.callName || (dt.host.personaInfo && dt.host.personaInfo.name))) || '主持人';
   const guestName = (dt && dt.guest && dt.guest.name) || '';
   const guestId = (dt && dt.guest && dt.guest.id) || null;
   try { window.__pubCoverNames = { host: hostName, guest: guestName, guestId }; } catch {}

@@ -40,7 +40,8 @@ export async function saveVoiceSampleCallName(language: string, callName: string
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ language, callName }),
     });
-    return res.ok;
+    // 必须校验 JSON：缺代理方法时 SPA fallback 会返回 200 + HTML，只判 res.ok 会误判成功
+    return res.ok && (res.headers.get("content-type") ?? "").includes("application/json");
   } catch {
     return false;
   }

@@ -15,7 +15,7 @@ import { useI18n } from "@dailogues/i18n";
 
 // 账号中心（dailog.fm/settings）：
 //   区块一「账号管理」——邮箱 / 昵称（@slug）/ 修改密码（better-auth 官方端点，站内代理）
-//   区块二「主持人资料」——displayName/bio/gender/profession/age/nationality/socialLinks（**账号级，不区分语言**）
+//   区块二「身份」——name/avatar/bio/gender/profession/age/nationality/socialLinks（**账号级，不区分语言**）
 //   区块三「声音采样」——**按语言区**各一张卡：该区节目中的称呼（callName）+ 该区声音采样（录音/试听/重录）。
 //         一投稿 = 一语言区 = 一期节目，两个区各自独立配置。
 // 划分：账号 = user 表；主持人资料 = profiles（账号级）；**称呼 + 采样 = voice_samples 行**（owner × 语种，
@@ -23,10 +23,10 @@ import { useI18n } from "@dailogues/i18n";
 
 interface ProfileData {
   email: string | null;
-  nickname: string | null;
+  username: string | null;
   emailVerified: boolean;
-  image: string | null;
-  displayName: string | null;
+  name: string | null;
+  avatar: string | null;
   bio: string | null;
   /** 脚本画像（账号级；投稿快照 personaInfo） */
   gender: string | null;
@@ -211,7 +211,7 @@ function AccountSection(props: { profile: ProfileData; loadError: string | null 
 function HostProfileBlock(props: { profile: ProfileData }) {
   const { t } = useI18n();
   const p = () => props.profile;
-  const [displayName, setDisplayName] = createSignal(p().displayName ?? "");
+  const [name, setName] = createSignal(p().name ?? "");
   const [bio, setBio] = createSignal(p().bio ?? "");
   const [gender, setGender] = createSignal(p().gender ?? "");
   const [profession, setProfession] = createSignal(p().profession ?? "");
@@ -238,7 +238,7 @@ function HostProfileBlock(props: { profile: ProfileData }) {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        displayName: displayName().trim() || undefined,
+        name: name().trim() || undefined,
         bio: bio().trim() || undefined,
         gender: gender().trim() || undefined,
         profession: profession().trim() || undefined,
@@ -259,7 +259,7 @@ function HostProfileBlock(props: { profile: ProfileData }) {
         <div {...stylex.props(styles.rowValue)}>{t("account.hostProfileDesc")}</div>
       </div>
       <div {...stylex.props(styles.field)}>
-        <TextInput label={t("account.displayName")} value={displayName()} onChange={(v) => setDisplayName(v)} maxLength={30} />
+        <TextInput label={t("account.displayName")} value={name()} onChange={(v) => setName(v)} maxLength={30} />
         <TextInput label={t("account.bio")} value={bio()} onChange={(v) => setBio(v)} maxLength={200} />
         <TextInput label={t("account.gender")} value={gender()} onChange={(v) => setGender(v)} maxLength={10} />
         <TextInput label={t("account.profession")} value={profession()} onChange={(v) => setProfession(v)} maxLength={30} />
@@ -328,7 +328,7 @@ function HostZoneCard(props: { profile: ProfileData; language: string }) {
 
   /** 朗读文案：固定稿 + 该区称呼（未填回退公开身份的展示名） */
   const readingScript = () =>
-    getReadingScript(zone(), callName().trim() || props.profile.displayName?.trim() || t("submit.hostFallback")).text;
+    getReadingScript(zone(), callName().trim() || props.profile.name?.trim() || t("submit.hostFallback")).text;
 
   /** 录音弹窗「保存」→ 上传该区采样（称呼随上传一并提交） */
   const onSampleSubmit = async (s: RecordedSample) => {
@@ -360,7 +360,7 @@ function HostZoneCard(props: { profile: ProfileData; language: string }) {
         <div {...stylex.props(styles.rowValue)}>{t("account.zoneRoleDesc")}</div>
       </div>
       <div {...stylex.props(styles.field)}>
-        <TextInput label={t("account.callName")} value={callName()} onChange={(v) => setCallName(v)} maxLength={20} placeholder={props.profile.displayName ?? undefined} />
+        <TextInput label={t("account.callName")} value={callName()} onChange={(v) => setCallName(v)} maxLength={20} placeholder={props.profile.name ?? undefined} />
       </div>
       <Button onClick={saveCallName} isDisabled={nameBusy()}>{t("account.saveZoneName")}</Button>
       <Show when={nameMsg()}>
@@ -410,7 +410,7 @@ function HostZoneCard(props: { profile: ProfileData; language: string }) {
 function AccountBlock(props: { profile: ProfileData; loadError: string | null }) {
   const { t } = useI18n();
   const p = () => props.profile;
-  const [nickname, setNickname] = createSignal(p().nickname ?? "");
+  const [username, setUsername] = createSignal(p().username ?? "");
   const [nameMsg, setNameMsg] = createSignal<{ ok: boolean; text: string } | null>(null);
 
   const [curPw, setCurPw] = createSignal("");
@@ -421,14 +421,18 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
 
   const saveName = async () => {
     setNameMsg(null);
-    const trimmed = nickname().trim();
-    if (!trimmed) return setNameMsg({ ok: false, text: t("account.nicknameRequired") });
+    const trimmed = username().trim();
+    if (!/^[A-Za-z0-9]{3,30}$/.test(trimmed)) {
+      return setNameMsg({ ok: false, text: t("account.usernameRule") });
+    }
     const res = await fetch("/v1/me/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname: trimmed }),
+      body: JSON.stringify({ username: trimmed }),
     });
-    setNameMsg(res.ok ? { ok: true, text: t("account.saved") } : { ok: false, text: t("account.saveFailed") });
+    if (res.ok) return setNameMsg({ ok: true, text: t("account.saved") });
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    setNameMsg({ ok: false, text: body?.error === "username_taken" ? t("account.usernameTaken") : t("account.saveFailed") });
   };
 
   const changePassword = async () => {
@@ -471,12 +475,13 @@ function AccountBlock(props: { profile: ProfileData; loadError: string | null })
 
       <div {...stylex.props(styles.card)}>
         <div {...stylex.props(styles.row)}>
-          <span {...stylex.props(styles.rowLabel)}>{t("account.nickname")}</span>
+          <span {...stylex.props(styles.rowLabel)}>{t("account.username")}</span>
         </div>
         <div {...stylex.props(styles.field)}>
-          <TextInput label={t("account.nickname")} value={nickname()} onChange={(v) => setNickname(v)} placeholder={t("account.nicknamePlaceholder")} maxLength={30} />
+          <TextInput label={t("account.username")} value={username()} onChange={(v) => setUsername(v)} placeholder={t("account.usernamePlaceholder")} maxLength={30} />
         </div>
-        <Button onClick={saveName}>{t("account.saveNickname")}</Button>
+        <div {...stylex.props(styles.rowValue)}>{t("account.usernameDesc")}</div>
+        <Button onClick={saveName}>{t("account.saveUsername")}</Button>
         <Show when={nameMsg()}>
           <div {...stylex.props(nameMsg()!.ok ? styles.success : styles.error)}>{nameMsg()!.text}</div>
         </Show>

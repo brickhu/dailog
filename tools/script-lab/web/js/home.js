@@ -93,7 +93,7 @@ async function loadApp(){
           </div>
         </td>
         <td><span class='tag' title='投稿区（目标语言）——决定脚本语言与节目 feed 归属'>${esc(zoneNameOf(r.language))}</span></td>
-        <td>${esc(r.displayName||'?')} <span class='muted mono'>(${esc(r.userEmail||'')})</span></td>
+        <td>${esc(r.name||'?')} <span class='muted mono'>(${esc(r.userEmail||'')})</span></td>
         <td class='mono muted'>${fmtDate(r.createdAt)}</td>
         <td><span class='tag ${esc(r.stage)}'>${esc(r.stage)}</span></td>
         <td><a class='detail-link' href='/${r.id}' onclick='event.preventDefault();goDetail("${r.id}")'>进入 →</a></td>
@@ -195,7 +195,7 @@ function renderRows(){
         ? `<a href='${esc(r.url)}' target='_blank' rel='noopener' title='${esc(r.title)}' style='font-size:13px;display:inline-block;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>${esc(r.title)}</a>`
         : (r.url ? `<a class='mono url' href='${esc(r.url)}' target='_blank' rel='noopener'>${esc(r.url)}</a>` : '—')}
         ${r.dialogueCount && r.dialogueCount.messages ? `<span class='tag' title='消息数'>${r.dialogueCount.messages} 条</span>` : ''}</div></td>
-      <td>${esc(r.displayName||'?')} <span class='muted mono'>(${esc(r.userEmail||'')})</span></td>
+      <td>${esc(r.name||'?')} <span class='muted mono'>(${esc(r.userEmail||'')})</span></td>
       <td class='mono muted'>${fmtDate(r.createdAt)}</td>
       <td><span class='tag ${esc(r.stage)}'>${esc(r.stage)}</span></td>
       <td><a class='detail-link' href='/${r.id}' onclick='event.preventDefault();goDetail("${r.id}")'>进入 →</a></td>

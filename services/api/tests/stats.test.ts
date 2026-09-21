@@ -99,6 +99,7 @@ function makeApp(overrides: Partial<AppDeps["repo"]["episodes"]> = {}) {
       getProfile: async () => null,
       getPersonaSnapshot: async () => null,
       updateUserNickname: async () => {},
+      usernameTaken: async () => false,
       updateChannel: async () => ({ ok: true as const }),
       syncAdminRoles: async () => 0,
       recordStat: async () => {},

@@ -134,8 +134,8 @@ export default function GuestPage() {
             </Show>
             <div {...stylex.props(styles.name)}>{data()!.name}</div>
             <div {...stylex.props(styles.platform)}>{data()!.platform}</div>
-            <Show when={data()!.intro}>
-              <p {...stylex.props(styles.intro)}>{data()!.intro}</p>
+            <Show when={data()!.bio}>
+              <p {...stylex.props(styles.intro)}>{data()!.bio}</p>
             </Show>
             <Show when={data()!.url}>
               <a href={data()!.url!} target="_blank" rel="noopener noreferrer" {...stylex.props(styles.link)}>
@@ -153,7 +153,7 @@ export default function GuestPage() {
                 <A href={`/episode/${ep.slug}`} {...stylex.props(styles.card)}>
                   <div {...stylex.props(styles.epTitle)}>{ep.title || t("common.unnamed")}</div>
                   <div {...stylex.props(styles.meta)}>
-                    {ep.displayName ?? `@${ep.username}`}
+                    {ep.name ?? `@${ep.username}`}
                     {ep.publishedAt ? ` · ${fmtDate(ep.publishedAt)}` : ""}
                     {ep.durationSeconds ? ` · ${fmtDuration(ep.durationSeconds)}` : ""}
                   </div>

@@ -297,7 +297,7 @@ export function editorRoutes(deps: EditorDeps) {
     await sendEmail(deps.env, {
       to: detail.userEmail,
       subject: "dailog：你的投稿未通过",
-      html: `<p>你好 ${detail.personaInfo?.displayName ?? detail.userEmail}，</p><p>很遗憾，你的投稿未能通过编辑审核：</p><blockquote>${escapeHtml(reason)}</blockquote><p>投稿链接：<a href="${escapeHtml(detail.url)}">${escapeHtml(detail.url)}</a></p><p>你可以在 <a href="${deps.siteBaseUrl ?? ""}/me/submits">投稿状态页</a> 查看。</p>`,
+      html: `<p>你好 ${detail.personaInfo?.name ?? detail.userEmail}，</p><p>很遗憾，你的投稿未能通过编辑审核：</p><blockquote>${escapeHtml(reason)}</blockquote><p>投稿链接：<a href="${escapeHtml(detail.url)}">${escapeHtml(detail.url)}</a></p><p>你可以在 <a href="${deps.siteBaseUrl ?? ""}/me/submits">投稿状态页</a> 查看。</p>`,
     }).catch(() => {});
     return c.json({ ok: true, status: "rejected" });
   }) as unknown as RouteHandler<typeof r3, AuthEnv>);
@@ -450,7 +450,7 @@ export function editorRoutes(deps: EditorDeps) {
     await sendEmail(deps.env, {
       to: detail.userEmail,
       subject: `dailog 第 ${created.number} 期「${episodeTitle}」已上线`,
-      html: `<p>你好 ${detail.personaInfo?.displayName ?? detail.userEmail}，</p><p>你的投稿已发布为 <strong>dailog 第 ${created.number} 期「${escapeHtml(episodeTitle)}」</strong>！</p><p><a href="${deps.siteBaseUrl ?? ""}${link}">立即收听</a></p>`,
+      html: `<p>你好 ${detail.personaInfo?.name ?? detail.userEmail}，</p><p>你的投稿已发布为 <strong>dailog 第 ${created.number} 期「${escapeHtml(episodeTitle)}」</strong>！</p><p><a href="${deps.siteBaseUrl ?? ""}${link}">立即收听</a></p>`,
     }).catch(() => {});
 
     return c.json({ episodeId: created.id, slug: created.slug, number: created.number, status: "published" }, 201);
@@ -996,7 +996,7 @@ export function editorRoutes(deps: EditorDeps) {
         await sendEmail(deps.env, {
           to: detail.userEmail,
           subject: "dailog：你的投稿未通过",
-          html: `<p>你好 ${detail.personaInfo?.displayName ?? detail.userEmail}，</p><p>很遗憾，你的投稿未能通过创作审核：</p><blockquote>${escapeHtml(reason)}</blockquote><p>你可以在 <a href="${deps.siteBaseUrl ?? ""}/me/submits">投稿状态页</a> 查看。</p>`,
+          html: `<p>你好 ${detail.personaInfo?.name ?? detail.userEmail}，</p><p>很遗憾，你的投稿未能通过创作审核：</p><blockquote>${escapeHtml(reason)}</blockquote><p>你可以在 <a href="${deps.siteBaseUrl ?? ""}/me/submits">投稿状态页</a> 查看。</p>`,
         }).catch(() => {});
       }
     }

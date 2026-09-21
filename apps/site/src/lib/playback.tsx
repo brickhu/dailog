@@ -20,7 +20,7 @@ export interface QueueEpisode {
   durationSeconds: number | null;
   publishedAt: Date | null;
   username: string;
-  displayName: string;
+  name: string;
   callName: string | null;
   transcript: string | null;
   sourceUrl: string | null;

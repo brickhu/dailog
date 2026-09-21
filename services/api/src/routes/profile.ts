@@ -1,12 +1,11 @@
-// 账号/主持人档案管理端点（**账号级，不区分语言**）：
-//  GET /v1/me/profile  → 账号（email/nickname/GitHub 状态）+ 主持人档案
-//                        （displayName/bio/gender/profession/age/nationality/socialLinks）
-//  PATCH /v1/me/profile  { nickname? } → 账号昵称（user.name = @slug；注册时应用层唯一）
-//                      { displayName?, bio?, gender?, profession?, age?, nationality?, socialLinks? } → 主持人档案
+// 账号 / 身份档案端点（三层分离：账号 user · 身份 profiles · 采样 voice_samples）：
+//  GET /v1/me/profile  → 账号（email/username/emailVerified）+ 身份档案
+//                        （name/avatar/bio/gender/profession/age/nationality/socialLinks/url）
+//  PATCH /v1/me/profile  { username? } → 用户名（user.name = @slug；**仅英文数字**、唯一、主页 /@xxx）
+//                      { name?, bio?, gender?, profession?, age?, nationality?, socialLinks? } → 身份档案
 // 账号管理（改密码/GitHub 登录）走 better-auth 官方端点 /api/auth/*（change-password / sign-in/social）。
-// 划分：账号 = user 表（邮箱/密码/昵称=@slug）；主持人档案 = profiles（公开身份 + 脚本画像）。
-//       **节目中的称呼（callName）不在这里**——它随声音采样走（voice_samples.call_name，按语言区，
-//       见 /v1/me/voice-sample 的 PATCH）。频道概念已废弃（无 username slug）；@主页 = user.name。
+// **节目中的称呼（callName）不在这里**——它随声音采样走（voice_samples.call_name，按语言区，
+// 见 /v1/me/voice-sample 的 PATCH）。
 
 import { createRoute, OpenAPIHono, z, type RouteHandler } from "@hono/zod-openapi";
 import type { Context } from "hono";
@@ -54,13 +53,13 @@ export function profileRoutes(deps: ProfileDeps) {
     ]);
     if (!profile) return c.json({ error: "not_found" }, 404);
     return c.json({
-      user: { id: userId, name: profile.nickname ?? null, email: profile.email ?? null, image: profile.image ?? null },
-      nickname: profile.nickname ?? null, // user.name = @slug
+      user: { id: userId, name: profile.username ?? null, email: profile.email ?? null, avatar: profile.avatar ?? null },
+      username: profile.username ?? null, // user.name = @slug
       unreadCount: unread,
     });
   }) as unknown as RouteHandler<typeof r2, { Variables: { userId: string } }>);
 
-  /** 账号昵称（≤30 字，去空白）——接口字段 nickname（DB 列 user.name = @slug；注册时应用层唯一） */
+  /** 用户名（user.name = @slug）：**仅英文数字**、3–30 位、唯一（大小写不敏感）、主页 /@xxx */
   const r3 = createRoute({
     method: "patch",
     path: "/v1/me/profile",
@@ -75,16 +74,21 @@ export function profileRoutes(deps: ProfileDeps) {
     const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body) return c.json({ error: "invalid_input" }, 400);
 
-    // 账号昵称（@slug）
-    if (body.nickname !== undefined) {
-      const nickname = typeof body.nickname === "string" ? body.nickname.trim() : "";
-      if (!nickname || nickname.length > 30) return c.json({ error: "invalid_name" }, 400);
-      await deps.repo.episodes.updateUserNickname(userId, nickname);
+    // 用户名（@slug）：仅英文数字 + 唯一（大小写不敏感）
+    if (body.username !== undefined) {
+      const username = typeof body.username === "string" ? body.username.trim() : "";
+      if (!/^[A-Za-z0-9]{3,30}$/.test(username)) {
+        return c.json({ error: "invalid_username", detail: "用户名仅支持 3–30 位英文或数字" }, 400);
+      }
+      if (await deps.repo.episodes.usernameTaken(username, userId)) {
+        return c.json({ error: "username_taken", detail: "该用户名已被占用" }, 409);
+      }
+      await deps.repo.episodes.updateUserNickname(userId, username);
     }
 
-    // 主持人档案（displayName/bio/gender/profession/age/nationality/socialLinks）
+    // 身份档案（name/bio/gender/profession/age/nationality/socialLinks）
     const row: {
-      displayName?: string;
+      name?: string;
       bio?: string | null;
       gender?: string | null;
       profession?: string | null;
@@ -99,10 +103,10 @@ export function profileRoutes(deps: ProfileDeps) {
       const t = v.trim();
       return t.length > max ? null : t || null;
     };
-    const displayName = check(body.displayName, 30);
-    if (displayName !== undefined) {
-      if (!displayName) return c.json({ error: "invalid_display_name" }, 400);
-      row.displayName = displayName;
+    const name = check(body.name, 30);
+    if (name !== undefined) {
+      if (!name) return c.json({ error: "invalid_name" }, 400);
+      row.name = name;
     }
     const bio = check(body.bio, 200);
     if (bio !== undefined && !bio) return c.json({ error: "invalid_bio" }, 400);

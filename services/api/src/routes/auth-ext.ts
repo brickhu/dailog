@@ -164,8 +164,11 @@ export function authExtRoutes(deps: AuthExtDeps) {
 
     // 创建用户（带密码）+ 自动登录（透传 set-cookie——cookie 会话 SSO）
     try {
-      // name = @slug（主持人主页标识）：应用层强制唯一——重名自动追加随机后缀
-      const baseName = typeof body.name === "string" && body.name.trim() ? body.name.trim().slice(0, 50) : email.split("@")[0];
+      // 用户名（user.name = @slug，主页 /@xxx）：**仅英文数字**（非法字符清洗掉）、长度 3–30、
+      // 唯一（重名自动追加随机后缀）。清洗后为空 → 退回邮箱前缀，再退回 "user"
+      const clean = (s: string) => s.replace(/[^A-Za-z0-9]/g, "");
+      const raw = typeof body.name === "string" && body.name.trim() ? body.name.trim() : email.split("@")[0];
+      const baseName = (clean(raw) || clean(email.split("@")[0]) || "user").slice(0, 24);
       const existing = await deps.db
         .select({ id: schema.authUsers.id })
         .from(schema.authUsers)

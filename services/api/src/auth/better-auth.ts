@@ -96,11 +96,12 @@ export function createAuth(opts: CreateAuthOptions) {
             return { data: user };
           },
           after: async (user) => {
-            // 创建主持人档案（1:1；displayName 默认取注册昵称，可在设置页改）
+            // 创建身份档案（id = user.id；name 默认取用户名，可在设置页改；头像一并带过来）
             const email = user.email ?? "";
             await opts.db.insert(schema.profiles).values({
               id: user.id,
-              displayName: user.name || email.split("@")[0] || "用户",
+              name: user.name || email.split("@")[0] || "用户",
+              avatar: user.image ?? null,
             });
           },
         },

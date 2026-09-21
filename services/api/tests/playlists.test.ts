@@ -62,6 +62,7 @@ function fakeRepo(overrides: Partial<Repos["playlists"]> = {}, episodesOverrides
       setVoiceSampleCallName: async () => {},
       getProfile: async () => null,
       updateUserNickname: async () => {},
+      usernameTaken: async () => false,
       updateChannel: async () => ({ ok: true } as const),
       syncAdminRoles: async () => 0,
       listByUser: async () => [],
@@ -74,7 +75,7 @@ function fakeRepo(overrides: Partial<Repos["playlists"]> = {}, episodesOverrides
       getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),
       recordStat: async () => {},
       getStats: async () => ({ plays: 0, completions: 0, likes: 0 }),
-      getPersonaSnapshot: async () => ({ displayName: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
+      getPersonaSnapshot: async () => ({ name: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
       ...episodesOverrides,
     },
     playlists: { ...fakePlaylistsRepo(), ...overrides },
@@ -143,7 +144,7 @@ describe("公开播放列表端点", () => {
   });
 
   it("GET /v1/public/playlists/:slug → 详情含公开节目（position 排序）", async () => {
-    const detail = { ...OWNED_PL, episodes: [{ position: 0, episodeId: EPISODE_ID, slug: "ep-1", title: "第 1 期", coverUrl: null, durationSeconds: 300, publishedAt: new Date(), language: "zh", audioUrl: "episodes/u/1.mp3", username: "fei", displayName: "Fei", callName: "小北" }] };
+    const detail = { ...OWNED_PL, episodes: [{ position: 0, episodeId: EPISODE_ID, slug: "ep-1", title: "第 1 期", coverUrl: null, durationSeconds: 300, publishedAt: new Date(), language: "zh", audioUrl: "episodes/u/1.mp3", username: "fei", name: "Fei", callName: "小北" }] };
     const app = new Hono();
     app.route("/", playlistPublicRoutes(fakeRepo({ getPublicBySlug: async () => detail })));
     const res = await app.request("/v1/public/playlists/my-list");
@@ -168,7 +169,7 @@ describe("我的收藏端点", () => {
   const FAV_ROW = {
     position: 2, episodeId: EPISODE_ID, slug: "ep-1", title: "第 1 期", coverUrl: null,
     durationSeconds: 300, publishedAt: new Date(), language: "zh", audioUrl: "episodes/u/1.mp3",
-    username: "fei", displayName: "Fei", callName: "小北", guestName: "ChatGPT", tags: ["科技", "访谈"],
+    username: "fei", name: "Fei", callName: "小北", guestName: "ChatGPT", tags: ["科技", "访谈"],
   };
 
   it("GET /v1/me/favorites → 我的收藏（含分组字段）", async () => {

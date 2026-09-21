@@ -562,7 +562,7 @@ export function SearchDialog() {
                             </span>
                             <span {...stylex.props(styles.rowSub)}>
                               {g.platform}
-                              {g.intro ? " · " + g.intro.slice(0, 40) : ""}
+                              {g.bio ? " · " + g.bio.slice(0, 40) : ""}
                             </span>
                           </span>
                         </A>
@@ -589,13 +589,13 @@ export function SearchDialog() {
                         >
                           <Show
                             when={h.avatar}
-                            fallback={<div {...stylex.props(styles.avatarFallback)}>{h.displayName.slice(0, 1)}</div>}
+                            fallback={<div {...stylex.props(styles.avatarFallback)}>{h.name.slice(0, 1)}</div>}
                           >
                             {(url) => <img src={url()} alt="" {...stylex.props(styles.avatar)} />}
                           </Show>
                           <span {...stylex.props(styles.rowText)}>
                             <span {...stylex.props(styles.rowTitle)}>
-                              <Highlighted text={h.displayName} query={query()} />
+                              <Highlighted text={h.name} query={query()} />
                             </span>
                             <span {...stylex.props(styles.rowSub)}>
                               @{h.username} · {t("search.episodeCount", { n: h.episodeCount })}

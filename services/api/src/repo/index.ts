@@ -1,9 +1,13 @@
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { randomBytes } from "node:crypto";
 import * as schema from "../db/schema";
 import type { PersonaSnapshot } from "../db/schema";
 import type { VoiceSampleRow } from "../routes/voice";
+
+/** 嘉宾侧的身份档案别名：查询里主持人用 schema.profiles，嘉宾身份要另取一份 join */
+const guestsProfile = alias(schema.profiles, "guests_profile");
 
 function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "23505";
@@ -81,7 +85,7 @@ export interface SubmissionsRepo {
     status: string;
     createdAt: Date;
     userEmail: string;
-    displayName: string;
+    name: string;
     hasVoiceSample: boolean;
   }>>;
   /** 编辑详情（无归属校验）：投稿 + 主持人档案快照 + 采样（TTS 按 脚本语言→en→唯一 匹配） */
@@ -103,7 +107,7 @@ export interface SubmissionsRepo {
     userEmail: string;
     /** 主持人档案快照（投稿时写入；脚本生成注入画像用） */
     personaInfo: {
-      displayName: string;
+      name: string;
       gender: string | null;
       profession: string | null;
       age: string | null;
@@ -205,15 +209,16 @@ export interface EpisodesRepo {
     sourceUrl: string | null;
     transcript: string | null;
     username: string;
-    displayName: string;
-    /** 主持人头像（authUsers.image；cast 卡片用） */
+    name: string;
+    /** 主持人头像（profiles.avatar；cast 卡片用） */
     hostAvatar: string | null;
     callName: string | null;
     /** 本期 AI 嘉宾（无 → null；cast 卡片用） */
+    /** 嘉宾身份字段来自 LEFT JOIN → 可空（无嘉宾时整个 guest 为 null，见 norm） */
     guest: {
-      id: string;
-      platform: string;
-      name: string;
+      id: string | null;
+      platform: string | null;
+      name: string | null;
       avatar: string | null;
       intro: string | null;
       url: string | null;
@@ -228,7 +233,7 @@ export interface EpisodesRepo {
   /** 热门主播（公开）：按期数排序（0034 起不含播放统计；个人主页入口展示） */
   listTopHosts(limit?: number): Promise<Array<{
     username: string;
-    displayName: string;
+    name: string;
     avatar: string | null;
     episodeCount: number;
   }>>;
@@ -245,7 +250,7 @@ export interface EpisodesRepo {
     publishedAt: Date | null;
     isPicked: boolean;
     username: string;
-    displayName: string;
+    name: string;
     callName: string | null;
   }>>;
   /** 编辑端节目详情（无归属校验）——含 userId（republish 拼 R2 key 用） */
@@ -306,7 +311,7 @@ export interface EpisodesRepo {
     durationSeconds: number | null;
     publishedAt: Date | null;
     username: string;
-    displayName: string | null;
+    name: string | null;
   }>>;
   /** 按投稿列节目（编辑端详情用，无归属校验；含 slug/coverUrl——重复投稿提示已生成节目用） */
   listBySubmission(submissionId: string): Promise<Array<{
@@ -358,27 +363,30 @@ export interface EpisodesRepo {
   /** 只写该语种采样的「节目称呼」（无该行则建 draft 行：只有称呼还没录音） */
   setVoiceSampleCallName(userId: string, language: string, callName: string | null): Promise<void>;
   // ---- 账号/档案（/api/me/profile） ----
-  /** 账号 + 主持人档案——昵称对外叫 nickname（列 user.name，= @slug） */
+  /** 账号 + 身份档案（user.name = 用户名 @slug；身份 data 在 profiles） */
   getProfile(userId: string): Promise<{
     email: string | null;
-    nickname: string | null;
+    username: string | null;
     emailVerified: boolean;
-    image: string | null;
-    /** 公开身份：展示名 / 简介 / 社交链接 */
-    displayName: string | null;
+    /** 身份档案：name/avatar/bio/画像/socialLinks/url */
+    name: string | null;
+    avatar: string | null;
     bio: string | null;
     gender: string | null;
     profession: string | null;
     age: string | null;
     nationality: string | null;
     socialLinks: Record<string, string> | null;
+    url: string | null;
     channelActivatedAt: Date | null;
   } | null>;
   updateUserNickname(userId: string, nickname: string): Promise<void>;
+  /** 用户名是否已被占用（大小写不敏感；exceptUserId = 排除自己） */
+  usernameTaken(username: string, exceptUserId?: string): Promise<boolean>;
   /** 主持人画像快照（**账号级，不区分语言**）：投稿时写入 submissions.host.personaInfo，编辑侧免查库 */
   getPersonaSnapshot(userId: string): Promise<PersonaSnapshot | null>;
-  /** 主持人档案设置（账号级）：displayName/bio/gender/profession/age/nationality/socialLinks */
-  updateChannel(userId: string, row: { displayName?: string; bio?: string | null; gender?: string | null; profession?: string | null; age?: string | null; nationality?: string | null; socialLinks?: Record<string, string> | null }): Promise<{ ok: true }>;
+  /** 主持人档案设置（账号级）：name/bio/gender/profession/age/nationality/socialLinks */
+  updateChannel(userId: string, row: { name?: string; bio?: string | null; gender?: string | null; profession?: string | null; age?: string | null; nationality?: string | null; socialLinks?: Record<string, string> | null }): Promise<{ ok: true }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -418,7 +426,7 @@ export interface PlaylistEpisodeRow {
   language: string;
   audioUrl: string;
   username: string;
-  displayName: string;
+  name: string;
   callName: string | null;
 }
 
@@ -434,9 +442,9 @@ export interface FavoriteEpisodeRow {
   language: string;
   audioUrl: string;
   username: string;
-  displayName: string;
+  name: string;
   callName: string | null;
-  /** 嘉宾名（guests.name；无嘉宾 → null）——「按嘉宾」分组 */
+  /** 嘉宾名（嘉宾身份的 profiles.name；无嘉宾 → null）——「按嘉宾」分组 */
   guestName: string | null;
   /** 标签（episodes.tags；无 → null）——「按标签」分组 */
   tags: string[] | null;
@@ -518,9 +526,9 @@ export interface GuestVoiceSampleRow {
 
 export interface GuestsRepo {
   getByPlatform(platform: string): Promise<{ id: string; name: string; intro: string | null } | null>;
-  list(): Promise<{ id: string; platform: string; name: string; avatar: string | null; intro: string | null; url: string | null }[]>;
+  list(): Promise<{ id: string; platform: string; name: string; avatar: string | null; bio: string | null; url: string | null }[]>;
   /** 嘉宾详情（按 id = platform 值，公开详情页用） */
-  getById(id: string): Promise<{ id: string; platform: string; name: string; avatar: string | null; intro: string | null; url: string | null } | null>;
+  getById(id: string): Promise<{ id: string; platform: string; name: string; avatar: string | null; bio: string | null; url: string | null } | null>;
   /** 嘉宾音频采样：按语种取（TTS 同语种优先注入）；无该语种 → null（调用方按 en 兜底） */
   voiceSampleByLanguage(guestId: string, language: string): Promise<GuestVoiceSampleRow | null>;
   /** 任意语种采样（/v1/editor/samples/guest/:id/audio 参考音频下载用，无语言参数） */
@@ -643,135 +651,152 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
 
     guests: {
       async getByPlatform(platform) {
+        // 嘉宾身份数据在 profiles（guests 只留登记关系）
         const rows = await db
-          .select({ id: schema.guests.id, name: schema.guests.name, intro: schema.guests.intro })
+          .select({ id: schema.guests.id, name: schema.profiles.name, intro: schema.profiles.bio })
           .from(schema.guests)
+          .innerJoin(schema.profiles, eq(schema.profiles.id, schema.guests.profileId))
           .where(eq(schema.guests.platform, platform as typeof schema.guests.platform.enumValues[number]))
           .limit(1);
         return rows[0] ?? null;
       },
       async list() {
         return db
-          .select({ id: schema.guests.id, platform: schema.guests.platform, name: schema.guests.name, avatar: schema.guests.avatar, intro: schema.guests.intro, url: schema.guests.url })
+          .select({ id: schema.guests.id, platform: schema.guests.platform, name: schema.profiles.name, avatar: schema.profiles.avatar, bio: schema.profiles.bio, url: schema.profiles.url })
           .from(schema.guests)
+          .innerJoin(schema.profiles, eq(schema.profiles.id, schema.guests.profileId))
           .orderBy(schema.guests.platform);
       },
       async getById(id) {
         const rows = await db
-          .select({ id: schema.guests.id, platform: schema.guests.platform, name: schema.guests.name, avatar: schema.guests.avatar, intro: schema.guests.intro, url: schema.guests.url })
+          .select({ id: schema.guests.id, platform: schema.guests.platform, name: schema.profiles.name, avatar: schema.profiles.avatar, bio: schema.profiles.bio, url: schema.profiles.url })
           .from(schema.guests)
+          .innerJoin(schema.profiles, eq(schema.profiles.id, schema.guests.profileId))
           .where(eq(schema.guests.id, id))
           .limit(1);
         return rows[0] ?? null;
       },
       async voiceSampleByLanguage(guestId, language) {
-        // 嘉宾声线与主持人共用 voice_samples（owner = guest_id）
+        // 采样挂在**身份**上（voice_samples.profile_id）；嘉宾身份 = guests.profile_id
         const rows = await db
           .select({
             id: schema.voiceSamples.id,
-            guestId: schema.voiceSamples.guestId,
+            guestId: schema.guests.id,
             language: schema.voiceSamples.language,
             audioKey: schema.voiceSamples.audioUrl,
             transcript: schema.voiceSamples.transcript,
           })
           .from(schema.voiceSamples)
+          .innerJoin(schema.guests, eq(schema.guests.profileId, schema.voiceSamples.profileId))
           .where(and(
-            eq(schema.voiceSamples.guestId, guestId),
+            eq(schema.guests.id, guestId),
             eq(schema.voiceSamples.language, language),
             eq(schema.voiceSamples.status, "ready"),
             isNotNull(schema.voiceSamples.audioUrl),
           ))
           .limit(1);
         const row = rows[0];
-        return row && row.audioKey && row.guestId ? { ...row, audioKey: row.audioKey, guestId: row.guestId } : null;
+        return row && row.audioKey ? { ...row, audioKey: row.audioKey } : null;
       },
       async voiceSampleAny(guestId) {
         const rows = await db
           .select({
             id: schema.voiceSamples.id,
-            guestId: schema.voiceSamples.guestId,
+            guestId: schema.guests.id,
             language: schema.voiceSamples.language,
             audioKey: schema.voiceSamples.audioUrl,
             transcript: schema.voiceSamples.transcript,
           })
           .from(schema.voiceSamples)
+          .innerJoin(schema.guests, eq(schema.guests.profileId, schema.voiceSamples.profileId))
           .where(and(
-            eq(schema.voiceSamples.guestId, guestId),
+            eq(schema.guests.id, guestId),
             eq(schema.voiceSamples.status, "ready"),
             isNotNull(schema.voiceSamples.audioUrl),
           ))
           .orderBy(desc(schema.voiceSamples.createdAt))
           .limit(1);
         const row = rows[0];
-        return row && row.audioKey && row.guestId ? { ...row, audioKey: row.audioKey, guestId: row.guestId } : null;
+        return row && row.audioKey ? { ...row, audioKey: row.audioKey } : null;
       },
       async anyVoiceSampleByLanguage(language, excludeGuestId) {
         const rows = await db
           .select({
             id: schema.voiceSamples.id,
-            guestId: schema.voiceSamples.guestId,
+            guestId: schema.guests.id,
             language: schema.voiceSamples.language,
             audioKey: schema.voiceSamples.audioUrl,
             transcript: schema.voiceSamples.transcript,
           })
           .from(schema.voiceSamples)
+          .innerJoin(schema.guests, eq(schema.guests.profileId, schema.voiceSamples.profileId))
           .where(and(
             eq(schema.voiceSamples.language, language),
             eq(schema.voiceSamples.status, "ready"),
             isNotNull(schema.voiceSamples.audioUrl),
-            excludeGuestId ? ne(schema.voiceSamples.guestId, excludeGuestId) : undefined,
+            excludeGuestId ? ne(schema.guests.id, excludeGuestId) : undefined,
           ))
           .orderBy(desc(schema.voiceSamples.createdAt))
           .limit(1);
         const row = rows[0];
-        return row && row.audioKey && row.guestId ? { ...row, audioKey: row.audioKey, guestId: row.guestId } : null;
+        return row && row.audioKey ? { ...row, audioKey: row.audioKey } : null;
       },
       async upsertVoiceSample(row) {
-        // 写入统一采样表（owner = guest_id）；称呼默认取嘉宾名（编辑端可另外改写）
+        // 写入该嘉宾身份的采样行；称呼默认取身份名（编辑端可另外改写）
         const [g] = await db
-          .select({ name: schema.guests.name })
+          .select({ profileId: schema.guests.profileId, name: schema.profiles.name })
           .from(schema.guests)
+          .innerJoin(schema.profiles, eq(schema.profiles.id, schema.guests.profileId))
           .where(eq(schema.guests.id, row.guestId))
           .limit(1);
+        if (!g) return;
         const updated = await db.update(schema.voiceSamples)
           .set({ audioUrl: row.audioKey, transcript: row.transcript ?? null, status: "ready" })
-          .where(and(eq(schema.voiceSamples.guestId, row.guestId), eq(schema.voiceSamples.language, row.language)))
+          .where(and(eq(schema.voiceSamples.profileId, g.profileId), eq(schema.voiceSamples.language, row.language)))
           .returning({ id: schema.voiceSamples.id });
         if (updated[0]) return;
         await db.insert(schema.voiceSamples).values({
-          guestId: row.guestId,
+          profileId: g.profileId,
           language: row.language,
           audioUrl: row.audioKey,
           transcript: row.transcript ?? null,
           duration: 0,
-          callName: g?.name ?? null,
+          callName: g.name,
           status: "ready",
         });
       },
       async update(id, row) {
-        await db.update(schema.guests)
+        // 嘉宾的 name/intro 写在它的身份档案上（profiles.name / profiles.bio）
+        const [g] = await db
+          .select({ profileId: schema.guests.profileId })
+          .from(schema.guests)
+          .where(eq(schema.guests.id, id))
+          .limit(1);
+        if (!g) return;
+        await db.update(schema.profiles)
           .set({
             ...(row.name !== undefined ? { name: row.name } : {}),
-            ...(row.intro !== undefined ? { intro: row.intro } : {}),
+            ...(row.intro !== undefined ? { bio: row.intro } : {}),
           })
-          .where(eq(schema.guests.id, id));
+          .where(eq(schema.profiles.id, g.profileId));
       },
       async listVoiceSamples() {
         const rows = await db
           .select({
             id: schema.voiceSamples.id,
-            guestId: schema.voiceSamples.guestId,
-            guestName: schema.guests.name,
+            guestId: schema.guests.id,
+            guestName: schema.profiles.name,
             language: schema.voiceSamples.language,
             audioKey: schema.voiceSamples.audioUrl,
             transcript: schema.voiceSamples.transcript,
           })
           .from(schema.voiceSamples)
-          .innerJoin(schema.guests, eq(schema.guests.id, schema.voiceSamples.guestId))
+          .innerJoin(schema.guests, eq(schema.guests.profileId, schema.voiceSamples.profileId))
+          .innerJoin(schema.profiles, eq(schema.profiles.id, schema.guests.profileId))
           .orderBy(schema.guests.platform);
         return rows
-          .filter((r) => r.guestId !== null && r.audioKey !== null)
-          .map((r) => ({ ...r, guestId: r.guestId as string, audioKey: r.audioKey as string }));
+          .filter((r) => r.audioKey !== null)
+          .map((r) => ({ ...r, audioKey: r.audioKey as string }));
       },
     },
 
@@ -837,7 +862,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
        *  language 给定则追加语种约束（投稿区：英文区必须有英文采样） */
       async hasReadyVoiceSample(userId, sampleId, language) {
         const cond = and(
-          eq(schema.voiceSamples.userId, userId),
+          eq(schema.voiceSamples.profileId, userId),
           eq(schema.voiceSamples.status, "ready"),
           isNotNull(schema.voiceSamples.audioUrl), // draft 行（只有称呼、没录音）不算就绪
           ...(sampleId ? [eq(schema.voiceSamples.id, sampleId)] : []),
@@ -979,10 +1004,11 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             status: schema.submissions.status,
             createdAt: schema.submissions.createdAt,
             userEmail: schema.authUsers.email,
-            displayName: schema.profiles.displayName,
+            name: schema.profiles.name,
             hasVoiceSample: sql<boolean>`EXISTS (
               SELECT 1 FROM ${schema.voiceSamples} vs
-              WHERE vs.user_id = ${schema.submissions.userId} AND vs.status = 'ready'
+              WHERE vs.profile_id = ${schema.submissions.userId}
+                AND vs.status = 'ready' AND vs.audio_url IS NOT NULL
             )`,
           })
           .from(schema.submissions)
@@ -1029,7 +1055,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             duration: schema.voiceSamples.duration,
           })
           .from(schema.voiceSamples)
-          .where(and(eq(schema.voiceSamples.userId, row.userId), eq(schema.voiceSamples.status, "ready")))
+          .where(and(eq(schema.voiceSamples.profileId, row.userId), eq(schema.voiceSamples.status, "ready")))
           .orderBy(desc(schema.voiceSamples.createdAt)); // 最近优先（编辑 TTS 兜底取第一条）
         return {
           id: row.id,
@@ -1210,17 +1236,17 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           transcript: schema.episodes.transcript,
           sourceUrl: sql<string>`COALESCE(${schema.episodes.rawConversationUrl}, ${schema.submissions.url})`,
           username: schema.authUsers.name,
-          displayName: schema.profiles.displayName,
-          hostAvatar: schema.authUsers.image,
+          name: schema.profiles.name,
+          hostAvatar: schema.profiles.avatar,
           callName: sql<string>`${schema.submissions.host}->>'callName'`,
           // 本期嘉宾（LEFT JOIN：无嘉宾 → 行内各列全 null，下方归一为 guest: null）
           guest: {
             id: schema.guests.id,
             platform: schema.guests.platform,
-            name: schema.guests.name,
-            avatar: schema.guests.avatar,
-            intro: schema.guests.intro,
-            url: schema.guests.url,
+            name: guestsProfile.name,
+            avatar: guestsProfile.avatar,
+            intro: guestsProfile.bio,
+            url: guestsProfile.url,
           },
         };
         const base = () => db.select(fields)
@@ -1228,7 +1254,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .innerJoin(schema.submissions, eq(schema.submissions.id, schema.episodes.submissionId))
           .innerJoin(schema.profiles, eq(schema.profiles.id, schema.episodes.userId))
           .innerJoin(schema.authUsers, eq(schema.authUsers.id, schema.profiles.id))
-          .leftJoin(schema.guests, eq(schema.guests.id, schema.episodes.guestId));
+          .leftJoin(schema.guests, eq(schema.guests.id, schema.episodes.guestId))
+          .leftJoin(guestsProfile, eq(guestsProfile.id, schema.guests.profileId));
         const norm = <T extends { guest: { id: string | null } | null }>(row: T): T =>
           row.guest?.id ? row : { ...row, guest: null };
         const bySlug = await base().where(and(
@@ -1300,7 +1327,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           hostCount: hostCount[0]?.n ?? 0,
           guestCount: guestCount[0]?.n ?? 0,
           episodeCount: epCount[0]?.n ?? 0,
-          topHost: top?.displayName ?? null,
+          topHost: top?.name ?? null,
           topHostAvatar: top?.avatar ?? null,
           topTags,
         };
@@ -1310,15 +1337,15 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         const rows = await db
           .select({
             username: schema.authUsers.name,
-            displayName: schema.profiles.displayName,
-            avatar: schema.authUsers.image,
+            name: schema.profiles.name,
+            avatar: schema.profiles.avatar,
             episodeCount: sql<number>`count(DISTINCT ${schema.episodes.id})::int`,
           })
           .from(schema.episodes)
           .innerJoin(schema.profiles, eq(schema.profiles.id, schema.episodes.userId))
           .innerJoin(schema.authUsers, eq(schema.authUsers.id, schema.profiles.id))
           .where(and(eq(schema.episodes.status, "published"), eq(schema.episodes.isPublic, true)))
-          .groupBy(schema.authUsers.name, schema.profiles.displayName, schema.authUsers.image)
+          .groupBy(schema.authUsers.name, schema.profiles.name, schema.profiles.avatar)
           .orderBy(desc(sql`count(DISTINCT ${schema.episodes.id})`))
           .limit(Math.min(limit, 20));
         return rows;
@@ -1339,7 +1366,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             publishedAt: schema.episodes.publishedAt,
             isPicked: schema.episodes.isPicked,
             username: schema.authUsers.name,
-            displayName: schema.profiles.displayName,
+            name: schema.profiles.name,
             callName: sql<string>`${schema.submissions.host}->>'callName'`,
           })
           .from(schema.episodes)
@@ -1478,7 +1505,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             durationSeconds: schema.episodes.durationSeconds,
             publishedAt: schema.episodes.publishedAt,
             username: schema.authUsers.name,
-            displayName: schema.profiles.displayName,
+            name: schema.profiles.name,
           })
           .from(schema.episodes)
           .innerJoin(schema.profiles, eq(schema.profiles.id, schema.episodes.userId))
@@ -1566,7 +1593,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             episodeNumber: schema.episodes.number,
             userId: schema.episodeRemovalRequests.userId,
             userEmail: schema.authUsers.email,
-            userDisplayName: schema.profiles.displayName,
+            userDisplayName: schema.profiles.name,
             reason: schema.episodeRemovalRequests.reason,
             status: schema.episodeRemovalRequests.status,
             createdAt: schema.episodeRemovalRequests.createdAt,
@@ -1613,7 +1640,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .select({
             id: schema.voiceSamples.id,
             language: schema.voiceSamples.language,
-            userId: schema.voiceSamples.userId,
+            userId: schema.voiceSamples.profileId,
             status: schema.voiceSamples.status,
             transcript: schema.voiceSamples.transcript,
             audioUrl: schema.voiceSamples.audioUrl,
@@ -1622,7 +1649,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             createdAt: schema.voiceSamples.createdAt,
           })
           .from(schema.voiceSamples)
-          .where(eq(schema.voiceSamples.userId, userId))
+          .where(eq(schema.voiceSamples.profileId, userId))
           .orderBy(desc(schema.voiceSamples.createdAt))
           .limit(1);
         return rows[0] ?? null;
@@ -1632,7 +1659,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .select({
             id: schema.voiceSamples.id,
             language: schema.voiceSamples.language,
-            userId: schema.voiceSamples.userId,
+            userId: schema.voiceSamples.profileId,
             status: schema.voiceSamples.status,
             transcript: schema.voiceSamples.transcript,
             audioUrl: schema.voiceSamples.audioUrl,
@@ -1641,7 +1668,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             createdAt: schema.voiceSamples.createdAt,
           })
           .from(schema.voiceSamples)
-          .where(and(eq(schema.voiceSamples.userId, userId), eq(schema.voiceSamples.language, language)))
+          .where(and(eq(schema.voiceSamples.profileId, userId), eq(schema.voiceSamples.language, language)))
           .limit(1);
         return rows[0] ?? null;
       },
@@ -1650,11 +1677,11 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         const updated = await db
           .update(schema.voiceSamples)
           .set({ callName })
-          .where(and(eq(schema.voiceSamples.userId, userId), eq(schema.voiceSamples.language, language)))
+          .where(and(eq(schema.voiceSamples.profileId, userId), eq(schema.voiceSamples.language, language)))
           .returning({ id: schema.voiceSamples.id });
         if (updated.length > 0) return;
         await db.insert(schema.voiceSamples).values({
-          userId,
+          profileId: userId, // 主持人身份 = user.id
           language,
           audioUrl: null, // 还没录音
           duration: 0,
@@ -1667,7 +1694,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .select({ audioUrl: schema.voiceSamples.audioUrl })
           .from(schema.voiceSamples)
           .where(and(
-            eq(schema.voiceSamples.userId, userId),
+            eq(schema.voiceSamples.profileId, userId),
             eq(schema.voiceSamples.status, "ready"),
             isNotNull(schema.voiceSamples.audioUrl), // draft 行（只有称呼）不算
           ))
@@ -1676,11 +1703,9 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         return rows[0]?.audioUrl ?? null;
       },
       async saveVoiceSample(row: VoiceSampleRow): Promise<{ id: string }> {
-        // owner（user_id 或 guest_id）× 语种一条；owner 列是**部分唯一索引**，
-        // ON CONFLICT 需匹配索引谓词（易写错）→ 改为「先更新，未命中再插入」
-        const owner = row.userId
-          ? and(eq(schema.voiceSamples.userId, row.userId), eq(schema.voiceSamples.language, row.language))
-          : and(eq(schema.voiceSamples.guestId, row.guestId!), eq(schema.voiceSamples.language, row.language));
+        // 一个身份（profile）× 一个语种一条采样：先更新，未命中再插入
+        if (!row.profileId) throw new Error("saveVoiceSample: profileId 必填");
+        const owner = and(eq(schema.voiceSamples.profileId, row.profileId), eq(schema.voiceSamples.language, row.language));
         const updated = await db.update(schema.voiceSamples)
           .set({
             ...(row.audioUrl !== undefined ? { audioUrl: row.audioUrl } : {}),
@@ -1693,8 +1718,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .returning({ id: schema.voiceSamples.id });
         if (updated[0]) return { id: updated[0].id };
         const rows = await db.insert(schema.voiceSamples).values({
-          userId: row.userId ?? null,
-          guestId: row.guestId ?? null,
+          profileId: row.profileId,
           language: row.language,
           audioUrl: row.audioUrl ?? null,
           transcript: row.transcript ?? null,
@@ -1707,19 +1731,21 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       async getProfile(userId) {
         const [userRows, profileRows] = await Promise.all([
           db
-            .select({ email: schema.authUsers.email, name: schema.authUsers.name, emailVerified: schema.authUsers.emailVerified, image: schema.authUsers.image })
+            .select({ email: schema.authUsers.email, name: schema.authUsers.name, emailVerified: schema.authUsers.emailVerified })
             .from(schema.authUsers)
             .where(eq(schema.authUsers.id, userId))
             .limit(1),
           db
             .select({
-              displayName: schema.profiles.displayName,
+              name: schema.profiles.name,
+              avatar: schema.profiles.avatar,
               bio: schema.profiles.bio,
               gender: schema.profiles.gender,
               profession: schema.profiles.profession,
               age: schema.profiles.age,
               nationality: schema.profiles.nationality,
               socialLinks: schema.profiles.socialLinks,
+              url: schema.profiles.url,
               channelActivatedAt: schema.profiles.channelActivatedAt,
             })
             .from(schema.profiles)
@@ -1731,16 +1757,17 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         if (!user || !profile) return null;
         return {
           email: user.email,
-          nickname: user.name, // 对外契约 nickname = @slug；DB 列 user.name 是 better-auth 标准字段
+          username: user.name, // 用户名（@slug）；DB 列 user.name 是 better-auth 标准字段
           emailVerified: user.emailVerified,
-          image: user.image,
-          displayName: profile.displayName,
+          name: profile.name,
+          avatar: profile.avatar,
           bio: profile.bio,
           gender: profile.gender,
           profession: profile.profession,
           age: profile.age,
           nationality: profile.nationality,
           socialLinks: profile.socialLinks ?? null,
+          url: profile.url,
           channelActivatedAt: profile.channelActivatedAt,
         };
       },
@@ -1748,7 +1775,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       async getPersonaSnapshot(userId) {
         const rows = await db
           .select({
-            displayName: schema.profiles.displayName,
+            name: schema.profiles.name,
             bio: schema.profiles.bio,
             gender: schema.profiles.gender,
             profession: schema.profiles.profession,
@@ -1761,7 +1788,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         const p = rows[0];
         if (!p) return null;
         return {
-          displayName: p.displayName,
+          name: p.name,
           gender: p.gender,
           profession: p.profession,
           age: p.age,
@@ -1772,10 +1799,21 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       async updateUserNickname(userId, nickname) {
         await db.update(schema.authUsers).set({ name: nickname, updatedAt: new Date() }).where(eq(schema.authUsers.id, userId));
       },
+      async usernameTaken(username, exceptUserId) {
+        const rows = await db
+          .select({ id: schema.authUsers.id })
+          .from(schema.authUsers)
+          .where(and(
+            sql`lower(${schema.authUsers.name}) = lower(${username})`,
+            exceptUserId ? ne(schema.authUsers.id, exceptUserId) : undefined,
+          ))
+          .limit(1);
+        return rows.length > 0;
+      },
       async updateChannel(userId, row) {
         await db.update(schema.profiles)
           .set({
-            ...(row.displayName !== undefined ? { displayName: row.displayName } : {}),
+            ...(row.name !== undefined ? { name: row.name } : {}),
             ...(row.bio !== undefined ? { bio: row.bio } : {}),
             ...(row.gender !== undefined ? { gender: row.gender } : {}),
             ...(row.profession !== undefined ? { profession: row.profession } : {}),
@@ -1954,9 +1992,9 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           language: schema.episodes.language,
           audioUrl: schema.episodes.audioUrl,
           username: schema.authUsers.name,
-          displayName: schema.profiles.displayName,
+          name: schema.profiles.name,
           callName: sql<string>`${schema.submissions.host}->>'callName'`,
-          guestName: schema.guests.name,
+          guestName: guestsProfile.name,
           tags: schema.episodes.tags,
         })
           .from(schema.playlistEpisodes)
@@ -2061,7 +2099,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           language: schema.episodes.language,
           audioUrl: schema.episodes.audioUrl,
           username: schema.authUsers.name,
-          displayName: schema.profiles.displayName,
+          name: schema.profiles.name,
           callName: sql<string>`${schema.submissions.host}->>'callName'`,
         })
           .from(schema.playlistEpisodes)

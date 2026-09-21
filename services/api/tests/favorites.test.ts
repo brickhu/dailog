@@ -69,6 +69,7 @@ function fakeRepo(): AppDeps["repo"] {
       setVoiceSampleCallName: async () => {},
       getProfile: async () => null,
       updateUserNickname: async () => {},
+      usernameTaken: async () => false,
       updateChannel: async () => ({ ok: true } as const),
       syncAdminRoles: async () => 0,
       listByUser: async () => [],
@@ -81,7 +82,7 @@ function fakeRepo(): AppDeps["repo"] {
       getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),
       recordStat: async () => {},
       getStats: async () => ({ plays: 0, completions: 0, likes: 0 }),
-      getPersonaSnapshot: async () => ({ displayName: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
+      getPersonaSnapshot: async () => ({ name: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
     },
   };
 }
@@ -133,7 +134,7 @@ describe.skipIf(!hasDb)("likes (消费端互动简化版, real local PG)", () =>
       .returning({ id: schema.authUsers.id });
     const ownerId = user[0].id;
     await dbClient.db.insert(schema.profiles).values({
-      id: ownerId, displayName: "Fav",
+      id: ownerId, name: "Fav",
     });
     const sub = await dbClient.db.insert(schema.submissions).values({
       userId: ownerId,

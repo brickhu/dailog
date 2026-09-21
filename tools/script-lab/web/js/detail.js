@@ -473,7 +473,7 @@ function renderProposalCards(id, proposals, totalTurns){
     const hostSampleV = (dt.voiceSamples && dt.voiceSamples[0]) || null;
     const hostUserIdV = dt.userId || null;
     const guestIdV = (dt.guest && dt.guest.id) || null;
-    const hostNameV = (dt.host && (dt.host.callName || (dt.host.personaInfo && dt.host.personaInfo.displayName))) || '主持人';
+    const hostNameV = (dt.host && (dt.host.callName || (dt.host.personaInfo && dt.host.personaInfo.name))) || '主持人';
     const guestNameV = (dt.guest && dt.guest.name) || '嘉宾';
     const subBody = [];
     subBody.push(row('标题', dt.title ? esc(dt.title) : "<span class='muted'>加载中...</span>"));
@@ -481,7 +481,7 @@ function renderProposalCards(id, proposals, totalTurns){
     subBody.push(row('投稿区', "<span class='tag' title='目标语言——脚本/合成采样/feed 归属都跟随它'>" + esc(zoneNameOf(dt.language)) + "</span>"));
     subBody.push(row('投稿时间', fmtDate(dt.createdAt)));
     subBody.push(row('对话链接', "<a href='" + esc(dt.url || '') + "' target='_blank' rel='noopener'>" + esc(dt.url || '—') + "</a>"));
-    subBody.push(row('投稿人', esc((dt.host && dt.host.personaInfo && dt.host.personaInfo.displayName) || '?') + ' · ' + esc(dt.userEmail || '')));
+    subBody.push(row('投稿人', esc((dt.host && dt.host.personaInfo && dt.host.personaInfo.name) || '?') + ' · ' + esc(dt.userEmail || '')));
     subBody.push(row('称呼', esc((dt.host && dt.host.callName) || '（无，用「主持人」）')));
     subBody.push(row('建议', esc(dt.suggestion || '—')));
     // 投稿区（目标语言）：试听与声线管理都按它取语种（多语种时避免"听到的/配的"不是同一条）

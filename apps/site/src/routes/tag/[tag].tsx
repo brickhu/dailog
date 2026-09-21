@@ -102,7 +102,7 @@ export default function TagPage() {
                     </Show>
                     <div {...stylex.props(styles.epTitle)}>{ep.title || t("common.unnamed")}</div>
                     <div {...stylex.props(styles.meta)}>
-                      {ep.displayName ?? `@${ep.username}`}
+                      {ep.name ?? `@${ep.username}`}
                       {ep.publishedAt ? ` · ${fmtDate(ep.publishedAt)}` : ""}
                       {ep.durationSeconds ? ` · ${fmtDuration(ep.durationSeconds)}` : ""}
                     </div>

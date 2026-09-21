@@ -9,7 +9,7 @@ import { useI18n } from "@dailogues/i18n";
 import { ListSkeleton } from "../components/page-skeletons";
 
 // 主播列表（/hosts）：在 Dailog 出过节目的主持人（按播放量 + 期数排序）
-interface HostRow { username: string; displayName: string; avatar: string | null; episodeCount: number; totalPlays: number; }
+interface HostRow { username: string; name: string; avatar: string | null; episodeCount: number; totalPlays: number; }
 
 // 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
 // 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
@@ -85,10 +85,10 @@ export default function HostsPage() {
             <For each={hosts() ?? []}>
               {(h) => (
                 <A href={`/@${h.username}`} {...stylex.props(styles.card)}>
-                  <Show when={h.avatar} fallback={<div {...stylex.props(styles.avatarFallback)}>{h.displayName.slice(0, 1)}</div>}>
+                  <Show when={h.avatar} fallback={<div {...stylex.props(styles.avatarFallback)}>{h.name.slice(0, 1)}</div>}>
                     <img src={h.avatar!} alt="" {...stylex.props(styles.avatar)} />
                   </Show>
-                  <div {...stylex.props(styles.name)}>{h.displayName}</div>
+                  <div {...stylex.props(styles.name)}>{h.name}</div>
                   <div {...stylex.props(styles.meta)}>@{h.username} · {h.episodeCount} 期 · {h.totalPlays} 播放</div>
                 </A>
               )}

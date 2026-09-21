@@ -69,8 +69,8 @@ export function AuthProvider(props: ParentProps) {
         return;
       }
       const data = (await res.json()) as {
-        user?: { id?: string; name?: string | null; email?: string; image?: string | null } | null;
-        nickname?: string | null;
+        user?: { id?: string; name?: string | null; email?: string; avatar?: string | null } | null;
+        username?: string | null;
         unreadCount?: number;
       } | null;
       const u = data?.user;
@@ -80,8 +80,8 @@ export function AuthProvider(props: ParentProps) {
         setStatus("unauthenticated");
         return;
       }
-      // 主持人主页地址 = 账号昵称（@slug = user.name）
-      setUser({ id: u.id ?? "", name: u.name ?? null, email: u.email, image: u.image ?? null, username: data?.nickname ?? null });
+      // 主持人主页地址 = 用户名（@slug = user.name）；头像取身份档案（profiles.avatar）
+      setUser({ id: u.id ?? "", name: u.name ?? null, email: u.email, image: u.avatar ?? null, username: data?.username ?? null });
       setUnread(typeof data?.unreadCount === "number" ? data.unreadCount : 0);
       setStatus("authenticated");
     } catch {

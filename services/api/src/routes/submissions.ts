@@ -361,7 +361,7 @@ export function submissionsRoutes(repo: Repos) {
       return c.json({ error: "pending_limit", detail: { count: pending, limit: PENDING_LIMIT } }, 429);
     }
     const title = typeof body.title === "string" && body.title.trim() ? body.title.trim().slice(0, 200) : null;
-    // 本次节目称呼（默认 displayName 填充，可改；脚本生成时按脚本语言改写）
+    // 本次节目称呼（默认取该投稿区采样行上的 callName，可改；脚本生成时按脚本语言改写）
     const callNameInEpisode = typeof body.callNameInEpisode === "string" && body.callNameInEpisode.trim()
       ? body.callNameInEpisode.trim().slice(0, 20)
       : null;
@@ -370,7 +370,7 @@ export function submissionsRoutes(repo: Repos) {
       ? body.suggestion.trim().slice(0, 500)
       : null;
     // 主持人档案快照（编辑 getDetail 免查库；脚本生成注入画像）
-    // 主持人画像快照（账号级，不区分语言：displayName/bio/性别/职业/年龄/国籍）
+    // 主持人画像快照（账号级，不区分语言：name/bio/性别/职业/年龄/国籍）
     const personaInfo = await repo.episodes.getPersonaSnapshot(userId).catch(() => null);
     // 嘉宾快照：按 URL 猜平台 → guests 表匹配（guest jsonb 定格，preview/脚本直接取）
     let guest = null;

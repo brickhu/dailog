@@ -23,7 +23,7 @@ interface FavRow {
   language: string;
   audioUrl: string;
   username: string;
-  displayName: string;
+  name: string;
   callName: string | null;
   guestName: string | null;
   tags: string[] | null;

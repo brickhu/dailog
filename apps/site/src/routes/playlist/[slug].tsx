@@ -225,7 +225,7 @@ export default function PlaylistPage(props: { params: { slug: string } }) {
                       </Show>
                       <div {...stylex.props(styles.rowBody)}>
                         <p {...stylex.props(styles.rowTitle)}>{ep.title ?? t("common.unnamed")}</p>
-                        <p {...stylex.props(styles.rowMeta)}>{ep.callName ?? ep.displayName ?? ep.username} · {fmtDuration(ep.durationSeconds)}</p>
+                        <p {...stylex.props(styles.rowMeta)}>{ep.callName ?? ep.name ?? ep.username} · {fmtDuration(ep.durationSeconds)}</p>
                       </div>
                       <button
                         {...stylex.props(styles.play)}

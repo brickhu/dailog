@@ -5,7 +5,7 @@ import { createDb } from "../src/db/client";
 import { createRepo } from "../src/repo";
 import type { Env } from "../src/config/env";
 import {
-  authUsers, episodes, notifications, profiles, submissions, voiceSamples,
+  authUsers, episodes, guests, notifications, profiles, submissions, voiceSamples,
 } from "../src/db/schema";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
@@ -40,7 +40,7 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       { id: REPO_USER, name: "Repo Test", email: "repo-test@test.local", emailVerified: true, createdAt: now, updatedAt: now },
     ]).onConflictDoNothing();
     await db.insert(profiles).values([
-      { id: REPO_USER, displayName: "Repo Test", channelActivatedAt: new Date() },
+      { id: REPO_USER, name: "Repo Test", channelActivatedAt: new Date() },
     ]).onConflictDoNothing();
   });
 
@@ -169,35 +169,36 @@ describe.skipIf(!hasDb)("drizzle repo (integration, local PG)", () => {
       const sample = await repo.guests.voiceSampleByLanguage("claude", "zz");
       expect(sample?.transcript).toBe("你好");
       expect((await repo.guests.list()).some((g) => g.id === "claude")).toBe(true);
-      // 嘉宾声线与主持人共用 voice_samples（owner = guest_id）
-      await db.delete(voiceSamples).where(and(eq(voiceSamples.guestId, "claude"), eq(voiceSamples.language, "zz")));
+      // 采样挂在身份上（voice_samples.profile_id = guests.profile_id）
+      const [gp] = await db.select({ profileId: guests.profileId }).from(guests).where(eq(guests.id, "claude"));
+      await db.delete(voiceSamples).where(and(eq(voiceSamples.profileId, gp.profileId), eq(voiceSamples.language, "zz")));
     });
   });
 
   describe("profile 档案 + voice sample", () => {
     it("updateChannel（账号级档案）读写 + personaSnapshot 快照", async () => {
       await repo.episodes.updateChannel(REPO_USER, {
-        displayName: "小北", gender: "男", profession: "产品经理", nationality: "中国", socialLinks: { github: "fei" },
+        name: "小北", gender: "男", profession: "产品经理", nationality: "中国", socialLinks: { github: "fei" },
       });
       const profile = await repo.episodes.getProfile(REPO_USER);
-      expect(profile?.displayName).toBe("小北");
+      expect(profile?.name).toBe("小北");
       expect(profile?.gender).toBe("男");
       expect(profile?.nationality).toBe("中国");
       expect(profile?.socialLinks?.github).toBe("fei");
       // 画像快照 = 账号级（不区分语言）
       const snap = await repo.episodes.getPersonaSnapshot(REPO_USER);
-      expect(snap?.displayName).toBe("小北");
+      expect(snap?.name).toBe("小北");
       expect(snap?.profession).toBe("产品经理");
     });
 
     it("saveVoiceSample + getVoiceSample（user×language upsert）", async () => {
       await repo.episodes.saveVoiceSample({
-        userId: REPO_USER, language: "zh", audioUrl: "voices/repo/zh.webm", transcript: "大家好", duration: 10, status: "ready",
+        profileId: REPO_USER, language: "zh", audioUrl: "voices/repo/zh.webm", transcript: "大家好", duration: 10, status: "ready",
       });
       const sample = await repo.episodes.getVoiceSample(REPO_USER);
       expect(sample?.audioUrl).toBe("voices/repo/zh.webm");
       expect(sample?.transcript).toBe("大家好");
-      await db.delete(voiceSamples).where(eq(voiceSamples.userId, REPO_USER));
+      await db.delete(voiceSamples).where(eq(voiceSamples.profileId, REPO_USER));
     });
   });
 

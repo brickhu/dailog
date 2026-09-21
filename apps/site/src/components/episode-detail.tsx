@@ -136,7 +136,7 @@ const styles = stylex.create({
 export function EpisodeDetail(props: { episode: QueueEpisode }) {
   const { t } = useI18n();
   const ep = () => props.episode;
-  const hostName = () => ep().callName ?? ep().displayName ?? ep().username;
+  const hostName = () => ep().callName ?? ep().name ?? ep().username;
   const [showTranscript, setShowTranscript] = createSignal(false);
   // 台本 = scripts/{submissionId}.json 引用：展开时拉取公开端点 → 解析 segments → 去情绪标签
   const [transcriptText, setTranscriptText] = createSignal<string | null>(null);

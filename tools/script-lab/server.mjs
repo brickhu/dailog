@@ -484,7 +484,7 @@ async function handleApi(path, res, req) {
       const stage = r.status || "submitted";
       return {
         id: r.id, url: r.url, title: r.title, collected: r.collected, dialogueCount: r.dialogueCount,
-        displayName: r.displayName || r.userEmail || "?", userEmail: r.userEmail,
+        name: r.name || r.userEmail || "?", userEmail: r.userEmail,
         createdAt: r.createdAt, hasVoiceSample: r.hasVoiceSample, stage,
         language: r.language || "zh",   // 投稿区（目标语言）：列表徽标用
         reusable: r.collected !== 1 && !!r.url && collectedUrls.has(r.url),   // 同源已采集 → 一键复用

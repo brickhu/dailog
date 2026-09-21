@@ -86,7 +86,7 @@ const styles = stylex.create({
 export default function MePage() {
   const { t } = useI18n();
   const [unread, setUnread] = createSignal(0);
-  const [profile, setProfile] = createSignal<{ nickname?: string | null; displayName?: string | null; image?: string | null } | null>(null);
+  const [profile, setProfile] = createSignal<{ nickname?: string | null; name?: string | null; avatar?: string | null } | null>(null);
 
   onMount(() => {
     void fetch("/v1/me/notifications/unread")
@@ -115,10 +115,10 @@ export default function MePage() {
           <Title>{t("me.title")} · dailog</Title>
           <div {...stylex.props(layouts.fullRow, styles.title)}>{t("me.title")}</div>
           <p {...stylex.props(layouts.fullRow, styles.subtitle)}>
-            <Show when={profile()?.image}>
-              <img src={profile()!.image!} alt="" {...stylex.props(styles.avatar)} />
+            <Show when={profile()?.avatar}>
+              <img src={profile()!.avatar!} alt="" {...stylex.props(styles.avatar)} />
             </Show>
-            {profile()?.displayName || profile()?.nickname || ""} · @{profile()?.nickname || ""}
+            {profile()?.name || profile()?.nickname || ""} · @{profile()?.nickname || ""}
           </p>
           <div {...stylex.props(layouts.fullRow, styles.grid)}>
             <For each={entries()}>

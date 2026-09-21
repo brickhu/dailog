@@ -305,7 +305,7 @@ export default function EpisodeDetailPage() {
   const [shareOpen, setShareOpen] = createSignal(false);
 
   // 标题区元信息：主持人 · 日期 · 播放/完播统计
-  const hostName = () => ep()?.callName ?? ep()?.displayName ?? ep()?.username ?? "";
+  const hostName = () => ep()?.callName ?? ep()?.name ?? ep()?.username ?? "";
   // 本期 AI 嘉宾名称（无嘉宾节目回退主播名——文案「用户与{guest}的原始对话」仍通顺）
   const guestName = () => ep()?.guest?.name ?? hostName();
   // 发布时间：日期 + 时间（跟随当前语言；时区固定为展示时区，见 lib/format 的 DISPLAY_TIME_ZONE）
@@ -342,7 +342,7 @@ const languageLabel = () => {
     durationSeconds: e.durationSeconds,
     publishedAt: e.publishedAt,
     username: e.username ?? "",
-    displayName: e.displayName ?? "",
+    name: e.name ?? "",
     callName: e.callName,
     transcript: e.transcript,
     sourceUrl: e.sourceUrl,

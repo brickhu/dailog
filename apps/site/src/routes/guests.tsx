@@ -9,7 +9,7 @@ import { useI18n } from "@dailogues/i18n";
 import { ListSkeleton } from "../components/page-skeletons";
 
 // 常驻 AI 嘉宾（/guests）：品牌声线宿主列表
-interface GuestRow { id: string; platform: string; name: string; avatar: string | null; intro: string | null; url: string | null; }
+interface GuestRow { id: string; platform: string; name: string; avatar: string | null; bio: string | null; url: string | null; }
 
 // 断点标签（与 theme.stylex.ts 的 DESKTOP/TABLET 同值——stylex babel 插件不支持
 // 跨文件常量解析，本地定义保持一致；改断点请同步 theme.stylex.ts）
@@ -89,7 +89,7 @@ export default function GuestsPage() {
                     <img src={g.avatar!} alt="" {...stylex.props(styles.avatar)} />
                   </Show>
                   <div {...stylex.props(styles.name)}>{g.name}</div>
-                  <div {...stylex.props(styles.meta)}>{g.platform}{g.intro ? ` · ${g.intro.slice(0, 40)}` : ""}</div>
+                  <div {...stylex.props(styles.meta)}>{g.platform}{g.bio ? ` · ${g.bio.slice(0, 40)}` : ""}</div>
                 </A>
               )}
             </For>

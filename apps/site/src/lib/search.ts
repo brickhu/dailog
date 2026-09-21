@@ -1,7 +1,7 @@
 // 站内搜索服务（站点自建，全局内容搜索弹窗 search-dialog.tsx 的数据源）。
 // "use server"：SolidStart server function——client bundle 只留 RPC 桩，查询代码不进客户端。
 // 按字段命中（Postgres ILIKE 子串匹配，大小写不敏感）：
-//   节目：标题 / 简介 / 台本 / 嘉宾名 / 主播名（displayName 或 @username）
+//   节目：标题 / 简介 / 台本 / 嘉宾名 / 主播名（身份名 name 或 @username）
 //   嘉宾：名称 / 平台 / 简介
 //   主播：昵称 / @username
 // 返回分组结果（episodes / guests / hosts）供弹窗自动补全分组展示。
@@ -32,12 +32,13 @@ export interface SearchGuest {
   platform: string;
   name: string;
   avatar: string | null;
-  intro: string | null;
+  /** 身份简介（profiles.bio——由原 guests.intro 迁入） */
+  bio: string | null;
 }
 
 export interface SearchHost {
   username: string;
-  displayName: string;
+  name: string;
   avatar: string | null;
   episodeCount: number;
 }
@@ -94,11 +95,13 @@ export async function searchContent(q: string, limit = 8): Promise<SearchResults
                e.published_at AS "publishedAt",
                e.duration_seconds AS "durationSeconds",
                e.number, e.guest_id AS "guestId",
-               g.name AS "guestName",
-               COALESCE(p.display_name, u.name) AS "hostName",
+               gp.name AS "guestName",
+               COALESCE(p.name, u.name) AS "hostName",
                u.name AS "hostUsername"
         FROM episodes e
         LEFT JOIN guests g ON g.id = e.guest_id
+        -- 嘉宾名称来自其身份档案（guests 只留登记：id/platform/profile_id）
+        LEFT JOIN profiles gp ON gp.id = g.profile_id
         LEFT JOIN profiles p ON p.id = e.profile_id
         JOIN "user" u ON u.id = e.user_id
         WHERE e.status = 'published' AND e.is_public = true
@@ -106,8 +109,8 @@ export async function searchContent(q: string, limit = 8): Promise<SearchResults
             e.title ILIKE ${like}
             OR e.description ILIKE ${like}
             OR e.transcript ILIKE ${like}
-            OR g.name ILIKE ${like}
-            OR p.display_name ILIKE ${like}
+            OR gp.name ILIKE ${like}
+            OR p.name ILIKE ${like}
             OR u.name ILIKE ${like}
           )
         -- 标题命中优先（自动补全的联想感），其余按发布时间
@@ -115,20 +118,21 @@ export async function searchContent(q: string, limit = 8): Promise<SearchResults
         LIMIT ${limit}
       ` as unknown as SearchEpisode[],
       db`
-        SELECT id, platform, name, avatar, intro, url
-        FROM guests
-        WHERE name ILIKE ${like} OR platform ILIKE ${like} OR intro ILIKE ${like}
-        ORDER BY name
+        SELECT g.id, g.platform, p.name, p.avatar, p.bio, p.url
+        FROM guests g
+        JOIN profiles p ON p.id = g.profile_id
+        WHERE p.name ILIKE ${like} OR g.platform ILIKE ${like} OR p.bio ILIKE ${like}
+        ORDER BY p.name
         LIMIT ${Math.max(1, Math.min(limit, 5))}
       ` as unknown as SearchGuest[],
       db`
-        SELECT u.name AS username, p.display_name AS "displayName",
-               u.image AS avatar, COUNT(e.id)::int AS "episodeCount"
+        SELECT u.name AS username, p.name AS "name",
+               p.avatar AS avatar, COUNT(e.id)::int AS "episodeCount"
         FROM profiles p
         JOIN "user" u ON u.id = p.id
         LEFT JOIN episodes e ON e.user_id = p.id AND e.status = 'published' AND e.is_public = true
-        WHERE p.display_name ILIKE ${like} OR u.name ILIKE ${like}
-        GROUP BY u.name, p.display_name, u.image
+        WHERE p.name ILIKE ${like} OR u.name ILIKE ${like}
+        GROUP BY u.name, p.name, p.avatar
         ORDER BY "episodeCount" DESC, u.name
         LIMIT ${Math.max(1, Math.min(limit, 5))}
       ` as unknown as SearchHost[],

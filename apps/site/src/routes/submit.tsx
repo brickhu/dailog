@@ -188,7 +188,7 @@ export default function SubmitPage() {
   // 人设（可选）+ 采样（必填；已有采样自动填充可沿用）
   const [callName, setCallName] = createSignal("");   // callNameInEpisode：本次节目称呼（默认取该区采样行上的 callName）
   // 主持人资料（进入确认态时拉取；称呼默认值的兜底展示名）
-  const [hostProfile, setHostProfile] = createSignal<{ displayName?: string | null } | null>(null);
+  const [hostProfile, setHostProfile] = createSignal<{ name?: string | null } | null>(null);
   // 该投稿区采样行上的「节目称呼」（callName；在设置页按语言区配置）
   const [zoneCallName, setZoneCallName] = createSignal("");
   const [suggestion, setSuggestion] = createSignal(""); // 节目建议（可选；仅供编辑部选题参考）
@@ -331,7 +331,7 @@ export default function SubmitPage() {
       try {
         const profileRes = await fetch("/v1/me/profile");
         if (profileRes.ok) {
-          const profile = (await profileRes.json()) as { displayName?: string | null };
+          const profile = (await profileRes.json()) as { name?: string | null };
           setHostProfile(profile);
         }
       } catch { /* 静默 */ }
@@ -361,7 +361,7 @@ export default function SubmitPage() {
   createEffect(() => {
     const z = zone();
     const zoneName = zoneCallName().trim();
-    const fallback = hostProfile()?.displayName?.trim() || "";
+    const fallback = hostProfile()?.name?.trim() || "";
     if (z !== prefilledZone) {
       prefilledZone = z;
       callNameEdited = false;

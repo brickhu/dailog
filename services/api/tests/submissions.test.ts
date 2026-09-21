@@ -53,6 +53,7 @@ function makeApp(repo: Partial<Repos["submissions"]> = {}) {
       setVoiceSampleCallName: async () => {},
       getProfile: async () => null,
       updateUserNickname: async () => {},
+      usernameTaken: async () => false,
       updateChannel: async () => ({ ok: true } as const),
       syncAdminRoles: async () => 0,
       listByUser: async () => [],
@@ -65,7 +66,7 @@ function makeApp(repo: Partial<Repos["submissions"]> = {}) {
       getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),
       recordStat: async () => {},
       getStats: async () => ({ plays: 0, completions: 0, likes: 0 }),
-      getPersonaSnapshot: async () => ({ displayName: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
+      getPersonaSnapshot: async () => ({ name: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
     },
     submissions: {
       create: async () => ({ id: "sub-1" }),
@@ -192,7 +193,7 @@ describe("POST /v1/submissions —— 并发上限 / 重复 / 入库", () => {
     expect(createArgs[6]).toEqual(expect.objectContaining({
       callName: "飞",
       voiceSampleId: "11111111-1111-4111-8111-111111111111",
-      personaInfo: expect.objectContaining({ displayName: "测试员" }),
+      personaInfo: expect.objectContaining({ name: "测试员" }),
     }));
     expect(createArgs[7]).toBe("zh"); // language（缺省投稿区）
     expect(String(createArgs[0])).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);

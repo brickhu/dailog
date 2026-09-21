@@ -9,7 +9,7 @@ import {
 
 export const authUsers = pgTable("user", {
   id: text("id").primaryKey(),
-  /** 昵称 = 主持人主页标识（@name，注册时应用层强制唯一；展示名另有 displayName 可独立） */
+  /** 用户名 = 主页标识（@name；**仅英文数字**、唯一（lower(name) 唯一索引）、3–30 位） */
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
@@ -64,15 +64,19 @@ export const authAccounts = pgTable("account", {
 // 业务表（user_id 关联 better-auth user.id，text 类型；M5 迁移）
 // ---------------------------------------------------------------------------
 
-/** 主持人档案（1:1 关联 user；id 即用户 id）——**账号级，不区分语言**。
- *  · 公开身份（对外展示）：display_name = 展示名、bio = 简介、social_links = 社交链接
- *    （主页标识 = user.name（@name），无独立 username 列）
- *  · 脚本画像：gender/profession/age/nationality（只进脚本生成的主持人画像，不对外展示）
- *  节目中的称呼（callName）不在这里——它随**声音采样**走（voice_samples.call_name，按语言区）。 */
+/** 身份（主持人与嘉宾共用一张表，**不加 type**——嘉宾身份由 guests.profile_id 指向）。
+ *  · id：账号身份 = user.id（主键直接用账号 id）；嘉宾身份 = 独立 uuid（与账号解耦）
+ *  · name = 身份名（公开展示；用户可中文「飞」，嘉宾「Claude」）
+ *  · avatar = **头像唯一来源**（账号头像也放这，不再用 user.image）
+ *  · bio / gender / profession / age / nationality / social_links / url
+ *  节目中的称呼（callName）不在这里——它随**声音采样**走（voice_samples.call_name，按语言区）。
+ *  profiles.id 上不再挂 user 外键（嘉宾身份没有账号）；账号删除不级联（当前无账号删除功能）。 */
 export const profiles = pgTable("profiles", {
-  id: text("id").primaryKey().references(() => authUsers.id, { onDelete: "cascade" }),
-  /** 主持人展示名/昵称（公开身份；节目中的称呼见 voice_samples.call_name） */
-  displayName: text("display_name").notNull(),
+  id: text("id").primaryKey(),
+  /** 身份名（公开展示；账号身份默认取用户名，可另改） */
+  name: text("name").notNull(),
+  /** 头像（唯一来源：账号与嘉宾都用这一列） */
+  avatar: text("avatar"),
   bio: text("bio"),
   /** 脚本画像（投稿快照 submissions.host.personaInfo 的账号级部分） */
   gender: text("gender"),
@@ -80,6 +84,8 @@ export const profiles = pgTable("profiles", {
   age: text("age"),
   /** 国籍（脚本生成注入主持人画像） */
   nationality: text("nationality"),
+  /** 官网/主页（嘉宾用：AI 平台地址） */
+  url: text("url"),
   /** 社交媒体链接（自由键值对，如 {twitter, github, website}） */
   socialLinks: jsonb("social_links").$type<Record<string, string>>(),
   /** 主持人开通时间（null = 未开通，不能生成/发布） */
@@ -87,33 +93,28 @@ export const profiles = pgTable("profiles", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-/** AI 平台嘉宾库：品牌声线宿主（跨期统一的 AI 受访嘉宾）。
- *  嘉宾的参考音频/转录**不单独建表**——与主持人同用 voice_samples（guest_id 非空即嘉宾行）。 */
+/** 嘉宾登记（"哪个 AI 平台是我们的常驻嘉宾"）：**身份数据在 profiles**，这里只留登记关系。
+ *  id = platform 枚举值（claude/chatgpt/…）——episodes.guest_id / 公开页 /guest/<id> / R2 路径
+ *  guests/<id>/<lang>.mp3 全部沿用；name/avatar/bio/url 读 guests.profile_id → profiles。 */
 export const guests = pgTable("guests", {
   id: text("id").primaryKey(), // 用 platform 枚举值作 id（claude/chatgpt/...）
   platform: text("platform", { enum: ["chatgpt", "claude", "kimi", "doubao", "tongyi", "gemini", "deepseek", "perplexity", "grok"] }).notNull().unique(),
-  name: text("name").notNull(),
-  avatar: text("avatar"),
-  intro: text("intro"),
-  url: text("url"),
+  /** 该嘉宾的身份档案（profiles.id） */
+  profileId: text("profile_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [uniqueIndex("guests_profile_id_unique").on(t.profileId)]);
 
 /** 声音采样（**主持人 + 嘉宾共用一张表**）：一行 = 一个声音身份 × 语种。
- *  owner 二选一（CHECK 约束保证恰好一个）：
- *    · user_id  非空 → 主持人（投稿人）的采样，profiles.id = user.id
- *    · guest_id 非空 → 嘉宾（AI 品牌声线）的采样，guests.id
+ *  profile_id 指向**身份**（profiles.id）：主持人身份 = user.id；嘉宾身份 = 其 uuid。
  *  call_name = 该语种节目中这个身份的称呼（主持人 = 自己的节目称呼；嘉宾 = 嘉宾名）。
  *  audio_url 为空 = 只配了称呼还没录音（status='draft'，不参与投稿前置校验与 TTS）。
- *  R2 key：主持人 voices/{userId}/{language}.webm；嘉宾 guests/{guestId}/{language}.mp3。 */
+ *  R2 key：主持人 voices/{userId}/{language}.webm；嘉宾 guests/{guestId}/{language}.mp3（沿用不变）。 */
 export const voiceSamples = pgTable(
   "voice_samples",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    /** 主持人 owner（profiles.id = user.id 恒等）；与 guestId 二选一 */
-    userId: text("user_id").references(() => profiles.id, { onDelete: "cascade" }),
-    /** 嘉宾 owner（guests.id）；与 userId 二选一 */
-    guestId: text("guest_id").references(() => guests.id, { onDelete: "cascade" }),
+    /** 归属身份（profiles.id）：主持人 = user.id；嘉宾 = 嘉宾 profile 的 uuid */
+    profileId: text("profile_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
     /** 采样语种（zh/en/…）：一个身份多语种各一条；编辑按脚本语言匹配（对应语种 → en → 唯一兜底） */
     language: text("language").notNull().default("zh"),
     /** 参考音频 storage key（draft 行可为空：只配了称呼还没录音） */
@@ -127,16 +128,14 @@ export const voiceSamples = pgTable(
     status: text("status", { enum: ["draft", "ready", "failed"] }).notNull().default("ready"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    // owner × 语种唯一：主持人/嘉宾各一条（部分唯一索引，owner 列互斥）
-    uniqueIndex("voice_samples_user_language").on(t.userId, t.language).where(sql`${t.userId} IS NOT NULL`),
-    uniqueIndex("voice_samples_guest_language").on(t.guestId, t.language).where(sql`${t.guestId} IS NOT NULL`),
-  ],
+  // 一个身份 × 一个语种一条采样（1 profile = [zh 采样][en 采样]…）
+  (t) => [uniqueIndex("voice_samples_profile_language").on(t.profileId, t.language)],
 );
 
 /** 主持人档案快照（投稿时写入 submissions.persona_info；编辑 getDetail 免查库，脚本生成注入画像） */
 export interface PersonaSnapshot {
-  displayName: string;
+  /** 身份名（= profiles.name；快照时定格） */
+  name: string;
   gender: string | null;
   profession: string | null;
   age: string | null;
@@ -154,9 +153,9 @@ export interface PersonaSnapshot {
  *  状态机：submitted（待审核）→ collected（已采集/进入制作）→ selected（编辑采纳脚本·锁定选题）
  *          → crafted（音频就绪）→ published（已上线）；rejected（拒审，附原因）贯穿。
  *  审核与制作在编辑本地 Agent 完成，此处不承载生成中间状态。
- *  callNameInEpisode：本次节目的主持人自称（投稿确认页默认填 displayName，可改；
+ *  callNameInEpisode：本次节目的主持人自称（投稿确认页默认填该区采样的 callName，可改；
  *  脚本生成时按脚本语言改写：匹配原样/英文通用/小语种转英文）。
- *  personaInfo：投稿时对主持人档案的快照（displayName/gender/profession/age/bio/nationality），
+ *  personaInfo：投稿时对**身份档案**的快照（name/gender/profession/age/bio/nationality），
  *  编辑 getDetail 直接用快照，免查库；voiceSampleId：投稿时使用的采样（仅记录，TTS 仍按语言匹配）。 */
 export const submissions = pgTable(
   "submissions",

@@ -15,7 +15,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       getByPlatform: async () => null,
       getById: async () => null,
       list: async () => [
-        { id: "claude", platform: "claude", name: "Claude", avatar: null, intro: "Anthropic 的 AI 助手", url: null },
+        { id: "claude", platform: "claude", name: "Claude", avatar: null, bio: "Anthropic 的 AI 助手", url: null },
       ],
       voiceSampleByLanguage: async () => null,
       voiceSampleAny: async () => ({ id: "gvs-1", guestId: "claude", language: "zh", audioKey: "guests/claude/zh.mp3", transcript: "你好" }),
@@ -53,6 +53,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       setVoiceSampleCallName: async () => {},
       getProfile: async () => null,
       updateUserNickname: async () => {},
+      usernameTaken: async () => false,
       updateChannel: async () => ({ ok: true } as const),
       syncAdminRoles: async () => 0,
       listByUser: async () => [],
@@ -65,7 +66,7 @@ function fakeRepo(overrides: Partial<Repos> = {}): Repos {
       getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),
       recordStat: async () => {},
       getStats: async () => ({ plays: 0, completions: 0, likes: 0 }),
-      getPersonaSnapshot: async () => ({ displayName: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
+      getPersonaSnapshot: async () => ({ name: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
     },
     submissions: {
       create: async () => ({ id: "sub-1" }),
@@ -130,7 +131,7 @@ const SUBMITTED_DETAIL = {
   reviewedAt: null,
   createdAt: new Date("2026-08-01T00:00:00Z"),
   userEmail: "submitter@test.local",
-  personaInfo: { displayName: "投稿人", gender: null, profession: null, age: null, bio: null, nationality: null },
+  personaInfo: { name: "投稿人", gender: null, profession: null, age: null, bio: null, nationality: null },
   callName: "小北",
   suggestion: null,
   voiceSampleId: null,
@@ -151,7 +152,7 @@ describe("角色守卫", () => {
 
 describe("队列与详情", () => {
   it("GET /v1/editor/submissions 缺省 submitted 队列", async () => {
-    const listQueue = vi.fn(async () => [{ id: "sub-1", url: "https://claude.ai/share/abc", title: null, status: "submitted", createdAt: new Date(), userEmail: "a@b.c", displayName: "A", hasVoiceSample: true }]);
+    const listQueue = vi.fn(async () => [{ id: "sub-1", url: "https://claude.ai/share/abc", title: null, status: "submitted", createdAt: new Date(), userEmail: "a@b.c", name: "A", hasVoiceSample: true }]);
     const res = await makeApp({ repo: fakeRepo({ submissions: { ...fakeRepo().submissions, listQueue } }) }).request("/v1/editor/submissions");
     expect(res.status).toBe(200);
     expect(listQueue).toHaveBeenCalledWith("submitted");

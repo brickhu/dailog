@@ -28,8 +28,8 @@ export interface EpisodeSummary {
   sourceUrl: string | null;
   // 频道信息
   username: string | null;
-  displayName: string | null;
-  /** 主持人节目中的称呼（投稿 callNameInEpisode；无则回退 displayName/username） */
+  name: string | null;
+  /** 主持人节目中的称呼（投稿 callNameInEpisode；无则回退 name/username） */
   callName: string | null;
   /** 无情绪标签的完整台本（节目页展示用） */
   transcript: string | null;
@@ -52,20 +52,22 @@ export interface EpisodeHighlight {
   text: string;
 }
 
-/** 常驻 AI 嘉宾（guests 表）：品牌声线宿主（节目 cast 卡片 / /guest/<id> 页用） */
+/** 常驻 AI 嘉宾（guests 登记 + profiles 身份档案，g.profile_id = p.id）：品牌声线宿主
+ *  （节目 cast 卡片 / /guest/<id> 页用） */
 export interface GuestSummary {
   id: string;
   platform: string;
   name: string;
   avatar: string | null;
-  intro: string | null;
+  /** 身份简介（profiles.bio——由原 guests.intro 迁入） */
+  bio: string | null;
   url: string | null;
 }
 
 export interface ChannelSummary {
   username: string;
   avatar: string | null;
-  displayName: string;
+  name: string;
   bio: string | null;
   episodeCount: number;
 }
@@ -116,7 +118,7 @@ export async function listLatestEpisodes(limit = 20, lang?: "zh" | "en"): Promis
              e.language, e.audio_url AS "audioUrl",
              e.number,
              e.tags,
-             u.name AS username, p.display_name AS "displayName"
+             u.name AS username, p.name AS "name"
       FROM episodes e
       JOIN profiles p ON p.id = e.user_id
       JOIN "user" u ON u.id = p.id
@@ -136,7 +138,7 @@ export async function listEpisodesByTag(tag: string, limit = 50): Promise<Episod
              e.language, e.audio_url AS "audioUrl",
              e.number,
              e.tags,
-             u.name AS username, p.display_name AS "displayName"
+             u.name AS username, p.name AS "name"
       FROM episodes e
       JOIN profiles p ON p.id = e.user_id
       JOIN "user" u ON u.id = p.id
@@ -199,7 +201,7 @@ export async function getEpisode(slug: string): Promise<EpisodeSummary | null> {
              -- 对话原文链接：优先节目字段，缺省回退投稿链接（存量节目未写 raw_conversation_url 时仍可显示）
              COALESCE(e.raw_conversation_url, s.url) AS "sourceUrl",
              e.transcript,
-             u.name AS username, p.display_name AS "displayName",
+             u.name AS username, p.name AS "name",
              s.call_name AS "callName"
       FROM episodes e
       JOIN submissions s ON s.id = e.submission_id
@@ -215,13 +217,13 @@ export async function getEpisode(slug: string): Promise<EpisodeSummary | null> {
 export async function getChannel(username: string): Promise<{ channel: ChannelSummary | null; episodes: EpisodeSummary[] }> {
     return withDb(async (db) => {
     const rows = await db`
-      SELECT u.name AS username, u.image AS avatar, p.display_name AS "displayName", p.bio,
+      SELECT u.name AS username, p.avatar AS avatar, p.name AS "name", p.bio,
              COUNT(e.id)::int AS "episodeCount"
       FROM profiles p
       JOIN "user" u ON u.id = p.id
       LEFT JOIN episodes e ON e.user_id = p.id AND e.status = 'published' AND e.is_public = true
       WHERE u.name = ${username}
-      GROUP BY u.name, u.image, p.display_name, p.bio
+      GROUP BY u.name, p.avatar, p.name, p.bio
       LIMIT 1
     `;
     if (rows.length === 0) return { channel: null, episodes: [] };
@@ -229,7 +231,7 @@ export async function getChannel(username: string): Promise<{ channel: ChannelSu
     const channel: ChannelSummary = {
       username: String(raw.username),
       avatar: raw.avatar == null ? null : String(raw.avatar),
-      displayName: String(raw.displayName),
+      name: String(raw.name),
       bio: raw.bio == null ? null : String(raw.bio),
       episodeCount: Number(raw.episodeCount),
     };
@@ -240,7 +242,7 @@ export async function getChannel(username: string): Promise<{ channel: ChannelSu
              e.language, e.audio_url AS "audioUrl",
              e.number,
              e.tags,
-             u.name AS username, p.display_name AS "displayName"
+             u.name AS username, p.name AS "name"
       FROM episodes e
       JOIN profiles p ON p.id = e.user_id
       JOIN "user" u ON u.id = p.id
@@ -257,7 +259,8 @@ export interface GuestDetail {
   platform: string;
   name: string;
   avatar: string | null;
-  intro: string | null;
+  /** 身份简介（profiles.bio——由原 guests.intro 迁入） */
+  bio: string | null;
   url: string | null;
   episodes: EpisodeSummary[];
 }
@@ -345,7 +348,7 @@ export async function getPlaylist(slug: string): Promise<PlaylistDetail | null> 
              e.language, e.audio_url AS "audioUrl",
              e.number,
              e.tags,
-             u.name AS username, p.display_name AS "displayName",
+             u.name AS username, p.name AS "name",
              s.call_name AS "callName", pe.position
       FROM playlist_episodes pe
       JOIN episodes e ON e.id = pe.episode_id
@@ -384,9 +387,10 @@ export async function getPlaylistsByEpisode(episodeId: string): Promise<Array<{ 
 export async function getGuest(id: string): Promise<GuestDetail | null> {
   return withDb(async (db) => {
     const rows = await db`
-      SELECT id, platform, name, avatar, intro, url
-      FROM guests
-      WHERE id = ${id}
+      SELECT g.id, g.platform, p.name, p.avatar, p.bio, p.url
+      FROM guests g
+      JOIN profiles p ON p.id = g.profile_id
+      WHERE g.id = ${id}
       LIMIT 1
     `;
     if (rows.length === 0) return null;
@@ -398,7 +402,7 @@ export async function getGuest(id: string): Promise<GuestDetail | null> {
              e.language, e.audio_url AS "audioUrl",
              e.number,
              e.tags,
-             u.name AS username, p.display_name AS "displayName"
+             u.name AS username, p.name AS "name"
       FROM episodes e
       JOIN profiles p ON p.id = e.user_id
       JOIN "user" u ON u.id = p.id
@@ -410,7 +414,7 @@ export async function getGuest(id: string): Promise<GuestDetail | null> {
       platform: String(raw.platform),
       name: String(raw.name),
       avatar: raw.avatar == null ? null : String(raw.avatar),
-      intro: raw.intro == null ? null : String(raw.intro),
+      bio: raw.bio == null ? null : String(raw.bio),
       url: raw.url == null ? null : String(raw.url),
       episodes: episodes as unknown as EpisodeSummary[],
     };

@@ -393,6 +393,13 @@
       "when": 1793000000000,
       "tag": "0058_voice_samples_unified",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1794000000000,
+      "tag": "0059_identity_layers",
+      "breakpoints": true
     }
   ]
 }

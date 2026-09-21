@@ -62,19 +62,21 @@ function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
       setVoiceSampleCallName: async () => {},
       getProfile: async () => ({
         email: "tester@test.dev",
-        nickname: "测试员",
+        username: "测试员",
         emailVerified: true,
-        image: null,
-        displayName: "测试员",
+        avatar: null,
+        name: "测试员",
         bio: null,
         gender: null,
         profession: null,
         age: null,
         nationality: null,
         socialLinks: null,
+        url: null,
         channelActivatedAt: new Date(),
       }),
       updateUserNickname: async () => {},
+      usernameTaken: async () => false,
       updateChannel: async () => ({ ok: true }),
       syncAdminRoles: async () => 0,
       listByUser: async () => [],
@@ -87,7 +89,7 @@ function fakeRepo(overrides: Partial<AppDeps["repo"]["episodes"]> = {}): Repos {
       getSiteStats: async () => ({ hostCount: 0, guestCount: 0, episodeCount: 0, topHost: null, topHostAvatar: null, topTags: [] }),
       recordStat: async () => {},
       getStats: async () => ({ plays: 0, completions: 0, likes: 0 }),
-      getPersonaSnapshot: async () => ({ displayName: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
+      getPersonaSnapshot: async () => ({ name: "测试员", gender: null, profession: null, age: null, bio: null, nationality: null }),
       ...overrides,
     },
   };
@@ -152,20 +154,29 @@ describe("/v1/me/profile", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.email).toBe("tester@test.dev");
-    expect(body.displayName).toBe("测试员");
+    expect(body.name).toBe("测试员");
   });
 
-  it("PATCH 昵称：合法 → 200；空 → 400；超 30 字 → 400", async () => {
+  it("PATCH 用户名：合法 → 200；非英文数字 / 过短 / 过长 → 400", async () => {
     const app = makeApp();
-    const ok = await patch("/v1/me/profile", { nickname: "新昵称" })(app);
+    const ok = await patch("/v1/me/profile", { username: "fei2026" })(app);
     expect(ok.status).toBe(200);
     expect(await ok.json()).toEqual({ ok: true });
 
-    const empty = await patch("/v1/me/profile", { nickname: "   " })(app);
-    expect(empty.status).toBe(400);
+    const chinese = await patch("/v1/me/profile", { username: "新昵称" })(app);
+    expect(chinese.status).toBe(400);
 
-    const long = await patch("/v1/me/profile", { nickname: "很".repeat(31) })(app);
+    const short = await patch("/v1/me/profile", { username: "ab" })(app);
+    expect(short.status).toBe(400);
+
+    const long = await patch("/v1/me/profile", { username: "a".repeat(31) })(app);
     expect(long.status).toBe(400);
+  });
+
+  it("PATCH 用户名重名 → 409", async () => {
+    const app = makeApp({ usernameTaken: async () => true });
+    const res = await patch("/v1/me/profile", { username: "taken2026" })(app);
+    expect(res.status).toBe(409);
   });
 
   it("画像字段（gender/profession/age/nationality）：合法 → 200；空 → 400", async () => {
@@ -180,15 +191,15 @@ describe("/v1/me/profile", () => {
 describe("/v1/me/profile（主持人档案）", () => {
   it("displayName 合法 → 200", async () => {
     const app = makeApp();
-    const res = await patch("/v1/me/profile", { displayName: "飞" })(app);
+    const res = await patch("/v1/me/profile", { name: "飞" })(app);
     expect(res.status).toBe(200);
   });
 
   it("displayName 空 / 超 30 字 → 400", async () => {
     const app = makeApp();
-    const empty = await patch("/v1/me/profile", { displayName: "   " })(app);
+    const empty = await patch("/v1/me/profile", { name: "   " })(app);
     expect(empty.status).toBe(400);
-    const long = await patch("/v1/me/profile", { displayName: "名".repeat(31) })(app);
+    const long = await patch("/v1/me/profile", { name: "名".repeat(31) })(app);
     expect(long.status).toBe(400);
   });
 
