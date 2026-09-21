@@ -484,7 +484,7 @@ async function handleApi(path, res, req) {
       const stage = r.status || "submitted";
       return {
         id: r.id, url: r.url, title: r.title, collected: r.collected, dialogueCount: r.dialogueCount,
-        name: r.name || r.userEmail || "?", userEmail: r.userEmail,
+        username: r.username || "", userEmail: r.userEmail,   // 用户名缺失时留空（前端显示 —），不要把邮箱当用户名
         createdAt: r.createdAt, hasVoiceSample: r.hasVoiceSample, stage,
         language: r.language || "zh",   // 投稿区（目标语言）：列表徽标用
         reusable: r.collected !== 1 && !!r.url && collectedUrls.has(r.url),   // 同源已采集 → 一键复用
@@ -853,6 +853,8 @@ async function handleApi(path, res, req) {
           title: ep.title || null, description: ep.description || null, category: ep.category || null,
           tags: tags || null, summary: ep.summary || null,
           references: arrOrJson(ep.references), highlights: arrOrJson(ep.highlights),
+          // 出演名单（发布时定格；编辑可改名字——slug/avatar_url/profile_id 由前端原样带回）
+          cast: Array.isArray(ep.cast) ? ep.cast : null,
           coverUrl: ep.coverUrl || null, durationSeconds: (ep.durationSeconds != null) ? ep.durationSeconds : null,
         },
       });

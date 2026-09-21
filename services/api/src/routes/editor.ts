@@ -613,6 +613,26 @@ export function editorRoutes(deps: EditorDeps) {
       const v = pick(k);
       if (v !== undefined) row[k] = Array.isArray(v) ? v : (v === null || v === "" ? [] : v);
     }
+    // 出演名单（发布时定格，编辑可改）：只接受 {name, role, slug, avatar_url, profile_id}
+    if (parsed.cast !== undefined) {
+      const raw = Array.isArray(parsed.cast) ? parsed.cast : [];
+      const cast: Array<{ name: string; role: "host" | "guest"; slug: string; avatar_url: string | null; profile_id: string }> = [];
+      for (const item of raw) {
+        if (!item || typeof item !== "object") continue;
+        const m = item as Record<string, unknown>;
+        const name = typeof m.name === "string" ? m.name.trim().slice(0, 60) : "";
+        if (!name) continue; // 名字必填——空条目直接丢弃
+        cast.push({
+          name,
+          role: m.role === "guest" ? "guest" : "host",
+          slug: typeof m.slug === "string" ? m.slug.trim().slice(0, 60) : "",
+          avatar_url: typeof m.avatar_url === "string" && m.avatar_url.trim() ? m.avatar_url.trim().slice(0, 500) : null,
+          profile_id: typeof m.profile_id === "string" ? m.profile_id.trim().slice(0, 64) : "",
+        });
+      }
+      if (cast.length === 0) return c.json({ error: "invalid_cast", detail: "cast 至少要有一位（且 name 不能为空）" }, 400);
+      row.cast = cast;
+    }
     const coverFile = form?.get("cover");
     if (coverFile instanceof File && coverFile.size > 0) {
       if (coverFile.size > 5 * 1024 * 1024) return c.json({ error: "cover_too_large" }, 400);

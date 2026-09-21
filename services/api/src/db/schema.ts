@@ -203,6 +203,20 @@ export const submissions = pgTable(
   (t) => [uniqueIndex("submissions_url_language").on(t.url, t.language)],
 );
 
+/** 节目出演名单的一条（发布时**定格**写进 episodes.cast；之后可由编辑修改）。
+ *  键名按数据契约（snake_case）：name/role/slug/avatar_url/profile_id */
+export interface EpisodeCastMember {
+  /** 节目中显示的名字（host = 该期称呼；guest = 嘉宾身份名） */
+  name: string;
+  role: "host" | "guest";
+  /** 主页标识：host = 用户名（/@slug）；guest = 平台键（/guest/slug） */
+  slug: string;
+  /** 头像 URL（profiles.avatar；无 → null） */
+  avatar_url: string | null;
+  /** 身份档案 id（host = user.id；guest = 嘉宾身份 profiles.id） */
+  profile_id: string;
+}
+
 /** 成品节目：编辑本地制作完成后一次性上传入库，即已发布（published + isPublic）。
  *  音频在 R2（audioUrl），封面可选（coverUrl）；期号发布时 max+1 分配——"dailog 第 N 期"。 */
 /** 对话名词术语条目（Step B 配套产物 references；播放页「本期提到的名词」） */
@@ -222,6 +236,8 @@ export const episodes = pgTable("episodes", {
   id: uuid("id").defaultRandom().primaryKey(),
   /** 来源投稿（submission 删除则节目级联删除） */
   submissionId: uuid("submission_id").notNull().references(() => submissions.id, { onDelete: "cascade" }),
+  /** 出演名单（发布时定格：host + 可选 guest；编辑可在发布后修改） */
+  cast: jsonb("cast").$type<EpisodeCastMember[]>().notNull().default([]),
   /** 投稿人账户（主持人 = 自己的克隆音色） */
   userId: text("user_id").notNull().references(() => authUsers.id, { onDelete: "cascade" }),
   /** 主持人档案（1:1 用户） */

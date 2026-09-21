@@ -402,7 +402,7 @@ describe("已发布节目编辑（含下架）", () => {
       repo: fakeRepo({
         episodes: {
           ...fakeRepo().episodes,
-          getById: async () => ({ id: "ep-1", submissionId: "sub-1", userId: "user-1", title: "第 1 期", description: null, coverUrl: null, tags: null, status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
+          getById: async () => ({ id: "ep-1", submissionId: "sub-1", userId: "user-1", title: "第 1 期", description: null, cast: [], coverUrl: null, tags: null, status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
           updatePublished,
         },
       }),
@@ -422,7 +422,7 @@ describe("已发布节目详情（编辑端）", () => {
       repo: fakeRepo({
         episodes: {
           ...fakeRepo().episodes,
-          getById: async () => ({ id: "ep-1", submissionId: "sub-1", userId: "user-1", title: "第 1 期", description: null, coverUrl: null, tags: null, status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
+          getById: async () => ({ id: "ep-1", submissionId: "sub-1", userId: "user-1", title: "第 1 期", description: null, cast: [], coverUrl: null, tags: null, status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
         },
         submissions: {
           ...fakeRepo().submissions,
@@ -439,7 +439,7 @@ describe("已发布节目详情（编辑端）", () => {
 describe("重新生成已发布节目（republish）", () => {
   it("audio 缺失 → 400", async () => {
     const res = await makeApp({
-      repo: fakeRepo({ episodes: { ...fakeRepo().episodes, getById: async () => ({ id: "ep-1", submissionId: "sub-1", userId: "user-1", title: "第 1 期", description: null, coverUrl: null, tags: null, status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }) } }),
+      repo: fakeRepo({ episodes: { ...fakeRepo().episodes, getById: async () => ({ id: "ep-1", submissionId: "sub-1", userId: "user-1", title: "第 1 期", description: null, cast: [], coverUrl: null, tags: null, status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }) } }),
     }).request("/v1/editor/episodes/ep-1/republish", { method: "POST", body: new FormData() });
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: string }).toMatchObject({ error: "audio_required" });
@@ -463,7 +463,7 @@ describe("重新生成已发布节目（republish）", () => {
       repo: fakeRepo({
         episodes: {
           ...fakeRepo().episodes,
-          getById: async () => ({ id: "ep-1", submissionId: "sub-1", userId: "user-1", title: "第 1 期", description: null, coverUrl: null, tags: null, status: "published", number: 3, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
+          getById: async () => ({ id: "ep-1", submissionId: "sub-1", userId: "user-1", title: "第 1 期", description: null, cast: [], coverUrl: null, tags: null, status: "published", number: 3, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
           updateEpisodeContent,
         },
       }),
@@ -494,7 +494,7 @@ describe("重新生成已发布节目（republish）", () => {
       repo: fakeRepo({
         episodes: {
           ...fakeRepo().episodes,
-          getById: async () => ({ id: "ep-1", submissionId: "sub-1", userId: "user-1", title: null, description: null, coverUrl: "covers/sub-1.jpg", tags: null, status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
+          getById: async () => ({ id: "ep-1", submissionId: "sub-1", userId: "user-1", title: null, description: null, cast: [], coverUrl: "covers/sub-1.jpg", tags: null, status: "published", number: 1, isPicked: false, createdAt: new Date(), publishedAt: new Date() }),
           updateEpisodeContent,
         },
       }),

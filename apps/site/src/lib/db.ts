@@ -37,6 +37,18 @@ export interface EpisodeSummary {
   hostAvatar?: string | null;
   /** 本期 AI 嘉宾（仅公开详情端点返回；列表类查询不返回）——节目页 cast 卡片用 */
   guest?: GuestSummary | null;
+  /** 出演名单（发布时定格：host + 可选 guest；节目页 cast 卡片直接用它，不再现场 join） */
+  cast?: EpisodeCastMember[] | null;
+}
+
+/** 出演名单一条（episodes.cast 的元素；键名与后端契约一致，snake_case） */
+export interface EpisodeCastMember {
+  name: string;
+  role: "host" | "guest";
+  /** 主页标识：host = 用户名（/@slug）；guest = 平台键（/guest/slug） */
+  slug: string;
+  avatar_url: string | null;
+  profile_id: string;
 }
 
 /** 对话名词术语条目（Step B 配套产物 references；播放页「本期提到的名词」） */
@@ -201,8 +213,10 @@ export async function getEpisode(slug: string): Promise<EpisodeSummary | null> {
              -- 对话原文链接：优先节目字段，缺省回退投稿链接（存量节目未写 raw_conversation_url 时仍可显示）
              COALESCE(e.raw_conversation_url, s.url) AS "sourceUrl",
              e.transcript,
+             e.cast,
              u.name AS username, p.name AS "name",
-             s.call_name AS "callName"
+             -- 称呼已并入 submissions.host jsonb（0054 删列）；cast 为权威，这里只是兜底
+             s.host->>'callName' AS "callName"
       FROM episodes e
       JOIN submissions s ON s.id = e.submission_id
       JOIN profiles p ON p.id = e.user_id
@@ -348,8 +362,9 @@ export async function getPlaylist(slug: string): Promise<PlaylistDetail | null> 
              e.language, e.audio_url AS "audioUrl",
              e.number,
              e.tags,
+             e.cast,
              u.name AS username, p.name AS "name",
-             s.call_name AS "callName", pe.position
+             s.host->>'callName' AS "callName", pe.position
       FROM playlist_episodes pe
       JOIN episodes e ON e.id = pe.episode_id
       JOIN submissions s ON s.id = e.submission_id

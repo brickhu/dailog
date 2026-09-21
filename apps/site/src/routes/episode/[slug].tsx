@@ -8,7 +8,7 @@ import { fetchFavoriteStatus, setFavorite } from "../../lib/favorites";
 import { usePlayback, type QueueEpisode } from "../../lib/playback";
 import { getEpisodeCached } from "../../lib/episode-cache";
 import { createClientValue } from "../../lib/client-value";
-import type { EpisodeSummary } from "../../lib/db";
+import type { EpisodeCastMember, EpisodeSummary } from "../../lib/db";
 import { apiBaseForFetch, env, episodeCoverUrl } from "../../lib/env";
 import { fmtDateTime, fmtDuration } from "../../lib/format";
 import * as stylex from "@stylexjs/stylex";
@@ -137,6 +137,33 @@ const css = stylex.create({
     alignItems: "center",
     flexWrap: "wrap",
     gap: dimensions.spacing2,
+  },
+  // 出演名单 block（Cast）：每行 [名字] [角色] [@主页标识]
+  castBlock: {
+    marginBottom: dimensions.spacing6,
+  },
+  castRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) max-content max-content",
+    alignItems: "center",
+    columnGap: dimensions.spacing4,
+    paddingTop: dimensions.spacing2,
+    paddingBottom: dimensions.spacing2,
+    borderTopStyle: "solid",
+    borderTopWidth: dimensions.borderWidthThin,
+    borderTopColor: colors.ink,
+  },
+  castName: {
+    fontWeight: dimensions.fontWeightMedium,
+    color: colors.foreground,
+  },
+  castRole: {
+    fontSize: dimensions.fontSizeSm,
+    color: colors.neutral,
+  },
+  castSlug: {
+    fontSize: dimensions.fontSizeSm,
+    color: colors.neutral,
   },
   castPerson: {
     display: "inline-flex",
@@ -304,10 +331,26 @@ export default function EpisodeDetailPage() {
   // 分享弹窗（受控：按钮在下方 actionOutter，弹窗 UI 复用 ShareDialog）
   const [shareOpen, setShareOpen] = createSignal(false);
 
+  /** 出演名单：优先用**发布时定格**的 episodes.cast（名字/头像/主页标识都在里面）；
+   *  老数据 cast 为空时，用旧字段兜底合成（host 必有一条，有嘉宾再补一条） */
+  const castList = (): EpisodeCastMember[] => {
+    const stored = ep()?.cast ?? [];
+    if (stored.length > 0) return stored;
+    const out: EpisodeCastMember[] = [{
+      name: ep()?.callName ?? ep()?.name ?? ep()?.username ?? "",
+      role: "host",
+      slug: ep()?.username ?? "",
+      avatar_url: ep()?.hostAvatar ?? null,
+      profile_id: "",
+    }];
+    const g = ep()?.guest;
+    if (g) out.push({ name: g.name, role: "guest", slug: g.id, avatar_url: g.avatar, profile_id: "" });
+    return out;
+  };
   // 标题区元信息：主持人 · 日期 · 播放/完播统计
-  const hostName = () => ep()?.callName ?? ep()?.name ?? ep()?.username ?? "";
+  const hostName = () => castList().find((m) => m.role === "host")?.name ?? "";
   // 本期 AI 嘉宾名称（无嘉宾节目回退主播名——文案「用户与{guest}的原始对话」仍通顺）
-  const guestName = () => ep()?.guest?.name ?? hostName();
+  const guestName = () => castList().find((m) => m.role === "guest")?.name ?? hostName();
   // 发布时间：日期 + 时间（跟随当前语言；时区固定为展示时区，见 lib/format 的 DISPLAY_TIME_ZONE）
 const pubDate = () => fmtDateTime(ep()?.publishedAt, locale() === "zh" ? "zh-CN" : "en-US");
 // 「节目信息」分类：后端枚举（insight/experience/advice/inspiration）→ 本地 i18n 文案；
@@ -411,7 +454,7 @@ const languageLabel = () => {
             <div {...stylex.props(css.titleOutter)}>
               <div {...stylex.props(typography.caption, css.caption)}>
                 <Show when={ep()!.number}>
-                  <span>{categoryLabel()}</span>
+                  <span> {t("episode.number", { n: ep()!.number! })}</span>
                 </Show>
                 <Show when={ep()!.durationSeconds}>
                   <span> · </span>
@@ -469,20 +512,25 @@ const languageLabel = () => {
         </Block>
         {/* Main Content */}
         <Block cols={7} start={6} xstyle={css.main}>
-          {/* 演职员：[头像][主播] 采访 [头像][AI 嘉宾] —— 两个名字都是可点击 badge
-              （主播 → /@username 频道页；嘉宾 → /guest/:id）。无嘉宾的节目只显示主播。 */}
+          {/* 演职员：直接渲染 episodes.cast（发布时定格；名字/头像/主页标识都在里面）。
+              host → /@slug 频道页；guest → /guest/slug。无嘉宾的节目 cast 里只有 host 一条。 */}
           <div {...stylex.props(css.cast)}>
-            <span> {t("episode.number", { n: ep()!.number! })} : </span>
-            
-            <A {...stylex.props(css.castPerson)} href={`/@${ep()!.username}`}>
-              <Avatar image={ep()!.hostAvatar} name={hostName()} size={20} /> {hostName()}
-            </A>
-            <span {...stylex.props(css.castVerb)}>×</span>
-
-            <A {...stylex.props(css.castPerson)} href={` /guest/${ep()!.guest!.id}`}>
-              <Avatar  image={ep()!.guest!.avatar} name={ep()!.guest!.name} size={20} /> {ep()!.guest!.name}
-            </A>
-            
+            {/* <span> {t("episode.number", { n: ep()!.number! })} : </span> */}
+            <Show when={ep()!.number}>
+                  <span>{categoryLabel()} : </span>
+                </Show>
+            <For each={castList()}>
+              {(m, i) => (
+                <>
+                  <Show when={i() > 0}>
+                    <span {...stylex.props(css.castVerb)}>×</span>
+                  </Show>
+                  <A {...stylex.props(css.castPerson)} href={m.role === "guest" ? `/guest/${m.slug}` : `/@${m.slug}`}>
+                    <Avatar image={m.avatar_url} name={m.name} size={20} /> {m.name}
+                  </A>
+                </>
+              )}
+            </For>
           </div>
           {/* Highlights */}
           <Show when={ep()?.highlights?.length}>
@@ -521,6 +569,21 @@ const languageLabel = () => {
                 </For>
               </div>
             </Show>
+          {/* Cast：出演名单（发布时定格的 episodes.cast）——名字 / 角色 / 主页标识 三列 */}
+          <div {...stylex.props(css.castBlock)}>
+            <div {...stylex.props(typography.headingXs)}>{t("episode.cast")}</div>
+            <For each={castList()}>
+              {(m) => (
+                <div {...stylex.props(css.castRow)}>
+                  <span {...stylex.props(css.castName)}>{m.name}</span>
+                  <span {...stylex.props(css.castRole)}>{m.role === "guest" ? t("episode.guest") : t("episode.host")}</span>
+                  <A {...stylex.props(global.linkText, css.castSlug)} href={m.role === "guest" ? `/guest/${m.slug}` : `/@${m.slug}`}>
+                    @{m.slug}
+                  </A>
+                </div>
+              )}
+            </For>
+          </div>
           {/* Info：节目元信息（值缺失显示 "—"，保持行结构稳定） */}
           <div {...stylex.props(layouts.containerFull)}>
             <MetadataList

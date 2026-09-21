@@ -104,6 +104,10 @@ function renderPubEditBox(){
       + '<textarea id="pubEditRefs" class="pub-input" rows="3" spellcheck="false"></textarea>'
       + '<label class="muted" style="font-size:12px">金句（JSON 数组）</label>'
       + '<textarea id="pubEditHl" class="pub-input" rows="2" spellcheck="false"></textarea>'
+      + '<label class="muted" style="font-size:12px">出演名单 · 主播名（节目中显示）</label>'
+      + '<input id="pubEditHostName" class="pub-input" spellcheck="false">'
+      + '<label class="muted" style="font-size:12px">出演名单 · 嘉宾名（节目中显示）</label>'
+      + '<input id="pubEditGuestName" class="pub-input" spellcheck="false">'
     + '</div>'
     + '<div class="pub-cover-col">'
       + '<div class="pub-cover-zone" id="pubCoverZone" onclick="document.getElementById(\'pubCoverFile\').click()">'
@@ -141,6 +145,11 @@ async function prefillPubEdit(){
   set('pubEditSummary', cur.summary || '');
   set('pubEditRefs', cur.references || '');
   set('pubEditHl', cur.highlights || '');
+  // 出演名单（episodes.cast，发布时定格）：只暴露两个名字给编辑；slug/头像/profile_id 原样保留
+  const castArr = Array.isArray(cur.cast) ? cur.cast : [];
+  window.__pubCast = castArr;
+  set('pubEditHostName', (castArr.find((m) => m && m.role === 'host') || {}).name || '');
+  set('pubEditGuestName', (castArr.find((m) => m && m.role === 'guest') || {}).name || '');
   // 封面：只要有 episodeId 就尝试取当前封面字节 → 预览（不再被 cur.coverUrl 卡住；失败明示）
   if (pm.episodeId) {
     try {
@@ -179,6 +188,16 @@ async function savePubMetaEdit(){
     references: parseArr(val('pubEditRefs')),
     highlights: parseArr(val('pubEditHl')),
   };
+  // 出演名单：名字可改，其余字段（slug/avatar_url/profile_id）沿用发布时定格的值
+  const baseCast = Array.isArray(window.__pubCast) ? window.__pubCast : [];
+  const hostM = baseCast.find((m) => m && m.role === 'host') || { role: 'host', slug: '', avatar_url: null, profile_id: '' };
+  const guestM = baseCast.find((m) => m && m.role === 'guest') || null;
+  const hostNameNew = val('pubEditHostName').trim() || hostM.name || '';
+  if (hostNameNew) {
+    const cast = [Object.assign({}, hostM, { name: hostNameNew })];
+    if (guestM) cast.push(Object.assign({}, guestM, { name: val('pubEditGuestName').trim() || guestM.name || '' }));
+    meta.cast = cast;
+  }
   const btn = document.getElementById('pubEditSave');
   if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
   try {

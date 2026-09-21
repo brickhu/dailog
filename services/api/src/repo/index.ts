@@ -9,6 +9,46 @@ import type { VoiceSampleRow } from "../routes/voice";
 /** 嘉宾侧的身份档案别名：查询里主持人用 schema.profiles，嘉宾身份要另取一份 join */
 const guestsProfile = alias(schema.profiles, "guests_profile");
 
+/** 发布时组装**出演名单**（定格写进 episodes.cast；键名按数据契约 snake_case）。
+ *  host：该期称呼（submissions.host.callName）→ 身份名 → 用户名；guest：嘉宾身份名。
+ *  之后编辑可通过 updateEpisodeContent({ cast }) 修改，不再随用户名/嘉宾名变动。 */
+async function buildCast(
+  db: PostgresJsDatabase<typeof schema>,
+  submissionId: string,
+  userId: string,
+  guestId: string | null,
+): Promise<schema.EpisodeCastMember[]> {
+  const [host] = await db
+    .select({
+      username: schema.authUsers.name,
+      name: schema.profiles.name,
+      avatar: schema.profiles.avatar,
+      callName: sql<string | null>`${schema.submissions.host}->>'callName'`,
+    })
+    .from(schema.submissions)
+    .innerJoin(schema.authUsers, eq(schema.authUsers.id, schema.submissions.userId))
+    .leftJoin(schema.profiles, eq(schema.profiles.id, schema.authUsers.id))
+    .where(eq(schema.submissions.id, submissionId))
+    .limit(1);
+  const cast: schema.EpisodeCastMember[] = [{
+    role: "host",
+    name: host?.callName?.trim() || host?.name || host?.username || "",
+    slug: host?.username ?? "",
+    avatar_url: host?.avatar ?? null,
+    profile_id: userId,
+  }];
+  if (guestId) {
+    const [g] = await db
+      .select({ name: schema.profiles.name, avatar: schema.profiles.avatar, profileId: schema.guests.profileId })
+      .from(schema.guests)
+      .innerJoin(schema.profiles, eq(schema.profiles.id, schema.guests.profileId))
+      .where(eq(schema.guests.id, guestId))
+      .limit(1);
+    if (g) cast.push({ role: "guest", name: g.name, slug: guestId, avatar_url: g.avatar, profile_id: g.profileId });
+  }
+  return cast;
+}
+
 function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "23505";
 }
@@ -85,7 +125,8 @@ export interface SubmissionsRepo {
     status: string;
     createdAt: Date;
     userEmail: string;
-    name: string;
+    /** 投稿人用户名（slug，user.name；投稿人主页标识） */
+    username: string;
     hasVoiceSample: boolean;
   }>>;
   /** 编辑详情（无归属校验）：投稿 + 主持人档案快照 + 采样（TTS 按 脚本语言→en→唯一 匹配） */
@@ -175,6 +216,8 @@ export interface EpisodeCreateRow {
   transcript?: string | null;
   /** 原始对话链接（服务端自动填 submission.url） */
   rawConversationUrl?: string | null;
+  /** 出演名单：不传则按当前身份数据自动定格（见 buildCast） */
+  cast?: schema.EpisodeCastMember[] | null;
 }
 
 export interface EpisodesRepo {
@@ -213,8 +256,10 @@ export interface EpisodesRepo {
     /** 主持人头像（profiles.avatar；cast 卡片用） */
     hostAvatar: string | null;
     callName: string | null;
-    /** 本期 AI 嘉宾（无 → null；cast 卡片用） */
-    /** 嘉宾身份字段来自 LEFT JOIN → 可空（无嘉宾时整个 guest 为 null，见 norm） */
+    /** 出演名单（发布时定格：host + 可选 guest；节目页 cast 卡片直接用它） */
+    cast: schema.EpisodeCastMember[];
+    /** 本期 AI 嘉宾（无 → null；cast 卡片用）——旧字段，逐步被 cast 取代
+     *  嘉宾身份字段来自 LEFT JOIN → 可空（无嘉宾时整个 guest 为 null，见 norm） */
     guest: {
       id: string | null;
       platform: string | null;
@@ -260,6 +305,8 @@ export interface EpisodesRepo {
     userId: string;
     title: string | null;
     description: string | null;
+    /** 出演名单（发布时定格；编辑可改） */
+    cast: schema.EpisodeCastMember[];
     coverUrl: string | null;
     tags: string[] | null;
     status: string;
@@ -288,6 +335,8 @@ export interface EpisodesRepo {
     category?: string | null;
     transcript?: string | null;
     guestId?: string | null;
+    /** 出演名单（编辑可改：改名字/头像/主页标识） */
+    cast?: schema.EpisodeCastMember[] | null;
   }): Promise<void>;
   /** 已发布节目清单（编辑端）：按期号倒序 */
   listPublished(): Promise<Array<{
@@ -1004,7 +1053,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             status: schema.submissions.status,
             createdAt: schema.submissions.createdAt,
             userEmail: schema.authUsers.email,
-            name: schema.profiles.name,
+            // 投稿人显示用户名（slug），不显示身份名——编辑端按 @slug 认人
+            username: schema.authUsers.name,
             hasVoiceSample: sql<boolean>`EXISTS (
               SELECT 1 FROM ${schema.voiceSamples} vs
               WHERE vs.profile_id = ${schema.submissions.userId}
@@ -1164,6 +1214,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             .select({ max: sql<number>`COALESCE(MAX(${schema.episodes.number}), 0)` })
             .from(schema.episodes);
           const number = (maxRow?.max ?? 0) + 1;
+          // 出演名单**定格**写入（host = 该期称呼 → 身份名 → 用户名；guest = 嘉宾身份名）
+          const cast = row.cast ?? await buildCast(tx, row.submissionId, row.userId, row.guestId ?? null);
           const inserted = await tx.insert(schema.episodes).values({
             submissionId: row.submissionId,
             userId: row.userId,
@@ -1184,6 +1236,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             category: row.category ?? null,
             transcript: row.transcript ?? null,
             rawConversationUrl: row.rawConversationUrl ?? null,
+            cast,
             number,
             status: "published",
             isPublic: true, // 上传即公开（公开音频端点/RSS/首页依赖此标志）
@@ -1239,6 +1292,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           name: schema.profiles.name,
           hostAvatar: schema.profiles.avatar,
           callName: sql<string>`${schema.submissions.host}->>'callName'`,
+          /** 出演名单（发布时定格；编辑可改） */
+          cast: schema.episodes.cast,
           // 本期嘉宾（LEFT JOIN：无嘉宾 → 行内各列全 null，下方归一为 guest: null）
           guest: {
             id: schema.guests.id,
@@ -1411,6 +1466,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             durationSeconds: schema.episodes.durationSeconds,
             transcript: schema.episodes.transcript,
             guestId: schema.episodes.guestId,
+            /** 出演名单（发布时定格；编辑可改） */
+            cast: schema.episodes.cast,
             coverUrl: schema.episodes.coverUrl,
             tags: schema.episodes.tags,
             status: schema.episodes.status,
@@ -1455,6 +1512,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             ...(row.category !== undefined ? { category: row.category } : {}),
             ...(row.transcript !== undefined ? { transcript: row.transcript } : {}),
             ...(row.guestId !== undefined ? { guestId: row.guestId } : {}),
+            ...(row.cast !== undefined ? { cast: row.cast ?? [] } : {}),
             publishedAt: new Date(), // 重新生成：publishedAt 刷新（列表新鲜度 + ETag 版本变化）
           })
           .where(eq(schema.episodes.id, id));

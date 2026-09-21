@@ -89,7 +89,7 @@ export const zh = {
 
   // ---- 登录/注册 ----
   "auth.brand": "登录 dailog",
-  "auth.tagline": "听见人类和 AI 的思想交锋",
+  "auth.tagline": "听见人类和 AI 的思想碰撞",
   "auth.loginOrSignup": "登录 / 注册（新用户将收到邮箱验证码）",
   "auth.email": "邮箱",
   "auth.password": "密码",
@@ -272,7 +272,7 @@ export const zh = {
   "home.statGuests": "{count} 个 AI 嘉宾",
   "home.statEpisodes": "{count} 期访谈",
   "home.statGuestsSub": "TA 们的声音，你来提问",
-  "home.statEpisodesSub": "听见人类和 AI 的思想交锋",
+  "home.statEpisodesSub": "听见人类和 AI 的思想碰撞",
   "hosts.title": "主播",
   "hosts.desc": "在 Dailog 出过节目的主持人",
   "hosts.empty": "还没有主播",
@@ -292,7 +292,7 @@ export const zh = {
   "home.topHosts": "热门主播",
   "home.guests": "常驻 AI 嘉宾",
   "home.guestIntro": "{platform} · {intro}",
-  "home.hero.tagline": "听见人类和AI的思想交锋",
+  "home.hero.tagline": "听见人类和AI的思想碰撞",
 "home.hero.what": "Dailog 是一档将「人机对话」模拟为真人采访AI的播客，单期5-10分钟呈现对话中的思考现场：洞察，经验，建议及启发",
   "home.hero.submit": "立即投稿",
   "home.hero.ctaHint": "提交「AI聊天记录」，录制声音采样，秒变主播。",
@@ -999,7 +999,7 @@ export const en: Dictionary = {
 
   // ---- 登录/注册 ----
   "auth.brand": "Sign in to dailog",
-  "auth.tagline": "Hear the clash between humans and AI",
+  "auth.tagline": "Hear human–AI minds collide",
   "auth.loginOrSignup": "Log in / Sign up（new users get an email code）",
   "auth.email": "Email",
   "auth.password": "Password",
@@ -1182,7 +1182,7 @@ export const en: Dictionary = {
   "home.statGuests": "{count} AI guest{plural2}",
   "home.statEpisodes": "{count} episode{plural3}",
   "home.statGuestsSub": "Their voices, your questions",
-  "home.statEpisodesSub": "Hear the clash of human and AI ideas",
+  "home.statEpisodesSub": "Hear human–AI minds collide",
   "hosts.title": "Hosts",
   "hosts.desc": "Hosts who have published on Dailog",
   "hosts.empty": "No hosts yet",
@@ -1202,7 +1202,7 @@ export const en: Dictionary = {
   "home.topHosts": "Top hosts",
   "home.guests": "Resident AI guests",
   "home.guestIntro": "{platform} · {intro}",
-  "home.hero.tagline": "Hear the clash between humans and AI",
+  "home.hero.tagline": "Hear human–AI minds collide",
 "home.hero.what": "Dailog is a podcast that turns human-AI chats into simulated interviews with AI — 5–10 minutes of a real Thinking Scene: insight, experience, advice & inspiration.",
   "home.hero.submit": "Submit your chat",
   "home.hero.ctaHint": "Submit AI chats, record your voice, become a host",
