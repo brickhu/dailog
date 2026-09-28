@@ -2,6 +2,7 @@ import { A, cache, createAsync } from "@solidjs/router";
 import { For, Show, Suspense } from "solid-js";
 import { useParams } from "@solidjs/router";
 import { getGuest } from "../../lib/db";
+import { profileAvatarUrl } from "../../lib/env";
 import { fmtDate, fmtDuration } from "../../lib/format";
 import { PageSpinner } from "../../components/page-loading";
 import * as stylex from "@stylexjs/stylex";
@@ -129,8 +130,8 @@ export default function GuestPage() {
           fallback={<div {...stylex.props(styles.notFound)}>{t("guest.notFound")}</div>}
         >
           <div {...stylex.props(styles.header)}>
-            <Show when={data()!.avatar} fallback={<div {...stylex.props(styles.avatarFallback)}>{data()!.name.slice(0, 1)}</div>}>
-              <img src={data()!.avatar!} alt="" {...stylex.props(styles.avatar)} />
+            <Show when={profileAvatarUrl(data()!.profileId, data()!.avatar)} fallback={<div {...stylex.props(styles.avatarFallback)}>{data()!.name.slice(0, 1)}</div>}>
+              <img src={profileAvatarUrl(data()!.profileId, data()!.avatar)!} alt="" {...stylex.props(styles.avatar)} />
             </Show>
             <div {...stylex.props(styles.name)}>{data()!.name}</div>
             <div {...stylex.props(styles.platform)}>{data()!.platform}</div>

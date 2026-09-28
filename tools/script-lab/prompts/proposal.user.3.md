@@ -401,9 +401,9 @@ The Human begins with one framing and gradually realizes that the more important
 
 The Human is re-examining an experience, belief, value, motivation, or personal pattern.
 
-Scene Type is an internal editorial classification.
+Every thread you return must carry exactly one `scene_type`, using the five values above.
 
-Do not add it to the output schema.
+Classify by what the Human is doing, not by the topic, the domain, or how the conversation ends.
 
 ---
 
@@ -973,7 +973,7 @@ Do not use raw conversation length as the basis for duration.
 
 # 20. CREATIVE PROPOSAL CONTRACT
 
-Every Thinking Scene in `exploration_threads` carries the eight content fields defined in §12. The editor locks one of them.
+Every Thinking Scene in `exploration_threads` carries the eight content fields defined in §12, plus `scene_type`. The editor locks one of them.
 
 The top-level `creative_proposal` carries one thing only:
 
@@ -1006,6 +1006,7 @@ The output structure MUST remain unchanged.
   "exploration_threads": [
     {
       "id": "thread_01",
+      "scene_type": "decision",
       "title": "...",
       "initial_state": "...",
       "core_question": "...",
@@ -1049,14 +1050,13 @@ The output structure MUST remain unchanged.
 }
 ```
 
-Do not add a new field for:
+`scene_type` is required on every thread. Do not add any other new field for:
 
-* scene type,
 * public tension,
 * audience entry,
 * perspective potential.
 
-The existing output contract must remain unchanged, except for the `for` tag inside `evidence[]`.
+The existing output contract must remain unchanged, except for `scene_type` and the `for` tag inside `evidence[]`.
 
 Use the existing fields to express these judgments.
 
@@ -1127,6 +1127,10 @@ Before returning the result, verify:
 
 27. Are you providing a recommendation rather than making the final production decision?
 28. If the Thinking Scene test fails, are there exactly zero proposals?
+
+### Scene Type
+
+29. Does every thread carry exactly one `scene_type`, chosen by what the Human is doing?
 
 The desired result is:
 

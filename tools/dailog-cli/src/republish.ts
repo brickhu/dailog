@@ -157,7 +157,7 @@ export async function republish(config: EditorConfig, args: string[]): Promise<v
       .slice(0, 5);
     if (hs.length) meta.highlights = hs;
   }
-  // 分类（PUB-STEP-2 metadata.json 自动读取；旧草稿 fallback script.json：insight/experience/advice/inspiration）
+  // 分类（PUB-STEP-2 metadata.json 自动读取；旧草稿 fallback script.json：decision/understanding/reflection/creation/reframing）
   let category: unknown = null;
   if (md) category = md.category;
   if (!category) {
@@ -166,7 +166,7 @@ export async function republish(config: EditorConfig, args: string[]): Promise<v
       category = script && !Array.isArray(script) ? script.category : null;
     } catch { /* 草稿无 script.json：分类可选，忽略 */ }
   }
-  if (typeof category === "string" && ["insight", "experience", "advice", "inspiration"].includes(category)) {
+  if (typeof category === "string" && ["decision", "understanding", "reflection", "creation", "reframing"].includes(category)) {
     meta.category = category;
   }
   // durationSeconds：ffprobe 成品音频

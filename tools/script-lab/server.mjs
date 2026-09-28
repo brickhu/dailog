@@ -892,6 +892,143 @@ async function handleApi(path, res, req) {
     return;
   }
 
+  // ---- 嘉宾管理（设置页）：身份档案 + 各语种声线（callName / audio / transcript）----
+
+  // GET /api/guests → { guests: [...], samples: [...] }（合并两个 api 端点，前端一次拿全）
+  if (path === "/api/guests" && req.method === "GET") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    try {
+      const [guests, samples] = await Promise.all([
+        apiWithToken(e, token, "/v1/editor/guests"),
+        apiWithToken(e, token, "/v1/editor/guests/voice-samples").catch(() => []),
+      ]);
+      sendJson(res, { ok: true, guests: Array.isArray(guests) ? guests : [], samples: Array.isArray(samples) ? samples : [] });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/guest-save → { guestId, name?, avatar?, bio?, url? }：嘉宾身份档案（profiles）
+  if (path === "/api/guest-save" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    let body = null;
+    try { body = await readBody(req); } catch { body = null; }
+    const guestId = body && body.guestId ? String(body.guestId) : "";
+    if (!guestId) { sendJson(res, { ok: false, error: "需 guestId" }, 400); return; }
+    const patch = {};
+    for (const k of ["name", "avatar", "bio", "url"]) if (body[k] !== undefined) patch[k] = body[k];
+    try {
+      await apiWithToken(e, token, "/v1/editor/guests/" + encodeURIComponent(guestId), { method: "PUT", body: patch });
+      sendJson(res, { ok: true });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/guest-voice-save → { guestId, language, callName?, transcript? }：只改该语种声线的元数据
+  if (path === "/api/guest-voice-save" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    let body = null;
+    try { body = await readBody(req); } catch { body = null; }
+    const guestId = body && body.guestId ? String(body.guestId) : "";
+    const language = body && body.language ? String(body.language) : "";
+    if (!guestId || !language) { sendJson(res, { ok: false, error: "需 guestId 与 language" }, 400); return; }
+    const patch = { language };
+    if (body.callName !== undefined) patch.callName = body.callName;
+    if (body.transcript !== undefined) patch.transcript = body.transcript;
+    try {
+      await apiWithToken(e, token, "/v1/editor/guests/" + encodeURIComponent(guestId) + "/voice-sample", { method: "PATCH", body: patch });
+      sendJson(res, { ok: true });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/guest-voice-upload?guestId= → multipart 原样透传（audio + language + transcript + callName）
+  if (path.split("?")[0] === "/api/guest-voice-upload" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const qs = new URL(path, "http://x").searchParams;
+    const guestId = qs.get("guestId") || "";
+    if (!guestId) { sendJson(res, { ok: false, error: "需 guestId" }, 400); return; }
+    const chunks = [];
+    let psize = 0;
+    for await (const c2 of req) { chunks.push(c2); psize += c2.length; if (psize > 30 * 1024 * 1024) { sendJson(res, { ok: false, error: "数据过大（>30MB）" }, 413); return; } }
+    const rawBody = Buffer.concat(chunks);
+    const contentType = req.headers["content-type"] || "";
+    try {
+      const cfg = await configFor(e);
+      const lib = await loadCliLib();
+      const headers = { "x-lab-env": e, "content-type": contentType };
+      const cookie = getCookieSession(e);
+      if (cookie) headers["cookie"] = cookie;
+      else if (token) headers["authorization"] = "Bearer " + token;
+      const up = await lib.apiFetch(cfg.apiBase + "/v1/editor/guests/" + encodeURIComponent(guestId) + "/voice-sample", { method: "POST", headers, body: rawBody });
+      if (!up.ok) {
+        const t = await up.text().catch(() => "");
+        throw new Error(up.status + ": " + t.slice(0, 200));
+      }
+      sendJson(res, { ok: true });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // POST /api/guest-avatar?guestId= → multipart 原样透传（avatar 图片 → api 存 R2 + profiles.avatar）
+  if (path.split("?")[0] === "/api/guest-avatar" && req.method === "POST") {
+    const cred = reqCred(req);
+    if (!isAuthed(cred)) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const { env: e, token } = cred;
+    const guestId = new URL(path, "http://x").searchParams.get("guestId") || "";
+    if (!guestId) { sendJson(res, { ok: false, error: "需 guestId" }, 400); return; }
+    const chunks = [];
+    let psize = 0;
+    for await (const c2 of req) { chunks.push(c2); psize += c2.length; if (psize > 10 * 1024 * 1024) { sendJson(res, { ok: false, error: "图片过大（>10MB）" }, 413); return; } }
+    const rawBody = Buffer.concat(chunks);
+    const contentType = req.headers["content-type"] || "";
+    try {
+      const cfg = await configFor(e);
+      const lib = await loadCliLib();
+      const headers = { "x-lab-env": e, "content-type": contentType };
+      const cookie = getCookieSession(e);
+      if (cookie) headers["cookie"] = cookie;
+      else if (token) headers["authorization"] = "Bearer " + token;
+      const up = await lib.apiFetch(cfg.apiBase + "/v1/editor/guests/" + encodeURIComponent(guestId) + "/avatar", { method: "POST", headers, body: rawBody });
+      if (!up.ok) {
+        const t = await up.text().catch(() => "");
+        throw new Error(up.status + ": " + t.slice(0, 200));
+      }
+      sendJson(res, { ok: true });
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }); }
+    return;
+  }
+
+  // GET /api/avatar?env=&profileId= → 身份头像字节（管理页 <img> 预览）
+  //   注意：<img> 标签带不了 X-Lab-Env 头 → env 从 query 取（与 /api/audio/* 同惯例）
+  if (path.startsWith("/api/avatar") && req.method === "GET") {
+    const qs0 = new URL(path, "http://x").searchParams;
+    const e = qs0.get("env") || req.headers["x-lab-env"] || null;
+    const hasCookie = e ? !!getCookieSession(e) : false;
+    if (!e || !hasCookie) { sendJson(res, { ok: false, error: "未登录——请先登录" }, 401); return; }
+    const profileId = qs0.get("profileId") || "";
+    if (!profileId) { sendJson(res, { ok: false, error: "需 profileId" }, 400); return; }
+    try {
+      const cfg = await configFor(e);
+      const r = await fetch(cfg.apiBase + "/v1/public/profiles/" + encodeURIComponent(profileId) + "/avatar", { redirect: "follow" });
+      if (!r.ok) { sendJson(res, { ok: false, error: "无头像" }, 404); return; }
+      const bytes = Buffer.from(await r.arrayBuffer());
+      res.writeHead(200, { "content-type": r.headers.get("content-type") || "image/jpeg", "cache-control": "no-store", "content-length": bytes.length });
+      res.end(bytes);
+    } catch (err) { sendJson(res, { ok: false, error: String((err && err.message) || err) }, 404); }
+    return;
+  }
+
+  // 声线试听统一走通用音频代理：GET /api/audio/guest?env=&platform=<guestId>&lang=<lang>
+  //   （audio 标签带不了 X-Lab-Env 头 → env 走 query；见下方 /api/audio/* 分支）
+
   // POST /api/run/console-import → 浏览器兜底采集入库：{id, messages?} 或 {id, html(完整渲染 DOM)}
 //   浏览器只负责把页面完整 DOM 复制过来；提取/清理在 lab 端做（cheerio，规则可迭代）
 if (path === "/api/run/console-import" && req.method === "POST") {
@@ -1527,10 +1664,11 @@ function segmentsFromDraftShape(p) {
 
       // 出稿校验（不阻断，仅报告）——按「提案 v2」契约（eligibility + 加权分 + recommended_thread_id）：
       //   ① eligible=false ⇒ 必须 threads=[] 且 creative_proposal=null（旧结果没这字段时按 eligible 处理）
-      //   ② eligible=true  ⇒ creative_proposal 九字段齐、每条线八字段齐、有 evidence、recommended_thread_id 能对上号
+      //   ② eligible=true  ⇒ creative_proposal 九字段齐、每条线八字段齐 + scene_type、有 evidence、recommended_thread_id 能对上号
       //   ③ score 只查形态（overall 是不是 0–100 的数字）——总分以模型输出为准，服务端不重算（算术只在提示词一处）
       const warnings = [];
       const WEIGHTS = scoreWeightsFromPrompt(p) || SCORE_WEIGHTS_FALLBACK;
+      const SCENE_TYPES = ["decision", "creation", "understanding", "reframing", "reflection"];
       if (!scoreWeightsFromPrompt(p)) console.warn("[proposal-validate] 提示词 §15 的权重表没解析出来，评分明细改用兜底权重 " + JSON.stringify(SCORE_WEIGHTS_FALLBACK));
       // 八字段住在 exploration_threads 里（每条线自带）；顶层 creative_proposal 只承载 recommended_duration（提示词 §20）
       const THREAD_FIELDS = ["title", "core_question", "initial_state", "central_tension", "exploration", "turning_point", "possible_discovery", "ending_state", "open_question"];
@@ -1554,6 +1692,7 @@ function segmentsFromDraftShape(p) {
       threads.forEach((t, ti) => {
         const miss = THREAD_FIELDS.filter((k) => !filled(t[k]));
         if (miss.length) warnings.push(`T${ti + 1} 缺字段：${miss.join("、")}`);
+        if (!SCENE_TYPES.includes(t.scene_type)) warnings.push(`T${ti + 1} scene_type 非法或缺失：${JSON.stringify(t.scene_type)}（应 decision/creation/understanding/reframing/reflection）`);
         if (!Array.isArray(t.evidence) || !t.evidence.length) warnings.push(`T${ti + 1} 缺 evidence（这条线没有原文出处）`);
         // 总分**以模型输出为准**：提示词 §14/§15 要求它自己按 6/4/3/3/2/2 加权求和写进 score.overall，
         //   服务端不再重算、也不再拿重算值去纠正它——两套算术打架只会让编辑不知道该信哪个。
@@ -2341,7 +2480,7 @@ function segmentsFromDraftShape(p) {
     const all = await apiWithToken(e, token, "/v1/editor/guests/voice-samples").catch(() => []);
     const samples = (Array.isArray(all) ? all : [])
       .filter((x) => !guestId || x.guestId === guestId)
-      .map((x) => ({ guestId: x.guestId, language: x.language, transcript: x.transcript || null }));
+      .map((x) => ({ guestId: x.guestId, language: x.language, transcript: x.transcript || null, callName: x.callName || null, hasAudio: !!x.audioKey }));
     sendJson(res, { ok: true, samples });
     return;
   }

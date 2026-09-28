@@ -63,7 +63,7 @@
   "name": "R3:语感打磨（逐句）"
  },
  "r4-meta": {
-  "version": 4,
+  "version": 5,
   "description": "发布元信息：system=episode+production+script，user=meta 提示词 → title/summary/description/tags/coverKeywords/category/references/highlights",
   "config": {
    "temperature": 0.4,
@@ -71,7 +71,7 @@
   },
   "params": {
    "episode": "R2 产出的 episode 对象（title/logline/hook）",
-   "production": "R2 产出的 production 对象（category/target_minutes/estimated_*）",
+   "production": "R2 产出的 production 对象（scene_type/category/target_minutes/estimated_*）",
    "script": "终稿台词数组（打磨后的 segments：[{speaker, text}]）"
   },
   "messages": [
@@ -87,8 +87,8 @@
   "name": "R4:发布元信息（title/summary/description/…）"
  },
  "r1-review": {
-  "version": 5,
-  "description": "提案检测：system=对话原文，user=提案提示词 → exploration_threads（八字段各自成线）+ recommended_thread_id + 顶层 creative_proposal（只承载 recommended_duration）",
+  "version": 6,
+  "description": "提案检测：system=对话原文，user=提案提示词 → exploration_threads（八字段 + scene_type 各自成线）+ recommended_thread_id + 顶层 creative_proposal（只承载 recommended_duration）",
   "config": {
    "temperature": 0.3,
    "maxTokens": 32768,
@@ -115,8 +115,8 @@
   "name": "R1:提案（creative_proposal）"
  },
  "r2-script": {
-  "version": 5,
-  "description": "脚本创作：照 creative_proposal 把对话渲染成一期现在时访谈 → episode + production + script（出口桥接为下游的 segments）",
+  "version": 6,
+  "description": "脚本创作：照 creative_proposal 把对话渲染成一期现在时访谈 → episode + production（回传 scene_type 供 R4 分类）+ script（出口桥接为下游的 segments）",
   "config": {
    "temperature": 0.7,
    "maxTokens": 16384,
@@ -129,7 +129,7 @@
   "params": {
    "dialogue": "素材：对话原文（messages 是 [tN 说话人] 编号块；sourceUrl 是原文地址）",
    "suggestion": "投稿人建议（可空）",
-   "creative_proposal": "编辑锁定的那条探索线（八字段 + recommended_duration）——R1→R2 的唯一输入",
+   "creative_proposal": "编辑锁定的那条探索线（八字段 + scene_type + recommended_duration）——R1→R2 的唯一输入",
    "HOST_NAME": "主持人名（投稿快照 host.callName）",
    "GUEST_NAME": "嘉宾名（投稿快照 guest.name）"
   },
@@ -140,7 +140,7 @@
    },
    {
     "role": "user",
-    "file": "script.user.3.md"
+    "file": "script.user.5.md"
    }
   ],
   "name": "R2:脚本创作（照 creative_proposal 渲染）"

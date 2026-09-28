@@ -37,7 +37,7 @@ interface PublishMeta {
   language?: string;
   guestId?: string;
   durationSeconds?: number;
-  /** 分类 token（Step A 选题维度）：insight 新知 / experience 经验 / advice 建议 / inspiration 启发 */
+  /** 分类 token（= R1 的 scene_type）：decision 抉择 / understanding 解惑 / reflection 复盘 / creation 构思 / reframing 转念 */
   category?: string;
   /** 无情绪标签的完整台本（节目页展示用；可选） */
   transcript?: string;
@@ -72,7 +72,7 @@ function parsePublishMeta(raw: string | null): PublishMeta | null {
     description: typeof m.description === "string" && m.description.trim() ? m.description.trim().slice(0, 2000) : undefined,
     summary: typeof m.summary === "string" && m.summary.trim() ? m.summary.trim().slice(0, 500) : undefined,
     language: typeof m.language === "string" && /^[a-z]{2,3}$/i.test(m.language) ? m.language.toLowerCase() : undefined,
-    category: typeof m.category === "string" && ["insight", "experience", "advice", "inspiration"].includes(m.category)
+    category: typeof m.category === "string" && ["decision", "understanding", "reflection", "creation", "reframing"].includes(m.category)
       ? m.category
       : undefined,
     tags: Array.isArray(m.tags)
@@ -855,7 +855,7 @@ export function editorRoutes(deps: EditorDeps) {
     return c.json(list);
   }) as unknown as RouteHandler<typeof r8, AuthEnv>);
 
-  /** 更新嘉宾称呼/简介（节目中的称呼——服务端配置） */
+  /** 更新嘉宾身份档案（profiles：name/avatar/bio/url；intro 为 bio 的旧别名） */
   const r9 = createRoute({
     method: "put",
     path: "/v1/editor/guests/:id",
@@ -866,15 +866,45 @@ export function editorRoutes(deps: EditorDeps) {
   });
   app.openapi(r9, (async (c: Context) => {
     const id = c.req.param("id")!;
-    const body = (await c.req.json().catch(() => null)) as { name?: unknown; intro?: unknown } | null;
+    const body = (await c.req.json().catch(() => null)) as { name?: unknown; avatar?: unknown; bio?: unknown; intro?: unknown; url?: unknown } | null;
     if (!body) return c.json({ error: "invalid_body" }, 400);
-    const patch: { name?: string; intro?: string | null } = {};
+    const patch: { name?: string; avatar?: string | null; bio?: string | null; url?: string | null } = {};
     if (typeof body.name === "string" && body.name.trim()) patch.name = body.name.trim().slice(0, 50);
-    if (typeof body.intro === "string") patch.intro = body.intro.trim().slice(0, 300) || null;
+    // avatar：URL 字符串（空串 = 清空）；bio（intro 旧名同理）
+    if (body.avatar !== undefined) patch.avatar = (typeof body.avatar === "string" && body.avatar.trim()) ? body.avatar.trim().slice(0, 500) : null;
+    const bioRaw = body.bio !== undefined ? body.bio : body.intro;
+    if (bioRaw !== undefined) patch.bio = (typeof bioRaw === "string" && bioRaw.trim()) ? bioRaw.trim().slice(0, 300) : null;
+    if (body.url !== undefined) patch.url = (typeof body.url === "string" && body.url.trim()) ? body.url.trim().slice(0, 500) : null;
     if (Object.keys(patch).length === 0) return c.json({ error: "nothing_to_update" }, 400);
     await deps.repo.guests.update(id, patch);
     return c.json({ ok: true });
   }) as unknown as RouteHandler<typeof r9, AuthEnv>);
+
+  /** 上传嘉宾头像（multipart：avatar 图片 ≤5MB）→ R2 avatars/{profileId}.jpg + profiles.avatar = key */
+  const r9b = createRoute({
+    method: "post",
+    path: "/v1/editor/guests/:id/avatar",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/guests/:id/avatar" },
+      400: { content: { "application/json": { schema: Err } }, description: "参数非法" },
+      404: { content: { "application/json": { schema: Err } }, description: "嘉宾不存在" },
+    },
+  });
+  app.openapi(r9b, (async (c: Context) => {
+    const id = c.req.param("id")!;
+    const g = await deps.repo.guests.getById(id);
+    if (!g) return c.json({ error: "guest_not_found" }, 404);
+    const form = await c.req.formData().catch(() => null);
+    const file = form?.get("avatar");
+    if (!(file instanceof File) || file.size === 0) return c.json({ error: "avatar_required", detail: "请选择图片文件" }, 400);
+    if (file.size > 5 * 1024 * 1024) return c.json({ error: "avatar_too_large", detail: "图片超过 5MB" }, 400);
+    // 与封面同一套归一（方图 JPEG）——头像统一 image/jpeg，公开端点按 jpeg 输出
+    const bytes = await normalizeCoverBytes(new Uint8Array(await file.arrayBuffer()));
+    const key = `avatars/${g.profileId}.jpg`;
+    await deps.storage.put(key, bytes);
+    await deps.repo.guests.update(id, { avatar: key });
+    return c.json({ ok: true, avatar: key });
+  }) as unknown as RouteHandler<typeof r9b, AuthEnv>);
 
   /** 上传嘉宾声线（multipart：audio 文件 + language + transcript）→ R2 + voice_samples（owner = guest_id；与主持人共用一张表） */
   const r10 = createRoute({
@@ -901,9 +931,38 @@ export function editorRoutes(deps: EditorDeps) {
     // R2：guests/{guestId}/{language}.mp3（guest×language 唯一 upsert）
     const audioKey = `guests/${guestId}/${language}.mp3`;
     await deps.storage.put(audioKey, new Uint8Array(await file.arrayBuffer()));
+    // 该语种的节目称呼/转录：表单带就一并写，不带则保留原值
+    const callNameRaw = form.get("callName");
+    const callName = typeof callNameRaw === "string" ? (callNameRaw.trim().slice(0, 30) || null) : undefined;
     await deps.repo.guests.upsertVoiceSample({ guestId, language, audioKey, transcript });
+    if (callName !== undefined) await deps.repo.guests.setVoiceSampleMeta(guestId, language, { callName });
     return c.json({ ok: true, guestId, language });
   }) as unknown as RouteHandler<typeof r10, AuthEnv>);
+
+  /** 更新嘉宾声线的元数据（该语种的节目称呼 callName / 参考转录 transcript；不动音频） */
+  const r10b = createRoute({
+    method: "patch",
+    path: "/v1/editor/guests/:id/voice-sample",
+    responses: {
+      200: { content: { "application/json": { schema: z.any() } }, description: "/v1/editor/guests/:id/voice-sample" },
+      400: { content: { "application/json": { schema: Err } }, description: "参数非法" },
+    },
+  });
+  app.openapi(r10b, (async (c: Context) => {
+    const guestId = c.req.param("id")!;
+    const body = (await c.req.json().catch(() => null)) as { language?: unknown; callName?: unknown; transcript?: unknown } | null;
+    const language = typeof body?.language === "string" && /^[a-z]{2,3}$/i.test(body.language.trim())
+      ? body.language.trim().toLowerCase()
+      : "";
+    if (!language) return c.json({ error: "invalid_language", detail: "缺少或非法的语种" }, 400);
+    const patch: { callName?: string | null; transcript?: string | null } = {};
+    if (body?.callName !== undefined) patch.callName = (typeof body.callName === "string" && body.callName.trim()) ? body.callName.trim().slice(0, 30) : null;
+    if (body?.transcript !== undefined) patch.transcript = (typeof body.transcript === "string" && body.transcript.trim()) ? body.transcript.trim().slice(0, 500) : null;
+    if (Object.keys(patch).length === 0) return c.json({ error: "nothing_to_update" }, 400);
+    const id = await deps.repo.guests.setVoiceSampleMeta(guestId, language, patch);
+    if (!id) return c.json({ error: "guest_not_found" }, 404);
+    return c.json({ ok: true, guestId, language });
+  }) as unknown as RouteHandler<typeof r10b, AuthEnv>);
 
   /** 嘉宾采样音频（品牌声线参考音频，编辑本地 TTS 下载用） */
   const r11 = createRoute({

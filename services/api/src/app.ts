@@ -133,6 +133,25 @@ export function createApp(deps: AppDeps): OpenAPIHono<AuthEnv> {
       return c.json({ error: "not_found" }, 404);
     }
   });
+  // 身份头像（公开）：profiles.avatar = storage key（avatars/{profileId}.jpg）→ 输出字节；
+  // 若存的是外链 URL → 302 跳过去（编辑直接填外链的情况）。节目 cast / 嘉宾页 / 主持人页共用。
+  app.get("/v1/public/profiles/:profileId/avatar", async (c) => {
+    const profileId = c.req.param("profileId");
+    if (!profileId || profileId.length > 64) return c.json({ error: "not_found" }, 404);
+    const avatar = await deps.repo.episodes.getProfileAvatar(profileId).catch(() => null);
+    if (!avatar) return c.json({ error: "not_found" }, 404);
+    if (/^https?:\/\//i.test(avatar)) return c.redirect(avatar, 302);
+    try {
+      const { data } = await deps.voice.storage.get(avatar);
+      if (!data) return c.json({ error: "not_found" }, 404);
+      return new Response(data as unknown as BodyInit, {
+        headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" },
+      });
+    } catch {
+      return c.json({ error: "not_found" }, 404);
+    }
+  });
+
   // 节目台本（公开）：scripts/{submissionId}.json（打磨脚本文件引用——节目页拉取后去情绪标签展示）
   const publicScriptRoute = createRoute({
     method: "get",

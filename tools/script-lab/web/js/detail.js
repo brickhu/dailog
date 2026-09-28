@@ -166,6 +166,7 @@ function proposalDetailRows(r, opts) {
     if (r.core_question && (r.central_tension || r.possible_discovery)) {
       const r0 = [];
       if (r.title) r0.push(row('标题', e(r.title)));
+      if (r.scene_type) r0.push(row('类型', e(r.scene_type)));
       const sc0 = r.score || {};
       const total = (typeof sc0.overall === 'number' && Number.isFinite(sc0.overall)) ? sc0.overall : null;
       if (total !== null) {
@@ -353,6 +354,7 @@ function renderProposalCards(id, proposals, totalTurns){
       + "<span class='prop-mark' style='font-size:15px;color:" + (on ? "#4f8cff" : "#8a91a0") + "'>" + (on ? "☑" : "☐") + "</span>"
       + "<b style='font-size:13px'>提案 " + (i + 1) + "</b>"
       + (p && p.__recommended ? "<span class='tag' style='color:#3fb950;border-color:#3fb950'>推荐</span>" : "")
+      + (p && p.scene_type ? "<span class='tag' style='color:#bc8cff;border-color:#bc8cff'>" + esc(p.scene_type) + "</span>" : "")
       + (p && p.category ? "<span class='tag'>" + esc(p.category) + "</span>" : "")
       + "</div>"
       + (det ? "<div style='margin-top:6px'>" + det + "</div>" : "")
@@ -611,6 +613,7 @@ async function runReview(id){
     var stored = r;
     if (Array.isArray(r.exploration_threads)) {
       var CPF = ['core_question','initial_state','central_tension','exploration','turning_point','possible_discovery','ending_state','open_question'];
+      var SCENE_TYPES = ['decision','creation','understanding','reframing','reflection'];
       var rec = r.creative_proposal || null;   // 顶层只承载 recommended_duration，内容字段在各条线里
       var recId = r.recommended_thread_id || '';
       var list = r.exploration_threads.map(function (t) {
@@ -618,6 +621,7 @@ async function runReview(id){
         CPF.forEach(function (k) { cp[k] = t[k] || ''; });
         cp.title = t.title || '';
         cp.thread_id = t.id || '';
+        cp.scene_type = SCENE_TYPES.indexOf(t.scene_type) >= 0 ? t.scene_type : '';
         cp.score = t.score || null;
         cp.evidence = t.evidence || null;
         cp.editorial_reason = t.editorial_reason || '';
@@ -1544,7 +1548,10 @@ document.addEventListener('click', function (e) {
 // （旧整 JSON 编辑已由段落级替代）
 
 // 嘉宾声线弹窗：新增/修改（上传 mp3 + 朗读文本）
-let guestVoiceCtx = { guestId: null, guestName: null };
+// 弹窗上下文：{ guestId, guestName, role, onSaved? }——onSaved 由调用方给（投稿详情页 → 重开详情；设置页 → 重渲染嘉宾卡）
+let guestVoiceCtx = { guestId: null, guestName: null, onSaved: null };
+/** 该嘉宾各语种声线快照（预填 + 判断"是否已有音频"） */
+let guestVoiceSamples = [];
 /** 已配置声线的语种 → 中文名（弹窗里告诉编辑"缺哪个语种"） */
 const GUEST_VOICE_LANGS = [['zh', '中文'], ['en', 'English']];
 async function renderGuestVoiceExisting(guestId){
@@ -1553,15 +1560,36 @@ async function renderGuestVoiceExisting(guestId){
   el.textContent = '已有声线：读取中…';
   try {
     const d = await j('/api/guest-voices?guestId=' + encodeURIComponent(guestId));
-    const have = new Set(((d && d.samples) || []).map((x) => x.language));
+    guestVoiceSamples = (d && d.samples) || [];
+    const have = new Set(guestVoiceSamples.filter((x) => x.hasAudio).map((x) => x.language));
     el.textContent = '已有声线：' + GUEST_VOICE_LANGS.map(([code, name]) => name + (have.has(code) ? ' ✓' : ' —')).join(' · ')
       + (have.size ? '' : '（该嘉宾还没有任何声线）');
+    fillGuestVoiceFields();
   } catch (e) {
+    guestVoiceSamples = [];
     el.textContent = '已有声线：读取失败（不影响上传）';
   }
 }
-function openGuestVoiceModal(guestId, guestName, zone){
-  guestVoiceCtx = { guestId, guestName };
+
+/** 按当前选中的语种，把该条声线的称呼/转录填进表单（切语种会重填） */
+function fillGuestVoiceFields(){
+  const sel = document.getElementById('guestVoiceLang');
+  const lang = (sel && sel.value === 'en') ? 'en' : 'zh';
+  const row = guestVoiceSamples.find((x) => x.language === lang) || null;
+  const cn = document.getElementById('guestVoiceCallName');
+  const tr = document.getElementById('guestVoiceTranscript');
+  if (cn) cn.value = (row && row.callName) || '';
+  if (tr) tr.value = (row && row.transcript) || '';
+  const hint = document.getElementById('guestVoiceAudioHint');
+  if (hint) hint.textContent = row && row.hasAudio ? '该语种已有音频：留空即只更新称呼/转录' : '该语种还没有音频：请选择 mp3';
+}
+function onGuestVoiceLangChange(){ fillGuestVoiceFields(); }
+/** 打开嘉宾声线弹窗（投稿详情页与设置页共用）。
+ *  zone：默认语种（投稿详情 = 本投稿的投稿区；设置页 = 点的那一行）
+ *  opts.onSaved：保存成功后的回调（缺省 = 重开当前投稿详情） */
+function openGuestVoiceModal(guestId, guestName, zone, opts){
+  const o = opts || {};
+  guestVoiceCtx = { guestId, guestName, onSaved: typeof o.onSaved === 'function' ? o.onSaved : null };
   const label = document.getElementById('guestVoiceGuestLabel');
   if (label) label.textContent = '嘉宾：' + (guestName || guestId || '?');
   // 语种默认 = 本投稿的投稿区（正要做的那一期需要哪个语种，就默认传哪个）
@@ -1569,8 +1597,10 @@ function openGuestVoiceModal(guestId, guestName, zone){
   if (sel) sel.value = (zone === 'en' ? 'en' : 'zh');
   document.getElementById('guestVoiceTranscript').value = '';
   document.getElementById('guestVoiceFile').value = '';
+  const cnEl = document.getElementById('guestVoiceCallName'); if (cnEl) cnEl.value = '';
   const st = document.getElementById('guestVoiceStatus');
   if (st) st.textContent = '';
+  guestVoiceSamples = [];
   void renderGuestVoiceExisting(guestId);
   document.getElementById('guestVoiceModal').style.display = 'flex';
 }
@@ -1578,28 +1608,45 @@ function closeGuestVoiceModal(){
   document.getElementById('guestVoiceModal').style.display = 'none';
 }
 async function submitGuestVoice(){
-  const file = document.getElementById('guestVoiceFile').files[0];
+  const fileEl = document.getElementById('guestVoiceFile');
+  const file = fileEl && fileEl.files ? fileEl.files[0] : null;
   const transcript = document.getElementById('guestVoiceTranscript').value.trim();
   const st = document.getElementById('guestVoiceStatus');
   if (!guestVoiceCtx.guestId) { if (st) st.textContent = '❌ 未知嘉宾'; return; }
-  if (!file) { if (st) st.textContent = '❌ 请选择 mp3 文件'; return; }
-  if (file.size > 20 * 1024 * 1024) { if (st) st.textContent = '❌ 文件超过 20MB'; return; }
-  // 语种由弹窗选择（zh/en；服务端按 guest×language 唯一 upsert，中英各存一条互不覆盖）
   const langSel = document.getElementById('guestVoiceLang');
   const lang = (langSel && langSel.value === 'en') ? 'en' : 'zh';
-  const fd = new FormData();
-  fd.append('audio', file);
-  fd.append('language', lang);
-  if (transcript) fd.append('transcript', transcript);
-  if (st) st.textContent = '上传中...';
+  const callNameEl = document.getElementById('guestVoiceCallName');
+  const callName = callNameEl ? callNameEl.value.trim() : '';
+  const existing = guestVoiceSamples.find((x) => x.language === lang) || null;
+  if (!file && !(existing && existing.hasAudio)) { if (st) st.textContent = '❌ 该语种还没有音频，请选择 mp3 文件'; return; }
+  if (file && file.size > 20 * 1024 * 1024) { if (st) st.textContent = '❌ 文件超过 20MB'; return; }
   try {
-    await j('/api/audio/guest-voice?guestId=' + encodeURIComponent(guestVoiceCtx.guestId), { method:'POST', body: fd });
+    if (file) {
+      // 有音频：multipart 上传（称呼/转录一并带上；同语种覆盖）
+      const fd = new FormData();
+      fd.append('audio', file);
+      fd.append('language', lang);
+      if (transcript) fd.append('transcript', transcript);
+      if (callName) fd.append('callName', callName);
+      if (st) st.textContent = '上传中...';
+      await j('/api/audio/guest-voice?guestId=' + encodeURIComponent(guestVoiceCtx.guestId), { method:'POST', body: fd });
+    } else {
+      // 无音频（该语种已有）：只改该条声线的称呼/转录，不动音频
+      if (st) st.textContent = '保存中...';
+      await j('/api/guest-voice-save', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ guestId: guestVoiceCtx.guestId, language: lang, callName: callName, transcript: transcript }),
+      });
+    }
     if (st) st.textContent = '✅ ' + (lang === 'en' ? 'English' : '中文') + '声线已保存';
     notice('嘉宾声线已保存（' + lang + '）', 'success');
     void renderGuestVoiceExisting(guestVoiceCtx.guestId);
-    // 刷新当前投稿（播放可用）
-    const id = location.pathname.slice(1);
-    if (id) openDetail(id);
+    if (guestVoiceCtx.onSaved) guestVoiceCtx.onSaved();
+    else {
+      // 缺省：投稿详情页上下文 → 重开详情
+      const id = location.pathname.slice(1);
+      if (id) openDetail(id);
+    }
   } catch (e) {
     if (st) st.textContent = '❌ ' + e.message;
   }

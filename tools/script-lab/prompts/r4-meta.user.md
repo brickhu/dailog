@@ -37,6 +37,8 @@ production
 script
 ```
 
+`production.scene_type` carries the scene classification decided upstream: `decision`, `creation`, `understanding`, `reframing`, or `reflection`. Treat it as given.
+
 The `script` is the primary source of truth.
 
 Base all metadata on the final script.
@@ -425,40 +427,21 @@ Preserve standard technical terms in their commonly used form.
 
 # 12. CATEGORY
 
-`category` represents the **primary value the listener takes away from the Perspective**, not the subject of the episode.
+`category` is not re-judged from the script. It is the scene classification decided upstream by the Editorial Discovery Director.
 
-Choose exactly ONE:
+Copy `production.scene_type` unchanged into `category`:
 
 ```text
-insight
-advice
-experience
-inspiration
+decision
+understanding
+reflection
+creation
+reframing
 ```
 
-### Insight
+If `production.scene_type` is missing or is not one of the five values, fall back to `understanding`.
 
-The listener gains a new understanding, reframing, distinction, or way of seeing.
-
-### Advice
-
-The listener gains a useful recommendation, direction, option, or course of action.
-
-### Experience
-
-The listener gains lessons, observations, mistakes, discoveries, or practical knowledge grounded in actual experience.
-
-### Inspiration
-
-The listener gains a new idea, possibility, direction, approach, or creative path.
-
-Ask:
-
-> **After witnessing this Thinking Scene, what kind of value is the listener most likely to carry away?**
-
-Choose only one.
-
-Do not classify based on topic, industry, or keywords.
+Do not classify based on topic, industry, or keywords. Do not re-derive the category from the script.
 
 ---
 
@@ -761,9 +744,8 @@ Before returning the result, verify:
 
 ### CATEGORY
 
-* Is exactly one selected?
-* Is it based on the listener's Perspective/value?
-* Is it one of the four allowed values?
+* Does it copy `production.scene_type` unchanged?
+* Is it one of the five allowed values?
 
 ### TAGS
 
@@ -826,7 +808,7 @@ Return valid JSON only.
     "visual search phrase 1",
     "visual search phrase 2"
   ],
-  "category": "insight",
+  "category": "decision",
   "references": [
     {
       "term": "Original term",

@@ -30,13 +30,15 @@
  *   --server <url>          默认 http://127.0.0.1:4173
  *   --env <name>            默认 local
  *   --timeout <ms>          默认 600000
+ *   --retry <n>             每个环节/素材包的尝试次数（含首次），默认 3；失败递增退避重试
+ *   --retry-delay <ms>      首次重试前等待（后续按倍数递增），默认 1500
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 const argv = process.argv.slice(2);
 // 带值的选项必须在这里登记，否则它的值会被当成位置参数（投稿 id）
-const OPTS_WITH_VALUE = new Set(["stage", "file", "out", "outdir", "server", "env", "timeout", "from", "thread"]);
+const OPTS_WITH_VALUE = new Set(["stage", "file", "out", "outdir", "server", "env", "timeout", "from", "thread", "retry", "retry-delay"]);
 const PARSED = (() => {
   const pos = [], flags = new Set(), vals = {};
   for (let i = 0; i < argv.length; i++) {
@@ -53,6 +55,39 @@ const SERVER = opt("server", process.env.LAB_URL || "http://127.0.0.1:4173").rep
 const ENV = opt("env", "local");
 const TIMEOUT = Number(opt("timeout", "600000"));
 const AS_JSON = flag("json");
+// 每一步的重试（LLM 输出抖动 / 网络抖动都靠它兜）：RETRY_MAX = 总尝试次数（含首次）
+const RETRY_MAX = Math.max(1, Number(opt("retry", process.env.DRYRUN_RETRY || "3")) || 1);
+const RETRY_DELAY = Math.max(0, Number(opt("retry-delay", process.env.DRYRUN_RETRY_DELAY || "1500")) || 0);
+
+/** 重试也没用的错误（参数/权限/素材缺失/环境问题）——直接抛，不浪费次数 */
+function isFatalError(err) {
+  const m = String((err && err.message) || err);
+  return /未登录|登录已失效|未知环节|素材包缺少|缺投稿 id|找不到投稿|匹配到|需 guestId|需 profileId|没有返回 preview/.test(m);
+}
+
+/** 每一步统一的重试包装：失败重试到 RETRY_MAX 次（递增退避），致命错误立即抛 */
+async function withRetry(label, fn) {
+  let last = null;
+  for (let attempt = 1; attempt <= RETRY_MAX; attempt++) {
+    try {
+      if (attempt > 1) console.log(`  ↻ [${label}] 第 ${attempt}/${RETRY_MAX} 次尝试…`);
+      return await fn();
+    } catch (e) {
+      last = e;
+      const msg = String((e && e.message) || e);
+      if (isFatalError(e)) throw e;
+      if (attempt >= RETRY_MAX) {
+        console.log(`  ✗ [${label}] 连续 ${RETRY_MAX} 次失败，放弃：${msg.slice(0, 200)}`);
+        break;
+      }
+      const wait = RETRY_DELAY * attempt;   // 递增退避：1.5s / 3s / …
+      console.log(`  ✗ [${label}] 第 ${attempt}/${RETRY_MAX} 次失败：${msg.slice(0, 200)}`);
+      console.log(`  ⏳ ${(wait / 1000).toFixed(1)}s 后重试…`);
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+  throw last;
+}
 
 const STAGE = {
   r1: { endpoint: "/api/run/review/round1", base: () => ({}), preview: true },
@@ -181,7 +216,7 @@ async function materialFallback(full) {
   };
 }
 
-const material = async (id) => {
+const materialOnce = async (id) => {
   const full = await resolveId(id);
   try {
     return await api("/api/dryrun/material/" + full);
@@ -191,9 +226,15 @@ const material = async (id) => {
     return await materialFallback(full);
   }
 };
+/** 取素材包（也带重试：网络抖动不该让整轮白跑） */
+const material = (id) => withRetry("material", () => materialOnce(id));
 
-/** 干跑一个环节：先 preview 拿渲染好的 messages，必要时换掉提示词正文，再真跑一次 */
+/** 干跑一个环节（带重试）：先 preview 拿渲染好的 messages，必要时换掉提示词正文，再真跑一次 */
 async function runStage(stage, id, mat, fileOverride, opts) {
+  return withRetry(stage, () => runStageOnce(stage, id, mat, fileOverride, opts));
+}
+
+async function runStageOnce(stage, id, mat, fileOverride, opts) {
   const s = STAGE[stage];
   if (!s) throw new Error("未知环节：" + stage + "（可选 r1/r2/r3/r4）");
   const base = s.base(mat, opts || {});
@@ -313,69 +354,129 @@ function printScript(script, heading) {
   console.log("─".repeat(64) + "\n共 " + segs.length + " 段\n");
 }
 
-/** 一个投稿走完全程：R1 选提案 → R2 脚本 → (R3 打磨) → (R4 发布文案) */
+/** 一个投稿走完全程：R1 选提案 → R2 脚本 → (R3 打磨) → (R4 发布文案)
+ *  每一步的产出之后都有菜单，菜单里都带「↻ 重试」——失败也进菜单而不是直接退出。 */
 async function flow(rawId) {
   const id = await resolveId(rawId);
   const m = await material(id);
   console.log("\n投稿　" + id + "\n标题　" + (m.title || "") + "\n");
 
-  // —— R1 ——
-  console.log("① 提案生成中…");
-  const t1 = Date.now();
-  let r1;
-  try { r1 = await runStage("r1", id, m, null, {}); }
-  catch (e) { console.log("提案没出来：" + e.message); return; }
-  const th = (r1.result && r1.result.exploration_threads) || [];
-  if (!th.length) { console.log("这条投稿没给出提案（" + ((r1.result && r1.result.eligibility && r1.result.eligibility.reason) || "无说明") + "）"); return; }
-  console.log("　✓ " + ((Date.now() - t1) / 1000).toFixed(0) + "s，给出 " + th.length + " 条\n");
-  const pick = await choose("挑一条提案（Enter 确认）", th.map((t) => ({ label: String(t.title || "").slice(0, 70), hint: t.id === r1.result.recommended_thread_id ? "★模型推荐" : "" })));
-  if (pick < 0) return;
-  const review = buildReview(r1.result, String(pick + 1));
+  // —— R1（重试：菜单里一项"重新生成提案"；失败也给重试菜单）——
+  let r1 = null, threads = [], review = null;
+  for (;;) {
+    console.log("① 提案生成中…");
+    const t1 = Date.now();
+    try { r1 = await runStage("r1", id, m, null, {}); }
+    catch (e) {
+      console.log("提案没出来：" + e.message);
+      const k = await choose("怎么办", [{ label: "↻ 重试提案生成" }, { label: "退出" }]);
+      if (k === 0) continue;
+      return;
+    }
+    threads = (r1.result && r1.result.exploration_threads) || [];
+    if (!threads.length) {
+      console.log("这条投稿没给出提案（" + ((r1.result && r1.result.eligibility && r1.result.eligibility.reason) || "无说明") + "）");
+      const k = await choose("怎么办", [{ label: "↻ 重试提案生成" }, { label: "退出" }]);
+      if (k === 0) continue;
+      return;
+    }
+    console.log("　✓ " + ((Date.now() - t1) / 1000).toFixed(0) + "s，给出 " + threads.length + " 条\n");
+    const items = threads.map((t) => ({ label: String(t.title || "").slice(0, 70), hint: t.id === r1.result.recommended_thread_id ? "★模型推荐" : "" }));
+    items.push({ label: "↻ 重新生成提案（重试）" });
+    const pick = await choose("挑一条提案（Enter 确认）", items);
+    if (pick < 0) return;
+    if (pick === threads.length) continue;            // 选了"重新生成提案"
+    review = buildReview(r1.result, String(pick + 1));
+    break;
+  }
   console.log("\n已选：" + review.title);
 
-  // —— R2 ——
-  console.log("\n② 脚本创作中…");
-  let r2;
-  try { r2 = await runStage("r2", id, m, null, { review }); }
-  catch (e) { console.log("脚本没出来：" + e.message + "（可重跑）"); return; }
-  let cur = (r2.result.scripts || [])[0] || null;
-  if (!cur) { console.log("脚本没出来（模型这次没给 script 数组）—— 重跑一次通常就有。"); return; }
-  printScript(cur, "脚本");
-
-  // —— 菜单循环 ——
+  // —— R2（重试：失败/空产出都给重试菜单）——
+  let cur = null;
   for (;;) {
-    const menu = [{ label: "打磨脚本" }, { label: "生成发布文案" }, { label: "退出" }];
+    console.log("\n② 脚本创作中…");
+    let r2 = null;
+    try { r2 = await runStage("r2", id, m, null, { review }); }
+    catch (e) { console.log("脚本没出来：" + e.message); }
+    cur = (r2 && r2.result && (r2.result.scripts || [])[0]) || null;
+    if (cur) { printScript(cur, "脚本"); break; }
+    console.log("脚本没出来（模型这次没给 script 数组）。");
+    const k = await choose("怎么办", [{ label: "↻ 重试脚本创作" }, { label: "退出" }]);
+    if (k === 0) continue;
+    return;
+  }
+
+  // —— 菜单循环（每一步都能重跑）——
+  for (;;) {
+    const menu = [
+      { label: "打磨脚本" },
+      { label: "生成发布文案" },
+      { label: "↻ 重跑脚本创作（r2 重试）" },
+      { label: "退出" },
+    ];
     const k = await choose("下一步", menu);
-    if (k === -1 || k === 2) { console.log("\n结束。"); return; }
+    if (k === -1 || k === 3) { console.log("\n结束。"); return; }
+
+    // ↻ 重跑脚本创作：同一条提案再来一版（不满意时最常用）
+    if (k === 2) {
+      console.log("\n② 脚本重跑中…");
+      try {
+        const again = await runStage("r2", id, m, null, { review });
+        const s = (again.result && (again.result.scripts || [])[0]) || null;
+        if (!s) { console.log("重跑仍未给出 script 数组——再试一次，或换条提案。"); continue; }
+        cur = s;
+        printScript(cur, "脚本（重跑）");
+      } catch (e) { console.log("重跑失败：" + e.message); }
+      continue;
+    }
 
     if (k === 0) {
-      console.log("\n③ 脚本打磨中…");
-      let r3;
-      try { r3 = await runStage("r3", id, m, null, { scripts: [{ segments: cur.segments }] }); }
-      catch (e) { console.log("打磨失败：" + e.message); continue; }
-      const segs = (r3.result && (r3.result.segments || (r3.result.script && r3.result.script.segments))) || null;
-      if (!segs) { console.log("打磨没返回 segments。"); continue; }
-      cur = Object.assign({}, cur, { segments: segs });
-      printScript(cur, "打磨后脚本");
+      // 打磨：失败/无产出都在原地给"↻ 重试打磨"
+      for (;;) {
+        console.log("\n③ 脚本打磨中…");
+        let r3 = null;
+        try { r3 = await runStage("r3", id, m, null, { scripts: [{ segments: cur.segments }] }); }
+        catch (e) { console.log("打磨失败：" + e.message); }
+        const segs = r3 && ((r3.result && (r3.result.segments || (r3.result.script && r3.result.script.segments))) || null);
+        if (segs) {
+          cur = Object.assign({}, cur, { segments: segs });
+          printScript(cur, "打磨后脚本");
+          break;
+        }
+        console.log("打磨没返回 segments。");
+        const kk = await choose("怎么办", [{ label: "↻ 重试打磨" }, { label: "返回菜单" }]);
+        if (kk !== 0) break;
+      }
       continue;
     }
 
     if (k === 1) {
-      console.log("\n④ 发布文案生成中…");
-      let r4;
-      try { r4 = await runStage("r4", id, m, null, { script: cur }); }
-      catch (e) { console.log("发布文案失败：" + e.message); continue; }
-      const meta = r4.result && r4.result.result ? r4.result.result : r4.result;
-      console.log("\n" + "═".repeat(64));
-      console.log("发布文案");
-      console.log("─".repeat(64));
-      if (meta && typeof meta === "object") {
-        for (const [kk, vv] of Object.entries(meta)) console.log(kk + "：\n  " + String(vv).replace(/\n/g, "\n  ") + "\n");
-      } else console.log(String(meta));
-      const again = await choose("还要做什么", [{ label: "回去继续打磨" }, { label: "退出" }]);
-      if (again === 0) continue;
-      console.log("\n结束。");
-      return;
+      // R4 也可以重跑（重生成发布文案）
+      for (;;) {
+        console.log("\n④ 发布文案生成中…");
+        let r4;
+        try { r4 = await runStage("r4", id, m, null, { script: cur }); }
+        catch (e) { console.log("发布文案失败：" + e.message); }
+        const meta = r4 && (r4.result && r4.result.result ? r4.result.result : r4.result);
+        if (meta) {
+          console.log("\n" + "═".repeat(64));
+          console.log("发布文案");
+          console.log("─".repeat(64));
+          if (typeof meta === "object") {
+            for (const [kk, vv] of Object.entries(meta)) console.log(kk + "：\n  " + String(vv).replace(/\n/g, "\n  ") + "\n");
+          } else console.log(String(meta));
+        }
+        const again = await choose("还要做什么", [
+          { label: "回去继续打磨" },
+          { label: "↻ 重新生成发布文案（重试）" },
+          { label: "退出" },
+        ]);
+        if (again === 0) break;            // 回主菜单
+        if (again === 1) continue;         // 重新生成 r4
+        console.log("\n结束。");
+        return;
+      }
+      continue;
     }
   }
 }

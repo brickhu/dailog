@@ -54,6 +54,7 @@ function makeApp(storage: AudioStorage) {
     episodes: {
       getPublicAudioKey: async () => ({ audioKey: "episodes/u/1.mp3", version: "v1" }),
       getPublicCoverKey: async () => null,
+      getProfileAvatar: async () => null,
     },
   } as unknown as AppDeps["repo"];
   return createApp({

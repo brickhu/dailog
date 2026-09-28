@@ -210,7 +210,7 @@ export interface EpisodeCreateRow {
   durationSeconds?: number | null;
   language?: string;
   tags?: string[] | null;
-  /** 分类 token（insight/experience/advice/inspiration） */
+  /** 分类 token（decision/understanding/reflection/creation/reframing —— 即 R1 的 scene_type） */
   category?: string | null;
   /** 无情绪标签的完整台本（节目页展示用） */
   transcript?: string | null;
@@ -225,6 +225,8 @@ export interface EpisodesRepo {
   createPublished(row: EpisodeCreateRow): Promise<{ id: string; number: number; slug: string }>;
   /** 公开读封面（主站免鉴权端点用）：仅已发布且公开 */
   getPublicCoverKey(episodeId: string): Promise<string | null>;
+  /** 某身份的 avatar 值（storage key 或外链 URL；公开头像端点用） */
+  getProfileAvatar(profileId: string): Promise<string | null>;
   /** 公开读音频（主站免鉴权端点用）：仅已发布且公开；
    *  version = 发布时间（ETag 用） */
   getPublicAudioKey(episodeId: string): Promise<{ audioKey: string; version: string } | null>;
@@ -575,9 +577,9 @@ export interface GuestVoiceSampleRow {
 
 export interface GuestsRepo {
   getByPlatform(platform: string): Promise<{ id: string; name: string; intro: string | null } | null>;
-  list(): Promise<{ id: string; platform: string; name: string; avatar: string | null; bio: string | null; url: string | null }[]>;
-  /** 嘉宾详情（按 id = platform 值，公开详情页用） */
-  getById(id: string): Promise<{ id: string; platform: string; name: string; avatar: string | null; bio: string | null; url: string | null } | null>;
+  list(): Promise<{ id: string; platform: string; profileId: string; name: string; avatar: string | null; bio: string | null; url: string | null }[]>;
+  /** 嘉宾详情（按 id = platform 值，公开详情页用）；profileId = 其身份档案 id（头像 key 用它拼） */
+  getById(id: string): Promise<{ id: string; platform: string; profileId: string; name: string; avatar: string | null; bio: string | null; url: string | null } | null>;
   /** 嘉宾音频采样：按语种取（TTS 同语种优先注入）；无该语种 → null（调用方按 en 兜底） */
   voiceSampleByLanguage(guestId: string, language: string): Promise<GuestVoiceSampleRow | null>;
   /** 任意语种采样（/v1/editor/samples/guest/:id/audio 参考音频下载用，无语言参数） */
@@ -587,8 +589,10 @@ export interface GuestsRepo {
   anyVoiceSampleByLanguage(language: string, excludeGuestId?: string): Promise<GuestVoiceSampleRow | null>;
   /** 管理录入/更新（guest_id + language 唯一，upsert） */
   upsertVoiceSample(row: { guestId: string; language: string; audioKey: string; transcript?: string | null }): Promise<void>;
-  /** 更新嘉宾称呼/简介（guests 表——节目中的称呼服务端配置） */
-  update(id: string, row: { name?: string; intro?: string | null }): Promise<void>;
+  /** 更新嘉宾身份档案（profiles：name/avatar/bio/url）——guests 表只留登记关系 */
+  update(id: string, row: { name?: string; avatar?: string | null; intro?: string | null; bio?: string | null; url?: string | null }): Promise<void>;
+  /** 只改某语种声线的元数据（callName / transcript，不动音频）；无该语种行 → 建 draft 行。返回行 id */
+  setVoiceSampleMeta(guestId: string, language: string, patch: { callName?: string | null; transcript?: string | null }): Promise<string | null>;
   /** 管理列表（join guests 展示名） */
   listVoiceSamples(): Promise<{
     id: string;
@@ -596,6 +600,8 @@ export interface GuestsRepo {
     guestName: string;
     language: string;
     audioKey: string;
+    /** 该语种节目中的称呼 */
+    callName: string | null;
     transcript: string | null;
   }[]>;
 }
@@ -711,14 +717,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
       },
       async list() {
         return db
-          .select({ id: schema.guests.id, platform: schema.guests.platform, name: schema.profiles.name, avatar: schema.profiles.avatar, bio: schema.profiles.bio, url: schema.profiles.url })
+          .select({ id: schema.guests.id, platform: schema.guests.platform, profileId: schema.guests.profileId, name: schema.profiles.name, avatar: schema.profiles.avatar, bio: schema.profiles.bio, url: schema.profiles.url })
           .from(schema.guests)
           .innerJoin(schema.profiles, eq(schema.profiles.id, schema.guests.profileId))
           .orderBy(schema.guests.platform);
       },
       async getById(id) {
         const rows = await db
-          .select({ id: schema.guests.id, platform: schema.guests.platform, name: schema.profiles.name, avatar: schema.profiles.avatar, bio: schema.profiles.bio, url: schema.profiles.url })
+          .select({ id: schema.guests.id, platform: schema.guests.platform, profileId: schema.guests.profileId, name: schema.profiles.name, avatar: schema.profiles.avatar, bio: schema.profiles.bio, url: schema.profiles.url })
           .from(schema.guests)
           .innerJoin(schema.profiles, eq(schema.profiles.id, schema.guests.profileId))
           .where(eq(schema.guests.id, id))
@@ -815,19 +821,49 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
         });
       },
       async update(id, row) {
-        // 嘉宾的 name/intro 写在它的身份档案上（profiles.name / profiles.bio）
+        // 嘉宾的身份档案在 profiles（name/avatar/bio/url）；intro 是旧字段名，等价于 bio
         const [g] = await db
           .select({ profileId: schema.guests.profileId })
           .from(schema.guests)
           .where(eq(schema.guests.id, id))
           .limit(1);
         if (!g) return;
+        const bio = row.bio !== undefined ? row.bio : row.intro;
         await db.update(schema.profiles)
           .set({
             ...(row.name !== undefined ? { name: row.name } : {}),
-            ...(row.intro !== undefined ? { bio: row.intro } : {}),
+            ...(row.avatar !== undefined ? { avatar: row.avatar } : {}),
+            ...(bio !== undefined ? { bio } : {}),
+            ...(row.url !== undefined ? { url: row.url } : {}),
           })
           .where(eq(schema.profiles.id, g.profileId));
+      },
+      async setVoiceSampleMeta(guestId, language, patch) {
+        const [g] = await db
+          .select({ profileId: schema.guests.profileId })
+          .from(schema.guests)
+          .where(eq(schema.guests.id, guestId))
+          .limit(1);
+        if (!g) return null;
+        const updated = await db.update(schema.voiceSamples)
+          .set({
+            ...(patch.callName !== undefined ? { callName: patch.callName } : {}),
+            ...(patch.transcript !== undefined ? { transcript: patch.transcript } : {}),
+          })
+          .where(and(eq(schema.voiceSamples.profileId, g.profileId), eq(schema.voiceSamples.language, language)))
+          .returning({ id: schema.voiceSamples.id });
+        if (updated[0]) return updated[0].id;
+        // 还没有该语种声线 → 先建 draft 行（只有称呼/转录，音频待上传）
+        const inserted = await db.insert(schema.voiceSamples).values({
+          profileId: g.profileId,
+          language,
+          audioUrl: null,
+          duration: 0,
+          callName: patch.callName ?? null,
+          transcript: patch.transcript ?? null,
+          status: "draft",
+        }).returning({ id: schema.voiceSamples.id });
+        return inserted[0]?.id ?? null;
       },
       async listVoiceSamples() {
         const rows = await db
@@ -837,15 +873,15 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             guestName: schema.profiles.name,
             language: schema.voiceSamples.language,
             audioKey: schema.voiceSamples.audioUrl,
+            callName: schema.voiceSamples.callName,
             transcript: schema.voiceSamples.transcript,
           })
           .from(schema.voiceSamples)
           .innerJoin(schema.guests, eq(schema.guests.profileId, schema.voiceSamples.profileId))
           .innerJoin(schema.profiles, eq(schema.profiles.id, schema.guests.profileId))
           .orderBy(schema.guests.platform);
-        return rows
-          .filter((r) => r.audioKey !== null)
-          .map((r) => ({ ...r, audioKey: r.audioKey as string }));
+        // audioKey 为空 = 只配了称呼/转录还没传音频（draft 行）——管理页要展示，故不过滤
+        return rows.map((r) => ({ ...r, audioKey: r.audioKey ?? "" }));
       },
     },
 
@@ -1252,6 +1288,14 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .where(and(eq(schema.episodes.id, episodeId), eq(schema.episodes.status, "published"), eq(schema.episodes.isPublic, true)))
           .limit(1);
         return rows[0]?.coverUrl ?? null;
+      },
+      async getProfileAvatar(profileId) {
+        const rows = await db
+          .select({ avatar: schema.profiles.avatar })
+          .from(schema.profiles)
+          .where(eq(schema.profiles.id, profileId))
+          .limit(1);
+        return rows[0]?.avatar ?? null;
       },
       async getPublicAudioKey(episodeId) {
         const rows = await db
@@ -2061,6 +2105,7 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
           .innerJoin(schema.profiles, eq(schema.profiles.id, schema.episodes.userId))
           .innerJoin(schema.authUsers, eq(schema.authUsers.id, schema.profiles.id))
           .leftJoin(schema.guests, eq(schema.guests.id, schema.episodes.guestId))
+          .leftJoin(guestsProfile, eq(guestsProfile.id, schema.guests.profileId))   // 嘉宾身份名（别名）
           .where(eq(schema.playlistEpisodes.playlistId, id))
           .orderBy(desc(schema.playlistEpisodes.position));
       },

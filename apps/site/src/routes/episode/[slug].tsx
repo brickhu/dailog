@@ -9,7 +9,7 @@ import { usePlayback, type QueueEpisode } from "../../lib/playback";
 import { getEpisodeCached } from "../../lib/episode-cache";
 import { createClientValue } from "../../lib/client-value";
 import type { EpisodeCastMember, EpisodeSummary } from "../../lib/db";
-import { apiBaseForFetch, env, episodeCoverUrl } from "../../lib/env";
+import { apiBaseForFetch, env, episodeCoverUrl, profileAvatarUrl } from "../../lib/env";
 import { fmtDateTime, fmtDuration } from "../../lib/format";
 import * as stylex from "@stylexjs/stylex";
 import { layouts, typography, shadows, dimensions, colors, global } from "@dailogues/ui/theme.stylex";
@@ -353,9 +353,9 @@ export default function EpisodeDetailPage() {
   const guestName = () => castList().find((m) => m.role === "guest")?.name ?? hostName();
   // 发布时间：日期 + 时间（跟随当前语言；时区固定为展示时区，见 lib/format 的 DISPLAY_TIME_ZONE）
 const pubDate = () => fmtDateTime(ep()?.publishedAt, locale() === "zh" ? "zh-CN" : "en-US");
-// 「节目信息」分类：后端枚举（insight/experience/advice/inspiration）→ 本地 i18n 文案；
+// 「节目信息」分类：后端枚举（decision/understanding/reflection/creation/reframing = R1 的 scene_type）→ 本地 i18n 文案；
 // 未知值原样显示（将来枚举扩充时不会显示空白）
-const CATEGORY_KEYS = ["insight", "experience", "advice", "inspiration"] as const;
+const CATEGORY_KEYS = ["decision", "understanding", "reflection", "creation", "reframing"] as const;
 const categoryLabel = () => {
   const c = ep()?.category;
   if (!c) return "—";
@@ -526,7 +526,7 @@ const languageLabel = () => {
                     <span {...stylex.props(css.castVerb)}>×</span>
                   </Show>
                   <A {...stylex.props(css.castPerson)} href={m.role === "guest" ? `/guest/${m.slug}` : `/@${m.slug}`}>
-                    <Avatar image={m.avatar_url} name={m.name} size={20} /> {m.name}
+                    <Avatar image={profileAvatarUrl(m.profile_id, m.avatar_url)} name={m.name} size={20} /> {m.name}
                   </A>
                 </>
               )}

@@ -50,6 +50,19 @@ export function episodeCoverUrl(
   return coverUrl;
 }
 
+/** 身份头像 URL：profiles.avatar = storage key（avatars/ 前缀）→ 公开端点 /v1/public/profiles/:id/avatar；
+ *  外链（编辑直接填的 URL）→ 直用；为空 → null（调用方回退首字母占位）。
+ *  节目 cast（有 profile_id）、嘉宾页/嘉宾列表（有 profileId）都用它。 */
+export function profileAvatarUrl(
+  profileId: string | null | undefined,
+  avatar: string | null | undefined,
+): string | null {
+  if (!avatar) return null;
+  if (/^https?:\/\//i.test(avatar)) return avatar;
+  if (!profileId) return null;
+  return `${env.apiBaseUrlPublic ?? env.apiBaseUrl}/v1/public/profiles/${profileId}/avatar`;
+}
+
 /** 播放列表封面 URL：R2 key（covers/ 前缀）→ 公开端点（/v1/public/playlists/:id/cover）；非 R2 → null。
  *  列表封面为编辑自定义上传（sharp 归一 1400² JPEG）；无自定义封面时调用方回退首期节目封面。 */
 export function playlistCoverUrl(

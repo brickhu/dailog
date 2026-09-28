@@ -43,12 +43,19 @@
       <div class='prompt-list'>
         <button class='item active' data-nav='prompts' onclick='switchSettingsTab("prompts")'>提示词</button>
         <button class='item' data-nav='llm' onclick='switchSettingsTab("llm")'>LLM 配置</button>
+        <button class='item' data-nav='guests' onclick='switchSettingsTab("guests")'>嘉宾</button>
       </div>
       <div class='prompt-edit'>
         <div class='settings-panel' id='panel-prompts'>
           <div class='card' style='padding:16px'>
             <div class='muted' style='font-size:12px;margin-bottom:10px'>提示词是工程文件，直接在 VSCode 中编辑 <span class='mono'>tools/script-lab/prompts/*.json</span>，保存后 git commit 随源码备份；lab 热更新（改文件即生效，无需重启）。</div>
             <div class='muted mono' style='font-size:12px' id='promptFiles'></div>
+          </div>
+        </div>
+        <div class='settings-panel' id='panel-guests' style='display:none'>
+          <div class='card' style='padding:16px'>
+            <div class='muted' style='font-size:12px;margin-bottom:10px'>常驻 AI 嘉宾的<b>身份档案</b>（名字/头像/简介/官网）与<b>中英文声线</b>（节目中的称呼 callName + 音频 + 参考转录）。保存即时生效于 TTS 与节目 cast。</div>
+            <div id='guestAdmin'><div class='muted' style='font-size:12px'>读取中…</div></div>
           </div>
         </div>
         <div class='settings-panel' id='panel-llm' style='display:none'>
@@ -68,15 +75,18 @@
     <div class='modal-body'>
       <div class='muted' style='font-size:12px;margin-bottom:8px' id='guestVoiceGuestLabel'>—</div>
       <label style='display:block;font-size:12px;color:#8a91a0;margin-bottom:4px'>声线语种（中英各存一条，互不覆盖）</label>
-      <select id='guestVoiceLang' style='width:100%;box-sizing:border-box;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;padding:6px 8px;font-size:12px;margin-bottom:4px'>
+      <select id='guestVoiceLang' onchange='onGuestVoiceLangChange()' style='width:100%;box-sizing:border-box;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;padding:6px 8px;font-size:12px;margin-bottom:4px'>
         <option value='zh'>中文（zh）</option>
         <option value='en'>English（en）</option>
       </select>
       <div class='muted' id='guestVoiceExisting' style='font-size:11px;margin-bottom:8px'>—</div>
+      <label style='display:block;font-size:12px;color:#8a91a0;margin-bottom:4px'>节目中称呼（该语种，选填——存到这条声线上）</label>
+      <input id='guestVoiceCallName' spellcheck='false' maxlength='30' style='width:100%;box-sizing:border-box;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;padding:6px 8px;font-size:12px;margin-bottom:10px' placeholder='如：DeepSeek / 豆包'>
       <label style='display:block;font-size:12px;color:#8a91a0;margin-bottom:4px'>朗读文本（用于声线克隆参考）</label>
       <textarea id='guestVoiceTranscript' spellcheck='false' style='width:100%;box-sizing:border-box;height:80px;background:#0b0d11;border:1px solid #262b36;color:#e6e8ee;border-radius:6px;padding:8px 10px;font-size:12px;resize:vertical;font-family:ui-monospace,Menlo,monospace' placeholder='输入该声线朗读的参考文本…'></textarea>
-      <label style='display:block;font-size:12px;color:#8a91a0;margin:10px 0 4px'>声音文件（mp3）</label>
+      <label style='display:block;font-size:12px;color:#8a91a0;margin:10px 0 4px'>声音文件（mp3；已有声线时可留空，只改上面的称呼/转录）</label>
       <input type='file' id='guestVoiceFile' accept='audio/mpeg,audio/mp3' style='font-size:12px;color:#e6e8ee'>
+      <div class='muted' id='guestVoiceAudioHint' style='font-size:11px;margin-top:4px'></div>
       <div class='muted' style='font-size:11px;margin-top:4px'>20MB 以内；同语种重传会覆盖，中英各存一条。试听/合成按投稿区语种取，缺该语种声线时回退中文声线</div>
     </div>
     <div class='modal-foot'>

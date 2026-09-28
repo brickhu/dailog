@@ -22,7 +22,7 @@ export async function buildFeedXml(request: Request, lang?: "zh" | "en"): Promis
   // 频道描述按语言（统一文案）
   const channelDesc = feedLang === "zh"
     ? "听见人类和 AI 的思想碰撞——一档模拟真人采访 AI 的播客。"
-    : "Hear human–AI minds collide — a podcast that simulates real humans interviewing AI.";
+    : "Hear human and AI minds clash — a podcast that simulates real humans interviewing AI.";
 
   const items = episodes
     .map((ep) => {

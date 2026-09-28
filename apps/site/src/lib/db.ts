@@ -22,7 +22,7 @@ export interface EpisodeSummary {
   language: string | null;
   audioUrl: string | null;
   tags: string[] | null;
-  /** 分类（枚举：insight / experience / advice / inspiration）——展示走 i18n episode.category.* */
+  /** 分类（枚举：decision / understanding / reflection / creation / reframing = R1 的 scene_type）——展示走 i18n episode.category.* */
   category: string | null;
   /** 对话原文地址（投稿时用户提交的分享链接） */
   sourceUrl: string | null;
@@ -69,6 +69,8 @@ export interface EpisodeHighlight {
 export interface GuestSummary {
   id: string;
   platform: string;
+  /** 身份档案 id（profiles.id）——头像 storage key → 公开端点用 */
+  profileId: string;
   name: string;
   avatar: string | null;
   /** 身份简介（profiles.bio——由原 guests.intro 迁入） */
@@ -271,6 +273,8 @@ export async function getChannel(username: string): Promise<{ channel: ChannelSu
 export interface GuestDetail {
   id: string;
   platform: string;
+  /** 身份档案 id（profiles.id）——头像 storage key → 公开端点用 */
+  profileId: string;
   name: string;
   avatar: string | null;
   /** 身份简介（profiles.bio——由原 guests.intro 迁入） */
@@ -402,7 +406,7 @@ export async function getPlaylistsByEpisode(episodeId: string): Promise<Array<{ 
 export async function getGuest(id: string): Promise<GuestDetail | null> {
   return withDb(async (db) => {
     const rows = await db`
-      SELECT g.id, g.platform, p.name, p.avatar, p.bio, p.url
+      SELECT g.id, g.platform, p.id AS "profileId", p.name, p.avatar, p.bio, p.url
       FROM guests g
       JOIN profiles p ON p.id = g.profile_id
       WHERE g.id = ${id}
@@ -427,6 +431,7 @@ export async function getGuest(id: string): Promise<GuestDetail | null> {
     return {
       id: String(raw.id),
       platform: String(raw.platform),
+      profileId: String(raw.profileId ?? ""),
       name: String(raw.name),
       avatar: raw.avatar == null ? null : String(raw.avatar),
       bio: raw.bio == null ? null : String(raw.bio),
