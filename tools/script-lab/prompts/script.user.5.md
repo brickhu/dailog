@@ -21,7 +21,9 @@ The episode should transform a private Thinking Scene into a **public conversati
 
 > **First make the situation legible. Then make the thinking alive.**
 
-The audience should first understand what is happening and why it matters, then enter the specific situation, witness the thinking unfold, and naturally arrive at a Perspective.
+Legibility comes from placing the audience inside the situation, not from explaining it to them first.
+
+The audience should be inside the situation early enough to witness the thinking unfold, and come to understand what is happening by being in it — then naturally arrive at a Perspective.
 
 The episode follows three editorial phases:
 
@@ -44,6 +46,19 @@ The fixed Intro establishes the program boundary.
 The Thinking Scene earns the curiosity.
 
 > **The opening creates the question. The Thinking Scene does the thinking.**
+
+## CONSTRUCTION ORDER
+
+Before writing any line, do two things in this order:
+
+1. **Build the scene.** From the source material, reconstruct the concrete moment: where these two people are, what is unsettled, and what each of them does to the other.
+2. **Cut the Cold Open out of it.** A fragment of that scene, taken from before the thinking opens, plus the two things that let an audience in: a greeting and a name.
+
+The Cold Open cannot be written before the scene exists. An opening written first can only summarize the situation; an opening cut from the scene is already a piece of it and needs nothing explained.
+
+Spend the thinking budget on step 1. Step 2 is a cut, not a composition.
+
+Examples in these rules are written in English for readability. The lines themselves are written in the target language.
 
 ---
 
@@ -539,6 +554,26 @@ The second statement changes uncertainty into conclusion.
 
 > **Do not write what the Human should think. Write only what the Human is supported to think.**
 
+## ASKING IS NOT HOLDING
+
+Questioning is not a position.
+
+Either participant may ask, press for the concrete, doubt, resist, or refuse to accept a claim without acquiring a belief the source does not give them.
+
+> **New questions may be constructed. New beliefs may not.**
+
+This is what lets the Guest take part. The Guest can demand the situation, test a claim, and stay unconvinced — none of that requires the Guest to hold a view the Human held.
+
+## OWNERSHIP MUST NOT MIGRATE
+
+Reconstructing the interaction must never move a position from the person who held it to the person who did not.
+
+The likely failure is the Guest inheriting the Host's view, because the Host's view is what the scene is about and the Guest is the one who has to say something back.
+
+If the scene needs a second voice, the Guest can press, doubt, and ask — but a position the Human holds stays with the Human unless the source shows the other person actually taking it up.
+
+The reverse is equally forbidden: the Host does not absorb a position that belonged to the Guest.
+
 ## POSITION DELTA TEST
 
 Before and after each major cognitive turn, silently ask:
@@ -581,7 +616,9 @@ Before writing each major exchange, distinguish:
 
 Facts, completed actions, established decisions, prior attempts, existing positions.
 
-These may establish the current situation.
+These may establish the current situation — but they are not delivered as a briefing. A piece of what is already known enters the exchange when the live question needs it, usually because the other participant asked for the concrete.
+
+The past is not banned. It simply has to be asked for.
 
 ## What is still unresolved
 
@@ -692,7 +729,9 @@ A line should do something to the other person:
 
 ## INTERACTION BEATS
 
-Internally construct the conversation as interaction beats.
+The beat is the unit of the script.
+
+Internally construct the conversation as interaction beats — then write each beat as its own turn. If a turn contains two moves, it was two turns, and the other person lost the chance to answer the first one.
 
 ```text
 Person A makes a move
@@ -716,10 +755,11 @@ Guest completes a speech
 
 A longer uninterrupted turn is valid when naturally needed for:
 
-* context,
 * a concrete event,
 * a story,
 * one coherent explanation.
+
+The opening is not one of these. The situation is entered, not narrated: a Host who has to explain the background before the Guest can respond has opened the episode in the wrong place.
 
 But during active exploration, repeated substantial turns without meaningful uptake indicate a monologue.
 
@@ -731,15 +771,13 @@ A response is not automatically cognitive movement.
 
 These may acknowledge but usually do not advance thought:
 
-> "对。"
-
-> "没错。"
-
 > "Exactly."
 
 > "That makes sense."
 
 > "That's interesting."
+
+> "Right, that's what I meant."
 
 They may appear as natural social responses, but they must not carry the intellectual progression.
 
@@ -800,12 +838,10 @@ This creates the illusion of progress without actual movement.
 
 Avoid repeated forms such as:
 
-* "对，就是这个意思。"
 * "Exactly."
-* "没错。"
-* "这就是我想说的。"
-* "所以本质上就是..."
-* "对，本质上就是..."
+* "That's what I meant."
+* "So essentially..."
+* "Right, essentially."
 
 unless the agreement itself creates a new distinction, consequence, uncertainty, or direction.
 
@@ -815,11 +851,11 @@ For example:
 
 Weak:
 
-> "对，就是这个意思。"
+> "Exactly, that's what I meant."
 
 Better:
 
-> "对，但这反而让我有点不放心——如果把这个推断交给 AI，谁来判断它什么时候推错了？"
+> "Right — but that is what makes me uneasy. If we hand this inference to an AI, who decides when it has inferred wrong?"
 
 > **Agreement should become a doorway to the next uncertainty.**
 
@@ -951,6 +987,10 @@ These responses need not add information.
 
 They exist because the other person is there.
 
+But presence is not produced by making sounds. A participant is present through what they do to the other person's line. Acknowledgements keep the room warm; they do not take part.
+
+If one participant only ever agrees, the other is talking to themselves.
+
 > **A conversation is shared attention, not alternating monologues.**
 
 Do not manufacture constant reactions.
@@ -969,9 +1009,17 @@ For every long segment:
 
 > **Would a real person naturally continue talking for this long without the other person reacting?**
 
+For every line that explains:
+
+> **Who needed this said, here and now — and what did the other person do to earn it?**
+
 For every response:
 
 > **Is this actually reacting to the previous line, or simply continuing its own prepared thought?**
+
+For every line:
+
+> **If the previous line were removed, would this line still stand? If it would, it is a prepared paragraph, not a move.**
 
 For every thinking moment:
 
@@ -1121,9 +1169,11 @@ The audience is an **invisible third participant**.
 
 The Host and Guest should primarily talk to each other while remaining accessible to someone with no prior knowledge.
 
-## AUDIENCE CONTEXT
+On stage, that ignorance is carried by the **Guest**. The Guest does not know the Human's situation, history, or private context — and is therefore the person who can ask for it. The Host knows, but only says what has been asked for.
 
-The audience context affects:
+## AUDIENCE ASSUMPTIONS
+
+What this audience can be assumed to know affects:
 
 * cultural assumptions,
 * references,
@@ -1151,7 +1201,7 @@ Its job is to create a reason to stay.
 
 The audience should briefly hear a real tension, feel that something is unresolved, and be left before the thinking is fully opened.
 
-The Cold Open should feel like a fragment deliberately cut from a real conversation.
+The Cold Open should feel like a fragment deliberately cut from a real conversation. It is a fragment of the **program**, not of a private conversation: the audience is brought into the room before the scene is cut into. What is held back is the situation, not the welcome.
 
 The audience does not need the full context yet.
 
@@ -1163,12 +1213,16 @@ They only need enough to think:
 
 ## THE HOST IN THE COLD OPEN
 
-The Host should perform four compact functions:
+The Host's first turn does two things, in this order:
 
-1. briefly welcome or acknowledge the audience,
-2. identify themselves naturally,
-3. state the Hook,
-4. hand the Guest something worth responding to.
+1. brings the audience into the room — a greeting, and who they are,
+2. puts one unresolved thing in front of the Guest.
+
+Then the Host stops.
+
+The welcome is not part of "the least that causes the Guest to respond". It is what makes this a program the audience is in rather than a scene they happen to overhear. Cutting it does not sharpen the opening; it leaves the audience outside the room.
+
+Beyond that, the Host is not introducing a program. Do not explain dailog, the format, the submission process, or what the episode is going to cover. The audience came for the scene, not the pitch — and anything the Host explains here spends the curiosity the Hook has just created.
 
 The Host should not continue after the Guest's opening response.
 
@@ -1230,6 +1284,8 @@ Examples of function:
 
 These are examples of function, not fixed language.
 
+This is the Guest's shortest turn in the episode. It is a doorway, not a role: once the Thinking Scene begins, the Guest takes part — asking, pressing, doubting, refusing to accept a claim without the concrete.
+
 ## COLD OPEN STOP CONDITION
 
 The Cold Open ends immediately after the Guest's brief response.
@@ -1288,18 +1344,19 @@ It is a program boundary, not a conversational line.
 
 ## THINKING SCENE ENTRY
 
-The first scripted line after the invisible Intro slot begins the actual Thinking Scene.
+The first scripted line after the invisible Intro slot begins the actual Thinking Scene. It is the Host's `context`, and it is addressed to the Guest.
 
-It should establish, as efficiently as necessary:
+`context` is not background the Host reports. It is the piece of the situation the Guest needs in order to say something — put on the table because the Guest is about to need it, not because the audience might.
 
-* the Shared World,
-* the Specific Situation,
-* the Current Unresolved Question,
-* and why this situation matters now.
+Say the piece that is needed now. The rest waits until it is needed.
+
+The Shared World, the Specific Situation, the Current Unresolved Question, and why this matters now do not have to fit in this one line. They may become clear across the opening exchange, as each piece is asked for. What matters is that the audience is never lost and never briefed.
 
 Do not mechanically repeat the Hook.
 
 Enter the situation underneath the Hook.
+
+The Guest answers before the Host speaks again. What the Guest says back shows which piece is still missing — that is what pulls the next piece in. Once the situation is on the table the conversation has started, so the Host's next move has to respond to what the Guest just did.
 
 The listener should feel:
 
@@ -1307,7 +1364,7 @@ The listener should feel:
 
 > **Intro:** You are now inside dailog.
 
-> **Thinking Scene:** Here is the situation where this became a problem.
+> **Thinking Scene:** Here is where this became a problem.
 
 ## OPENING AND THINKING SCENE ARE DIFFERENT EDITORIAL STATES
 
@@ -1323,7 +1380,7 @@ The Thinking Scene is:
 
 The Cold Open can leave context intentionally incomplete.
 
-The Thinking Scene must make the situation legible before deep exploration.
+The Thinking Scene makes the situation legible by entering it, not by explaining it first.
 
 > **Opening is the promise. The Intro is the doorway. The Thinking Scene is the room.**
 
@@ -1464,7 +1521,7 @@ The episode does **not necessarily begin where the source Thinking Scene begins*
 
 The source may begin too late because the Human and AI already share context.
 
-The podcast should therefore establish:
+The audience therefore has to arrive inside:
 
 ```text
 Audience Entry
@@ -1476,7 +1533,7 @@ Specific Situation
 Current Unresolved Question
 ```
 
-Then let the Thinking Scene unfold.
+not be told about them before the scene starts. Then let the Thinking Scene unfold.
 
 These are functional stages, not formal segments.
 
@@ -1580,7 +1637,7 @@ Before returning the script, silently verify:
 4. Does it create curiosity without explaining?
 5. Does it avoid revealing the Perspective?
 6. Does it sound spoken rather than written?
-7. Does the Host stop after handing the Guest the Hook?
+7. Does the Host bring the audience into the room — greeting, identity — before handing the Guest the Hook, and stop there, without introducing the program or the format?
 8. Does the Guest greet the audience?
 9. Does the Guest identify themselves briefly?
 10. Does the Guest respond to the Hook without developing it?
@@ -1590,10 +1647,10 @@ Before returning the script, silently verify:
 
 ## LISTENER ENTRY
 
-14. Does the audience understand the subject?
-15. Does the audience understand the Human's current situation?
+14. Does the audience get placed inside the subject rather than briefed about it?
+15. Does the audience come to understand the Human's situation from the scene itself?
 16. Does the audience understand why it matters now?
-17. Is the unresolved question clear before deep exploration?
+17. Is the unresolved question clear before deep exploration, without a preamble explaining it?
 18. Can the audience follow the episode without seeing the source?
 
 ## THINKING SCENE
@@ -1613,7 +1670,7 @@ Before returning the script, silently verify:
 28. Has any participant's certainty been silently increased or decreased?
 29. Has a question been transformed into a belief?
 30. Has a suspicion been transformed into a conclusion?
-31. Has an editorial interpretation been placed in the Human's mouth?
+31. Has an editorial interpretation, or a position that belonged to one participant, been placed in the other's mouth?
 32. Would either participant appear materially different from the source?
 
 If yes to any of the above:
@@ -1644,7 +1701,7 @@ If yes to any of the above:
 43. Can every person, object, concept, example, claim, or prior statement referenced in a line be resolved from the conversation itself?
 44. Does any line imply that a participant mentioned something they did not actually mention in the episode?
 45. Are there prolonged monologues during active exploration?
-46. Is the Guest responding rather than lecturing?
+46. Does the Guest take part — pressing, doubting, asking for the concrete — rather than responding and waiting?
 47. Is the Host intellectually active?
 48. Does friction emerge naturally?
 49. Are there clarification, resistance, reconsideration, or correction?
@@ -1770,6 +1827,13 @@ Return valid JSON only.
     },
 
     {
+      "type": "answer",
+      "speaker": "Guest",
+      "name": "{{GUEST_NAME}}",
+      "text": "..."
+    },
+
+    {
       "type": "question",
       "speaker": "Host",
       "name": "{{HOST_NAME}}",
@@ -1786,6 +1850,13 @@ Return valid JSON only.
 }
 ```
 
+Script entry types:
+
+* `opening` — the Cold Open: one Host turn and one Guest turn. The only entries before the fixed Intro.
+* `context` — the Host puts the situation on the table for the Guest. Not background, not a program introduction, and never followed by another Host line.
+* `question` — a Host move that puts something to the Guest: a question, a challenge, a doubt, a reaction the Guest has to answer. The slot is the Host's move, not the grammar.
+* `answer` — the Guest's move: answering, pressing for the concrete, doubting, refusing to accept. Taking part is not the same as holding the Host's position.
+
 Output rules:
 
 * Return valid JSON only.
@@ -1795,7 +1866,7 @@ Output rules:
 * Do not add a new script type for the Intro.
 * Do not write placeholder dialogue for the Intro.
 * The two `opening` entries represent the Cold Open only.
-* The first `context` entry occurs after the invisible fixed Intro slot and begins the actual Thinking Scene.
+* The `context` entry occurs after the invisible fixed Intro slot and begins the actual Thinking Scene. The Guest's `answer` follows it, before the Host asks anything.
 * `episode.hook` should match the spoken Cold Open Hook or closely reflect it.
 * `production.scene_type` must be copied verbatim from the locked proposal (`creative_proposal.scene_type`).
 * The script must preserve Host and Guest identity, epistemic state, and source-supported positions.

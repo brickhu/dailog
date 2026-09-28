@@ -162,7 +162,7 @@ export interface SubmissionsRepo {
     /** 投稿时使用的采样（仅记录） */
     voiceSampleId: string | null;
     /** 投稿人全部 ready 采样（按语种；编辑端展示 + 服务端 TTS 按规则匹配） */
-    voiceSamples: Array<{ audioUrl: string | null; transcript: string | null; language: string; status: string; duration: number | null }>;
+    voiceSamples: Array<{ audioUrl: string | null; transcript: string | null; language: string; status: string; duration: number | null; callName: string | null }>;
   } | null>;
   /** 拒审（reason 必填） */
   reject(id: string, reason: string): Promise<void>;
@@ -1139,6 +1139,8 @@ export function createRepo(db: PostgresJsDatabase<typeof schema>): Repos {
             language: schema.voiceSamples.language,
             status: schema.voiceSamples.status,
             duration: schema.voiceSamples.duration,
+            // 该语种节目中的称呼（voice_samples.call_name）——脚本生成的 HOST_NAME 权威来源
+            callName: schema.voiceSamples.callName,
           })
           .from(schema.voiceSamples)
           .where(and(eq(schema.voiceSamples.profileId, row.userId), eq(schema.voiceSamples.status, "ready")))

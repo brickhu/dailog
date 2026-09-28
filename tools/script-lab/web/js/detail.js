@@ -953,13 +953,18 @@ function clearSegAudioCache(id){
   Object.keys(segAudioCache).forEach(k => { if (k.indexOf(id + '-') === 0) delete segAudioCache[k]; });
 }
 // 生成语音：调用 /api/run/tts-seg → 缓存 → 按钮变「播放 + 重新生成」
+// 同一段同时只允许一次生成：锁放在「段」上，**不放在 DOM 节点上**。
+// （侧栏会被整块重建，旧节点引用随即失效；而且已生成段的侧栏是 ▶↻ 组，
+//   组内按钮以前没带 data-si/data-segi，按属性查压根查不到 → 既不出 ⌛ 也锁不住）
+const segTtsInFlight = {};
 async function genSegAudio(id, si, segi){
   if (batchTtsRunning) return;
+  const flight = id + ':' + si + ':' + segi;
+  if (segTtsInFlight[flight]) return;
+  segTtsInFlight[flight] = true;
   // 惰性清理：生成时顺带清除过期的 IndexedDB 语音缓存（不阻塞生成）
   if (typeof clearExpiredSegAudio === 'function') clearExpiredSegAudio();
-  const btn = document.querySelector('.seg-tts-btn[data-si="' + si + '"][data-segi="' + segi + '"]');
-  if (btn && btn.dataset.generating) return;
-  if (btn) { btn.dataset.generating = '1'; btn.textContent = '⏳'; btn.disabled = true; }
+  renderSegBusy(id, si, segi);   // 立即 ⌛（不再依赖按钮上有没有 data 属性）
   try {
     const d = await j('/api/run/tts-seg', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id, scriptIndex: si, segIndex: segi, scripts: labWorkScriptsOf(id) }) });
     const k = segRowKey(id, si, segi);
@@ -973,18 +978,19 @@ async function genSegAudio(id, si, segi){
       notice('⚠ 语音已生成但未保存（存储失败），请点 ✗ 重试', 'error');
     }
   } catch (e) {
-    if (btn) { btn.textContent = '🔊'; btn.disabled = false; btn.title = '生成失败: ' + e.message; }
+    renderSegAudioBtn(id, si, segi);   // 失败：回到 🔊（regen 已先清掉旧缓存）
     notice('✗ 语音生成失败: ' + e.message, 'error');
   } finally {
-    if (btn) delete btn.dataset.generating;
+    delete segTtsInFlight[flight];
   }
 }
 // 生成成功但未持久化（IndexedDB 写入失败）：按钮显示 ✗ + 重试，不显示可播放态（刷新后会丢）
 function renderSegAudioFail(id, si, segi){
   const side = document.querySelector('.seg-row[data-si="' + si + '"][data-segi="' + segi + '"] .seg-tts-side');
   if (!side) return;
+  side.innerHTML = `<button class='seg-tts-btn' data-si='${si}' data-segi='${segi}' title='未保存（存储失败），点击重试'>✗</button>`;
   const btn = side.querySelector('.seg-tts-btn');
-  if (btn) { btn.textContent = '✗'; btn.disabled = false; btn.title = '未保存（存储失败），点击重试'; btn.onclick = () => genSegAudio(id, si, segi); }
+  if (btn) btn.onclick = () => genSegAudio(id, si, segi);
 }
 
 // 渲染语音按钮状态：无缓存 → 🔊生成；有缓存 → ▶播放 + ↻重新生成
@@ -992,28 +998,28 @@ function renderSegAudioFail(id, si, segi){
 function renderSegBusy(id, si, segi){
   const side = document.querySelector('.seg-row[data-si="' + si + '"][data-segi="' + segi + '"] .seg-tts-side');
   if (!side) return;
-  side.innerHTML = '<button class="seg-tts-btn" title="生成中" disabled>⌛</button>';
+  side.innerHTML = `<button class="seg-tts-btn" data-si="${si}" data-segi="${segi}" title="生成中" disabled>⌛</button>`;
 }
 
+// 侧栏 HTML（唯一源）：有缓存 → ▶ + ↻；无缓存 → 🔊。
+// **必须整块重建，不能用 btn.outerHTML 只替换第一个按钮**：侧栏已经是 ▶↻ 组时，
+// outerHTML 会把新组套进旧组、把旧的 ↻ 留在外面 → 每调一次就多冒一个 ↻（还可能套娃）。
+// key 可由调用方传入（首屏渲染时行还没进 DOM，取不到 data-segkey）。
+function segTtsSideHtml(id, si, segi, key){
+  const k = (key === undefined) ? segRowKey(id, si, segi) : key;
+  if (k && segAudioGet(k)) {
+    const playingThis = playingSegKey === k;
+    return `<span class='seg-tts-group'>`
+      + `<button class='seg-tts-btn' data-si='${si}' data-segi='${segi}' onclick='playSegAudio("${id}", ${si}, ${segi})' title='${playingThis ? '暂停' : '播放'}'>${playingThis ? '⏸' : '▶'}</button>`
+      + `<button class='seg-tts-btn' data-si='${si}' data-segi='${segi}' onclick='regenSegAudio("${id}", ${si}, ${segi})' title='重新生成'>↻</button>`
+      + `</span>`;
+  }
+  return `<button class='seg-tts-btn' data-si='${si}' data-segi='${segi}' onclick='genSegAudio("${id}", ${si}, ${segi})' title='生成语音'>🔊</button>`;
+}
 function renderSegAudioBtn(id, si, segi){
   const side = document.querySelector('.seg-row[data-si="' + si + '"][data-segi="' + segi + '"] .seg-tts-side');
   if (!side) return;
-  const btn = side.querySelector('.seg-tts-btn');
-  if (!btn) return;
-  const key = segRowKey(id, si, segi);
-  const cached = segAudioGet(key);
-  if (cached) {
-    // 播放 + 重新生成（并排小按钮）
-    const playingThis = playingSegKey === key;
-    btn.outerHTML = `<span class='seg-tts-group'>`
-      + `<button class='seg-tts-btn' onclick='playSegAudio("${id}", ${si}, ${segi})' title='${playingThis ? '暂停' : '播放'}'>${playingThis ? '⏸' : '▶'}</button>`
-      + `<button class='seg-tts-btn' onclick='regenSegAudio("${id}", ${si}, ${segi})' title='重新生成'>↻</button>`
-      + `</span>`;
-    return;
-  } else {
-    btn.textContent = '🔊'; btn.title = '生成语音'; btn.disabled = false;
-    btn.onclick = () => genSegAudio(id, si, segi);
-  }
+  side.innerHTML = segTtsSideHtml(id, si, segi);
 }
 // 播放/暂停切换（单例 audio；播放中该段图标 ⏸，再点暂停回 ▶）
 let segAudioEl = null;
@@ -1203,11 +1209,7 @@ function renderSegsHtml(script, id, si){
           + `<textarea class='seg-ta' spellcheck='false' data-id='${id}' data-si='${si}' data-segi='${segi}' oninput='segTagInput(this)' onkeydown='segTaKey(this,event)' onblur='segEditBlur(this)'>${esc(seg.text)}</textarea>`
         + `</div>`
       + `</div>`
-      + `<div class='seg-tts-side'>`
-        + (segAudioGet(segKey(id, seg))
-            ? `<span class='seg-tts-group'><button class='seg-tts-btn' onclick='playSegAudio(\"${id}\",${si},${segi})' title='播放'>▶</button><button class='seg-tts-btn' onclick='regenSegAudio(\"${id}\",${si},${segi})' title='重新生成'>↻</button></span>`
-            : `<button class='seg-tts-btn' data-si='${si}' data-segi='${segi}' onclick='genSegAudio(\"${id}\",${si},${segi})' title='生成语音'>🔊</button>`)
-      + `</div>`
+      + `<div class='seg-tts-side'>${segTtsSideHtml(id, si, segi, segKey(id, seg))}</div>`
     + `</div>`);
     // 段与段之间：＋ 插入按钮 + 段间隔气泡（气泡点击配置两段间停顿）
     if (segi < segs.length - 1) {
@@ -1331,10 +1333,7 @@ function segSaveText(id, si, segi, text){
 function refreshSegTtsSide(id, si, segi){
   const side = document.querySelector('.seg-row[data-si="' + si + '"][data-segi="' + segi + '"] .seg-tts-side');
   if (!side) return;
-  const key = segRowKey(id, si, segi);
-  side.innerHTML = (key && segAudioGet(key))
-    ? `<span class='seg-tts-group'><button class='seg-tts-btn' onclick='playSegAudio("${id}",${si},${segi})' title='播放'>▶</button><button class='seg-tts-btn' onclick='regenSegAudio("${id}",${si},${segi})' title='重新生成'>↻</button></span>`
-    : `<button class='seg-tts-btn' data-si='${si}' data-segi='${segi}' onclick='genSegAudio("${id}",${si},${segi})' title='生成语音'>🔊</button>`;
+  side.innerHTML = segTtsSideHtml(id, si, segi);
 }
 function segRemoveRow(id, si, segi){                // 删除一段（撤销空段插入/确认删除等）→ 整块重绘
   const current = (labWorkScriptsOf(id) || []).slice();

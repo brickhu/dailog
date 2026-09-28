@@ -119,8 +119,8 @@
   "description": "脚本创作：照 creative_proposal 把对话渲染成一期现在时访谈 → episode + production（回传 scene_type 供 R4 分类）+ script（出口桥接为下游的 segments）",
   "config": {
    "temperature": 0.7,
-   "maxTokens": 16384,
-   "thinking": "disabled",
+   "maxTokens": 32768,
+   "thinking": "enabled",
    "seed": 49,
    "responseFormat": {
     "type": "json_object"

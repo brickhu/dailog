@@ -1506,6 +1506,35 @@ function foldLegend(folded) {
     + "如果去掉这些成品与外部内容之后，剩下的只是「帮我改提示词 / 评审这份成品」这类工作过程，请按 §4 判为不合格（eligible=false）。）";
 }
 
+// 称呼（callName）解析：**权威是「身份 × 语种」的采样行**（voice_samples.call_name），
+//   匹配链与 TTS 一致：该语种 → en → 任意语种；采样里没有才退投稿快照。
+//   快照是投稿时定格的（会缺语种/过期：en 区的快照可能是中文名），只作兜底。
+function pickVoiceRow(rows, zone) {
+  const list = (Array.isArray(rows) ? rows : [])
+    .filter((x) => x && typeof x.callName === "string" && x.callName.trim());
+  return list.find((x) => x.language === zone) || list.find((x) => x.language === "en") || list[0] || null;
+}
+async function resolveSpeakerNames(e, token, detail) {
+  const zone = (detail && detail.language) || "zh";
+  const hostSnap = (detail && detail.host) || null;
+  const guestSnap = (detail && detail.guest) || null;
+  // 主持人：detail.voiceSamples 就是该投稿人的采样行（ready、与 TTS 同源）
+  const hostRow = pickVoiceRow((detail && detail.voiceSamples) || [], zone);
+  const hostName = (hostRow && hostRow.callName.trim())
+    || (hostSnap && hostSnap.callName && hostSnap.callName.trim())
+    || (hostSnap && hostSnap.personaInfo && hostSnap.personaInfo.name)
+    || "主持人";
+  // 嘉宾：嘉宾声线接口（含 draft 行），按 guestId 过滤后同一条链
+  let guestName = (guestSnap && guestSnap.name) || "AI";
+  const guestId = (guestSnap && guestSnap.id) || null;
+  if (guestId) {
+    const all = await apiWithToken(e, token, "/v1/editor/guests/voice-samples").catch(() => []);
+    const row = pickVoiceRow((Array.isArray(all) ? all : []).filter((x) => x.guestId === guestId), zone);
+    if (row) guestName = row.callName.trim();
+  }
+  return { zone, hostName, guestName };
+}
+
 function dialogueBlockFor(dialogue, hostName, guestName, onlyTurns) {
   const msgs = Array.isArray(dialogue && dialogue.messages) ? dialogue.messages : [];
   const keep = (Array.isArray(onlyTurns) && onlyTurns.length) ? new Set(onlyTurns.map((x) => Number(x))) : null;
@@ -1567,6 +1596,7 @@ function segmentsFromDraftShape(p) {
       const hostSnap = (detail && detail.host) || null;
       const guestSnap = (detail && detail.guest) || null;
       const cfg = llmConfig();
+      const names = await resolveSpeakerNames(e, token, detail);
       // 第1轮：system=打分规则文本（字典静态部分），user1=仅对话 json
       const scoreSystem = (pScore.messages.find(m => m.role === "system") || {}).content || "";
       // 第2轮：scriptRule = 渲染后的续接指令（script-material.system 素材 + script-by-proposal.user 提示词；提案由 review 运行时注入）
@@ -1574,8 +1604,8 @@ function segmentsFromDraftShape(p) {
         score: null,
         review: null,
         suggestion: (detail && detail.suggestion) || "",
-        host: hostSnap ? { callName: hostSnap.callName || "主持人", personaInfo: hostSnap.personaInfo || undefined } : { callName: "主持人" },
-        guests: guestSnap ? [{ name: guestSnap.name, platform: guestSnap.id, intro: guestSnap.intro || null }] : [{ name: "AI" }],
+        host: { callName: names.hostName, personaInfo: (hostSnap && hostSnap.personaInfo) || undefined },
+        guests: [{ name: names.guestName, platform: guestSnap ? guestSnap.id : undefined, intro: guestSnap ? (guestSnap.intro || null) : undefined }],
       });
       const scriptRule = (rendered[0] || {}).content || "";
       sendJson(res, {
@@ -1586,8 +1616,8 @@ function segmentsFromDraftShape(p) {
         scriptRule,
         user2: JSON.stringify({
           suggestion: (detail && detail.suggestion) || undefined,
-          host: hostSnap ? { callName: hostSnap.callName || undefined, personaInfo: hostSnap.personaInfo || undefined } : undefined,
-          guests: guestSnap ? [{ name: guestSnap.name, platform: guestSnap.id, intro: guestSnap.intro || null }] : undefined,
+          host: { callName: names.hostName, personaInfo: (hostSnap && hostSnap.personaInfo) || undefined },
+          guests: [{ name: names.guestName, platform: guestSnap ? guestSnap.id : undefined, intro: guestSnap ? (guestSnap.intro || null) : undefined }],
         }, null, 1),
         temperature: cfg && cfg.temperature !== undefined ? cfg.temperature : 0.7,
         seed: cfg && cfg.seed !== undefined ? cfg.seed : 42,   // 默认固定 seed，可复现
@@ -1736,14 +1766,12 @@ function segmentsFromDraftShape(p) {
       const dialogue = await loadDialogue(e, token, id);
       if (!dialogue) { sendJson(res, { ok: false, error: "未采集——请先采集对话" }); return; }
       const detail = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null);
-      const hostSnap = (detail && detail.host) || null;
-      const guestSnap = (detail && detail.guest) || null;
       const pScript = getPrompt("r2-script");
       // R1→R2 的唯一接口：编辑锁定的 creative_proposal（新契约九字段）
       const review = (body && body.review && typeof body.review === "object") ? body.review : null;
       const cp = review || {};
-      const hostName = (hostSnap && hostSnap.callName) || "主持人";
-      const guestName = (guestSnap && guestSnap.name) || "AI";
+      // 名字从采样行取（该语种 → en → 任意），快照只兜底
+      const { hostName, guestName } = await resolveSpeakerNames(e, token, detail);
       const dlgTotal = ((dialogue && dialogue.messages) || []).length;
       const fold2 = foldPastedArtifacts(dialogue);   // 与审题同一套口径：成品/外部内容先折叠
       if (fold2.folded.length) console.log("[round2] 外部粘贴/成品折叠 " + fold2.folded.length + " 处（省 " + fold2.savedChars + " 字）：" + fold2.folded.map((f) => "t" + f.n + "(" + f.chars + ")").join(" "));
@@ -1877,8 +1905,7 @@ function segmentsFromDraftShape(p) {
         return { design: sc.design || "", hostOpen: sc.hostOpen || "", guestOpen: sc.guestOpen || "", turns: sc.turns || [], hostWrap: sc.hostWrap || "", guestSum: sc.guestSum || "", hostOutro: sc.hostOutro || "" };
       })();
       const detail0 = await apiWithToken(e, token, "/v1/editor/submissions/" + id).catch(() => null);
-      const hostName0 = (detail0 && detail0.host && detail0.host.callName) || "主持人";
-      const guestName0 = (detail0 && detail0.guest && detail0.guest.name) || "AI";
+      const { hostName: hostName0, guestName: guestName0 } = await resolveSpeakerNames(e, token, detail0);
       const coveredA = coveredTurnsOf(body.proposal || null);
       const scopeA = coveredA ? (turnsLabel(coveredA) + "（共 " + coveredA.length + " 条）") : "全部原文";
       // （范围超出原文时，dialogueBlockFor 自然只放存在的那些）
@@ -2566,6 +2593,7 @@ function segmentsFromDraftShape(p) {
       const dialogue = await loadDialogue(e, token, id).catch(() => null);
       const production = await loadProduction(e, token, id).catch(() => null);
       const det = detail || {};
+      const names = await resolveSpeakerNames(e, token, det);
       const msgs = (dialogue && dialogue.messages) || [];
       // 提案：锁定稿优先；否则取 reviewProposals 的推荐线程（与前端同一套回退）
       let proposal = null, proposalSource = null;
@@ -2602,8 +2630,8 @@ function segmentsFromDraftShape(p) {
         ok: true, mode: "dryrun", writes: "none", id,
         title: det.title || (dialogue && dialogue.title) || null,
         stage: det.status || null, language: det.language || null,
-        host: { callName: det.callName || null },
-        guest: (det.guest && { id: det.guest.id, name: det.guest.name }) || null,
+        host: { callName: names.hostName || null },
+        guest: (det.guest && { id: det.guest.id, name: names.guestName }) || null,
         dialogue: {
           sourceUrl: (dialogue && dialogue.sourceUrl) || null,
           source: (dialogue && dialogue.source) || null,
