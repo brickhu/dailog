@@ -120,26 +120,71 @@ export async function getSlugById(id: string): Promise<string | null> {
     return (rows[0] as { slug?: string } | undefined)?.slug ?? null;
 }
 
-/** 最新已发布节目（首页/发现页）。
+/** 探索页 /discover 的节目列表口径（新 / 热 / 精） */
+export type DiscoverTab = "new" | "hot" | "picked";
+
+/** 最新已发布节目（首页/发现页）。= listDiscoverEpisodes("new")，保留旧签名兼容调用方。
  *  lang 可选（"zh"|"en"）：语言偏好分流——同语言内容优先（ORDER BY 匹配降序），
  *  数量不足时按时间自然 fallback 到其他语言（推荐层数据分流，不做独立 tab）。
  *  语言字段来自 episodes（编辑提交成品时固化）。 */
 export async function listLatestEpisodes(limit = 20, lang?: "zh" | "en"): Promise<EpisodeSummary[]> {
-    return withDb((db) => db`
-      SELECT e.id, e.slug, e.title, e.description,
-             e.duration_seconds AS "durationSeconds",
-             e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
-             e.language, e.audio_url AS "audioUrl",
-             e.number,
-             e.tags,
-             u.name AS username, p.name AS "name"
+    return listDiscoverEpisodes("new", limit, lang);
+}
+
+/** 探索页 /discover 的节目列表（三个口径 + 「更多」检索页 /browse 共用同一查询）：
+ *  - new    最新上线：发布时间倒序
+ *  - hot    热门节目：累计播放量倒序（episode_stats.plays，公开播放器播放时上报），同量按时间倒序
+ *  - picked 精选：编辑精选池（episodes.is_picked = true，与首页首屏播放器同池），时间倒序
+ *  offset 用于 /browse 翻页（页码 → OFFSET；总数用 countDiscoverEpisodes）。
+ *  lang 可选（"zh"|"en"）：语言偏好分流——同语言内容优先（ORDER BY 匹配降序），
+ *  数量不足时按时间自然 fallback 到其他语言（同 listLatestEpisodes 既有约定）；
+ *  语言字段来自 episodes（编辑提交成品时固化）。 */
+export async function listDiscoverEpisodes(
+  tab: DiscoverTab,
+  limit = 50,
+  lang?: "zh" | "en",
+  offset = 0,
+): Promise<EpisodeSummary[]> {
+    return withDb((db) => {
+      // 排序前缀/连接/过滤按 tab 组合（片段拼接：postgres.js 模板内嵌带参数的片段安全）
+      const langFirst = lang ? db`(e.language = ${lang}) DESC, ` : db``;
+      const hotJoin = tab === "hot" ? db`LEFT JOIN episode_stats s ON s.episode_id = e.id` : db``;
+      const pickedOnly = tab === "picked" ? db`AND e.is_picked = true` : db``;
+      const orderBy =
+        tab === "hot"
+          ? db`${langFirst}COALESCE(s.plays, 0) DESC, e.published_at DESC`
+          : db`${langFirst}e.published_at DESC`;
+      return db`
+        SELECT e.id, e.slug, e.title, e.description, e.summary,
+               e.duration_seconds AS "durationSeconds",
+               e.published_at AS "publishedAt", e.cover_url AS "coverUrl",
+               e.language, e.audio_url AS "audioUrl",
+               e.raw_conversation_url AS "sourceUrl",
+               e.number,
+               e.tags,
+               u.name AS username, p.name AS "name"
+        FROM episodes e
+        JOIN profiles p ON p.id = e.user_id
+        JOIN "user" u ON u.id = p.id
+        ${hotJoin}
+        WHERE e.status = 'published' AND e.is_public = true
+          ${pickedOnly}
+        ORDER BY ${orderBy}
+        LIMIT ${limit}
+        OFFSET ${offset}
+      ` as unknown as Promise<EpisodeSummary[]>;
+    });
+}
+
+/** 某口径下的公开节目总数（/browse 分页算总页数用；lang 只影响排序、不影响条数） */
+export async function countDiscoverEpisodes(tab: DiscoverTab): Promise<number> {
+    const rows = await withDb((db) => db`
+      SELECT count(*)::int AS count
       FROM episodes e
-      JOIN profiles p ON p.id = e.user_id
-      JOIN "user" u ON u.id = p.id
       WHERE e.status = 'published' AND e.is_public = true
-      ${lang ? db`ORDER BY (e.language = ${lang}) DESC, e.published_at DESC` : db`ORDER BY e.published_at DESC`}
-      LIMIT ${limit}
-    ` as unknown as Promise<EpisodeSummary[]>);
+        ${tab === "picked" ? db`AND e.is_picked = true` : db``}
+    `);
+    return (rows[0] as { count?: number } | undefined)?.count ?? 0;
 }
 
 /** 标签检索（/tag/<tag> 标签检索页）：含该标签的全部公开节目，按发布时间倒序。
@@ -161,6 +206,27 @@ export async function listEpisodesByTag(tag: string, limit = 50): Promise<Episod
       ORDER BY e.published_at DESC
       LIMIT ${limit}
     ` as unknown as Promise<EpisodeSummary[]>);
+}
+
+/** 标签 + 该标签下的公开节目数（探索页「探索更多」区用） */
+export interface TagCount {
+  tag: string;
+  count: number;
+}
+
+/** 节目数最多的标签（探索页「探索更多」区）：按该标签下已发布公开节目数倒序，取前 limit 个
+ *  （并列按标签名升序，保证分页/刷新顺序稳定）。tags 为编辑发布时固化的 text[]，
+ *  unnest 展开后聚合；空白标签（null / 空串 / 纯空格）忽略。 */
+export async function listTopTags(limit = 50): Promise<TagCount[]> {
+    return withDb((db) => db`
+      SELECT t AS tag, count(*)::int AS count
+      FROM episodes e, unnest(e.tags) AS t
+      WHERE e.status = 'published' AND e.is_public = true
+        AND t IS NOT NULL AND btrim(t) <> ''
+      GROUP BY t
+      ORDER BY count DESC, t ASC
+      LIMIT ${limit}
+    ` as unknown as Promise<TagCount[]>);
 }
 
 /** 单 feed 用（dailog 频道全部已发布节目 + 音频 size + 封面） */

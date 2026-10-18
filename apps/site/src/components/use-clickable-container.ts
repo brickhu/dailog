@@ -69,7 +69,11 @@ function isInteractiveHit(
 ): boolean {
   if (target == null || !(target instanceof Element)) return false;
   if (target === root) return false;
-  return target.closest(selector) != null;
+  // 命中的交互元素必须是容器「内部」的嵌套元素：容器自身也带 role（link/button）时
+  // closest() 会把它自己算进来（点击任何子元素都命中容器 → 容器永远不激活）。
+  // 命中结果等于容器本身 → 视为表面点击（激活容器）。
+  const hit = target.closest(selector);
+  return hit != null && hit !== root;
 }
 
 export function useClickableContainer(

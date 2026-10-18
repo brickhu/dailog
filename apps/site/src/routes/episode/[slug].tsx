@@ -141,6 +141,7 @@ const css = stylex.create({
   // 出演名单 block（Cast）：每行 [名字] [角色] [@主页标识]
   castBlock: {
     marginBottom: dimensions.spacing6,
+    width: "100%",
   },
   castRow: {
     display: "grid",
@@ -151,7 +152,7 @@ const css = stylex.create({
     paddingBottom: dimensions.spacing2,
     borderTopStyle: "solid",
     borderTopWidth: dimensions.borderWidthThin,
-    borderTopColor: colors.ink,
+    borderTopColor: colors.surfaceWeak,
   },
   castName: {
     fontWeight: dimensions.fontWeightMedium,

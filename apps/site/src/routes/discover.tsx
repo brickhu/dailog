@@ -1,173 +1,174 @@
 import { A, cache, createAsync } from "@solidjs/router";
-import { For, Show, Suspense, createSignal } from "solid-js";
-import { listLatestEpisodes, listPublicPlaylists, type EpisodeSummary, type PlaylistSummary } from "../lib/db";
-import { fmtDate, fmtDuration } from "../lib/format";
-import { episodeCoverUrl, playlistCoverUrl } from "../lib/env";
+import { For, Show, Suspense } from "solid-js";
+import { Title } from "@solidjs/meta";
 import * as stylex from "@stylexjs/stylex";
-import { layouts } from "@dailogues/ui/theme.stylex";
-import { colors, dimensions } from "@dailogues/ui/theme.stylex";
+import { colors, dimensions, global, typography } from "@dailogues/ui/theme.stylex";
 import { useI18n } from "@dailogues/i18n";
+import { listDiscoverEpisodes, listTopTags, type EpisodeSummary, type TagCount } from "../lib/db";
+import { EpisodeSummaryCard } from "../components/episode-summary-card";
+import { PickedBanner, PickedBannerSkeleton } from "../components/picked-banner";
 import { ListSkeleton } from "../components/page-skeletons";
+import { Page } from "../layouts/page";
+import { Block, Container } from "../layouts/container";
 
-// 探索页（PRD §5 /discover）：新 / 热 / 精 / 荐 四个 tab。
-// v1（P4 前）：四个 tab 均展示最新节目列表；hot/picked/top 的真实排序与精选池随 P4 接入
-const TABS = ["new", "hot", "picked", "top", "lists"] as const;
-type Tab = (typeof TABS)[number];
+// 探索页（PRD §5 /discover）：单页四个区域（无 tab 切换）
+// ① 精选 banner：picked 池轮播，池空则整个区域不显示
+// ② 最新上线的节目：new 口径 10 条 + 「更多」进 /browse?sort=new
+// ③ 热门节目：hot 口径（累计播放量）10 条 + 「更多」进 /browse?sort=hot
+// ④ 探索更多：节目数最多的标签（前 50），点击进标签检索页 /tag/<tag>
+// 数据口径全部在 lib/db 的 listDiscoverEpisodes / listTopTags（与检索页同源）
+const SECTION_LIMIT = 10;
+/** 精选 banner 最多几张（封面大图较重，池子再大也只取前 N） */
+const BANNER_LIMIT = 10;
+const TAGS_LIMIT = 50;
 
 const styles = stylex.create({
-  page: {
-    minHeight: "100vh",
-    backgroundColor: colors.background,
-    color: colors.foreground,
-    fontFamily: "system-ui, -apple-system, sans-serif",
-  },
-  content: {
-    maxWidth: "720px",
-    margin: "0 auto",
-    padding: dimensions.spacing8,
-  },
   title: {
     fontSize: dimensions.fontSize2xl,
     fontWeight: dimensions.fontWeightBold,
-    marginBottom: dimensions.spacing4,
+    margin: 0,
   },
-  tabs: {
+  // 区标题行：标题左、 「更多」右（与首页推荐区同一排版约定）
+  sectionTitleRow: {
     display: "flex",
-    gap: dimensions.spacing2,
-    marginBottom: dimensions.spacing6,
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: dimensions.spacing3,
   },
-  tab: {
-    padding: `${dimensions.spacing2} ${dimensions.spacing4}`,
-    fontSize: dimensions.fontSizeMd,
-    color: colors.neutral,
-    textDecoration: "none",
-    borderBottom: "2px solid transparent",
-    cursor: "pointer",
-    background: "none",
-    borderTop: "none",
-    borderLeft: "none",
-    borderRight: "none",
-  },
-  tabActive: {
-    color: colors.foreground,
-    fontWeight: dimensions.fontWeightMedium,
-    borderBottomColor: colors.brand,
-  },
-  card: {
-    display: "block",
-    padding: dimensions.spacing4,
-    borderRadius: dimensions.radiusMd,
-    backgroundColor: colors.surface,
-    marginBottom: dimensions.spacing3,
-    textDecoration: "none",
-    color: "inherit",
-    overflow: "hidden",
-  },
-  thumb: {
-    width: "48px",
-    height: "48px",
-    borderRadius: dimensions.radiusSm,
-    objectFit: "cover",
-    float: "left",
-    marginRight: dimensions.spacing3,
-  },
-  epTitle: {
-    fontWeight: dimensions.fontWeightMedium,
-    marginBottom: dimensions.spacing1,
-  },
-  meta: {
-    color: colors.neutral,
-    fontSize: dimensions.fontSizeSm,
-  },
-  langTag: {
-    display: "inline-block",
-    marginLeft: dimensions.spacing2,
-    padding: "1px 6px",
-    borderRadius: dimensions.radiusSm,
-    fontSize: "11px",
-    lineHeight: 1.4,
+  sectionTitle: {
+    fontSize: dimensions.fontSizeXl,
+    fontWeight: dimensions.fontWeightBold,
+    margin: 0,
   },
   empty: {
     color: colors.neutral,
     textAlign: "center",
     padding: dimensions.spacing12,
   },
+  tagList: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: dimensions.spacing2,
+  },
+  tag: {
+    display: "inline-flex",
+    alignItems: "baseline",
+    gap: dimensions.spacing1,
+    padding: `${dimensions.spacing1} ${dimensions.spacing3}`,
+    borderRadius: dimensions.radiusFull,
+    backgroundColor: colors.surface,
+    color: colors.foreground,
+    fontSize: dimensions.fontSizeSm,
+    textDecoration: "none",
+    ":hover": { borderColor: colors.primary },
+  },
+  tagCount: {
+    color: colors.neutral,
+    fontSize: dimensions.fontSizeXs,
+  },
 });
 
 export default function DiscoverPage() {
   const { t, locale } = useI18n();
-  const [tab, setTab] = createSignal<Tab>("new");
-  // 语言偏好分流（同首页）：界面语言即内容偏好，同语言优先 + 时间 fallback
-  // cache：客户端导航间复用（公开数据无新鲜度问题），减少重复 DB 查询
-  const getLatestCached = cache((lang: "zh" | "en") => listLatestEpisodes(50, lang), "discover-latest");
-  const episodes = createAsync<EpisodeSummary[]>(() => getLatestCached(locale() === "zh" ? "zh" : "en"));
-  // 「列表」tab：平台策展播放列表（语言偏好 = 界面语言；客户端导航间缓存）
-  const getListsCached = cache((lang: "zh" | "en") => listPublicPlaylists(50, lang), "discover-lists");
-  const lists = createAsync<PlaylistSummary[]>(() => getListsCached(locale() === "en" ? "en" : "zh"));
+  const lang = (): "zh" | "en" => (locale() === "zh" ? "zh" : "en");
+  // cache：客户端导航间复用（公开数据无新鲜度问题），减少重复 DB 查询；按 (口径, lang) 分键缓存
+  const getEpisodesCached = cache(
+    (tab: "new" | "hot" | "picked", limit: number, lang: "zh" | "en") => listDiscoverEpisodes(tab, limit, lang),
+    "discover-episodes",
+  );
+  const picked = createAsync<EpisodeSummary[]>(() => getEpisodesCached("picked", BANNER_LIMIT, lang()));
+  const newest = createAsync<EpisodeSummary[]>(() => getEpisodesCached("new", SECTION_LIMIT, lang()));
+  const hot = createAsync<EpisodeSummary[]>(() => getEpisodesCached("hot", SECTION_LIMIT, lang()));
+  const tags = createAsync<TagCount[]>(() => listTopTags(TAGS_LIMIT));
 
   return (
-    <div {...stylex.props(layouts.page)}>
-      <div {...stylex.props(layouts.containerSm)}>
-        <div {...stylex.props(layouts.fullRow, styles.title)}>{t("discover.title")}</div>
-        <div {...stylex.props(layouts.fullRow, styles.tabs)}>
-          <For each={TABS}>
-            {(key) => (
-              <button
-                type="button"
-                onClick={() => setTab(key)}
-                {...stylex.props(styles.tab, tab() === key && styles.tabActive)}
-              >
-                {t(`discover.${key}` as never)}
-              </button>
-            )}
-          </For>
-        </div>
-        <div {...stylex.props(layouts.fullRow)}>
-        <Show when={tab() !== "lists"}>
-          <Suspense fallback={<ListSkeleton />}>
-          <Show
-            when={episodes()?.length}
-            fallback={<div {...stylex.props(styles.empty)}>{t("discover.empty")}</div>}
-          >
-            <For each={episodes()}>
-              {(ep) => (
-                <A  href={`/episode/${ep.slug}`} {...stylex.props(styles.card)}>
-                  <Show when={episodeCoverUrl(ep.id, ep.coverUrl)}>
-                    <img src={episodeCoverUrl(ep.id, ep.coverUrl)!} alt={ep.title || ""} {...stylex.props(styles.thumb)} />
-                  </Show>
-                  <div {...stylex.props(styles.epTitle)}>{ep.title || t("common.unnamed")}</div>
-                  <div {...stylex.props(styles.meta)}>
-                    @{ep.username} · {fmtDate(ep.publishedAt)} · {fmtDuration(ep.durationSeconds)}
-                    {ep.language ? <span {...stylex.props(styles.langTag)}>{ep.language === "en" ? "EN" : "中"}</span> : null}
-                  </div>
-                </A>
-              )}
-            </For>
+    <>
+      <Title>{t("discover.title")} · dailog</Title>
+      <Page>
+        <Container>
+          <Block><h1 {...stylex.props(styles.title)}>{t("discover.title")}</h1></Block>
+        </Container>
+
+        {/* ① 精选 banner（picked 池空 → 整个区域不渲染） */}
+        <Suspense fallback={<Container><Block><PickedBannerSkeleton /></Block></Container>}>
+          <Show when={picked()?.length}>
+            <Container>
+              <Block>
+                <PickedBanner episodes={picked()!} />
+              </Block>
+            </Container>
           </Show>
-          </Suspense>
-        </Show>
-        <Show when={tab() === "lists"}>
-          <Suspense fallback={<ListSkeleton />}>
+        </Suspense>
+
+        {/* ② 最新上线的节目 */}
+        <Container>
+          <Block xstyle={styles.sectionTitleRow}>
+            <h2 {...stylex.props(styles.sectionTitle)}>{t("discover.newTitle")}</h2>
+            <A href="/browse?sort=new" {...stylex.props(global.linkText, typography.bodyMd)}>
+              {t("discover.more")}
+            </A>
+          </Block>
+          <Suspense fallback={<Block><ListSkeleton /></Block>}>
             <Show
-              when={lists() && lists()!.length > 0}
-              fallback={<div {...stylex.props(styles.empty)}>{t("playlists.empty")}</div>}
+              when={newest()?.length}
+              fallback={<Block><div {...stylex.props(styles.empty)}>{t("discover.empty")}</div></Block>}
             >
-              <For each={lists()}>
-                {(pl: PlaylistSummary) => (
-                  <A href={`/playlist/${pl.slug}`} {...stylex.props(styles.card)}>
-                    <Show when={playlistCoverUrl(pl.id, pl.coverUrl, 96) ?? episodeCoverUrl(pl.firstEpisodeId ?? "", pl.firstCover, 96)}>
-                      <img src={playlistCoverUrl(pl.id, pl.coverUrl, 96) ?? episodeCoverUrl(pl.firstEpisodeId ?? "", pl.firstCover, 96)!} alt={pl.title} {...stylex.props(styles.thumb)} />
-                    </Show>
-                    <div {...stylex.props(styles.epTitle)}>{pl.title}</div>
-                    <div {...stylex.props(styles.meta)}>{t("playlists.episodeCount", { count: pl.episodeCount })}</div>
-                  </A>
+              <For each={newest()}>
+                {(ep) => (
+                  <Block cols="1/2">
+                    <EpisodeSummaryCard episode={ep} />
+                  </Block>
                 )}
               </For>
             </Show>
           </Suspense>
-        </Show>
-        </div>
-      </div>
-    </div>
+        </Container>
+
+        {/* ③ 热门节目（累计播放量） */}
+        <Container>
+          <Block xstyle={styles.sectionTitleRow}>
+            <h2 {...stylex.props(styles.sectionTitle)}>{t("discover.hotTitle")}</h2>
+            <A href="/browse?sort=hot" {...stylex.props(global.linkText, typography.bodyMd)}>
+              {t("discover.more")}
+            </A>
+          </Block>
+          <Suspense fallback={<Block><ListSkeleton /></Block>}>
+            <Show
+              when={hot()?.length}
+              fallback={<Block><div {...stylex.props(styles.empty)}>{t("discover.empty")}</div></Block>}
+            >
+              <For each={hot()}>
+                {(ep) => (
+                  <Block cols="1/2">
+                    <EpisodeSummaryCard episode={ep} />
+                  </Block>
+                )}
+              </For>
+            </Show>
+          </Suspense>
+        </Container>
+
+        {/* ④ 探索更多：节目数最多的标签（空 → 整个区域不渲染） */}
+        <Suspense fallback={<Container><Block><ListSkeleton /></Block></Container>}>
+          <Show when={tags()?.length}>
+            <Container>
+              <Block xstyle={styles.sectionTitleRow}>
+                <h2 {...stylex.props(styles.sectionTitle)}>{t("discover.tagsTitle")}</h2>
+              </Block>
+              <Block xstyle={styles.tagList}>
+                <For each={tags()}>
+                  {(item) => (
+                    <A href={`/tag/${encodeURIComponent(item.tag)}`} {...stylex.props(styles.tag)}>
+                      #{item.tag}
+                      <span {...stylex.props(styles.tagCount)}>({item.count})</span>
+                    </A>
+                  )}
+                </For>
+              </Block>
+            </Container>
+          </Show>
+        </Suspense>
+      </Page>
+    </>
   );
 }

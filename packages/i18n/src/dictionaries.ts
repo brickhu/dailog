@@ -472,11 +472,18 @@ export const zh = {
 
   // ---- 探索页 ----
   "discover.title": "探索",
-  "discover.new": "最新",
-  "discover.hot": "热门",
+  "discover.newTitle": "最新上线的节目",
+  "discover.hotTitle": "热门节目",
   "discover.picked": "精选",
-  "discover.top": "推荐",
+  "discover.tagsTitle": "探索更多",
+  "discover.more": "更多",
   "discover.empty": "还没有已发布的节目",
+  "discover.browseCount": "{count} 期节目",
+
+  // ---- 检索页（/browse 翻页）----
+  "browse.prev": "上一页",
+  "browse.next": "下一页",
+  "browse.pager": "第 {page} / {pages} 页",
 
   // ---- 投稿流程 ----
   "submit.title": "投稿",
@@ -891,7 +898,6 @@ export const zh = {
   "playlist.updatedAt": "更新于 {date}",
   "playlist.in": "收录于",
   "home.playlists": "播放列表",
-  "discover.lists": "列表",
 
   // ---- 我的收藏 ----
   "me.favoritesDesc": "收藏的节目都在这里，随时回听",
@@ -1380,11 +1386,18 @@ export const en: Dictionary = {
 
   // ---- Discover ----
   "discover.title": "Discover",
-  "discover.new": "New",
-  "discover.hot": "Hot",
+  "discover.newTitle": "Latest episodes",
+  "discover.hotTitle": "Popular episodes",
   "discover.picked": "Picked",
-  "discover.top": "Top",
+  "discover.tagsTitle": "Explore more",
+  "discover.more": "More",
   "discover.empty": "No published episodes yet",
+  "discover.browseCount": "{count} episodes",
+
+  // ---- Browse page (/browse pagination) ----
+  "browse.prev": "Previous",
+  "browse.next": "Next",
+  "browse.pager": "Page {page} of {pages}",
 
   // ---- Submit flow ----
   "submit.title": "Submit",
@@ -1799,7 +1812,6 @@ export const en: Dictionary = {
   "playlist.updatedAt": "Updated {date}",
   "playlist.in": "In playlists",
   "home.playlists": "Playlists",
-  "discover.lists": "Lists",
 
   // ---- My favorites ----
   "me.favoritesDesc": "Every episode you saved, ready to replay",
